@@ -1,0 +1,60 @@
+name: Slack Send
+description: >
+  Send a Slack notification — plain text or build completion mode.
+  Single implementation; consumers call this instead of vendoring slack-send.sh.
+
+inputs:
+  message:
+    description: 'Plain-text message to send (mutually exclusive with --product mode)'
+    required: false
+    default: ''
+  product:
+    description: 'Product name for build notification mode (e.g., "Acme Widget")'
+    required: false
+    default: ''
+  version:
+    description: 'Version string for build notification mode (e.g., "4.4.0")'
+    required: false
+    default: ''
+  status:
+    description: 'Build status for build notification mode: success or failure'
+    required: false
+    default: ''
+  details:
+    description: 'Optional details text for build notification mode'
+    required: false
+    default: ''
+  duration:
+    description: 'Optional build duration string (e.g., "35m 12s")'
+    required: false
+    default: ''
+  webhook-url:
+    description: 'Slack webhook URL. Defaults to SLACK_WEBHOOK_URL env var.'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Send Slack notification
+      shell: bash
+      env:
+        SLACK_WEBHOOK_URL: ${{ inputs.webhook-url != '' && inputs.webhook-url || env.SLACK_WEBHOOK_URL }}
+        INPUT_MESSAGE:  ${{ inputs.message }}
+        INPUT_PRODUCT:  ${{ inputs.product }}
+        INPUT_VERSION:  ${{ inputs.version }}
+        INPUT_STATUS:   ${{ inputs.status }}
+        INPUT_DETAILS:  ${{ inputs.details }}
+        INPUT_DURATION: ${{ inputs.duration }}
+      run: |
+        SCRIPT="${{ github.action_path }}/../../slack/scripts/slack-send.sh"
+        if [[ -n "${INPUT_PRODUCT:-}" ]]; then
+          bash "$SCRIPT" \
+            --product  "$INPUT_PRODUCT" \
+            --version  "$INPUT_VERSION" \
+            --status   "$INPUT_STATUS" \
+            ${INPUT_DETAILS:+--details  "$INPUT_DETAILS"} \
+            ${INPUT_DURATION:+--duration "$INPUT_DURATION"}
+        else
+          bash "$SCRIPT" "$INPUT_MESSAGE"
+        fi

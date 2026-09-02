@@ -1,0 +1,26 @@
+[
+  {
+    "number": 1,
+    "state": "open",
+    "rule": { "severity": "error", "id": "js/sql-injection" },
+    "most_recent_instance": { "location": { "path": "scripts/foo.sh" } }
+  },
+  {
+    "number": 2,
+    "state": "open",
+    "rule": { "severity": "warning", "id": "py/clear-text-logging" },
+    "most_recent_instance": { "location": { "path": "scripts/foo.sh" } }
+  },
+  {
+    "number": 3,
+    "state": "open",
+    "rule": { "severity": "error", "id": "js/path-injection" },
+    "most_recent_instance": { "location": { "path": "scripts/untouched.sh" } }
+  },
+  {
+    "number": 4,
+    "state": "fixed",
+    "rule": { "severity": "error", "id": "js/already-fixed" },
+    "most_recent_instance": { "location": { "path": "scripts/foo.sh" } }
+  }
+]

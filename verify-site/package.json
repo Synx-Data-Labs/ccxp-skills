@@ -1,0 +1,11 @@
+{
+  "name": "verify-site-skill-deps",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Runtime deps for the verify-site Claude skill. Installed once into the skill dir; shared across all consumer repos.",
+  "dependencies": {
+    "@axe-core/playwright": "^4.10.0",
+    "lighthouse": "^12.2.1",
+    "playwright": "^1.48.0"
+  }
+}
