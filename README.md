@@ -9,24 +9,36 @@ or config-driven via environment variables with no baked-in default.
 
 ## Install
 
-Clone this repo directly as your user-scope skills directory (or as one of
-several sibling skill sets — Claude Code loads every `<name>/SKILL.md`
-under `~/.claude/skills/`, so this can coexist with a private, company-
-specific skills repo on the same machine):
+Claude Code's skill loader is exactly one level deep —
+`~/.claude/skills/<name>/SKILL.md` — it does **not** recurse into a
+repo-root clone placed under `~/.claude/skills/`. So clone this repo
+somewhere else, then symlink each skill/shared-lib into
+`~/.claude/skills/` with the included installer. This is what lets it
+coexist as a sibling skill set alongside another, independently-git-tracked
+skills repo (e.g. a private, company-specific one) on the same machine —
+Claude Code follows symlinks and reads `SKILL.md` from the target:
 
 ```bash
-git clone git@github.com:your-org/ccxp-skills.git ~/.claude/skills/ccxp-skills
+git clone git@github.com:your-org/ccxp-skills.git ~/workspace/ccxp-skills
+bash ~/workspace/ccxp-skills/scripts/install.sh
 ```
 
-Claude Code reads skills from `~/.claude/skills/**/SKILL.md`, so every
-subdirectory here becomes immediately available in every repo on that
-machine. No submodule, no symlink, no install script.
+`install.sh` symlinks every top-level skill (a directory with a
+`SKILL.md`) and every shared lib (a leading-underscore directory) into
+`~/.claude/skills/`. It's idempotent (safe to re-run) and never touches
+an existing name it didn't create itself — see `--target DIR` to install
+elsewhere, `--dry-run` to preview, and `--uninstall` to remove only the
+symlinks it owns.
 
 Update later with:
 
 ```bash
-cd ~/.claude/skills/ccxp-skills && git pull
+cd ~/workspace/ccxp-skills && git pull
 ```
+
+No re-install needed — the symlinks point at the same clone, so `git
+pull` alone picks up new/changed skills. Re-run `install.sh` only when a
+*new* skill directory is added upstream (it needs its own new symlink).
 
 ## Prerequisites
 
