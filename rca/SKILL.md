@@ -46,6 +46,8 @@ bash ~/.claude/skills/_gh/ci-triage.sh <run-id>
 
 ### 3. Classify the failure
 
+**Check the local KB first.** If `dev/known-failures.md` exists at the current repo's root, grep it for a match on the error signature from step 2. A match gives you a candidate root cause and a verify command — but **re-run that verify command now**. A KB hit is a lead, not an answer: the same signature can have a different cause than last time it was seen (a `403` that used to mean a credential scope gap can just as easily mean a storage quota — that drift, discovered only on the 7th reproduction, is why this file exists).
+
 | Category | Examples | Action |
 |----------|----------|--------|
 | **Our code** | Script bug, missing patch, wrong SHA | Create task, fix ASAP |
@@ -54,7 +56,12 @@ bash ~/.claude/skills/_gh/ci-triage.sh <run-id>
 | **Transient** | Git fetch timeout, rate limit, flaky test | Retry, monitor frequency |
 | **Configuration** | Missing secret, wrong env var | Fix configuration |
 
-**Evidence required**: Every classification must cite specific log lines. Never say "probably transient" without proof.
+**Evidence required — no guessing.** Every classification must be backed by one of:
+
+- Direct log evidence (cite the specific line), or
+- A concrete verification command run just now that confirms or denies the hypothesis — from a KB entry's verify command, or an ad hoc check (query a quota/rate-limit API, re-run with a different credential to isolate scope, check the provider's status page, check whether the failure correlates with a deploy/rotation window, etc.)
+
+If neither is available — you have a hypothesis ("probably a network glitch") but no way to prove it from what's on hand — do **not** report it as classified. Mark it **Unconfirmed** (see report template, step 5) and, in step 6, file a task whose action item is adding the logging/instrumentation that would make the *next* occurrence provable instead of guessed. Never write "probably X" into a report as if it were a finding.
 
 ### 4. Determine impact
 
@@ -86,7 +93,10 @@ Output a structured report:
 <1-2 sentence explanation with evidence>
 
 ### Classification
-<Our code | Infrastructure | Upstream | Transient | Configuration>
+<Our code | Infrastructure | Upstream | Transient | Configuration> — <Confirmed | Unconfirmed>
+
+### Verification
+<one of: the command you ran just now and what it showed; "Confirmed via cited log line — see Root cause, no command needed"; or, if Unconfirmed, "No verification path available; instrumentation task filed (see Action)">
 
 ### Impact
 <What's blocked>
@@ -96,6 +106,8 @@ Output a structured report:
 ```
 
 ### 6. Create task if needed
+
+**If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
 If classification is **Our code**, **Upstream**, or **Configuration**:
 
@@ -141,9 +153,19 @@ If classification is **Infrastructure**:
 - Retry the run: `bash ~/.claude/skills/_gh/gh.sh run rerun <run-id> --failed`
 - If retry also fails: create task — and apply Tier 3 auto-promote + `scheduled:` stamp (steps 3–4 above)
 
+### 7. Update the local knowledge base
+
+If the classification is **Confirmed** (step 3 verified it with a concrete command, not a guess):
+
+- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the exact verify command that confirmed it just now, any false-positive alternatives ruled out along the way, the source (this run's URL or the task ID), and today's date as "last confirmed."
+- If an existing entry's signature matched but its stated cause turned out wrong or incomplete this time (the way a `403` can drift from "credential scope gap" to "storage quota" across repeated reproductions): correct that entry in place — don't add a duplicate. Bump "last confirmed" and note the correction.
+
+Skip this step entirely if the classification is Unconfirmed — there's nothing confirmed yet to record.
+
 ## Important Notes
 
-- **Always cite log evidence.** Never guess or assume — the log is the source of truth.
+- **Evidence over guessing.** A classification is either backed by a cited log line or a verification command run just now — never a hunch. See step 3.
+- **`dev/known-failures.md` is repo-local, not part of this skill.** This skill's classification/verification discipline is generic; domain-specific failure signatures (e.g. what a given CI's `403`s tend to mean) are knowledge that belongs to the repo whose pipeline produces them, built up incrementally via step 7. A repo without one yet just skips the KB-lookup in step 3.
 - **Check if the failure is pre-existing.** Don't blame the latest commit if the same failure existed before.
 - **Check recent history.** A "transient" failure that happens every day is not transient.
 - **Don't skip failures.** Every main branch failure deserves investigation. Normalized failures become permanent.

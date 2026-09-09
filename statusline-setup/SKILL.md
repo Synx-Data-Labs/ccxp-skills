@@ -41,11 +41,38 @@ change," not editing.)
    git -C ~/.claude/skills pull
    ```
 
-2. Confirm `~/.claude/settings.json` has `statusLine.command` pointing at the
-   live path (one-time setup, already done when this skill was created):
+2. Find every Claude config dir in play, not just the default `~/.claude`.
+   Claude Code honors `$CLAUDE_CONFIG_DIR`, and it's common to have a second
+   one wired up via a shell alias or function (e.g. `ccp` running with
+   `CLAUDE_CONFIG_DIR=~/.claude-personal`). Check both — `alias` only lists
+   aliases, not function wrappers (a common pattern since a function can
+   forward `"$@"` cleanly where an alias can't):
+
+   ```bash
+   alias | grep -i CLAUDE_CONFIG_DIR
+   declare -f | grep -i -B2 CLAUDE_CONFIG_DIR   # catches function wrappers too (bash and zsh) — -B2 to include the function's name line, not -A1
+   ```
+
+   `skills/` under an alternate config dir is often a **symlink** back to
+   `~/.claude/skills` (one script, shared) — but `settings.json` is never
+   shared, it's a real per-config-dir file. A `statusLine.command` set up in
+   `~/.claude/settings.json` does nothing for sessions launched against
+   `~/.claude-personal`; each config dir needs its own entry.
+
+3. For **each** config dir found (default `~/.claude` plus any alternates),
+   confirm its `settings.json` has `statusLine.command` pointing at *that
+   dir's own* path (one-time setup, already done for `~/.claude` when this
+   skill was created — but redo this check whenever a new config dir shows
+   up, e.g. a new alias or a new machine):
 
    ```json
    "command": "bash /Users/YOUR_USERNAME/.claude/skills/statusline-setup/scripts/statusline-command.sh"
+   ```
+
+   and for an alternate dir, e.g.:
+
+   ```json
+   "command": "bash /Users/YOUR_USERNAME/.claude-personal/skills/statusline-setup/scripts/statusline-command.sh"
    ```
 
 ### Edit

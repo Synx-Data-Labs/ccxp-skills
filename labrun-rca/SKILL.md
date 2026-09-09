@@ -73,7 +73,7 @@ Delegate to `/rca <run-id>`. That skill handles:
 - Impact assessment (is `main` red?)
 - Task creation in `dev/TODO/` when actionable
 
-Let `/rca` write the normal RCA report to the conversation. Capture its output structure (root cause, classification, impact, task ID if any).
+Let `/rca` write the normal RCA report to the conversation. Capture its output structure (root cause, classification, confidence, impact, task ID if any).
 
 ### 5. Post the RCA report to the thread
 
@@ -85,6 +85,7 @@ Format the RCA for Slack `mrkdwn` (`*bold*`, `_italic_`, `` `code` ``, `<url|lab
 *Error:* `<one-line error from logs>`
 *Root cause:* <1–2 sentence explanation>
 *Classification:* <Our code | Infrastructure | Upstream | Transient | Configuration>
+*Confidence:* <Confirmed | Unconfirmed>
 *Impact:* <what's blocked>
 *Action:* <task-id if created, otherwise "None — <reason>">
 
@@ -126,4 +127,4 @@ If the caller is not in a repo context (e.g., running this from a personal dir),
 - **Thread-only replies.** Never post to the channel root when replying with RCA findings — always use `thread_ts`. This keeps `#slack-automation-alerts` readable.
 - **One RCA per failure.** Check the thread before starting so concurrent ccxp sessions don't race on the same message.
 - **No secrets in replies.** Paste log excerpts, not environment variables or tokens. The `gh run view --log-failed` output is generally safe but spot-check before sending.
-- **Respect `/rca`'s classification.** Don't editorialize. If `/rca` says Transient, the Slack reply says Transient.
+- **Respect `/rca`'s classification and confidence.** Don't editorialize. If `/rca` says Transient, the Slack reply says Transient — and if it says Unconfirmed, the reply says Unconfirmed, not a bare classification that reads as definitive.
