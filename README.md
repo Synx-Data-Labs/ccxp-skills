@@ -104,7 +104,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `stage` | Ensure a task is present in `dev/TODO/queue.md` |
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
 | `new-task` | File a new task to the `dev/TODO` backlog |
-| `gcpr` | Commit & push uncommitted changes, open a PR, hand off to `address-pr` |
+| `gcpr` (alias `land`) | Commit & push uncommitted changes, open a PR, hand off to `address-pr` |
 | `address-pr` | Address PR review comments, verify CI + hard gate, merge or notify |
 | `cleanup-branch` | Post-merge branch cleanup — a specific branch, a PR-merge sweep, or a bulk prune |
 | `retro` | Weekly retrospective — metrics, analysis, action items |

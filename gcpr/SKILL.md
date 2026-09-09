@@ -7,6 +7,8 @@ argument-hint: [commit-message-or-description]
 
 Group-Commit-PR — automates the branch workflow up to PR creation. Once the PR is open, hand off to the `/address-pr` skill, which owns CI watching, Copilot review handling, pre-merge gating, and merge. Keeping the split clean means each skill has one job.
 
+Also invocable as `/land` (see `land/SKILL.md`) — same skill, more natural name.
+
 ## Argument
 
 `$ARGUMENTS` optionally contains:
