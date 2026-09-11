@@ -62,9 +62,18 @@ related: T20260911-140914
      for the same physical machine as equivalent — fragile and
      probably not worth it given option 1 exists.
 - Either way, existing `claimed_by` values already on `main` (stamped
-  with a since-drifted hostname) need a migration path — likely just
-  "re-acquire on next touch," since `_tc_acquire` already overwrites
-  `claimed_by` with the current identity.
+  with a since-drifted hostname) need a migration path. **Not** a plain
+  "re-acquire on next touch" — checked `_tc_acquire()`: it only
+  overwrites `claimed_by` unconditionally in the `none` (unclaimed)
+  branch. In the `other` branch, which is exactly what a drift-orphaned
+  self-claim looks like (some `claimed_by` present, string mismatch
+  against the current identity), it instead *refuses* — `printf
+  'claimed:%s\n' "$cur"; return 3` — rather than re-stamping. The actual
+  migration needs either a one-time bulk re-stamp of existing
+  `claimed_by` values (recomputing each with the new stable-machine-id
+  scheme so old and new agree), or a small carve-out in `_tc_acquire`'s
+  `other` branch that treats "same working-dir, only the old hostname
+  half looks stale" as reclaimable rather than foreign.
 
 ## Test plan
 

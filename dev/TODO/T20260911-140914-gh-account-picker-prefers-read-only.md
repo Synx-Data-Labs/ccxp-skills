@@ -33,7 +33,7 @@ source: apache-skills session, 2026-09-09 — discovered while running /gcpr on 
   "picks the authenticated account with access to this repo" — read
   access was an implicit, unstated proxy for "access," which breaks for
   any repo where different accounts have different permission tiers.
-- `_gh_pick_account()` (lines ~71-89) never checks `viewerPermission`
+- `_gh_pick_account()` (lines 72-92) never checks `viewerPermission`
   (available via `gh repo view <slug> --json viewerPermission`), and
   never invalidates a cached entry after a write operation fails against
   it — so once a wrong pick is cached, every subsequent write silently
@@ -53,6 +53,14 @@ source: apache-skills session, 2026-09-09 — discovered while running /gcpr on 
   (e.g. "must be a collaborator"), drop that cache line and re-probe
   before failing outright, rather than requiring a human to edit the
   cache file by hand.
+  - **Implementation obstacle**: `main()` ends with `exec env
+    GH_TOKEN="$tok" gh "$@"` (line 101) — `exec` replaces the wrapper's
+    own process image with `gh`, so the wrapper never regains control to
+    inspect `gh`'s exit code or output. Self-healing requires dropping
+    the `exec` for a capture-then-retry shape (run `gh` as a normal
+    child, check its exit status, drop the cache + re-probe + re-run on
+    a permission-shaped failure, otherwise pass through its exit code)
+    — a real restructuring of `main()`, not a one-line addition.
 
 ## Test plan
 
