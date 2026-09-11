@@ -9,3 +9,4 @@ reprioritize.
 - [T20260910-872316](T20260910-872316-retro-slack-summary-no-webhook-fallback.md): Retro's Slack summary has no webhook fallback, unlike standup/IPM
 - [T20260911-140914](T20260911-140914-gh-account-picker-prefers-read-only.md): `_gh/gh.sh` account-picker can cache a read-only account
 - [T20260911-698434](T20260911-698434-claimant-id-unstable-hostname.md): `_tc_claimant_id()` uses bare `hostname`, which can drift
+- [T20260911-347027](T20260911-347027-ccxp-epic-progress-in-standup.md): `/ccxp` standup should report epic-level progress from the hub repo's `dev/EPICS.md`
