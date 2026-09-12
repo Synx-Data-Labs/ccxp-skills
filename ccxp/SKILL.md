@@ -52,7 +52,7 @@ skill/argument surface.
 
 | XP Practice | How ccxp applies it |
 |-------------|---------------------|
-| Planning game | Pre-IPM design pass (interactive-only, Phase 2a.3) readies candidates during the week; Monday IPM (Phase 2a, cron) budget-cuts whatever's design-ready → ipm-weekly.md; **continuous pre-IPM staging** via `/stage` (candidates accrue all week under `## Candidates`, IPM folds them in) |
+| Planning game | Pre-IPM design pass (interactive-only, Phase 2a.3, run as `/grill-me` per candidate) readies candidates during the week; Monday IPM (Phase 2a, cron) budget-cuts whatever's design-ready → ipm-weekly.md; **continuous pre-IPM staging** via `/stage` (candidates accrue all week under `## Candidates`, IPM folds them in) |
 | Small releases | Continuous PR flow — ship small, ship often |
 | Simple design | KISS principle from `dev/guidelines.md` |
 | Testing | TDD — test plan before code, `bats tests/` before push |
@@ -597,11 +597,11 @@ Run `/todo next` to get the top 5 ranked Tier 2 tasks (`Design` or `Open`). The 
 
 **This step never runs unattended.** It's where business priorities get weighed and a candidate task actually becomes ready to implement — exactly the kind of judgment call reserved for a human at the keyboard (see "Cron mode vs. interactive mode" above). When `CCXP_CRON_MODE=1`, skip straight to 2a.4 with whatever the 2a.2 filter left in the pool. The rest of this step describes the interactive pairing-session flow:
 
-For each Tier 2 candidate, time-box ~10–15 min:
+For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/grill-me`** — run `/grill-me T<id>` (see `grill-me/SKILL.md`), which interviews the human in frontier rounds and, on confirmation, writes the Design section + Test Plan and any estimation revision into the task file. This phase wraps that call with the lifecycle bookkeeping `/grill-me` deliberately does not touch:
 
-1. Read the task file. If it has no Design section, write one — scope, dependencies, unknowns, and decisions to make. If it already has one, refresh it: re-validate that the assumptions still hold.
-2. If implementing the task requires a design decision that needs human input, file a Slack escalation via the existing protocol and **skip this task for this week**. It re-enters the candidate pool next IPM.
-3. If the design pass changes what the task actually entails, **revise the `estimation` field in the frontmatter**. Append a one-liner to the Design section: `Estimation revised from {old} to {new}: {one-line reason}`.
+1. **Grill it.** `/grill-me T<id>`. It reads the task's Problem (and any existing Design section — a refresh re-validates the assumptions rather than starting cold), asks the frontier rounds, and stops at its synthesis for a go/no-go. Do not run the rounds yourself or summarize on the user's behalf — the whole point is the human answering.
+2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#claude-notification`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
+3. **Confirm the estimate landed.** `/grill-me` step 4 already rewrote `estimation:` and appended `Estimation revised from {old} to {new}: {reason}` to the Design section when the estimate moved; check the frontmatter before the 2a.4 budget cut consumes it. If the pass was a free-text grill (no task file), it wrote nothing — file the task via `/new-task` first, then re-run.
 4. **Claim the task before touching its status** (T20260610-248248 — this step
    previously only mirrored to the board, leaving the task unclaimed mid-pass
    and pickable by a peer session's `/todo next`):
@@ -611,17 +611,19 @@ For each Tier 2 candidate, time-box ~10–15 min:
    bash ~/.claude/skills/_session/task_claim.sh acquire <task-id>
    ```
 
-   `acquire` sets `claimed_by` **and** `status: Coding` as a side effect. If
-   the design pass produced a Design section (not ready for Coding yet),
-   correct the status back — same two-step pattern `/drive` Phase 1 uses for
-   "a design PR will still run":
+   `acquire` sets `claimed_by` **and** `status: Coding` as a side effect. A
+   grilled-but-not-yet-implemented task belongs in `Design`, so correct the
+   status back — same two-step pattern `/drive` Phase 1 uses for "a design
+   PR will still run":
 
    ```bash
    bash ~/.claude/skills/_session/status.sh <task-id> Design
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
-5. Tier 1 carry-overs do **not** get a re-design pass — once a task is in Coding, the design is presumed adequate. If Coding has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+5. Tier 1 carry-overs do **not** get a re-grill — once a task is in Coding, the design is presumed adequate. If Coding has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+
+The grilled task files (Design sections, estimation revisions, claims) are left uncommitted by `/grill-me`; they land together with the IPM file in 2a.5's commit PR, not one PR per candidate.
 
 #### 2a.4 Budget cut
 
