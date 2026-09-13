@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "ccxp-skills",
+  "displayName": "ccxp-skills",
+  "description": "Task lifecycle, PR automation, CI/RCA and retro skills for the ccxp-family workflow suite, plus general-purpose dev-tool skills (Cloudflare, docs, email, web-perf).",
+  "version": "1.0.0",
+  "author": {
+    "name": "Synx Data Labs",
+    "url": "https://github.com/Synx-Data-Labs"
+  },
+  "homepage": "https://github.com/Synx-Data-Labs/ccxp-skills#readme",
+  "repository": "https://github.com/Synx-Data-Labs/ccxp-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "workflow",
+    "task-lifecycle",
+    "pull-request",
+    "ci",
+    "rca",
+    "cloudflare"
+  ],
+  "skills": "."
+}

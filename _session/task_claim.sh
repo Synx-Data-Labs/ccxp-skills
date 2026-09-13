@@ -1,0 +1,669 @@
+#!/usr/bin/env bash
+# task_claim.sh <verb> <task-id> [args] — durable, main-resident task claim.
+#
+# Unlike _session/claim.sh (the soft Project-board *visualization* layer), this
+# claim lives in the task FILE's frontmatter on `main`. Because every session
+# merges to the same `origin/main`, a merge is an atomic cross-machine
+# compare-and-swap: two sessions claiming the same task edit the SAME
+# `claimed_by:` line, so the second merge conflicts. **The conflict IS the lock.**
+# See build-pipeline-repo T20260611-104067 for the full design.
+#
+# The claim is two fields in the task file's leading `---` frontmatter block:
+#   claimed_by:      <machine>:<working-dir>  (empty when unclaimed; the lock —
+#                                              already carries the working-dir)
+#   status:          Coding                   (board projection; secondary)
+#
+# The claimant id is the (machine, clone-path) pair, NOT a per-invocation session
+# id — so a new /drive or ccxp run in the SAME clone is the SAME claimant and
+# supersedes its own prior claim instead of stacking a new one. That clone-stable
+# identity is what makes release-on-pickup (the `release-others` verb, formerly
+# `release-mine` — still accepted as an alias) reliable.
+# See build-pipeline-repo T20260615-169917 (retires the old <sid>@<machine>).
+#
+# `sync-tasks-to-issues` projects claimed_by from `main` onto the Project V2
+# field of the SAME name (1:1). The soft-claim direct writes
+# (_session/claim.sh, heartbeat.sh) and the old machine/cc_session_id/clone_path/
+# last_heartbeat Project fields are retired; there is no heartbeat in this design
+# (liveness comes from git progress).
+#
+# NOTE: `claimed_by:` is the *session execution lock* and is distinct from the
+# informal human-assignee field `owner:` (e.g. "owner: Alex"). This lib never
+# touches `owner:`.
+#
+# CORRECTNESS INVARIANT: the `claimed_by:` line is the canonical single-line
+# claim location. For the conflict-guarantee to hold, two concurrent claims MUST
+# produce a git merge conflict — which they do iff both edit the same existing
+# `claimed_by:` line to different values. Task files should therefore carry a
+# `claimed_by:` line (empty) even when unclaimed; see the seed migration slice.
+#
+# PR OWNERSHIP IS DERIVED, NOT SEPARATELY TRACKED (T20260622-404636). A PR is
+# owned by whoever owns the TASK it implements — i.e. that task's `claimed_by`
+# on `main`, the single source of truth above. There is no per-PR marker; the
+# `pr-owner` verb resolves PR → task → claimed_by so callers (`/address-pr`
+# §1.6) defer to another agent's live work or proceed on their own / a free
+# task. This replaced the old `pr_owner.sh` cc-owned-label/marker mechanism,
+# whose stranded markers under dead sessions were the recurring pain — a problem
+# that simply does not exist when ownership lives on the task, freed by
+# release-on-pickup (same agent) and the reclaim sweep (foreign dead agent).
+#
+# Verbs:
+#   acquire <task-id>            → claim if free. Prints one of:
+#                                    "acquired"        (was free, now mine)
+#                                    "mine"            (already mine; idempotent)
+#                                    "claimed:<by>"    (held by another; exit 3)
+#   read    <task-id>            → prints "<status>\t<claimed_by>" (empty if none)
+#   release <task-id> [status]   → clear claimed_by, set status (default Open). Prints "released"
+#   release-others [except-id]   → release-on-pickup: clear EVERY task held by this
+#                                    identity EXCEPT the optional <except-id> (the
+#                                    task about to be acquired), so a session holds
+#                                    ≤1 active claim. Prints "released:<id>" per freed
+#                                    task. NOTE the inverted argument vs `release`
+#                                    above: `release <id>` releases <id> itself;
+#                                    `release-others <id>` releases everything BUT
+#                                    <id>. Don't confuse the two — this was a real,
+#                                    hit-in-production mix-up (T20260720-113930,
+#                                    build-pipeline-repo), which is why the verb was
+#                                    renamed from `release-mine` (still accepted as a
+#                                    backward-compatible alias) to a name that doesn't
+#                                    read as a sibling of `release`.
+#   pr-owner <pr-number>         → derive PR ownership from its task's claimed_by.
+#                                    Prints "mine" | "free" | "owned:<by>" |
+#                                    "untracked" (PR maps to no task) | "unknown"
+#                                    (task file unresolvable — caller defers).
+#   reclaimable <task-id> [days] → "reclaimable" | "live". Stale iff the relevant
+#                                    activity signal exceeds the window (default
+#                                    2d): commit date on `main` for a no-PR task,
+#                                    or the open PR's last activity (updatedAt)
+#                                    for an open-PR task. Open PRs no longer
+#                                    auto-block reclaim (T20260622-404636).
+#   claimant-id                  → prints this session's claimant id (<machine>:<working-dir>)
+#
+# Frontmatter edits are best-effort-safe: they operate ONLY within the first
+# `---`...`---` fence and never touch the body. All operations are idempotent.
+
+set -uo pipefail
+
+_TC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$_TC_DIR/_lib.sh"   # identity helpers: session_machine, session_clone_path
+
+# Where task files live, relative to repo root. Resolved at call time
+# (via _tc_task_dir) so tests and other repos can override TASK_CLAIM_DIR.
+_tc_task_dir() { printf '%s' "${TASK_CLAIM_DIR:-dev/TODO}"; }
+
+# --- Identity ----------------------------------------------------------------
+
+_tc_claimant_id() {
+  # "<machine>:<working-dir>" — the (host, clone-path) pair. Stable across CC
+  # invocations in the SAME clone (one clone = one session), so a new /drive or
+  # ccxp run supersedes its OWN prior claim instead of stacking a new one.
+  # `machine` keeps the id globally unique when two hosts share a /home/... path.
+  # Retires the per-invocation session_cc_session_id (the accumulation cause —
+  # T20260615-169917). PR ownership is now derived from THIS id via `pr-owner`
+  # (T20260622-404636 retired the separate per-session PR marker), so a PR is
+  # owned by the same (host, clone) agent that holds its task.
+  printf '%s:%s' "$(session_machine)" "$(session_clone_path)"
+}
+
+# Where PARKING task files live — derived from the TODO dir so a TASK_CLAIM_DIR
+# override (tests, other repos) relocates both in lockstep. release-others (formerly release-mine) scans
+# TODO + PARKING because a parked task can still carry this session's claim.
+_tc_parking_dir() {
+  if [ -n "${TASK_CLAIM_PARKING_DIR:-}" ]; then printf '%s' "$TASK_CLAIM_PARKING_DIR"; return; fi
+  # Sibling of the task dir (dev/TODO → dev/PARKING). Always derive from the
+  # resolved task dir — never a cwd-relative literal — so a TASK_CLAIM_DIR
+  # override (or a non-/TODO layout) can't make release-others (formerly release-mine) scan/mutate an
+  # unrelated dev/PARKING in the caller's cwd.
+  local td; td="$(_tc_task_dir)"
+  printf '%s/PARKING' "$(dirname "$td")"
+}
+
+# --- Frontmatter get/set (pure; operate only within the first --- fence) -----
+
+_tc_fm_get() {
+  # $1 file  $2 field → echo the field's value (trimmed), or empty. First fence only.
+  local file="$1" field="$2"
+  [ -r "$file" ] || return 1
+  awk -v f="$field" '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---"  { exit }
+    infm {
+      # anchored "field:" at line start; capture the remainder verbatim
+      if (index($0, f":") == 1) {
+        v = substr($0, length(f) + 2)        # drop "field:"
+        sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+        print v; exit
+      }
+    }
+  ' "$file"
+}
+
+_tc_fm_set() {
+  # $1 file  $2 field  $3 value → set/insert "field: value" within the first
+  # fence (replace if present, else insert before the closing ---). An empty
+  # value writes a bare "field:" (no trailing space). Atomic.
+  local file="$1" field="$2" value="$3" line tmp
+  [ -w "$file" ] || { _session_log "task_claim: not writable: $file"; return 1; }
+  if [ -n "$value" ]; then line="$field: $value"; else line="$field:"; fi
+  tmp="$(mktemp "${file}.tc.XXXXXX")" || return 1
+  awk -v f="$field" -v repl="$line" '
+    BEGIN { infm = 0; done = 0; opened = 0 }
+    NR==1 && $0=="---" { infm = 1; opened = 1; print; next }
+    {
+      if (infm && $0=="---") {              # closing fence
+        if (!done) { print repl; done = 1 }
+        infm = 0; print; next
+      }
+      if (infm && !done && index($0, f":") == 1) {
+        print repl; done = 1; next          # replace existing
+      }
+      print
+    }
+    END {
+      # No frontmatter fence at all → do not fabricate one (task files must
+      # have frontmatter). opened guards that pathological case.
+      if (!opened) exit 0
+    }
+  ' "$file" > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$file"
+}
+
+# --- scheduled: reality-stamp helpers ----------------------------------------
+
+_tc_current_monday() {
+  # Print the ISO date (YYYY-MM-DD) of the Monday that starts the current week.
+  # Respects SESSION_TODAY env var for testability (same hook as iteration.sh).
+  local today
+  today="${SESSION_TODAY:-$(date +%F)}"
+  python3 -c "
+import datetime, sys
+try:
+    d = datetime.date.fromisoformat('${today}')
+    print((d - datetime.timedelta(days=d.weekday())).isoformat())
+except Exception:
+    sys.exit(1)
+"
+}
+
+_tc_stamp_scheduled_if_needed() {
+  # Stamp scheduled: = current Monday iff the field is empty/missing OR set to
+  # a future Monday (early-pickup — task was scheduled ahead but work starts now).
+  # A past scheduled: is a historical record and is left untouched.
+  # Idempotent: calling twice with the same current Monday is a no-op.
+  local file="$1" cur_monday existing
+  cur_monday="$(_tc_current_monday)" || return 1
+  existing="$(_tc_fm_get "$file" scheduled)"
+  if [ -z "$existing" ] || [[ "$existing" > "$cur_monday" ]]; then
+    _tc_fm_set "$file" scheduled "$cur_monday" || return 1
+  fi
+}
+
+# --- The own-or-defer decision (the anti-steal core) -------------------------
+
+_tc_decide() {
+  # $1 current-claimant (may be empty)  $2 my-id → "none" | "mine" | "other".
+  local cur="$1" mine="$2"
+  if [ -z "$cur" ] || [ "$cur" = "none" ]; then printf 'none'; return 0; fi
+  if [ "$cur" = "$mine" ]; then printf 'mine'; return 0; fi
+  printf 'other'
+}
+
+# --- The reclaim decision (pure; git/gh facts gathered by the caller) --------
+
+_tc_reclaim_decide() {
+  # $1 status  $2 claimed_by  $3 commit_days  $4 pr_days  $5 stale_days
+  # $6 (optional) live_signal — "1" if the caller observed an in-progress
+  #    GH Actions run or a live local PID for this claim, else empty/"0".
+  #   → "reclaimable" | "live"
+  #
+  # A claim is reclaimable only when actively-claimed (Coding/Review with a
+  # claimant) AND BOTH activity signals exceed the window:
+  #   - commit_days: days since the last commit mentioning the id on `main`
+  #     (large when none — incl. an open-PR task whose work sits on an unmerged
+  #     branch, invisible to `git log` on main);
+  #   - pr_days: days since the open PR's last activity (updatedAt — captures
+  #     pushes, comments, reviews), or large when there is NO open PR.
+  #
+  # An open PR no longer auto-blocks reclaim. The old `has_pr=1 -> live` rule was
+  # too conservative: it leaked a dead session's open-PR task forever, which was
+  # the recurring pain (T20260622-404636). Now the PR's OWN activity gates it —
+  # a PR touched within the window is live, an abandoned one is reclaimable.
+  # Because the irrelevant signal is large (no-PR task -> pr_days large; open-PR
+  # work-on-branch -> commit_days large), the AND reduces to "the RELEVANT signal
+  # is stale", so the no-PR behaviour is unchanged and open-PR tasks gain a
+  # PR-activity-gated reclaim path.
+  #
+  # Two pre-checks (T20260724-312324) run BEFORE the staleness window, either
+  # one short-circuiting straight to "live":
+  #   1. Non-session claimant format — a claimed_by that matches NEITHER the
+  #      current "<host>:<path>" shape (_tc_claimant_id, contains ':/') NOR
+  #      the legacy "<sid>@<machine>" shape (contains '@', pre-T20260615-169917
+  #      — ages out via this same staleness window, see
+  #      "legacy <sid>@<machine> claim still parses, defers, and clears" in
+  #      tests/task_claim.bats) is a deliberate human override
+  #      (e.g. `claimed_by: Alex`) and is NEVER auto-reclaimable, regardless of
+  #      activity staleness.
+  #   2. Caller-observed liveness signal — an in-progress GH Actions run or a
+  #      live local PID referencing this claim. Gathering it is impure
+  #      (gh/ps I/O), so the caller (_tc_reclaimable) computes it and passes
+  #      the verdict in as $6, keeping this function pure/unit-testable.
+  local status="$1" claimed_by="$2" commit_days="$3" pr_days="$4" stale="$5" live_signal="${6:-}"
+  case "$status" in
+    Coding|Review) : ;;
+    *) printf 'live'; return 0 ;;
+  esac
+  if [ -z "$claimed_by" ] || [ "$claimed_by" = "none" ]; then printf 'live'; return 0; fi
+  case "$claimed_by" in
+    *:/*) : ;;  # session-shaped: current "<host>:<path>"
+    *)
+      # Legacy "<sid>@<machine>" shape (pre-T20260615-169917) — a hex session
+      # id of 6+ chars before the '@' (every real example is 8 hex chars,
+      # e.g. deadbeef@buildhost, 8d907ecf@buildhost; 6 is a conservative
+      # floor). A bare
+      # '*@*' match is too loose: a human override that happens to contain
+      # '@' (an email address, an '@'-mention) would misclassify as
+      # session-shaped and lose its "never auto-reclaimable" protection —
+      # caught in code review, T20260724-312324.
+      if [[ "$claimed_by" =~ ^[0-9a-fA-F]{6,}@ ]]; then
+        : # session-shaped — subject to the staleness window
+      else
+        printf 'live'; return 0  # non-session claimant — human-assigned, never auto-reclaimable
+      fi
+      ;;
+  esac
+  if [ "$live_signal" = "1" ]; then printf 'live'; return 0; fi
+  if [ "${commit_days:-0}" -ge "$stale" ] 2>/dev/null && [ "${pr_days:-0}" -ge "$stale" ] 2>/dev/null; then
+    printf 'reclaimable'
+  else
+    printf 'live'
+  fi
+}
+
+# --- File lookup -------------------------------------------------------------
+
+_tc_find_file() {
+  # $1 task-id → echo path to the task file under the task dir, or empty (+ nonzero).
+  local id="$1" dir m
+  dir="$(_tc_task_dir)"
+  for m in "$dir/$id"*.md; do
+    [ -e "$m" ] && { printf '%s' "$m"; return 0; }
+  done
+  return 1
+}
+
+_tc_find_file_anydir() {
+  # $1 task-id → echo path under TODO **or PARKING**, or empty (+ nonzero).
+  # release-others' except-id resolution needs this: the task about to be picked
+  # may be a PARKED task being resumed, and a TODO-only lookup would fail to
+  # protect it — release-others would then clear the very claim it was told to keep.
+  local id="$1" dir m
+  for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
+    for m in "$dir/$id"*.md; do
+      [ -e "$m" ] && { printf '%s' "$m"; return 0; }
+    done
+  done
+  return 1
+}
+
+# --- I/O: git-progress liveness ---------------------------------------------
+
+_tc_days_since_last_commit() {
+  # $1 task-id → whole days since the most recent commit mentioning the id on
+  # the current branch, or a large number if none. Uses committer date.
+  local id="$1" last now
+  last="$(git log -1 --format=%ct --grep="$id" 2>/dev/null || true)"
+  [ -n "$last" ] || { printf '99999'; return 0; }
+  now="$(date +%s)"
+  printf '%d' $(( (now - last) / 86400 ))
+}
+
+_tc_iso_to_epoch() {
+  # $1 ISO-8601 UTC → epoch seconds, or empty. GNU date then BSD date.
+  local iso="$1" e
+  e="$(date -u -d "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
+  e="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
+  printf ''
+}
+
+_tc_pick_pr_field() {
+  # $1 task-id  $2 field-name  $3 open-PRs JSON (array of {updatedAt, headRefName, body, title})
+  #   → the <field-name> value off the most-recently-updated PR that references
+  #     the id by HEAD BRANCH (`t<digits>-…`), body, or title — or empty. Pure
+  #     (no I/O), unit-tested. Shared matcher behind _tc_pick_pr_updated_at and
+  #     _tc_pick_pr_head_ref (T20260724-312324) — same match set, each caller
+  #     just picks a different field off the winning PR.
+  #
+  # Why match the BRANCH locally (T20260622-404636): a task-tracked PR can carry
+  # its id only in the branch name, and `gh ... --search "<id>"` does NOT index
+  # headRefName — a bare-term search returns nothing, the PR reads as "no open
+  # PR" (99999 -> stale -> FALSE reclaim of a live PR). The branch is the
+  # load-bearing signal: `/drive` Phase 4 and `/gcpr` ALWAYS name the branch
+  # `t<id>-…`, so every conventionally-created PR is matched here.
+  #
+  # BY DESIGN — agreement with session_pr_task_id holds on every task-tracked PR
+  # (T20260625-733429, resolving T20260622-404636's HIGH finding). session_pr_task_id
+  # (the pr-owner resolver) has a THIRD signal this picker does not replicate — a
+  # commit-messageHeadline scan — so on paper a PR carrying its id ONLY in commit
+  # subjects (non-`t<id>-…` branch AND no id in body/title) resolves there but is
+  # missed here. That asymmetry is UNREACHABLE in the reclaim path, this picker's
+  # only consumers: _tc_reclaimable (via reclaim_sweep.sh) and _tc_has_live_run
+  # run solely against `claimed_by:` task files, and a claimed task's PR is created
+  # by /drive Phase 4 or /gcpr, which ALWAYS name the branch `t<id>-…` — signal #1,
+  # keyed by BOTH session_pr_task_id and this picker. So every task-tracked PR a
+  # claim could have is matched here; a commit-only-id PR is non-task-tracked by
+  # construction (no convention created it) and so is never a claimed task's live
+  # PR. Replicating signal #3 would need a per-PR commits fetch (N+1 gh calls over
+  # every open PR, every reclaim tick) to protect a PR type no tooling produces —
+  # the wrong tradeoff. Both halves of the invariant are pinned in
+  # tests/task_claim.bats ("matches a BRANCH-named PR (id only in headRefName)" +
+  # "commit-only-id PR is by-design unmatched").
+  local id="$1" field="$2" json="$3" head_token
+  head_token="$(printf '%s' "$id" | sed 's/^T/t/')"
+  printf '%s' "$json" | python3 -c '
+import json, sys
+tid, h, field = sys.argv[1], sys.argv[2], sys.argv[3]
+try:
+    arr = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+m = [p for p in arr
+     if (p.get("headRefName") or "").startswith(h)
+     or tid in (p.get("body") or "")
+     or tid in (p.get("title") or "")]
+m.sort(key=lambda p: p.get("updatedAt") or "")
+print((m[-1].get(field) or "") if m else "")
+' "$id" "$head_token" "$field" 2>/dev/null
+}
+
+_tc_pick_pr_updated_at() {
+  # $1 task-id  $2 open-PRs JSON → updatedAt of the matched PR. See
+  # _tc_pick_pr_field for the match semantics (T20260622-404636/T20260625-733429).
+  _tc_pick_pr_field "$1" updatedAt "$2"
+}
+
+_tc_pick_pr_head_ref() {
+  # $1 task-id  $2 open-PRs JSON → headRefName of the same matched PR (see
+  # _tc_pick_pr_field) — the branch _tc_has_live_run checks GH Actions run
+  # status against (T20260724-312324).
+  _tc_pick_pr_field "$1" headRefName "$2"
+}
+
+_tc_has_live_run() {
+  # $1 task-id → "1" if there is an in-progress/queued/pending-approval GH
+  # Actions run on the branch of this task's open PR, else empty.
+  # Cross-host-safe (no PID/host assumptions — works regardless of which box
+  # the claim was made from); this is the "always-available" liveness signal
+  # T20260724-312324 calls out over a same-host PID check. Best-effort: any
+  # gh/network failure resolves to "not live" — fails toward the pre-existing
+  # staleness-window behavior, never toward blocking a genuinely dead claim
+  # from reclaim.
+  local id="$1" pr_json head statuses
+  pr_json="$(_session_gh pr list --state open --limit 200 \
+             --json headRefName,body,title,updatedAt 2>/dev/null || true)"
+  [ -n "$pr_json" ] || { printf ''; return 0; }
+  head="$(_tc_pick_pr_head_ref "$id" "$pr_json")"
+  [ -n "$head" ] || { printf ''; return 0; }
+  statuses="$(_session_gh run list --branch "$head" --limit 5 \
+              --json status --jq '.[].status' 2>/dev/null || true)"
+  # requested/pending cover a run awaiting environment approval — still live,
+  # not just in_progress/queued/waiting (code review, T20260724-312324).
+  if grep -qE '^(in_progress|queued|waiting|requested|pending)$' <<<"$statuses"; then
+    printf '1'
+  else
+    printf ''
+  fi
+}
+
+_tc_pr_activity_days() {
+  # $1 task-id → whole days since the most-recently-active OPEN PR referencing the
+  # id was last touched (updatedAt: push / comment / review), or a large number
+  # when there is NO open PR. Lets an actively-driven PR read as live even with
+  # no NEW commits, while an abandoned open PR ages into reclaimability.
+  local id="$1" json ts last now
+  json="$(_session_gh pr list --state open --limit 200 \
+          --json updatedAt,headRefName,body,title 2>/dev/null || true)"
+  [ -n "$json" ] || { printf '99999'; return 0; }
+  ts="$(_tc_pick_pr_updated_at "$id" "$json")"
+  [ -n "$ts" ] || { printf '99999'; return 0; }
+  last="$(_tc_iso_to_epoch "$ts")"
+  [ -n "$last" ] || { printf '99999'; return 0; }
+  now="$(date +%s)"
+  printf '%d' $(( (now - last) / 86400 ))
+}
+
+# --- Verbs -------------------------------------------------------------------
+
+_tc_acquire() {
+  local id="$1" file cur mine decision
+  file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id under $(_tc_task_dir)"; return 2; }
+  cur="$(_tc_fm_get "$file" claimed_by)"
+  mine="$(_tc_claimant_id)"
+  decision="$(_tc_decide "$cur" "$mine")"
+  case "$decision" in
+    mine)  printf 'mine\n'; return 0 ;;
+    other) printf 'claimed:%s\n' "$cur"; return 3 ;;
+    none)
+      _tc_fm_set "$file" claimed_by "$mine" || return 1
+      _tc_fm_set "$file" status Coding || return 1
+      _tc_stamp_scheduled_if_needed "$file" || return 1
+      printf 'acquired\n'; return 0 ;;
+  esac
+}
+
+_tc_read() {
+  local id="$1" file
+  file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
+  printf '%s\t%s\n' "$(_tc_fm_get "$file" status)" "$(_tc_fm_get "$file" claimed_by)"
+}
+
+_tc_release() {
+  local id="$1" final="${2:-Open}" file
+  file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
+  _tc_fm_set "$file" claimed_by "" || return 1
+  _tc_fm_set "$file" status "$final" || return 1
+  printf 'released\n'
+}
+
+_tc_release_others() {
+  # Release-on-pickup: free EVERY task currently claimed by THIS identity across
+  # TODO + PARKING, EXCEPT $1 if given, so a session holds ≤1 active claim. The
+  # pick step (/drive Phase 1, /todo, /ccxp) calls this before acquiring a new
+  # task; the clone-stable claimant id (_tc_claimant_id) is what makes "mine"
+  # recognizable across CC invocations — without it a live session never
+  # releases its prior task and claims accumulate until the backlog reads
+  # fully-claimed.
+  #
+  # Named release-OTHERS (not release-mine, T20260720-113930) so its argument
+  # can't be misread as "the task to release" — it's the opposite: the one
+  # task to KEEP. `release-mine` is kept as a dispatcher-level alias for any
+  # existing caller; both invoke this same function.
+  #
+  # $1 (optional) except-id — keep this task's claim (the one about to be
+  # acquired / re-picked), so re-picking the same task is a no-op. Resolved by
+  # FILE across TODO **and PARKING** (_tc_find_file_anydir) so a parked task being
+  # resumed is protected, and so the short task-ids used in tests work too.
+  #
+  # Status handling: only an actively-claimed-but-now-abandoned task (Coding /
+  # Design) is returned to the pickable pool (→ Open). Every other status is
+  # PRESERVED, just shorn of its claim — critically `Blocked by T<id>` (the
+  # compound blocked status: resetting it to Open would re-inject a still-blocked
+  # task and destroy the blocker linkage /todo + the lint board-pass rely on),
+  # `Review` (a live PR drives it), and the terminal Done/Closed/Parked.
+  # Prints "released:<id>" per freed task (nothing if none).
+  local except="${1:-}" mine dir f status b id except_file=""
+  mine="$(_tc_claimant_id)"
+  [ -n "$mine" ] || return 0
+  if [ -n "$except" ]; then except_file="$(_tc_find_file_anydir "$except" 2>/dev/null || true)"; fi
+  for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
+    [ -d "$dir" ] || continue
+    for f in "$dir"/*.md; do
+      [ -e "$f" ] || continue
+      if [ -n "$except_file" ] && [ "$f" -ef "$except_file" ]; then continue; fi
+      [ "$(_tc_fm_get "$f" claimed_by)" = "$mine" ] || continue
+      status="$(_tc_fm_get "$f" status)"
+      case "$status" in Coding|Design) status="Open" ;; *) : ;; esac
+      _tc_fm_set "$f" claimed_by ""        || return 1
+      _tc_fm_set "$f" status "$status"     || return 1
+      b="$(basename "$f")"
+      if [[ "$b" =~ (T[0-9]{8}-[0-9]{6}) ]]; then id="${BASH_REMATCH[1]}"; else id="${b%.md}"; fi
+      printf 'released:%s\n' "$id"
+    done
+  done
+  return 0
+}
+
+_tc_reclaimable() {
+  local id="$1" stale="${2:-${TASK_CLAIM_STALE_DAYS:-2}}" file status claimed_by commit_days pr_days live_signal
+  file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
+  status="$(_tc_fm_get "$file" status)"
+  claimed_by="$(_tc_fm_get "$file" claimed_by)"
+  commit_days="$(_tc_days_since_last_commit "$id")"
+  pr_days="$(_tc_pr_activity_days "$id")"
+  live_signal="$(_tc_has_live_run "$id")"
+  _tc_reclaim_decide "$status" "$claimed_by" "$commit_days" "$pr_days" "$stale" "$live_signal"
+  printf '\n'
+}
+
+# --- PR ownership, DERIVED from the task claim (T20260622-404636) ------------
+
+_tc_resolve_task_location() {
+  # $1 pr  $2 task-id → echo "<owner/repo>\t<path-to-task-file>" or empty (+ nonzero).
+  #
+  # Cross-repo PRs carry an explicit `Task:` LINE in the body (a hub URL); the
+  # task file then lives in THAT repo, not the PR's repo. Two hardening rules
+  # the resolution MUST hold (T20260622-404636 verification):
+  #   - parse only the link on the `Task:` line, NOT the first blob link anywhere
+  #     in the body — a decoy `Spec:`/`Plan:`/`Builds-on:` cross-link that precedes
+  #     it must not redirect us to the wrong file; and
+  #   - the resolved filename must belong to THIS task id (basename startswith id),
+  #     so a mislinked URL forces the caller's fail-safe `unknown` (defer).
+  # A body-fetch FAILURE is not an empty body: fail closed (return 1 -> unknown)
+  # rather than silently degrading to the same-repo lookup against the wrong
+  # (target) clone — gh always resolves against $PWD's origin.
+  local pr="$1" id="$2" body rc links matched n url repo path
+  body="$(_session_gh pr view "$pr" --json body --jq '.body // ""' 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  # All blob links on `Task:` lines (a cross-repo PR carries exactly one; a prose
+  # "Task:" mention without a link contributes nothing).
+  links="$(printf '%s' "$body" | grep -iE '^[[:space:]]*Task:' \
+           | grep -oE 'github\.com/[^/]+/[^/]+/blob/[^ )]+\.md')"
+  if [ -n "$links" ]; then
+    # Keep only links to THIS task's file via a TOKEN-BOUNDARY id match
+    # (`<id>-<slug>.md` or bare `<id>.md`) — a string-prefix test would let a
+    # longer colliding id through (T…404636 vs T…4046369) — then dedupe. Resolve
+    # only if EXACTLY ONE distinct hub link remains: zero (all mislinks) or >1
+    # (ambiguous / a same-id decoy line in another repo) → fail closed → defer.
+    matched="$(printf '%s\n' "$links" | while IFS= read -r u; do
+      [ -n "$u" ] || continue
+      case "$(basename "$u")" in "$id"-*.md|"$id".md) printf '%s\n' "$u" ;; esac
+    done | sort -u)"
+    n="$(printf '%s' "$matched" | grep -c .)"
+    [ "$n" -eq 1 ] || return 1
+    url="$matched"
+    repo="$(printf '%s' "$url" | sed -E 's#.*github\.com/([^/]+/[^/]+)/blob/.*#\1#')"
+    path="$(printf '%s' "$url" | sed -E 's#.*/blob/[^/]+/##')"
+    { [ -n "$repo" ] && [ -n "$path" ]; } && { printf '%s\t%s' "$repo" "$path"; return 0; }
+    return 1
+  fi
+  # Same-repo: the task file is in this repo under the task dir; find its slug
+  # (same token-boundary id match as the cross-repo path).
+  repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
+  [ -n "$repo" ] || return 1
+  local dir name
+  dir="$(_tc_task_dir)"
+  name="$(_session_gh api "/repos/$repo/contents/$dir?ref=main" \
+          --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
+          | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
+          | head -1)"
+  [ -n "$name" ] || return 1
+  printf '%s\t%s/%s' "$repo" "$dir" "$name"
+}
+
+_tc_fetch_fm_field() {
+  # $1 owner/repo  $2 path  $3 field → echo the frontmatter field from that file
+  # on `main` (the source of truth), or nonzero on any fetch/decode failure.
+  local repo="$1" path="$2" field="$3" b64 tmp val
+  b64="$(_session_gh api "/repos/$repo/contents/$path?ref=main" --jq '.content // ""' 2>/dev/null || true)"
+  [ -n "$b64" ] || return 1
+  tmp="$(mktemp "${TMPDIR:-/tmp}/tc-fm.XXXXXX")" || return 1
+  printf '%s' "$b64" | base64 -d > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  val="$(_tc_fm_get "$tmp" "$field")"
+  rm -f "$tmp"
+  printf '%s' "$val"
+}
+
+_tc_is_own_cross_repo_clone() {
+  # $1 task-id  $2 claimed_by  $3 my-claimant-id → 0 (yes) | 1 (no). Pure string
+  # logic, no I/O — the cross-repo counterpart to _tc_decide's exact-path match.
+  #
+  # T20260626-195977: a cross-repo task's claim is written from the HUB clone
+  # (/drive Phase 1), but /address-pr's cross-repo mode runs from an ephemeral
+  # TARGET clone (Phase 1.5: `/tmp/<task-id>-<slug>-target`) — a different path
+  # on the SAME host. _tc_decide's exact `<host>:<path>` match can never say
+  # "mine" for that legitimate case, so pr-owner always deferred (`owned:`) on
+  # the session's own cross-repo PRs. This recognizes exactly that one
+  # additional case, without loosening the anti-steal guarantee for anything
+  # else: both the host must match (a foreign host is never "mine") AND the
+  # current clone's path must be the ephemeral ${task-id}-*-target directory
+  # Phase 1.5 itself creates for THIS task — a same-host clone working a
+  # DIFFERENT task, or any clone that isn't this exact naming convention,
+  # still falls through to _tc_decide's "other".
+  local id="$1" claimed_by="$2" mine="$3" claim_host claim_path my_host my_path base
+  [ -n "$claimed_by" ] && [ -n "$mine" ] || return 1
+  claim_host="${claimed_by%%:*}"; claim_path="${claimed_by#*:}"
+  my_host="${mine%%:*}"; my_path="${mine#*:}"
+  [ -n "$claim_host" ] && [ "$claim_host" = "$my_host" ] || return 1
+  [ "$claim_path" != "$my_path" ] || return 1   # exact match is _tc_decide's job, not this one
+  base="$(basename "$my_path")"
+  case "$base" in
+    "$id"-*-target) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_tc_pr_owner() {
+  # $1 pr → "mine" | "free" | "owned:<by>" | "untracked" | "unknown".
+  # Derive PR ownership from the claim on the task the PR implements. The task's
+  # claimed_by on `main` (the hub repo) is the single source of truth; fetched
+  # over the API so it works cross-repo and reads the AUTHORITATIVE main value
+  # (not a possibly-edited branch copy). Fail-safe: an unresolvable task file
+  # returns "unknown" so the caller defers, never silently proceeds on a PR it
+  # cannot prove is free.
+  local pr="$1" id loc repo path claimed_by mine decision
+  id="$(session_pr_task_id "$pr")"
+  [ -n "$id" ] || { printf 'untracked\n'; return 0; }
+  loc="$(_tc_resolve_task_location "$pr" "$id")" || { printf 'unknown\n'; return 0; }
+  [ -n "$loc" ] || { printf 'untracked\n'; return 0; }
+  repo="${loc%%$'\t'*}"; path="${loc#*$'\t'}"
+  claimed_by="$(_tc_fetch_fm_field "$repo" "$path" claimed_by)" || { printf 'unknown\n'; return 0; }
+  mine="$(_tc_claimant_id)"
+  decision="$(_tc_decide "$claimed_by" "$mine")"
+  if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine"; then
+    decision="mine"
+  fi
+  case "$decision" in
+    none)  printf 'free\n' ;;
+    mine)  printf 'mine\n' ;;
+    other) printf 'owned:%s\n' "$claimed_by" ;;
+  esac
+}
+
+_tc_main() {
+  local verb="${1:-}"; shift || true
+  case "$verb" in
+    acquire)        _tc_acquire "$@" ;;
+    read)           _tc_read "$@" ;;
+    release)        _tc_release "$@" ;;
+    release-others) _tc_release_others "$@" ;;
+    release-mine)   _tc_release_others "$@" ;;  # deprecated alias, T20260720-113930
+    pr-owner)       _tc_pr_owner "$@" ;;
+    reclaimable)    _tc_reclaimable "$@" ;;
+    claimant-id)    _tc_claimant_id; printf '\n' ;;
+    *) _session_log "usage: task_claim.sh <acquire|read|release|release-others|pr-owner|reclaimable|claimant-id> [task-id|pr-number] [args]"; return 64 ;;
+  esac
+}
+
+# Dispatch only when executed directly; sourcing (tests) is side-effect-free.
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  _tc_main "$@"
+fi

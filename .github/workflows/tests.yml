@@ -1,0 +1,65 @@
+name: tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'actions/sync-tasks/**'
+      - 'repo-conventions/scripts/**'
+      - '_session/**'
+      - '_docs/**'
+      - 'slack/**'
+      - 'design-score/**'
+      - 'retro/**'
+      - 'quality-probe/**'
+      - 'statusline-setup/**'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'actions/sync-tasks/**'
+      - 'repo-conventions/scripts/**'
+      - '_session/**'
+      - '_docs/**'
+      - 'slack/**'
+      - 'design-score/**'
+      - 'retro/**'
+      - 'quality-probe/**'
+      - 'statusline-setup/**'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+jobs:
+  sync-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+        shell: bash
+      - run: python3 actions/sync-tasks/test_sync.py -v
+        shell: bash
+  lint-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+        shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_tasks.py -v
+        shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_paragraphs.py -v
+        shell: bash
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+        shell: bash
+      - name: Run bats suite
+        run: bats tests/*.bats _docs/*.bats
+        shell: bash

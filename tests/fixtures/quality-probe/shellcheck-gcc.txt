@@ -1,0 +1,4 @@
+touched.sh:2:5: error: This is a fake error finding. [SC9001]
+touched.sh:5:1: warning: bar is referenced but not assigned. [SC2154]
+touched.sh:6:6: warning: Double quote to prevent globbing. [SC2086]
+touched.sh:7:3: note: Use $(...) notation instead of legacy backticks. [SC2006]
