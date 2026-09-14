@@ -10,6 +10,12 @@ scheduled: 2026-09-14
 
 # T20260914-384424: Update stale `~/.claude/skills/...` example paths across skill docs
 
+## TLDR
+
+- **Type**: chore
+- **Problem**: 44 files still show example invocations like `bash ~/.claude/skills/_taskid/new.sh --check ./dev`, assuming the old symlink-install layout retired by T20260914-871616 (this repo now ships as a Claude Code plugin).
+- **Solution**: rewrite each example per audience — skill-relative paths (`../_taskid/new.sh`) for Claude-facing docs, non-copyable "run from this script's directory" prose for human-shell-facing header comments — applied consistently across all 44 hits.
+
 ## Problem
 
 - **Type**: chore
@@ -61,14 +67,80 @@ scheduled: 2026-09-14
   turns up nothing left to fix (or only intentional exceptions, noted
   inline).
 
+## Plan
+
+- Apply the two conventions from Notes, split by audience, mechanically
+  across all 44 files:
+  - **Claude-facing** (`*/SKILL.md`, doc prose meant to be read while a
+    skill is loaded): rewrite to a path relative to "Base directory for
+    this skill" — e.g. `bash ../_taskid/new.sh --check ./dev` — matching
+    how the code itself already resolves siblings via
+    `dirname "${BASH_SOURCE[0]}"` (`_taskid/in-this-repo.sh:41`,
+    `_session/task-state.sh:37`).
+  - **Human-shell-facing** (script header usage comments, e.g. some
+    `_taskid/*.sh` files): rewrite to "run from this script's own
+    directory" prose — no single copyable absolute path is correct across
+    every install method (marketplace cache vs. dev checkout).
+  - `dev/guidelines.md`, `lifecycle.md`, `README.md`: same Claude-facing
+    treatment — these are read inside a loaded-skill or onboarding
+    context, not typed cold at a shell.
+- Work file-by-file from the Problem section's list, re-running
+  `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
+  after each batch to track remaining count.
+- **Alternatives rejected**:
+  - *Leave the paths as-is, document the new install method elsewhere* —
+    rejected: examples are what a reader copies verbatim; T20260914-871616
+    shows a stale hardcoded path silently breaking a `SessionStart` hook
+    even with correct docs living a few files away.
+  - *Introduce a `${CLAUDE_PLUGIN_ROOT}`-style placeholder in doc prose* —
+    rejected: that variable is only resolved inside `hooks.json`-style
+    plugin manifests (used for `_gh/auto-switch.sh`'s hook wiring per
+    T20260914-871616), not inside a skill's own Markdown prose or a
+    plain shell script invoked ad hoc — it would just be a new,
+    equally-unresolvable placeholder for these files.
+
+## Test plan
+
+- [ ] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
+      returns nothing unexpected (or only intentional exceptions, noted
+      inline)
+- [ ] `bash _docs/lint-docs.sh --fix` stays clean on every touched file
+- [ ] `bash repo-conventions/scripts/lint.sh` stays clean
+
 ## Done criteria
 
-- [ ] Decide the replacement convention (see Notes) and apply it
-      consistently across all 44 files.
+- [ ] Decide the replacement convention (see Notes/Plan) and apply it
+      consistently across all 44 files listed in `## Problem`.
 - [ ] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
-      returns nothing unexpected.
-- [ ] `bash _docs/lint-docs.sh --fix` and the `repo-conventions` doc lints
-      stay clean on every touched file.
+      returns nothing unexpected — see `## Test plan`.
+- [ ] `bash _docs/lint-docs.sh --fix` and
+      `bash repo-conventions/scripts/lint.sh` stay clean on every touched
+      file — see `## Test plan`.
+
+## Root cause
+
+- Every hit predates T20260914-234656's switch to Claude Code **plugin**
+  distribution (`.claude-plugin/plugin.json`, `"skills": "."`) — when
+  these docs/comments were written, `~/.claude/skills/<name>` symlinks
+  from `scripts/install.sh` were the only install method, so a literal
+  `~/.claude/skills/...` example was correct at the time.
+- T20260914-871616 (2026-09-14) fixed the two *functionally* broken
+  instances (the `SessionStart` hook and `statusLine.command`, both real
+  code paths that executed and failed) but explicitly scoped out the
+  remaining ~44 *prose* examples as "worth its own task" — an intentional
+  deferral, not an oversight, which is what this task now picks up.
+- Confirmed non-functional today: the scripts' own sibling resolution
+  (`_taskid/in-this-repo.sh:41`, `_session/task-state.sh:37`) already uses
+  `dirname "${BASH_SOURCE[0]}"`, not the stale example paths — so this is
+  purely a stale-documentation fix, not a code fix.
+
+## Repo file references
+
+| File | Purpose |
+|---|---|
+| `_taskid/in-this-repo.sh` | sibling-resolution pattern to match in rewritten examples (`dirname "${BASH_SOURCE[0]}"`, line 41) |
+| `_session/task-state.sh` | same pattern, line 37 |
+| 42 other `*/SKILL.md` / `*.sh` / `*.md` files | listed in full in `## Problem`; each gets one example-path rewrite per `## Plan`'s audience split |
 
 ## Notes
 
