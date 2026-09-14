@@ -12,7 +12,19 @@ SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$REPO_ROOT/statusline-setup/scripts/statusline-command.sh"
 
+setup() {
+  # The machine-id/secret cache lives under ~/.claude/state by default; tests
+  # must neither read the developer's real identity nor write to their home.
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/claimant-state"
+}
+
 _load() { source "$SCRIPT"; }
+
+# The clone-id for a path, computed exactly the way production computes it.
+# Fixtures MUST go through this rather than hardcoding a format: hardcoding is
+# what let the old suite stay green while the statusline silently matched
+# nothing (T20260911-698434).
+_clone_id() { bash -c "source '$SCRIPT'; sl-clone-id '$1'"; }
 
 # Build a throwaway git repo with a dev/TODO dir under $BATS_TEST_TMPDIR and
 # print its path. Args: $1 = subdir name.
@@ -65,10 +77,26 @@ _make_repo() {
 # sl-clone-id
 # ---------------------------------------------------------------------------
 
-@test "sl-clone-id joins hostname and repo root with a colon" {
-  run bash -c "source '$SCRIPT'; sl-clone-id '/some/repo'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "$(hostname):/some/repo" ]
+@test "sl-clone-id EQUALS _tc_claimant_id for the same clone (cross-check)" {
+  # The assertion the previous suite could not make: it pinned sl-clone-id
+  # against its own hardcoded format, so a divergence from task_claim.sh stayed
+  # green while the feature silently broke. Both now source one definition;
+  # this fails loudly if that ever stops being true.
+  local from_statusline from_claim
+  from_statusline="$(bash -c "source '$SCRIPT'; sl-clone-id '/some/repo'")"
+  from_claim="$(bash -c "
+    source '$REPO_ROOT/_session/claimant-id.sh'
+    claimant_clone_path() { printf '/some/repo'; }
+    claimant_id \"\$(claimant_clone_path)\"")"
+  [ -n "$from_statusline" ]
+  [ "$from_statusline" = "$from_claim" ]
+}
+
+@test "sl-clone-id emits the cc1- shape and leaks no hostname or path" {
+  local id; id="$(_clone_id /some/repo)"
+  [[ "$id" =~ ^cc1-[0-9a-f]{8}:[0-9a-f]{16}$ ]]
+  [[ "$id" != *"$(hostname)"* ]]
+  [[ "$id" != *"/some/repo"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -84,7 +112,7 @@ _make_repo() {
 @test "sl-claimed-task-label prints nothing when no task is claimed by this clone" {
   local repo clone_id
   repo=$(_make_repo repo2)
-  clone_id="$(hostname):$repo"
+  clone_id="$(_clone_id "$repo")"
   cat > "$repo/dev/TODO/T20260101-000001.md" <<EOF
 ---
 claimed_by: otherhost:/other/repo
@@ -99,7 +127,7 @@ EOF
 @test "sl-claimed-task-label prints '<id>: <title>' when claimed_by matches and a heading exists" {
   local repo clone_id
   repo=$(_make_repo repo3)
-  clone_id="$(hostname):$repo"
+  clone_id="$(_clone_id "$repo")"
   cat > "$repo/dev/TODO/T20260427-242654.md" <<EOF
 ---
 claimed_by: ${clone_id}
@@ -114,7 +142,7 @@ EOF
 @test "sl-claimed-task-label prints just the id when no '# T<id>' heading exists" {
   local repo clone_id
   repo=$(_make_repo repo4)
-  clone_id="$(hostname):$repo"
+  clone_id="$(_clone_id "$repo")"
   cat > "$repo/dev/TODO/T20260427-242654.md" <<EOF
 ---
 claimed_by: ${clone_id}
@@ -129,7 +157,7 @@ EOF
 @test "sl-claimed-task-label anchors the match so a longer sibling clone-id cannot match as a prefix" {
   local repo clone_id
   repo=$(_make_repo repo5)
-  clone_id="$(hostname):$repo"
+  clone_id="$(_clone_id "$repo")"
   # A sibling clone whose id has this clone's id as a strict prefix.
   cat > "$repo/dev/TODO/T20260427-999999.md" <<EOF
 ---
@@ -212,7 +240,7 @@ EOF
   # statusline-command resolves cwd to git's realpath toplevel internally
   # (see the macOS /var->/private/var note above), so build clone_id from
   # that same resolved path rather than the raw $repo.
-  clone_id="$(hostname):$(git -C "$repo" rev-parse --show-toplevel)"
+  clone_id="$(_clone_id "$(git -C "$repo" rev-parse --show-toplevel)")"
   branch=$(git -C "$repo" symbolic-ref --short HEAD)
   cat > "$repo/dev/TODO/T20260427-242654.md" <<EOF
 ---

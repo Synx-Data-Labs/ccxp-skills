@@ -3,10 +3,25 @@
 #
 # Repo root, TODO dir, and clone-id are all derived from the SESSION cwd, so the
 # same global (~/.claude/settings.json) statusLine works across every
-# clone/session regardless of which folder Claude was launched in. The clone-id
-# matches the `claimed_by: <machine>:<clone-path>` format written by
-# ~/.claude/skills/_session/task_claim.sh (session_machine = `hostname`;
-# session_clone_path = `git rev-parse --show-toplevel || pwd`).
+# clone/session regardless of which folder Claude was launched in.
+#
+# The clone-id is NOT reimplemented here. It used to be (`$(hostname):$root`),
+# coupled to task_claim.sh by nothing but a comment, which meant a format change
+# there left this silently matching nothing — and `sl-claimed-task-label` prints
+# nothing on a miss, so a stale copy renders exactly like "no task claimed"
+# (T20260911-698434). It now sources the single definition instead.
+#
+# _session/_lib.sh is deliberately NOT sourced: it runs `set -uo pipefail` and
+# loads ~/.claude/.env at source time, and this runs on every prompt render.
+# claimant-id.sh is side-effect-free for exactly this caller.
+
+_SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh" \
+                "$HOME/.claude/skills/_session/claimant-id.sh"; do
+  # shellcheck source=/dev/null
+  [ -r "$_sl_cand" ] && { . "$_sl_cand"; break; }
+done
+unset _sl_cand
 
 # Resolve the repo root from a session cwd (fall back to cwd if not a git repo).
 sl-repo-root() {
@@ -15,8 +30,17 @@ sl-repo-root() {
 }
 
 sl-clone-id() {
+  # Must equal `_tc_claimant_id` for this clone or the statusline silently shows
+  # no task; tests/statusline_setup.bats pins that equality directly.
   local repo_root="$1"
-  printf '%s:%s' "$(hostname)" "$repo_root"
+  if declare -F claimant_id >/dev/null 2>&1; then
+    claimant_id "$repo_root"
+  else
+    # Lib not found (unusual install layout). Emit nothing rather than a
+    # wrong-format guess: a guess would match no task anyway, and the statusline
+    # must never fail the prompt.
+    printf ''
+  fi
 }
 
 # Current git branch for repo_root, or empty (detached HEAD / not a repo).

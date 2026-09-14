@@ -21,7 +21,7 @@ ALLOWED = REQUIRED | {
     "priority", "deadline", "blocks", "blocked-by", "source",
     "target-repo", "target-path", "related", "owner", "description",
     # runtime (tooling-written: /stage, IPM, /focus)
-    "scheduled", "claimed_by", "iteration",
+    "scheduled", "claimed_by", "claimed_role", "iteration",
 }
 STATUS_TOKENS = {"open", "design", "coding", "review",
                  "blocked", "parked", "done", "closed"}
