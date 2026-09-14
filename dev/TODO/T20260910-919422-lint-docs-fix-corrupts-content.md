@@ -16,8 +16,9 @@ description: lint-docs.sh --fix silently corrupts prose and always lints repo-wi
   consumer repo (a downstream skills consumer) on 2026-09-10.
 - **Content corruption**: `--fix` (shelling out to `markdownlint-cli2 --fix`)
   rewrote a hard-wrapped prose line that happens to start with a bare `+` into
-  `-`, silently changing meaning. CommonMark treats a line-leading `+ ` as a
-  lazy-continuation list marker, so this may be "correct" markdownlint
+  `-`, silently changing meaning. CommonMark treats a line-leading `+`
+  followed by a space as a lazy-continuation list marker, so this may be
+  "correct" markdownlint
   behavior on ambiguous input — but it ran unreviewed against permanent
   JOURNAL records. Three confirmed instances in the consumer repo (reverted
   before that session committed), each a hard-wrapped prose line whose
