@@ -14,7 +14,7 @@ description: Read a hub-repo dev/EPICS.md and add a token-free "Epic progress" b
   and 1.4 Slack), but every section is task- or PR-granular (Resolved, Nightly, PRs needing
   attention, Top 5, Weekly focus). Nothing rolls tasks up to the 3-5 standing goals the
   maintainer actually steers by (e.g. "fix the build container for the pgrx bump",
-  "SOC 2 Type 1 by 2026-09-30", "Cloudsmith egress ≤ $1K/mo").
+  "pass the compliance audit by Q3", "keep vendor egress under budget").
 - Result: the maintainer has to re-derive epic status by hand from `queue.md` + task
   frontmatter across two repos (observed 2026-09-11 — took an interactive session ~30
   min to assemble what the standup should have said in five lines).
