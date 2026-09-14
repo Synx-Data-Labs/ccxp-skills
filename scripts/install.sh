@@ -77,9 +77,13 @@ _ccxp_wire_session_hook() {
     [ "$dry_run" = 1 ] && return 0
     local tmp
     tmp="$(mktemp "${settings_file}.XXXXXX")" || return 1
+    # $cmd_tilde is "" when $target isn't under $HOME (see above) — guard the
+    # comparison on that, mirroring the bash-side `[ -n "$cmd_tilde" ]` check,
+    # so an unrelated hook that happens to have a literally-empty .command
+    # isn't also swept up by `!= $cmd_tilde` matching "" == "".
     jq --arg cmd "$cmd" --arg cmd_tilde "$cmd_tilde" '
       .hooks.SessionStart |= (
-        map(.hooks |= map(select(.command != $cmd and .command != $cmd_tilde)))
+        map(.hooks |= map(select(.command != $cmd and ($cmd_tilde == "" or .command != $cmd_tilde))))
         | map(select((.hooks // []) | length > 0))
       )
     ' "$settings_file" > "$tmp" || { rm -f "$tmp"; return 1; }
@@ -159,7 +163,17 @@ install_ccxp_skills() {
     [ "$dry_run" = 1 ] || ln -s "$path" "$dest"
   done
 
-  [ "$wire_hooks" = 1 ] && _ccxp_wire_session_hook "$target" "$dry_run" "$uninstall"
+  # `|| true`, not a bare `&&` call: under `set -e`, a nonzero return from the
+  # last command of an unparenthesized `&&`/`||` list run as a statement DOES
+  # trigger -e (the "except the last command" exemption only applies when the
+  # list is itself a condition, e.g. an `if`) — so a wiring failure (missing
+  # jq, a corrupt settings.json) would silently abort this function before
+  # `return 0`, even though the symlinking above already succeeded. This
+  # matches the fix-then-continue, never-blocks policy _ccxp_wire_session_hook
+  # itself already documents via its own stderr warning.
+  if [ "$wire_hooks" = 1 ]; then
+    _ccxp_wire_session_hook "$target" "$dry_run" "$uninstall" || true
+  fi
   return 0
 }
 
