@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 1d
 source: maintainer conversation 2026-09-11 — standups are task-focused and never surface epic-level progress
 related: T20260906-306082
