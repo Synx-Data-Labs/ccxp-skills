@@ -1,10 +1,10 @@
 ---
-status: Coding
+status: Done
 estimation: 2h
 source: this conversation, 2026-09-14
 related: T20260914-871616
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-14
 ---
 
@@ -54,14 +54,22 @@ scheduled: 2026-09-14
   ```
 
   (full, current list: `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`)
-- **Cosmetic only, not a functional bug**: confirmed by inspecting
+- **Mostly cosmetic, but NOT uniformly so**: confirmed by inspecting
   `_gh/gh.sh`, `_taskid/new.sh`, `_taskid/in-this-repo.sh`,
-  `_session/task-state.sh` — the actual sibling-script resolution inside
-  these scripts already uses `../_gh/foo.sh`-style relative references
-  (per README's "keeps each skill a sibling of the shared libs" design),
-  so nothing here breaks execution. It's the human/Claude-facing example
-  commands in doc prose and script header comments that are stale — wrong
-  to copy-paste verbatim under a plugin install.
+  `_session/task-state.sh` — these four resolve their own siblings via
+  `dirname "${BASH_SOURCE[0]}"`, not the stale example paths, so nothing
+  in them breaks execution.
+  **Correction found during implementation**: 5 other files were NOT
+  checked before filing and turned out to be genuinely broken —
+  `address-pr/scripts/pre-merge-check.sh`, `ccxp/scripts/reclaim-sweep-pr.sh`,
+  `ccxp/scripts/update-roadmap.sh`, `verify-site/scripts/verify.sh`, and
+  `_ipm/ipm-iteration-drain-check.sh` all literally `bash
+  ~/.claude/skills/_gh/gh.sh ...` (or similar) as real executable code, not
+  just a doc example — confirmed by running `pre-merge-check.sh` directly
+  in this environment and hitting "could not determine repo" from the
+  broken path. Fixed as part of this task (same fix shape: resolve the
+  sibling via `dirname "${BASH_SOURCE[0]}"`, overridable via an env var for
+  tests, per `_taskid/url.sh`'s `TASKID_GH` precedent).
 - Done = every hit above shows a path (or invocation form) that resolves
   correctly for a plugin-only install, and a re-run of the grep above
   turns up nothing left to fix (or only intentional exceptions, noted
@@ -101,21 +109,45 @@ scheduled: 2026-09-14
 
 ## Test plan
 
-- [ ] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
+- [x] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
       returns nothing unexpected (or only intentional exceptions, noted
-      inline)
-- [ ] `bash _docs/lint-docs.sh --fix` stays clean on every touched file
-- [ ] `bash repo-conventions/scripts/lint.sh` stays clean
+      inline) — remaining 7 hits, all intentional:
+      - `dev/TODO/queue.md` — this task's own title, not an invocation
+      - `dev/TODO/T20260914-384424-*.md` (this file) and
+        `dev/TODO/T20260914-871616-*.md` — historical/self-referential
+        bug-report prose, excluded per `## Notes`
+      - `address-pr/scripts/pre-merge-check.sh`,
+        `ccxp/scripts/reclaim-sweep-pr.sh`,
+        `ccxp/scripts/update-roadmap.sh`,
+        `_ipm/ipm-iteration-drain-check.sh` — each hit is this task's own
+        new explanatory comment ("not a hardcoded `~/.claude/skills/...`
+        path") describing the retired pattern being fixed, not a live
+        example
+      - `turnstile-spin/README.md` — a CI-synced mirror of an external
+        Cloudflare docs page describing a *different* skill's generic
+        Claude Code global-skill install, unrelated to ccxp-skills'
+        retired plugin-symlink layout; out of scope and would drift from
+        its canonical source if hand-edited
+- [x] `bash _docs/lint-docs.sh --fix` stays clean on every touched file
+      (445 files linted, 0 errors)
+- [x] `bash repo-conventions/scripts/lint.sh` stays clean (pre-existing,
+      unrelated violation on `T20260914-234656` — confirmed present on
+      `main` before this branch, not introduced here)
 
 ## Done criteria
 
-- [ ] Decide the replacement convention (see Notes/Plan) and apply it
-      consistently across all 44 files listed in `## Problem`.
-- [ ] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
+- [x] Decide the replacement convention (see Notes/Plan) and apply it
+      consistently across all 44 files listed in `## Problem` — plus 5
+      more with a genuine functional bug found during implementation, see
+      `## Problem`'s correction note.
+- [x] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
       returns nothing unexpected — see `## Test plan`.
-- [ ] `bash _docs/lint-docs.sh --fix` and
+- [x] `bash _docs/lint-docs.sh --fix` and
       `bash repo-conventions/scripts/lint.sh` stay clean on every touched
       file — see `## Test plan`.
+- [x] `bats tests/` passes (543/543, including a fix to
+      `tests/update_roadmap.bats` needed after `update-roadmap.sh`'s
+      hardcoded-path bug fix — see `## Problem`).
 
 ## Root cause
 
@@ -129,10 +161,17 @@ scheduled: 2026-09-14
   code paths that executed and failed) but explicitly scoped out the
   remaining ~44 *prose* examples as "worth its own task" — an intentional
   deferral, not an oversight, which is what this task now picks up.
-- Confirmed non-functional today: the scripts' own sibling resolution
-  (`_taskid/in-this-repo.sh:41`, `_session/task-state.sh:37`) already uses
-  `dirname "${BASH_SOURCE[0]}"`, not the stale example paths — so this is
-  purely a stale-documentation fix, not a code fix.
+- Some scripts' own sibling resolution (`_taskid/in-this-repo.sh:41`,
+  `_session/task-state.sh:37`) already uses `dirname "${BASH_SOURCE[0]}"`,
+  not the stale example paths — those are pure documentation fixes. Five
+  others (`address-pr/scripts/pre-merge-check.sh`,
+  `ccxp/scripts/reclaim-sweep-pr.sh`, `ccxp/scripts/update-roadmap.sh`,
+  `verify-site/scripts/verify.sh`, `_ipm/ipm-iteration-drain-check.sh`) were
+  NOT yet converted and actually executed the stale absolute path at
+  runtime — a real functional bug the original Problem statement missed by
+  not checking every file before filing. Fixed with the same
+  `dirname "${BASH_SOURCE[0]}"` pattern, with an env-var override seam
+  (`GH_SH` / `SKILLS_ROOT`) for test injection.
 
 ## Repo file references
 
@@ -161,3 +200,36 @@ scheduled: 2026-09-14
 - Don't touch `dev/TODO/T20260914-871616-*.md` or
   `dev/JOURNAL/*` — those are historical/closed-task records, not living
   docs.
+
+## Closed (2026-09-14)
+
+- Shipped in [ccxp-skills#19](https://github.com/Synx-Data-Labs/ccxp-skills/pull/19).
+  CI green (Markdown Lint), `bats tests/` 543/543, design-score gate 81/100.
+- All 44 originally-scoped files updated, plus 5 more with a genuine
+  functional bug found mid-implementation (see `## Problem`'s correction
+  note and `## Root cause`) — `_gh/gh.sh` invoked via a hardcoded
+  `~/.claude/skills/...` path at runtime, not just in a doc example.
+- 7 intentional exceptions left unchanged, documented in `## Test plan`.
+- README.md's "Skill scripts" section (the canonical documented
+  convention) updated so future skills don't reintroduce the same
+  stale-path pattern.
+- quality-probe recorded: 47 files, shellcheck 0 errors/2 warnings (both
+  pre-existing on `main`, unrelated to this change)/5 info, design_score
+  81 — see `dev/quality/metrics.jsonl`.
+- No follow-up tasks filed — the fix is complete and verified.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs/comment-only
+  change plus a hardcoded-path bug fix with no new behavior to drive with
+  a red test; verified instead via the existing `bats tests/` suite
+  (543/543) and a direct functional smoke test of the fixed script.
+- Verification (`superpowers:verification-before-completion`): yes — ran
+  the full fresh verification pass (grep, bats, design-score, doc-lint,
+  shellcheck, functional smoke test) before opening the PR.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the functional-bug discovery came from directly running
+  `pre-merge-check.sh` and reading its one clear error, not trial-and-error.
+- Receiving code review (`superpowers:receiving-code-review`): pending —
+  not yet reviewed as of this writing; will apply if findings come back
+  from `/address-pr`.
