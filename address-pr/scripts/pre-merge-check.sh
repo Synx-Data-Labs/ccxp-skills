@@ -5,7 +5,7 @@
 # Exits non-zero if any check fails. Must be called before every gh pr merge.
 #
 # Usage:
-#   ~/.claude/skills/address-pr/scripts/pre-merge-check.sh <pr-number>
+#   bash pre-merge-check.sh <pr-number>     # run from this script's own directory
 #
 # Repo is auto-detected from cwd via `gh repo view`. Override with REPO env var:
 #   REPO=your-org/other-repo bash .../pre-merge-check.sh 42
@@ -17,6 +17,12 @@
 #
 set -euo pipefail
 
+# Resolve the sibling _gh/gh.sh relative to this script's own directory —
+# not a hardcoded ~/.claude/skills/... path, which only exists under the
+# retired symlink-install layout (T20260914-871616). Overridable via GH_SH
+# for tests (same seam as _taskid/url.sh's TASKID_GH).
+GH_SH="${GH_SH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../_gh" && pwd)/gh.sh}"
+
 PR="${1:?Usage: $0 <pr-number>}"
 
 if ! [[ "$PR" =~ ^[0-9]+$ ]]; then
@@ -25,7 +31,7 @@ if ! [[ "$PR" =~ ^[0-9]+$ ]]; then
 fi
 
 # Resolve repo: explicit REPO env var wins, otherwise discover from cwd
-REPO="${REPO:-$(bash ~/.claude/skills/_gh/gh.sh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)}"
+REPO="${REPO:-$(bash "$GH_SH" repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)}"
 if [ -z "${REPO:-}" ]; then
   echo "Error: could not determine repo. Run from inside a gh-recognized repo or set REPO=owner/name." >&2
   exit 1
@@ -43,7 +49,7 @@ ERRORS=0
 
 echo ""
 echo "1. CI status..."
-CI_OUTPUT=$(bash ~/.claude/skills/_gh/gh.sh pr checks "$PR" --repo "$REPO" 2>&1) || CI_EXIT=$?
+CI_OUTPUT=$(bash "$GH_SH" pr checks "$PR" --repo "$REPO" 2>&1) || CI_EXIT=$?
 CI_EXIT=${CI_EXIT:-0}
 if [ "$CI_EXIT" -ne 0 ] && [ -z "$CI_OUTPUT" ]; then
   echo "  ❌ Failed to get CI status (API error?)"
@@ -91,7 +97,7 @@ if ! command -v jq >/dev/null 2>&1; then
   echo "  ❌ Review check requires 'jq' but it is not installed"
   ERRORS=$((ERRORS + 1))
 else
-  REVIEW_JSON=$(bash ~/.claude/skills/_gh/gh.sh api graphql \
+  REVIEW_JSON=$(bash "$GH_SH" api graphql \
     -f owner="$OWNER" -f name="$NAME" -F number="$PR" \
     -f query='
     query($owner: String!, $name: String!, $number: Int!) {
@@ -112,7 +118,7 @@ else
   REVIEW_EXIT=${REVIEW_EXIT:-0}
 
   # Separately fetch issue comments (Coding Agent posts here, not in `reviews`).
-  COMMENTS_JSON=$(bash ~/.claude/skills/_gh/gh.sh api \
+  COMMENTS_JSON=$(bash "$GH_SH" api \
     "/repos/${OWNER}/${NAME}/issues/${PR}/comments" \
     --paginate 2>&1) || COMMENTS_EXIT=$?
   COMMENTS_EXIT=${COMMENTS_EXIT:-0}
@@ -171,7 +177,7 @@ fi
 
 echo ""
 echo "3. Test plan..."
-BODY=$(bash ~/.claude/skills/_gh/gh.sh pr view "$PR" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
+BODY=$(bash "$GH_SH" pr view "$PR" --repo "$REPO" --json body --jq '.body' 2>/dev/null || echo "")
 
 if grep -q '^### Post-merge' <<<"$BODY"; then
   PRE_MERGE_SECTION=$(echo "$BODY" | sed -n '/### Pre-merge/,/### Post-merge/{/### Post-merge/d;p;}')

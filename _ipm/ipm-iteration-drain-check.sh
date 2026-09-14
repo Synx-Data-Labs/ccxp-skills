@@ -101,8 +101,9 @@ A SAME-repo offender whose task file fails the changed-mode frontmatter lint
 (non-allowlisted fields it can't be edited to advance scheduled: past — the
 T20260626-353630 class) is LINT-FROZEN and downgraded to a non-blocking WARNING,
 the same-repo analogue of the cross-repo valve (T20260628-951477). Probe via
-lint_tasks.py (resolved by LINT_TASKS_PY, else ~/.claude/skills/repo-conventions/
-scripts/lint_tasks.py); fail-safe is BLOCKING.
+lint_tasks.py (resolved by LINT_TASKS_PY, else the sibling
+repo-conventions/scripts/lint_tasks.py next to this script); fail-safe is
+BLOCKING.
 
 Reads the board via `gh project item-list`, or from IPM_DRAIN_BOARD_JSON when set.
 Set IPM_DRAIN_FROZEN_IDS (whitespace-separated task IDs) to force the frozen set
@@ -121,9 +122,11 @@ _ipm_drain_prev_start() {
 }
 
 # Path to the frontmatter linter used for the lint-frozen probe. Resolved via
-# LINT_TASKS_PY, else the well-known shared-skills location.
+# LINT_TASKS_PY, else the sibling repo-conventions/ script relative to this
+# script's own directory — not a hardcoded ~/.claude/skills/... path, which
+# only exists under the retired symlink-install layout (T20260914-871616).
 _ipm_drain_lint_tasks_py() {
-  printf '%s\n' "${LINT_TASKS_PY:-${HOME}/.claude/skills/repo-conventions/scripts/lint_tasks.py}"
+  printf '%s\n' "${LINT_TASKS_PY:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../repo-conventions/scripts" && pwd)/lint_tasks.py}"
 }
 
 # Derive "owner/repo" from the `origin` remote of the given repo path (default

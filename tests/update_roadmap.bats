@@ -198,6 +198,7 @@ EOF
   chmod +x "$fakehome/.claude/skills/_docs/lint-docs.sh"
 
   run env PATH="$fakebin:/usr/bin:/bin" HOME="$fakehome" \
+    SKILLS_ROOT="$fakehome/.claude/skills" \
     ROADMAP_TARGET_REPO="acme-org/acme-team" \
     bash "$SCRIPT" commit-pr --target "$target" --bp-pr-url "https://example.com/pr/1"
   [ "$status" -eq 0 ]
