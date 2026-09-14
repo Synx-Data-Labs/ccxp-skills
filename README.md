@@ -55,8 +55,10 @@ bash ~/workspace/ccxp-skills/scripts/install.sh
 `SKILL.md`) and every shared lib (a leading-underscore directory) into
 `~/.claude/skills/`. It's idempotent (safe to re-run) and never touches
 an existing name it didn't create itself — see `--target DIR` to install
-elsewhere, `--dry-run` to preview, and `--uninstall` to remove only the
-symlinks it owns.
+elsewhere, `--dry-run` to preview, `--uninstall` to remove only the
+symlinks it owns, and `--wire-hooks` to also wire the `_gh/auto-switch.sh`
+`SessionStart` hook into `settings.json` (see `_gh/auto-switch.sh` under
+[Shared helpers](#shared-helpers-_name) below).
 
 Update later with:
 
@@ -246,6 +248,49 @@ stay invisible as skills). Current set:
   probes `gh auth status` accounts and runs `gh` under the one that can
   read `origin`, scoped per-process via `GH_TOKEN` (no global mutation, no
   `gh auth switch`).
+- `_gh/auto-switch.sh` — `SessionStart` hook complement to `gh.sh` above.
+  It covers what `gh.sh` can't: a **bare, unwrapped** `gh` call (a Bash-tool
+  invocation running `gh pr view` directly, a human typing `gh` in the
+  terminal, any tool that doesn't route through the wrapper) still uses
+  whichever account `gh auth switch` last left active — global, mutable,
+  shared across every shell and Claude Code session on the machine. This
+  script probes accounts the same way `gh.sh` does, but deliberately runs
+  `gh auth switch` — the opposite tradeoff from `gh.sh`'s no-global-mutation
+  design — because that's the only lever available to fix a bare `gh`
+  call. Exits 0 in every case (not a git repo, already-correct account, no
+  account can see the repo) — it never blocks session start.
+
+  Wire it once per machine with:
+
+  ```bash
+  bash ~/workspace/ccxp-skills/scripts/install.sh --wire-hooks
+  ```
+
+  `--wire-hooks` (requires `jq`) merges a `SessionStart` entry into
+  `settings.json` next to the `--target` skills dir (default
+  `~/.claude/settings.json`) — idempotent (skips if already wired,
+  recognizing both the absolute and `~`-spelled form), additive (leaves
+  every other key and hook untouched), symlink-safe (writes through
+  `settings.json` if it's itself a symlink, e.g. into a dotfiles repo,
+  rather than replacing it), and composes with `--dry-run` (preview only)
+  and `--uninstall` (`--wire-hooks --uninstall` removes just this hook
+  entry). Or edit `settings.json` by hand — merge this into your existing
+  `hooks.SessionStart` array if you already have one:
+
+  ```json
+  {
+    "hooks": {
+      "SessionStart": [
+        {
+          "hooks": [
+            { "type": "command", "command": "bash ~/.claude/skills/_gh/auto-switch.sh" }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+
 - `_session/` — on-main task claim lock, Project V2 board mirror,
   PR-ownership resolution, reclaim sweep for dead claims. See
   `_session/README.md`.
