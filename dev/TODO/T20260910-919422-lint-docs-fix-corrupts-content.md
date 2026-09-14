@@ -3,6 +3,8 @@ status: Open
 estimation: 2h
 source: conversation 2026-09-10 (cross-repo, from a downstream consumer-repo session)
 description: lint-docs.sh --fix silently corrupts prose and always lints repo-wide despite the docs promising per-file scoping
+claimed_by:
+scheduled: 2026-09-14
 ---
 
 # T20260910-919422: lint-docs.sh --fix corrupts prose (+ -> -) and always lints repo-wide despite path args
@@ -16,8 +18,9 @@ description: lint-docs.sh --fix silently corrupts prose and always lints repo-wi
   consumer repo (a downstream skills consumer) on 2026-09-10.
 - **Content corruption**: `--fix` (shelling out to `markdownlint-cli2 --fix`)
   rewrote a hard-wrapped prose line that happens to start with a bare `+` into
-  `-`, silently changing meaning. CommonMark treats a line-leading `+ ` as a
-  lazy-continuation list marker, so this may be "correct" markdownlint
+  `-`, silently changing meaning. CommonMark treats a line-leading `+`
+  followed by a space as a lazy-continuation list marker, so this may be
+  "correct" markdownlint
   behavior on ambiguous input — but it ran unreviewed against permanent
   JOURNAL records. Three confirmed instances in the consumer repo (reverted
   before that session committed), each a hard-wrapped prose line whose

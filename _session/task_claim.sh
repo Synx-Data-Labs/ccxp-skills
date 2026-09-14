@@ -86,6 +86,10 @@ set -uo pipefail
 _TC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$_TC_DIR/_lib.sh"   # identity helpers: session_machine, session_clone_path
+# shellcheck source=/dev/null
+source "$_TC_DIR/claimant-id.sh"  # claimant_id + claimant_is_current_shape — the
+                                  # ONE definition of the claimant identity,
+                                  # shared with statusline-command.sh
 
 # Where task files live, relative to repo root. Resolved at call time
 # (via _tc_task_dir) so tests and other repos can override TASK_CLAIM_DIR.
@@ -94,15 +98,23 @@ _tc_task_dir() { printf '%s' "${TASK_CLAIM_DIR:-dev/TODO}"; }
 # --- Identity ----------------------------------------------------------------
 
 _tc_claimant_id() {
-  # "<machine>:<working-dir>" — the (host, clone-path) pair. Stable across CC
-  # invocations in the SAME clone (one clone = one session), so a new /drive or
-  # ccxp run supersedes its OWN prior claim instead of stacking a new one.
-  # `machine` keeps the id globally unique when two hosts share a /home/... path.
-  # Retires the per-invocation session_cc_session_id (the accumulation cause —
-  # T20260615-169917). PR ownership is now derived from THIS id via `pr-owner`
-  # (T20260622-404636 retired the separate per-session PR marker), so a PR is
-  # owned by the same (host, clone) agent that holds its task.
-  printf '%s:%s' "$(session_machine)" "$(session_clone_path)"
+  # "cc1-<machine-id>:<path-hash>" — see claimant-id.sh for the format and why
+  # each half looks the way it does. Still the (machine, clone-path) pair
+  # semantically: stable across CC invocations in the SAME clone (one clone =
+  # one session), so a new /drive or ccxp run supersedes its OWN prior claim
+  # instead of stacking a new one, and globally unique when two machines share
+  # a /home/... path.
+  #
+  # T20260911-698434 replaced the plaintext "<hostname>:<clone-path>" form. Two
+  # reasons, in order of severity: `hostname` is not stable on one machine
+  # (mDNS/MagicDNS/ComputerName disagree and change under you), which produced
+  # false "owned by another agent" verdicts against a task's own live owner;
+  # and the value lands on `main`, so it published a machine name, an OS
+  # username and a filesystem path into a public repo.
+  #
+  # Fails CLOSED (empty + nonzero) rather than degrading to a hostname, so a
+  # caller can never write a half-formed or PII-bearing claim.
+  claimant_id
 }
 
 # Where PARKING task files live — derived from the TODO dir so a TASK_CLAIM_DIR
@@ -264,7 +276,21 @@ _tc_reclaim_decide() {
       # '@' (an email address, an '@'-mention) would misclassify as
       # session-shaped and lose its "never auto-reclaimable" protection —
       # caught in code review, T20260724-312324.
-      if [[ "$claimed_by" =~ ^[0-9a-fA-F]{6,}@ ]]; then
+      if [[ "$claimed_by" =~ ^cc1-[0-9a-f]{8}:[0-9a-f]{16}$ ]]; then
+        # Current "cc1-<machine-id>:<path-hash>" shape (T20260911-698434).
+        # ONE-WAY DOOR: this arm must survive a revert of the code that
+        # WRITES the shape. Reverting both would leave every live cc1-
+        # claim matching neither arm, falling through to the
+        # human-override branch below, and becoming permanently
+        # unreclaimable — a silent repo-wide stranding. Reader landed
+        # before the writer for exactly this reason; drop it only after
+        # no cc1- claim exists anywhere.
+        # Anchored rather than a `cc1-*` glob so a real hostname that
+        # merely begins "cc1-" can never be mistaken for this shape,
+        # independently of arm ordering (a legacy plaintext claim like
+        # `cc1-box:/home/x` still matches the `*:/*` arm above first).
+        : # session-shaped — subject to the staleness window
+      elif [[ "$claimed_by" =~ ^[0-9a-fA-F]{6,}@ ]]; then
         : # session-shaped — subject to the staleness window
       else
         printf 'live'; return 0  # non-session claimant — human-assigned, never auto-reclaimable
@@ -433,17 +459,84 @@ _tc_pr_activity_days() {
 
 # --- Verbs -------------------------------------------------------------------
 
+# $1 claimed_by  $2 my-clone-path → 0 when $1 is a LEGACY "<host>:<path>" claim
+# written by this very clone before T20260911-698434 changed the format.
+#
+# Migration path for claims already on `main`. _tc_acquire only overwrites
+# claimed_by in the `none` branch; a legacy self-claim looks like `other` (a
+# value is present and does not string-match the new id), so without this it
+# would refuse forever and a human would have to hand-edit every claimed task.
+#
+# Deliberately narrow: LEGACY SHAPE ONLY (contains ':/' — a current cc1- value
+# can never reach here) and the path half must be exactly this clone. It does
+# NOT compare the host half, because the whole bug being fixed is that the host
+# half drifts on one machine — requiring it to match would fail precisely the
+# case this exists to rescue.
+#
+# Residual risk, accepted knowingly: two machines sharing an identical clone
+# path (say /home/ci/repo on two CI boxes) can each read the other's legacy
+# claim as their own during the migration window. The merge-to-`main` still
+# arbitrates the real lock — both would re-stamp different cc1- ids and the
+# second merge conflicts — so this changes who wins a race, not whether the
+# lock holds. The window closes as soon as each claim is re-stamped.
+_tc_is_legacy_self_claim() {
+  local claimed_by="$1" my_path="$2"
+  [ -n "$claimed_by" ] && [ -n "$my_path" ] || return 1
+  case "$claimed_by" in *:/*) : ;; *) return 1 ;; esac
+  [ "${claimed_by#*:}" = "$my_path" ]
+}
+
+# "ccxp" | "interactive" for THIS clone. Written alongside claimed_by because
+# the claimant id's path half is now a hash: attribution used to recover the
+# clone path from claimed_by and test it against ATTRIBUTION_CCXP_PATHS, which a
+# hash makes impossible (T20260911-698434). A coarse role token is all
+# attribution ever consumed, carries no PII, and — unlike a path hash — stays
+# comparable from another machine at standup time.
+#
+# Resolution order mirrors _attribution_load_env: an exported value wins, then
+# $ENV_FILE, then ~/.claude/.env; skipped under BATS unless ENV_FILE points at a
+# fixture, to keep tests hermetic.
+_tc_claimed_role() {
+  local path="${1:-}" list p
+  [ -n "$path" ] || path="$(claimant_clone_path)"
+  list="${ATTRIBUTION_CCXP_PATHS:-}"
+  if [ -z "$list" ]; then
+    if [ -n "${ENV_FILE:-}" ]; then
+      # shellcheck disable=SC1090
+      [ -f "$ENV_FILE" ] && source "$ENV_FILE"
+    elif [ -z "${BATS_TEST_TMPDIR:-}" ] && [ -f "$HOME/.claude/.env" ]; then
+      # shellcheck disable=SC1090
+      source "$HOME/.claude/.env"
+    fi
+    list="${ATTRIBUTION_CCXP_PATHS:-}"
+  fi
+  local IFS=':'
+  for p in $list; do
+    [ -n "$p" ] || continue
+    [ "$path" = "$p" ] && { printf 'ccxp'; return 0; }
+  done
+  printf 'interactive'
+}
+
 _tc_acquire() {
   local id="$1" file cur mine decision
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id under $(_tc_task_dir)"; return 2; }
   cur="$(_tc_fm_get "$file" claimed_by)"
-  mine="$(_tc_claimant_id)"
+  mine="$(_tc_claimant_id)" || { _session_log "task_claim: cannot resolve claimant id — refusing to claim $id"; return 1; }
   decision="$(_tc_decide "$cur" "$mine")"
+  if [ "$decision" = "other" ] && _tc_is_legacy_self_claim "$cur" "$(claimant_clone_path)"; then
+    # Our own pre-migration claim: re-stamp in place, keep status untouched.
+    _session_log "task_claim: migrating legacy claim on $id to the current format"
+    _tc_fm_set "$file" claimed_by "$mine" || return 1
+    _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
+    printf 'mine\n'; return 0
+  fi
   case "$decision" in
     mine)  printf 'mine\n'; return 0 ;;
     other) printf 'claimed:%s\n' "$cur"; return 3 ;;
     none)
       _tc_fm_set "$file" claimed_by "$mine" || return 1
+      _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
       _tc_fm_set "$file" status Coding || return 1
       _tc_stamp_scheduled_if_needed "$file" || return 1
       printf 'acquired\n'; return 0 ;;
@@ -460,6 +553,7 @@ _tc_release() {
   local id="$1" final="${2:-Open}" file
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
   _tc_fm_set "$file" claimed_by "" || return 1
+  _tc_fm_set "$file" claimed_role "" || return 1   # same clear-on-close contract as claimed_by
   _tc_fm_set "$file" status "$final" || return 1
   printf 'released\n'
 }
@@ -593,8 +687,15 @@ _tc_fetch_fm_field() {
 }
 
 _tc_is_own_cross_repo_clone() {
-  # $1 task-id  $2 claimed_by  $3 my-claimant-id → 0 (yes) | 1 (no). Pure string
-  # logic, no I/O — the cross-repo counterpart to _tc_decide's exact-path match.
+  # $1 task-id  $2 claimed_by  $3 my-claimant-id  $4 my-clone-path (optional;
+  # defaults to this clone) → 0 (yes) | 1 (no). The cross-repo counterpart to
+  # _tc_decide's exact-path match.
+  #
+  # $4 exists because of T20260911-698434: the claimant id's path half is now a
+  # HASH, so the ephemeral-target-directory check below can no longer read the
+  # path back out of $3. It takes the real local path instead — which is safe,
+  # since that value is only compared locally and never written anywhere. Pass
+  # it explicitly to keep this pure string logic (the unit tests do).
   #
   # T20260626-195977: a cross-repo task's claim is written from the HUB clone
   # (/drive Phase 1), but /address-pr's cross-repo mode runs from an ephemeral
@@ -603,18 +704,26 @@ _tc_is_own_cross_repo_clone() {
   # "mine" for that legitimate case, so pr-owner always deferred (`owned:`) on
   # the session's own cross-repo PRs. This recognizes exactly that one
   # additional case, without loosening the anti-steal guarantee for anything
-  # else: both the host must match (a foreign host is never "mine") AND the
-  # current clone's path must be the ephemeral ${task-id}-*-target directory
+  # else: both the machine must match (a foreign machine is never "mine") AND
+  # the current clone's path must be the ephemeral ${task-id}-*-target directory
   # Phase 1.5 itself creates for THIS task — a same-host clone working a
   # DIFFERENT task, or any clone that isn't this exact naming convention,
   # still falls through to _tc_decide's "other".
-  local id="$1" claimed_by="$2" mine="$3" claim_host claim_path my_host my_path base
+  local id="$1" claimed_by="$2" mine="$3" my_clone_path="${4:-}"
+  local claim_host claim_path my_host my_path base
   [ -n "$claimed_by" ] && [ -n "$mine" ] || return 1
+  [ -n "$my_clone_path" ] || my_clone_path="$(claimant_clone_path)"
+  # The machine half is everything before the first ':'. Under the current
+  # format that is "cc1-<machine-id>", which still differs per machine — the
+  # whole reason the version marker rides inside this field instead of being a
+  # ":"-separated field of its own. Had it been "cc1:<id>:<hash>", this would
+  # evaluate to the literal "cc1" for EVERY claim and the foreign-machine guard
+  # below would silently pass for everyone.
   claim_host="${claimed_by%%:*}"; claim_path="${claimed_by#*:}"
-  my_host="${mine%%:*}"; my_path="${mine#*:}"
+  my_host="${mine%%:*}";          my_path="${mine#*:}"
   [ -n "$claim_host" ] && [ "$claim_host" = "$my_host" ] || return 1
   [ "$claim_path" != "$my_path" ] || return 1   # exact match is _tc_decide's job, not this one
-  base="$(basename "$my_path")"
+  base="$(basename "$my_clone_path")"
   case "$base" in
     "$id"-*-target) return 0 ;;
     *) return 1 ;;
@@ -638,7 +747,7 @@ _tc_pr_owner() {
   claimed_by="$(_tc_fetch_fm_field "$repo" "$path" claimed_by)" || { printf 'unknown\n'; return 0; }
   mine="$(_tc_claimant_id)"
   decision="$(_tc_decide "$claimed_by" "$mine")"
-  if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine"; then
+  if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine" "$(claimant_clone_path)"; then
     decision="mine"
   fi
   case "$decision" in

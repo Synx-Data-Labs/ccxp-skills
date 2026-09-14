@@ -104,10 +104,27 @@ _attribution_norm_loc() {
 # --- classification (pure — no I/O) -----------------------------------------
 
 attribution_classify() {
-  # $1 location (a `<host>:<clone-path>` value, possibly empty)
+  # $1 location (a claimed_by value, possibly empty)
+  # $2 claimed_role (optional: "ccxp" | "interactive")
   #   -> "ccxp" | "interactive" | "unattributed"
-  local loc="${1:-}" path p
+  #
+  # T20260911-698434: a current `cc1-<machine-id>:<path-hash>` claim carries no
+  # recoverable clone path, so the role is read from the task's `claimed_role`
+  # field, written beside claimed_by at acquire time. The path-parsing branch
+  # below is kept for PRE-MIGRATION history: completed-task attribution recovers
+  # claimed_by from git history, where the plaintext `<host>:<path>` form lives
+  # forever, and every historical retro must keep attributing correctly.
+  local loc="${1:-}" role="${2:-}" path p
   [ -z "$loc" ] && { printf 'unattributed'; return 0; }
+  case "$role" in
+    ccxp|interactive) printf '%s' "$role"; return 0 ;;
+  esac
+  # No role recorded. A current-format claim cannot be classified by path, so
+  # it is interactive by definition of the default; only legacy values reach
+  # the path comparison below with anything meaningful.
+  case "$loc" in
+    cc1-*:*) printf 'interactive'; return 0 ;;
+  esac
   # The clone path is everything after the FIRST ':'; a value with no ':' is
   # treated whole (defensive — every real claim has one).
   case "$loc" in

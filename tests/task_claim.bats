@@ -11,6 +11,10 @@
 
 setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  # Per-test claimant state: the machine-id and secret are cached under
+  # ~/.claude/state by default, and tests must neither read the developer's
+  # real identity nor write to their home directory.
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/claimant-state"
   # Dispatch block is guarded by [ "${BASH_SOURCE[0]}" = "${0}" ], so sourcing
   # is side-effect-free.
   source "$REPO_ROOT/_session/task_claim.sh"
@@ -184,6 +188,40 @@ EOF
   [ "$(_tc_reclaim_decide Coding deadbeef@cdw 99 99 2)" = "reclaimable" ]
 }
 
+# --- T20260911-698434: cc1- claimant shape (reader, landed before the writer) -
+
+@test "_tc_reclaim_decide: cc1- claimant is session-shaped -> subject to the staleness window" {
+  # The whole point of landing this arm first: without it a cc1- value
+  # matches neither the "<host>:<path>" nor the legacy "<sid>@<machine>"
+  # shape, falls to the human-override branch, and becomes permanently
+  # unreclaimable.
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide Review cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
+}
+
+@test "_tc_reclaim_decide: cc1- claimant still respects a fresh signal -> live" {
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 0 99999 2)" = "live" ]
+}
+
+@test "_tc_reclaim_decide: a LEGACY plaintext claim whose host begins 'cc1-' is not confused for the new shape" {
+  # `cc1-box:/home/x` is a <host>:<path> claim from a machine named
+  # "cc1-box"; it must match the *:/* arm, not the anchored cc1- regex.
+  # Both are session-shaped, so the observable outcome is the same — the
+  # test pins that neither arm ordering nor the anchor lets it fall through
+  # to the human-override branch.
+  [ "$(_tc_reclaim_decide Coding cc1-box:/home/x 99 99 2)" = "reclaimable" ]
+}
+
+@test "_tc_reclaim_decide: cc1--prefixed values that are NOT the exact shape stay human-assigned" {
+  # The anchor is what makes this hold: a bare "cc1-" glob would have
+  # swallowed all of these and silently made hand-assigned tasks reclaimable.
+  [ "$(_tc_reclaim_decide Coding cc1-Alex 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4 99 99 2)" = "live" ]                      # no path-hash
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e 99 99 2)" = "live" ]                 # hash too short
+  [ "$(_tc_reclaim_decide Coding cc1-A1B2C3D4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # uppercase, not our emitter
+  [ "$(_tc_reclaim_decide Coding cc2-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # unknown version
+}
+
 # --- T20260724-312324: live-run/PID liveness pre-check ----------------------
 # An optional 6th arg carries the caller-gathered liveness signal (in-progress
 # GH Actions run, or a live local PID for a same-host claim) — "1" means live,
@@ -205,10 +243,45 @@ EOF
 
 # --- claimant-id format (working-dir identity; T20260615-169917) ------------
 
-@test "_tc_claimant_id is <machine>:<working-dir> (no per-invocation session id)" {
-  session_machine() { printf 'boxname'; }
-  session_clone_path() { printf '/home/u/clone'; }
-  [ "$(_tc_claimant_id)" = "boxname:/home/u/clone" ]
+@test "_tc_claimant_id is the cc1- shape and carries no hostname, user or path" {
+  claimant_clone_path() { printf '/home/u/clone'; }
+  local id; id="$(_tc_claimant_id)"
+  claimant_is_current_shape "$id"
+  # The privacy contract: none of the inputs may survive into the value that
+  # gets committed to `main` (T20260911-698434).
+  [[ "$id" != *"$(hostname)"* ]]
+  [[ "$id" != *"/home/u/clone"* ]]
+  [[ "$id" != *"/Users/"* && "$id" != *"/home/"* ]]
+}
+
+@test "_tc_claimant_id is stable per clone and distinct across clones" {
+  claimant_clone_path() { printf '/clone/a'; }
+  local a b c; a="$(_tc_claimant_id)"; b="$(_tc_claimant_id)"
+  claimant_clone_path() { printf '/clone/b'; }
+  c="$(_tc_claimant_id)"
+  [ "$a" = "$b" ]
+  [ "$a" != "$c" ]
+}
+
+@test "_tc_claimant_id ignores hostname drift on the same machine (the T20260911-698434 repro)" {
+  # The original failure: a claim stamped under one hostname read as foreign
+  # after Tailscale changed what `hostname` returns, on the same box and clone.
+  claimant_clone_path() { printf '/clone/x'; }
+  hostname() { printf 'oldname.local'; }
+  local before; before="$(_tc_claimant_id)"
+  hostname() { printf 'newname-1.tailnet.ts.net'; }
+  local after; after="$(_tc_claimant_id)"
+  [ "$before" = "$after" ]
+}
+
+@test "_tc_claimant_id fails closed when the state dir cannot be written" {
+  # Never degrade to a hostname (reintroduces the leak) and never mint an
+  # ephemeral secret (the agent would stop recognising its own prior claim —
+  # the exact false-owned: bug this task exists to kill).
+  CLAIMANT_STATE_DIR="/proc/cannot-create-here"
+  run _tc_claimant_id
+  [ "$status" -ne 0 ]
+  [ -z "$output" ] || [[ "$output" != cc1-* ]]
 }
 
 @test "same clone + churning session-id resolves to the same claimant (no double-claim)" {
@@ -219,13 +292,13 @@ EOF
   # the old <sid>@<host> identity — this is a true regression guard: under the
   # old code _tc_claimant_id read session_cc_session_id and the 2nd acquire would
   # be 'claimed:' (exit 3); the new id must ignore it and resolve to 'mine'.
-  session_machine() { printf 'box'; }
-  session_clone_path() { printf '/clone/x'; }
+  claimant_clone_path() { printf '/clone/x'; }
   session_cc_session_id() { printf 'sess-one'; }
   run _tc_acquire T1; [ "$status" -eq 0 ]; [ "$output" = "acquired" ]
   session_cc_session_id() { printf 'sess-two'; }   # fresh CC invocation, same clone
   run _tc_acquire T1; [ "$status" -eq 0 ]; [ "$output" = "mine" ]
-  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)" = "box:/clone/x" ]
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)" = "$(_tc_claimant_id)" ]
+  claimant_is_current_shape "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)"
 }
 
 # --- release-on-pickup (the accumulation fix) -------------------------------
@@ -551,61 +624,121 @@ EOF
   [ "$(_tc_pr_owner 123)" = "unknown" ]
 }
 
+# --- T20260911-698434: legacy-claim migration -------------------------------
+
+@test "acquire: our OWN legacy <host>:<path> claim re-stamps to cc1- and reads as mine" {
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
+  claimant_clone_path() { printf '/clone/x'; }
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-demo.md" claimed_by 'oldhostname:/clone/x'
+  # Assert the STDOUT contract directly (callers parse it) — the migration also
+  # emits a _session_log line, and _session_log writes to stderr precisely so it
+  # cannot pollute that contract. Plain redirection rather than `run
+  # --separate-stderr`, which would pin a bats minimum version in CI.
+  local out; out="$(_tc_acquire T1 2>/dev/null)"
+  [ "$out" = "mine" ]
+  # Re-stamped in place, so the next agent sees the current format.
+  claimant_is_current_shape "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)"
+}
+
+@test "acquire: a legacy claim from a DIFFERENT clone still refuses" {
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
+  claimant_clone_path() { printf '/clone/x'; }
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-demo.md" claimed_by 'otherbox:/clone/ELSEWHERE'
+  run _tc_acquire T1
+  [ "$status" -eq 3 ]; [ "$output" = "claimed:otherbox:/clone/ELSEWHERE" ]
+}
+
+@test "is_legacy_self_claim: only the legacy shape, only this clone" {
+  _tc_is_legacy_self_claim 'oldhost:/clone/x' '/clone/x'
+  ! _tc_is_legacy_self_claim 'oldhost:/clone/other' '/clone/x'
+  # A current-format value must never be treated as a legacy self-claim.
+  ! _tc_is_legacy_self_claim 'cc1-a1b2c3d4:9f8e7d6c5b4a3210' '/clone/x'
+  # A human override must never be adopted.
+  ! _tc_is_legacy_self_claim 'Alex' '/clone/x'
+  ! _tc_is_legacy_self_claim '' '/clone/x'
+}
+
 # --- pr-owner cross-repo blind spot (T20260626-195977) ----------------------
 # A cross-repo task's claim is written from the HUB clone but /address-pr runs
 # from the ephemeral TARGET clone (Phase 1.5 naming: <task-id>-<slug>-target).
 # _tc_is_own_cross_repo_clone recognizes exactly that case; everything else
 # must still fall through to _tc_decide's exact-match "owned:"/"mine".
 
-@test "is_own_cross_repo_clone: same host, ephemeral target clone for THIS task -> yes" {
+# Fixtures are on the CURRENT claimant format. Keeping them plaintext would let
+# this whole block pass while production emitted a shape nothing here exercises
+# (T20260911-698434). $4 carries the real local clone path, which the id's
+# hashed path half can no longer supply.
+CC_A_HUB='cc1-aaaaaaaa:1111111111111111'      # machine A, hub clone
+CC_A_TGT='cc1-aaaaaaaa:2222222222222222'      # machine A, ephemeral target clone
+CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
+
+@test "is_own_cross_repo_clone: same machine, ephemeral target clone for THIS task -> yes" {
   run _tc_is_own_cross_repo_clone T20260626-195977 \
-    'cdw:/home/ci/hub-repo' \
-    'cdw:/tmp/T20260626-195977-pr-owner-target'
+    "$CC_A_HUB" "$CC_A_TGT" '/tmp/T20260626-195977-pr-owner-target'
   [ "$status" -eq 0 ]
 }
 
-@test "is_own_cross_repo_clone: different host -> no (never weakens anti-steal)" {
+@test "is_own_cross_repo_clone: different machine -> no (never weakens anti-steal)" {
+  # THE guard. It holds only because the machine half stays distinct per
+  # machine: "cc1-aaaaaaaa" vs "cc1-bbbbbbbb". Under a "cc1:<id>:<hash>"
+  # spelling both would read as the literal "cc1" and this would wrongly
+  # return yes — a foreign machine's claim adopted as our own.
   run _tc_is_own_cross_repo_clone T20260626-195977 \
-    'otherbox:/home/other/hub-repo' \
-    'cdw:/tmp/T20260626-195977-pr-owner-target'
+    "$CC_B_HUB" "$CC_A_TGT" '/tmp/T20260626-195977-pr-owner-target'
   [ "$status" -eq 1 ]
 }
 
-@test "is_own_cross_repo_clone: same host, ephemeral clone for a DIFFERENT task -> no" {
+@test "is_own_cross_repo_clone: same machine, ephemeral clone for a DIFFERENT task -> no" {
   run _tc_is_own_cross_repo_clone T20260626-195977 \
-    'cdw:/home/ci/hub-repo' \
-    'cdw:/tmp/T20260101-111111-other-task-target'
+    "$CC_A_HUB" "$CC_A_TGT" '/tmp/T20260101-111111-other-task-target'
   [ "$status" -eq 1 ]
 }
 
-@test "is_own_cross_repo_clone: same host, non-ephemeral clone path -> no" {
+@test "is_own_cross_repo_clone: same machine, non-ephemeral clone path -> no" {
   run _tc_is_own_cross_repo_clone T20260626-195977 \
-    'cdw:/home/ci/hub-repo' \
-    'cdw:/home/ci/some-other-clone'
+    "$CC_A_HUB" "$CC_A_TGT" '/home/ci/some-other-clone'
   [ "$status" -eq 1 ]
 }
 
-@test "is_own_cross_repo_clone: exact path match -> no (that's _tc_decide's 'mine', not this)" {
+@test "is_own_cross_repo_clone: exact id match -> no (that's _tc_decide's 'mine', not this)" {
   run _tc_is_own_cross_repo_clone T20260626-195977 \
-    'cdw:/home/ci/hub-repo' \
-    'cdw:/home/ci/hub-repo'
+    "$CC_A_HUB" "$CC_A_HUB" '/tmp/T20260626-195977-pr-owner-target'
   [ "$status" -eq 1 ]
 }
 
-@test "pr-owner: cross-repo PR, claim held by this host's hub clone -> mine" {
+@test "is_own_cross_repo_clone: LEGACY plaintext claims still resolve during migration" {
+  # A consumer repo mid-migration still has <host>:<path> claims on main; the
+  # machine half is the hostname and must keep discriminating.
+  run _tc_is_own_cross_repo_clone T20260626-195977 \
+    'cdw:/home/ci/hub-repo' 'cdw:/tmp/T20260626-195977-pr-owner-target' \
+    '/tmp/T20260626-195977-pr-owner-target'
+  [ "$status" -eq 0 ]
+  run _tc_is_own_cross_repo_clone T20260626-195977 \
+    'otherbox:/home/other/hub-repo' 'cdw:/tmp/T20260626-195977-pr-owner-target' \
+    '/tmp/T20260626-195977-pr-owner-target'
+  [ "$status" -eq 1 ]
+}
+
+@test "pr-owner: cross-repo PR, claim held by this machine's hub clone -> mine" {
   session_pr_task_id()        { printf 'T20260626-195977'; }
   _tc_resolve_task_location() { printf 'your-org/hub-repo\tdev/TODO/T20260626-195977-x.md'; }
-  _tc_claimant_id()            { printf 'cdw:/tmp/T20260626-195977-pr-owner-target'; }
-  _tc_fetch_fm_field()        { printf 'cdw:/home/ci/hub-repo'; }
+  _tc_claimant_id()           { printf 'cc1-aaaaaaaa:2222222222222222'; }
+  # The ephemeral-target check reads the REAL local path now that the id's
+  # path half is a hash, so this stub is what makes the case reachable.
+  claimant_clone_path()       { printf '/tmp/T20260626-195977-pr-owner-target'; }
+  _tc_fetch_fm_field()        { printf 'cc1-aaaaaaaa:1111111111111111'; }
   [ "$(_tc_pr_owner 123)" = "mine" ]
 }
 
-@test "pr-owner: cross-repo PR, claim held by a DIFFERENT host -> still owned: (anti-steal preserved)" {
+@test "pr-owner: cross-repo PR, claim held by a DIFFERENT machine -> still owned: (anti-steal preserved)" {
   session_pr_task_id()        { printf 'T20260626-195977'; }
   _tc_resolve_task_location() { printf 'your-org/hub-repo\tdev/TODO/T20260626-195977-x.md'; }
-  _tc_claimant_id()            { printf 'cdw:/tmp/T20260626-195977-pr-owner-target'; }
-  _tc_fetch_fm_field()        { printf 'otherbox:/home/other/hub-repo'; }
-  [ "$(_tc_pr_owner 123)" = "owned:otherbox:/home/other/hub-repo" ]
+  _tc_claimant_id()           { printf 'cc1-aaaaaaaa:2222222222222222'; }
+  claimant_clone_path()       { printf '/tmp/T20260626-195977-pr-owner-target'; }
+  _tc_fetch_fm_field()        { printf 'cc1-bbbbbbbb:1111111111111111'; }
+  [ "$(_tc_pr_owner 123)" = "owned:cc1-bbbbbbbb:1111111111111111" ]
 }
 
 @test "pr-owner: cross-repo PR, claim held by a different clone on the SAME host that is NOT the hub -> still owned: (no false-mine)" {

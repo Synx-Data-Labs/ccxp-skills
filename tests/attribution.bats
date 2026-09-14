@@ -63,6 +63,26 @@ _mk_git_dev() {
   [ "$(attribution_classify 'cdw:/home/ci/some-repo')" = "interactive" ]
 }
 
+@test "classify: an explicit claimed_role wins (the cc1- path, T20260911-698434)" {
+  # A current claim's path half is a hash, so the role must come from the
+  # task's own claimed_role field rather than being parsed back out.
+  [ "$(attribution_classify 'cc1-a1b2c3d4:9f8e7d6c5b4a3210' ccxp)" = "ccxp" ]
+  [ "$(attribution_classify 'cc1-a1b2c3d4:9f8e7d6c5b4a3210' interactive)" = "interactive" ]
+}
+
+@test "classify: a cc1- claim with NO role falls back to interactive, never a bogus path match" {
+  [ "$(attribution_classify 'cc1-a1b2c3d4:9f8e7d6c5b4a3210')" = "interactive" ]
+}
+
+@test "classify: PRE-MIGRATION plaintext history still classifies by path" {
+  # Completed-task attribution recovers claimed_by from git history, which
+  # keeps the old <host>:<path> form forever. Every historical retro must keep
+  # attributing correctly without a claimed_role field existing back then.
+  ATTRIBUTION_CCXP_PATHS='/home/ci/focus/some-repo'
+  [ "$(attribution_classify 'cdw:/home/ci/focus/some-repo')" = "ccxp" ]
+  [ "$(attribution_classify 'cdw:/home/someone/interactive-clone')" = "interactive" ]
+}
+
 @test "classify: empty location is unattributed" {
   [ "$(attribution_classify '')" = "unattributed" ]
   [ "$(attribution_classify)" = "unattributed" ]

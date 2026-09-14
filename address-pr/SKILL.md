@@ -83,7 +83,7 @@ The §1.5 Project-board writes (Status mirror + PR ref) are **soft visualization
 
 (The §1.3 authorship gate must already have passed — §1.6 applies only to PRs that are ours.)
 
-**PR ownership is NOT tracked separately on the PR (T20260622-404636).** There is no `cc-owned` label or marker comment. A PR is owned by whoever owns the **task it implements** — that task's `claimed_by: <host>:<path>` on `main`, which is durable, GitHub-persisted, and atomically arbitrated by the merge (the same `<host>:<path>` agent identity, and the release-on-pickup "≤1 task at a time", that `task_claim.sh` already enforces). The old per-PR marker stranded green PRs under dead sessions (#1361/#1326/#1386/#1524) and leaned on a verified-dead liveness probe that isn't feasible on stable signals (see T20260622-404636 JOURNAL). Deriving ownership from the task makes that whole failure class vanish: a dead agent's claim self-clears when its clone next picks up work (release-on-pickup), or via the reclaim sweep for a foreign dead clone.
+**PR ownership is NOT tracked separately on the PR (T20260622-404636).** There is no `cc-owned` label or marker comment. A PR is owned by whoever owns the **task it implements** — that task's `claimed_by: cc1-<machine-id>:<path-hash>` on `main`, which is durable, GitHub-persisted, and atomically arbitrated by the merge (the same (machine, clone) agent identity, and the release-on-pickup "≤1 task at a time", that `task_claim.sh` already enforces). The old per-PR marker stranded green PRs under dead sessions (#1361/#1326/#1386/#1524) and leaned on a verified-dead liveness probe that isn't feasible on stable signals (see T20260622-404636 JOURNAL). Deriving ownership from the task makes that whole failure class vanish: a dead agent's claim self-clears when its clone next picks up work (release-on-pickup), or via the reclaim sweep for a foreign dead clone.
 
 So before doing **any** work on the PR, resolve its owner from the task claim:
 
@@ -93,7 +93,7 @@ case "$OWN" in
   mine|untracked) ;;        # our task, or not task-tracked — proceed
   free)                     # the task is unclaimed — claim it FIRST (see below), then proceed
     ;;
-  owned:*)                  # the PR's task is claimed by ANOTHER <host>:<path> agent
+  owned:*)                  # the PR's task is claimed by ANOTHER (machine, clone) agent
     echo "PR #<number>'s task is owned by ${OWN#owned:} — deferring, not touching."
     # STOP: do not run the loop, do not merge. The reclaim sweep frees it if the
     # owning clone is genuinely dead (no PR activity past the window); a live
@@ -109,7 +109,7 @@ esac
 - **`mine`** — this clone holds the task claim (the normal `/drive` path: it claimed the task before opening the PR). Proceed.
 - **`free`** — the task exists but is unclaimed. **Claim it before doing anything else** — see below. Don't just "proceed"; a PR can sit open against an unclaimed task for weeks, during which the Project board reads `Open`/unclaimed even while a PR against it exists, and a peer session could pick the same task for duplicate work.
 - **`untracked`** — the PR maps to no task (`fix/*` branch, no `Task:` link). No cross-session task to coordinate on; proceed.
-- **`owned:<agent>`** — a *different* `<host>:<path>` agent holds the task. Defer; do not drive or merge.
+- **`owned:<agent>`** — a *different* (machine, clone) agent holds the task. Defer; do not drive or merge.
 - **`unknown`** — the task file couldn't be resolved (network / not found). Fail-safe: defer, never a silent merge. (A stale branch-name-vs-body-Task:-link mismatch can also surface as `unknown` on a rescoped PR — see T20260718-160579; that's a tooling bug to fix separately, not license to bypass the fail-safe. If you've manually confirmed the real current task from the PR body and claimed *that* task, you may proceed — but say so explicitly and file/link the tooling bug if not already tracked.)
 
 **`free` → claim now, same mechanism as `/drive` Phase 1's Claim PR** (this is the one case where `/address-pr` *does* acquire, not just read):
@@ -121,7 +121,7 @@ esac
 
 **No heartbeat / release for the `mine`/`owned` cases.** Ownership is already established when the task was claimed; `/address-pr` only *reads* it there. There is no TTL marker to heartbeat, and nothing to release at merge — the task claim is released at task close (`/drive` Phase 7 / the journal-move PR, via `task_claim.sh release`).
 
-**Cross-repo ownership resolution (T20260626-195977).** For a cross-repo task (hub repo holds the task file + claim, e.g. `hub-repo`; target repo holds the PR, e.g. `ccxp-skills`/`example-website.com`), the claim is written from the **hub** clone (`/drive` Phase 1) but `/address-pr`'s cross-repo mode runs from the ephemeral **target** clone (Phase 1.5: `/tmp/<task-id>-<slug>-target`) — a different path on the same host. `_tc_claimant_id`'s exact `<host>:<path>` match can never call that "mine" on its own, which without this recognition made every cross-repo PR fall through to `owned:<hub-clone>` (from the target clone) or `untracked`/wrong-PR (from the hub clone, since `gh pr view <n>` resolves against `$PWD`'s origin).
+**Cross-repo ownership resolution (T20260626-195977).** For a cross-repo task (hub repo holds the task file + claim, e.g. `hub-repo`; target repo holds the PR, e.g. `ccxp-skills`/`example-website.com`), the claim is written from the **hub** clone (`/drive` Phase 1) but `/address-pr`'s cross-repo mode runs from the ephemeral **target** clone (Phase 1.5: `/tmp/<task-id>-<slug>-target`) — a different path on the same host. `_tc_claimant_id`'s exact identity match can never call that "mine" on its own, which without this recognition made every cross-repo PR fall through to `owned:<hub-clone>` (from the target clone) or `untracked`/wrong-PR (from the hub clone, since `gh pr view <n>` resolves against `$PWD`'s origin).
 
 `_tc_pr_owner` closes this gap with `_tc_is_own_cross_repo_clone`, a pure check consulted only when `_tc_decide` itself said `other`:
 

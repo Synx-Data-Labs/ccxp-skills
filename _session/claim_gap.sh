@@ -84,7 +84,11 @@ _cg_state_file() {
 _cg_list_hash() {
   local ids
   ids="$(grep -oE 'unclaimed T[0-9]{8}-[0-9]+' <<<"$1" | sort -u)" || true
-  printf '%s' "$ids" | sha256sum | awk '{print $1}'
+  # claimant_sha256 (via task_claim.sh -> claimant-id.sh) rather than bare
+  # sha256sum: that is GNU-only and absent on a stock macOS, where this whole
+  # function silently produced an empty hash and defeated the change-detection
+  # it exists for (T20260911-698434 adopted the portable helper).
+  printf '%s' "$ids" | claimant_sha256
 }
 
 # Run claim_gap; only print its output when the flagged-ID list differs from

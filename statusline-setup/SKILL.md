@@ -10,7 +10,7 @@ argument-hint: "[edit|test]"
 Canonical, version-tracked home for `scripts/statusline-command.sh` — the
 script `~/.claude/settings.json`'s `statusLine.command` invokes on every
 prompt render. It surfaces the task claimed by *this* clone (matching
-`claimed_by: <machine>:<clone-path>` written by `_session/task_claim.sh`) and
+`claimed_by: cc1-<machine-id>:<path-hash>` written by `_session/task_claim.sh`) and
 the remaining context-window percentage.
 
 The script previously lived loose at `~/.claude/statusline-command.sh`,

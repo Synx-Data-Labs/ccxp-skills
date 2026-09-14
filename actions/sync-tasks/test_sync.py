@@ -829,10 +829,9 @@ class SyncFieldsTests(unittest.TestCase):
         mock_text.assert_called_once_with("item_1", "fld_blocked", "")
 
     def test_claim_fields_projected_when_present(self):
-        # claimed_by is the on-main session lock (_session/task_claim.sh). When
-        # set in frontmatter it must project onto the same-named Project TEXT
-        # field so the board shows who holds the task (the value already carries
-        # the working-tree path: <host>:<path>).
+        # claimed_by is the on-main session lock (_session/task_claim.sh). A
+        # LEGACY "<host>:<path>" value still projects verbatim — pre-migration
+        # rows on the board must not change shape underneath anyone.
         fields = {
             **self._FIELDS,
             "claimed_by": {"id": "fld_claimed"},
@@ -850,6 +849,44 @@ class SyncFieldsTests(unittest.TestCase):
              patch.object(sync, "get_start_date", return_value=None):
             sync.sync_fields("item_1", "dev/TODO/T123.md", fields)
         mock_text.assert_any_call("item_1", "fld_claimed", "cdw:/home/ci/focus/some-repo")
+
+    def test_claim_fields_projected_short_with_role_for_cc1(self):
+        # A current claimant id is opaque (T20260911-698434), so the board
+        # shows a short prefix plus the role — the part a human scanning the
+        # board actually wants — instead of 26 characters of hash.
+        fields = {
+            **self._FIELDS,
+            "claimed_by": {"id": "fld_claimed"},
+        }
+        meta = {
+            "status": "Coding",
+            "claimed_by": "cc1-a1b2c3d4:9f8e7d6c5b4a3210",
+            "claimed_role": "ccxp",
+        }
+        with patch.object(sync, "get_frontmatter", return_value=meta), \
+             patch.object(sync, "update_single_select", return_value=True), \
+             patch.object(sync, "update_iteration", return_value=True), \
+             patch.object(sync, "clear_field", return_value=True), \
+             patch.object(sync, "update_text", return_value=True) as mock_text, \
+             patch.object(sync, "update_date", return_value=True), \
+             patch.object(sync, "get_start_date", return_value=None):
+            sync.sync_fields("item_1", "dev/TODO/T123.md", fields)
+        mock_text.assert_any_call("item_1", "fld_claimed", "cc1-a1b2c3 (ccxp)")
+
+    def test_claim_display_shapes(self):
+        d = sync.claim_display
+        self.assertEqual(d("cc1-a1b2c3d4:9f8e7d6c5b4a3210", "ccxp"), "cc1-a1b2c3 (ccxp)")
+        self.assertEqual(d("cc1-a1b2c3d4:9f8e7d6c5b4a3210", None), "cc1-a1b2c3")
+        # Legacy and human-assigned values pass through untouched.
+        self.assertEqual(d("cdw:/home/ci/repo", None), "cdw:/home/ci/repo")
+        self.assertEqual(d("Alex", None), "Alex")
+        # Near-miss shapes are NOT shortened — only the exact format is known.
+        self.assertEqual(d("cc1-a1b2c3d4", None), "cc1-a1b2c3d4")
+        self.assertEqual(d("cc1-A1B2C3D4:9f8e7d6c5b4a3210", None),
+                         "cc1-A1B2C3D4:9f8e7d6c5b4a3210")
+        # Clear-to-empty contract.
+        self.assertEqual(d("", None), "")
+        self.assertEqual(d(None, None), "")
 
     def test_claim_fields_cleared_to_empty_when_unclaimed(self):
         # A released/unclaimed task carries empty claim frontmatter. Mirror the

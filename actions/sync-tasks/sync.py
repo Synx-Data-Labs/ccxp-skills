@@ -603,8 +603,37 @@ def update_date(item_id, field_id, date_str):
 # recover just these fields line-by-line so a single prose value no longer
 # silently drops a task's Status + Iteration off the Project board.
 _SCALAR_FM_KEYS = ("status", "scheduled", "estimation", "priority", "deadline",
-                   "claimed_by")
+                   "claimed_by", "claimed_role")
 _FM_SCALAR_RE = {k: re.compile(rf"^{k}:[ \t]*(.*)$", re.MULTILINE) for k in _SCALAR_FM_KEYS}
+
+
+_CLAIM_CC1_RE = re.compile(r"^cc1-([0-9a-f]{8}):[0-9a-f]{16}$")
+
+
+def claim_display(claimed_by, claimed_role=None):
+    """Board-facing rendering of a claimed_by value.
+
+    The claimant id is opaque by design (T20260911-698434) — it used to be
+    "<hostname>:<clone-path>", which was readable but published a machine name,
+    an OS username and a filesystem path onto a board and into a public repo.
+    A full "cc1-a1b2c3d4:9f8e7d6c5b4a3210" tells a human nothing extra over its
+    first few characters, so shorten it and append the role, which is the part
+    someone scanning the board actually wants ("was this the cron loop or a
+    person?").
+
+    Anything that is not the current shape — a legacy "<host>:<path>" claim, or
+    a deliberate human assignment like "Alex" — passes through untouched, and an
+    unclaimed task still renders as "" so the clear-to-empty contract holds.
+    """
+    raw = str(claimed_by or "").strip()
+    if not raw:
+        return ""
+    role = str(claimed_role or "").strip()
+    m = _CLAIM_CC1_RE.match(raw)
+    if not m:
+        return raw
+    short = "cc1-" + m.group(1)[:6]
+    return f"{short} ({role})" if role else short
 
 
 def _lenient_scalars(block):
@@ -757,7 +786,9 @@ def sync_fields(item_id, file_path, fields):
     # Blocked-by above. No-op when the board has no such column.
     for fm_key in ("claimed_by",):
         cf = fields.get(fm_key)
-        if cf and update_text(item_id, cf["id"], str(meta.get(fm_key) or "")):
+        if cf and update_text(item_id, cf["id"],
+                              claim_display(meta.get(fm_key),
+                                            meta.get("claimed_role"))):
             updates += 1
 
     # Iteration — mirrors `scheduled` for LIVE tasks: a TODO/PARKING task with no
