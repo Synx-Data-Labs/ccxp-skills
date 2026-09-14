@@ -111,7 +111,7 @@ scheduled: 2026-09-14
 
 - [x] `grep -rl '~/.claude/skills/' --include="*.md" --include="*.sh" .`
       returns nothing unexpected (or only intentional exceptions, noted
-      inline) — remaining 7 hits, all intentional:
+      inline) — remaining 8 hits, all intentional:
       - `dev/TODO/queue.md` — this task's own title, not an invocation
       - `dev/TODO/T20260914-384424-*.md` (this file) and
         `dev/TODO/T20260914-871616-*.md` — historical/self-referential
@@ -128,11 +128,24 @@ scheduled: 2026-09-14
         Claude Code global-skill install, unrelated to ccxp-skills'
         retired plugin-symlink layout; out of scope and would drift from
         its canonical source if hand-edited
+      - Note (`.bats` residual, out of the `--include` scope above but
+        found during review): `tests/session_lib.bats:4`'s header comment
+        also names the retired path, explaining what `_session/_lib.sh`'s
+        `_session_gh()` deliberately does *not* do — self-documenting
+        historical prose, same shape as this task's own explanatory
+        comments above; left unchanged.
 - [x] `bash _docs/lint-docs.sh --fix` stays clean on every touched file
       (445 files linted, 0 errors)
 - [x] `bash repo-conventions/scripts/lint.sh` stays clean (pre-existing,
       unrelated violation on `T20260914-234656` — confirmed present on
       `main` before this branch, not introduced here)
+- [x] Regression coverage for the 2 functional-bug fixes that had zero
+      prior test coverage: `tests/pre_merge_check.bats` (GH_SH override)
+      and `tests/reclaim_sweep_pr.bats` (SKILLS_ROOT override) — added
+      after independent review flagged the gap; `update-roadmap.sh` and
+      `verify.sh`/`ipm-iteration-drain-check.sh` already had coverage
+      (`tests/update_roadmap.bats`, fixed in the same PR; the latter two
+      via their existing suites).
 
 ## Done criteria
 
