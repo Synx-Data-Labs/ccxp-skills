@@ -13,3 +13,4 @@ reprioritize.
 - [T20260910-919422](T20260910-919422-lint-docs-fix-corrupts-content.md): `lint-docs.sh --fix` corrupts prose and always lints repo-wide
 - [T20260914-234656](T20260914-234656-finish-public-release-prep.md): Finish the pre-public cleanup (branches + commit signatures)
 - [T20260914-384424](T20260914-384424-stale-skills-path-examples.md): Update stale `~/.claude/skills/...` example paths across skill docs
+- [T20260914-412750](T20260914-412750-learn-from-mattpocock-skills.md): Learn from `mattpocock/skills` and apply improvements to ccxp-skills
