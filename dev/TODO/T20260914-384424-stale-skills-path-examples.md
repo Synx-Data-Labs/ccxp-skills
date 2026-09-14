@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Coding
 estimation: 2h
 source: this conversation, 2026-09-14
 related: T20260914-871616
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-14
 ---
 
 # T20260914-384424: Update stale `~/.claude/skills/...` example paths across skill docs
