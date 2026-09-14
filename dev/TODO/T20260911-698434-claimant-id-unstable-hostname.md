@@ -74,7 +74,7 @@ soon-to-be-public repo.
 - **`hostname` is no longer consulted**, which is what removes the drift
   this task was filed for. `session_machine()` loses its only caller.
 - **Two fields, not one hash** — keeping `<machine-id>` visible as its own
-  field is load-bearing, not cosmetic: `_tc_cross_repo_mine` needs "same
+  field is load-bearing, not cosmetic: `_tc_is_own_cross_repo_clone` needs "same
   machine, different clone" to remain decidable (see below). A single
   combined hash would make that feature impossible.
 - **Reclaim** — add an arm to `_tc_reclaim_decide`'s `case`
@@ -101,7 +101,8 @@ soon-to-be-public repo.
   first-colon path parsing as a fallback whenever the recovered value is
   not `cc1-`-shaped, so every pre-migration retro still attributes
   correctly without touching git history.
-- **Cross-repo ownership** — `_tc_cross_repo_mine` (`task_claim.sh:613`)
+- **Cross-repo ownership** — `_tc_is_own_cross_repo_clone` (`task_claim.sh:595`, parsing at
+  `:613-614`)
   does `claim_host="${claimed_by%%:*}"` / `claim_path="${claimed_by#*:}"`.
   Because `cc1-` lives inside the host field, `claim_host` evaluates to
   `cc1-<machine-id>` — still distinct per machine — so **the host
@@ -151,7 +152,7 @@ and it is passed as a shell word in test fixtures.
 
 | candidate | verdict |
 |---|---|
-| `cc1:<mid>:<hash>` | rejected — `${v%%:*}` collapses to `cc1` for every claim, silently voiding `_tc_cross_repo_mine`'s foreign-host guard |
+| `cc1:<mid>:<hash>` | rejected — `${v%%:*}` collapses to `cc1` for every claim, silently voiding `_tc_is_own_cross_repo_clone`'s foreign-host guard |
 | `[cc1] <mid>:<hash>` | rejected — **`yaml.safe_load` raises `ParserError`** (`[cc1]` opens a flow sequence), breaking board sync and the task linter on every claimed task; `[`/`]` are also regex-special and the statusline's escaper only escapes `\` and `.`; the space invites word-splitting in unquoted fixtures |
 | `cc1@<mid>:<hash>` | viable — parses, discriminates, no regex-special chars. Rejected only to keep `@` meaning exactly one thing (the legacy `<sid>@<machine>` shape). Note `^[0-9a-fA-F]{6,}@` matches any 6+ hex-char prefix, so `ccdef1@…` *would* hit the legacy arm — `cc1@` is safe only by being 3 characters |
 | `cc1-<mid>:<hash>` | **chosen** — preserves the two-field `<host>:<path>` shape, parses as a plain YAML string, no whitespace, no regex-special characters, and leaves `@` unambiguous |
@@ -166,33 +167,80 @@ the docs that pin the format — `_session/README.md` (5 sites),
 `claim/SKILL.md`, `address-pr/SKILL.md`, `drive/SKILL.md`, `ccxp/SKILL.md`,
 `glossary.md`, `statusline-setup/SKILL.md`, `templates/task.md`.
 
+Tests: one new suite (`tests/claimant_id.bats`) plus migrations and
+additions in `tests/task_claim.bats`, `tests/statusline_setup.bats`,
+`tests/attribution.bats`, `tests/reclaim_sweep.bats`,
+`tests/claim_gap.bats`, `tests/session_lib.bats` and
+`actions/sync-tasks/test_sync.py` — see the Test Plan for what each gains.
+
 ### Test Plan
 
-- **Identity**: stable across calls in one clone; unchanged when
-  `hostname` changes mid-flight (the original drift repro); distinct for
-  two clones on one machine
-- **Reclaim**: a `cc1-` claim is subject to the staleness window; a bare
-  human name still never auto-reclaims; legacy `h:/p` and `deadbeef@box`
-  classify exactly as before
-- **Cross-repo**: same machine-id + ephemeral `<task-id>-*-target` clone
-  reads `mine`; a foreign machine-id in the same ephemeral clone reads
-  `owned:` (guards the vacuous-host-check regression)
-- **Migration**: a legacy claim whose path half matches re-stamps to
-  `cc1-` and reads as mine; a non-matching path half still refuses
-- **Attribution**: `cc1-` + `claimed_role: ccxp` → `ccxp`; a historical
-  plaintext value still resolves via the path fallback; missing role →
-  `interactive`
-- **Statusline**: cross-check test asserts `sl-clone-id` output equals
-  `_tc_claimant_id` output
-- **Failure**: unwritable `~/.claude/state/` aborts the claim non-zero
-  with a readable message
-- **Format guard**: a written `claimed_by` round-trips through
-  `yaml.safe_load` as a plain string, and matches the anchored
-  `^cc1-[0-9a-f]{8}:[0-9a-f]{16}$` shape — the test that would have caught
-  the `[cc1] <mid>:<hash>` spelling
-- **Privacy regression guard**: assert no written `claimed_by` matches
-  `/Users/|/home/|\.ts\.net|$(hostname)` — the test that stops this
-  leak returning
+The existing suites are strong on behaviour but share one blind spot:
+**every suite hardcodes a plaintext claimant fixture** (`h:/p` in
+`task_claim.bats`, `cdw:/tmp/...` in the cross-repo cases,
+`"$(hostname):$repo"` in `statusline_setup.bats`, `cdw:/home/ci/...` in
+`test_sync.py`). If production starts emitting `cc1-…` and the fixtures
+are not migrated with it, every suite stays green while testing a format
+nothing writes. Migrating fixtures is therefore part of the work, not a
+follow-up — and the contract test below is what stops them drifting again.
+
+Worth recording honestly: the cross-repo anti-steal direction is already
+well covered (`task_claim.bats:560,567,603,611`). Once its fixtures are on
+the new format those tests *do* catch the vacuous-host-guard failure — but
+only after the `basename` half is fixed, because a broken `basename` check
+fails closed and masks it. That interaction is why the rejected
+`cc1:<mid>:<hash>` spelling was dangerous rather than merely wrong.
+
+**New suite — `tests/claimant_id.bats`** (no existing home; the helpers
+land in `_lib.sh`):
+
+- `_tc_claimant_id` output matches `^cc1-[0-9a-f]{8}:[0-9a-f]{16}$` — the
+  **format contract** every other suite's fixtures are validated against
+- stable across calls in one clone; unchanged when `hostname` changes
+  mid-flight (the original drift repro); distinct for two clones on one
+  machine
+- `machine-id` and the secret are generated once and reused; the secret
+  file is mode 600 and never equals `machine-id`
+- unwritable `~/.claude/state/` → claim aborts non-zero with a readable
+  message (fail-closed), and writes no `claimed_by`
+- the portable sha256 helper agrees across `shasum -a 256`, `sha256sum`
+  and `openssl dgst -sha256`, and still works with any one of them absent
+  from `PATH`
+- **privacy guard**: a written `claimed_by` matches none of
+  `/Users/`, `/home/`, `\.ts\.net`, or `$(hostname)` — the test that
+  stops this leak returning
+- **YAML guard**: the written frontmatter line round-trips through
+  `yaml.safe_load` as a plain string — the test that would have caught the
+  `[cc1] <mid>:<hash>` spelling, which no suite could see today
+
+**Extended — `tests/task_claim.bats`** (42 `claimed_by` refs to migrate):
+
+- a `cc1-` claim is subject to the staleness window; a bare human name
+  still never auto-reclaims; legacy `h:/p` and `deadbeef@box` classify
+  exactly as before
+- a legacy plaintext claim whose host half begins `cc1-` is **not**
+  mistaken for the new format (guards the anchored-shape decision)
+- migration: a legacy claim whose path half matches re-stamps to `cc1-`
+  and reads as mine; a non-matching path half still refuses
+- cross-repo cases 560/567/603/611 re-fixtured onto `cc1-`, keeping both
+  the positive and the two anti-steal negatives
+
+**Extended — `tests/statusline_setup.bats`** (6 hardcoded format sites):
+
+- **cross-check**: `sl-clone-id` output equals `_tc_claimant_id` output —
+  the assertion that makes the duplicate implementation safe, and the one
+  thing the current suite structurally cannot do
+
+**Extended — `tests/attribution.bats`**:
+
+- `cc1-` + `claimed_role: ccxp` → `ccxp`; missing role → `interactive`
+- a historical plaintext value still resolves via the first-colon path
+  fallback (protects every pre-migration retro)
+
+**Extended — `actions/sync-tasks/test_sync.py`**:
+
+- `claimed_by` projection emits the short `cc1-<machine-id first 6>` plus
+  role, and still clears to empty on release
 
 ### Open
 
@@ -214,7 +262,7 @@ the docs that pin the format — `_session/README.md` (5 sites),
 
 Estimation revised from 1h to 1d: the grill settled the design but the
 surface is far wider than the original bug implied — 2 sequenced commits
-across 9 source files plus 7 test files and 8 documents, with
+across 9 source files, 1 new and 7 migrated test suites, and 8 documents, with
 `tests/task_claim.bats` alone carrying 42 `claimed_by` references and
 `tests/statusline_setup.bats` 6 hardcoded format sites.
 
@@ -229,3 +277,6 @@ across 9 source files plus 7 test files and 8 documents, with
 - [ ] Statusline resolves the claimed task, with a cross-check test
       pinning it to `_tc_claimant_id`
 - [ ] Claiming fails closed, loudly, when `~/.claude/state/` is unwritable
+- [ ] `tests/claimant_id.bats` exists and pins the format contract, the
+      privacy guard and the YAML guard; no suite still asserts against a
+      plaintext claimant fixture
