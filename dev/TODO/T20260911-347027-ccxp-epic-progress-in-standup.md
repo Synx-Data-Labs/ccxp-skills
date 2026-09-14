@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 1d
 source: maintainer conversation 2026-09-11 — standups are task-focused and never surface epic-level progress
 related: T20260906-306082
 description: Read a hub-repo dev/EPICS.md and add a token-free "Epic progress" block to the ccxp daily standup + Slack
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-14
 ---
 
 # T20260911-347027: `/ccxp` standup should report epic-level progress from the hub repo's `dev/EPICS.md`
