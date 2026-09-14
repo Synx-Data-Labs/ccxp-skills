@@ -12,7 +12,7 @@ or config-driven via environment variables with no baked-in default.
 ### As a plugin (recommended)
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 41 skills in one step:
+so `/plugin` can install all 42 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -206,14 +206,32 @@ copying them per-repo:
 
 Edits to `<skill>/SKILL.md` take effect immediately in every consumer
 repo — it's a real checkout, not a read-only cache. When ready, commit +
-push here; other machines pick up changes with `git pull`.
+push here; other machines pick up changes with `git pull`, or with
+`/plugin update ccxp-skills` where the repo is installed as a plugin.
+
+`.claude-plugin/plugin.json` declares `"skills": "."`, so the plugin's
+skill root is the repo root rather than a `skills/` subdirectory. That is
+deliberate: each skill sits beside the shared libs (`_gh/`, `_session/`,
+`_taskid/`, `_ipm/`, `_docs/`, `_journal/`) and reaches them through
+`../_gh/gh.sh`-style relative references. Moving the skills under
+`skills/` would break every one of those and the symlink installer with
+them. `.claude-plugin/marketplace.json` makes the repo its own
+single-plugin marketplace, which is why `/plugin marketplace add` takes
+the repo slug directly.
 
 ## Adding a new skill
 
 1. Create `<name>/SKILL.md` at the repo root with proper frontmatter
    (`name`, `description`, `argument-hint`)
 2. Commit + push
-3. Other machines: `git pull`
+3. Other machines: `git pull`, or `/plugin update ccxp-skills`
+
+No manifest edit is needed — `"skills": "."` means any root directory
+containing a `SKILL.md` is picked up automatically, by both install
+paths. The frontmatter `name` is what the skill is invoked as, so keep it
+equal to the directory name. Verify with `claude plugin validate .`, and
+`claude plugin details ccxp-skills` once installed to see the component
+inventory and its token cost.
 
 ## Skill scripts
 
