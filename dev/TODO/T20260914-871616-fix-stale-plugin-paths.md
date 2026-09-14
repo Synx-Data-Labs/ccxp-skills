@@ -1,5 +1,5 @@
 ---
-status: Review
+status: Done
 estimation: 30m
 source: this conversation, 2026-09-14
 scheduled: 2026-09-14
@@ -50,7 +50,9 @@ scheduled: 2026-09-14
 
 ## Closed (2026-09-14)
 
-- Shipped in PR (this branch) `t20260914-871616-fix-stale-plugin-paths`.
+- Shipped in [ccxp-skills#14](https://github.com/Synx-Data-Labs/ccxp-skills/pull/14),
+  merged (rebase, branch deleted). CI green (Markdown Lint, bats,
+  lint-tasks, sync-tasks).
 - `hooks/hooks.json` added — `SessionStart` now runs
   `${CLAUDE_PLUGIN_ROOT}/_gh/auto-switch.sh` automatically for every
   plugin install (superpowers's own `hooks/hooks.json` was used as the
@@ -67,7 +69,18 @@ scheduled: 2026-09-14
   plugin cache picks up the merged change) and repointed
   `statusLine.command` at `/home/rocky/ccxp-skills/statusline-setup/scripts/statusline-command.sh`
   (this machine's marketplace is a `directory` source pointing straight at
-  the live repo, so this path is stable here).
+  the live repo, so this path is stable here). Smoke-tested: the script
+  runs and prints a normal statusline.
+- **Follow-up spotted, not fixed here** (out of this task's scope): ~40
+  other files (most `*/SKILL.md` files plus a few shared-lib script header
+  comments) still show example invocations like
+  `bash ~/.claude/skills/_taskid/new.sh` — cosmetic-only (none of it is
+  live code path resolution; the actual scripts already use
+  `../_gh/foo.sh`-style relative sibling references, confirmed by
+  inspecting `_gh/gh.sh`, `_taskid/new.sh`, `_taskid/in-this-repo.sh`,
+  `_session/task-state.sh`), but wrong/stale for anyone copy-pasting a
+  doc example under a plugin install. Worth its own task if it's worth
+  fixing at all.
 
 ## Skills invoked
 
