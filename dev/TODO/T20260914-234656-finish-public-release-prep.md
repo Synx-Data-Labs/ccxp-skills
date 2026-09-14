@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 estimation: 30m
 source: session 2026-09-14 — PII sweep + history rewrite; blocked on permissions the session could not exercise
 related: T20260911-698434
 description: Delete four redundant branches and decide on unverified-commit signatures, then the repo is ready to switch public
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-14
 ---
 
@@ -62,7 +62,9 @@ scheduled: 2026-09-14
       repo's own legitimate `Synx-Data-Labs` org name. One real finding
       (a vendor name + compliance figures in an illustrative example,
       T20260911-347027:17) was redacted in PR #10 before this scan
-- [ ] Repo switched to public
+- [x] Repo switched to public — `gh repo edit --visibility public
+      --accept-visibility-change-consequences`, confirmed
+      `visibility: PUBLIC` via `gh repo view`
 
 ## Notes
 
@@ -82,3 +84,42 @@ scheduled: 2026-09-14
   blocked: `DELETE .../git/refs/heads/<branch>` for branch removal, same
   mechanism available for the visibility switch (`PATCH .../repos/<owner>/<repo>`
   or `gh repo edit --visibility public`).
+
+## Closed (2026-09-14)
+
+- Shipped in PR #10 (redaction), #11 (claim), #12 (progress record), and
+  this close PR. Repo visibility flipped directly via
+  `gh repo edit --visibility public --accept-visibility-change-consequences`
+  (no PR — not a repo-content change).
+- All four Done criteria met:
+  - Redundant branches (`clean-main`, `claude/vibrant-carson-x9yiee`,
+    `t20260911-347027-file-task`, `t20260912-279229-grill-me-pre-ipm`)
+    deleted via `gh api -X DELETE`, each confirmed 0-ahead of `main` first.
+  - Unverified-commit signatures on `890c1ce`/`2afef98` accepted as
+    cosmetic — decided in-conversation 2026-09-14, no history rewrite.
+  - Fresh `sensitivity-audit` scan reviewed clean immediately before the
+    flip (144 hits, all confirmed false positives — license text, code
+    identifiers, doc/test fixtures, the repo's own org name, and this
+    task file's own self-referential mentions of those categories). One
+    real finding (vendor name + compliance figures in an illustrative
+    example) was caught and redacted in PR #10 before the final scan.
+  - `Synx-Data-Labs/ccxp-skills` is now `PUBLIC`, confirmed via
+    `gh repo view --json visibility`.
+- Nothing external/unverified remains — GitHub Support `gc` for the
+  orphaned pre-rewrite objects (noted in this task's original Notes) is
+  optional cleanup, not a blocker; exposure was already assessed as low
+  (repo had no forks/PRs while private).
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class task, no
+  code changes
+- Verification (`superpowers:verification-before-completion`): yes — the
+  branch-deletion, signature-decision, and PII-scan claims were each
+  independently confirmed against live repo state (API queries, re-scans)
+  before being marked done
+- Systematic debugging (`superpowers:systematic-debugging`): no — no
+  stuck point
+- Receiving code review (`superpowers:receiving-code-review`): no — no
+  Claude Code review findings; CI-only docs PRs
