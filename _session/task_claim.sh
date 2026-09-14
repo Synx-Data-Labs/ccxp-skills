@@ -264,7 +264,21 @@ _tc_reclaim_decide() {
       # '@' (an email address, an '@'-mention) would misclassify as
       # session-shaped and lose its "never auto-reclaimable" protection —
       # caught in code review, T20260724-312324.
-      if [[ "$claimed_by" =~ ^[0-9a-fA-F]{6,}@ ]]; then
+      if [[ "$claimed_by" =~ ^cc1-[0-9a-f]{8}:[0-9a-f]{16}$ ]]; then
+        # Current "cc1-<machine-id>:<path-hash>" shape (T20260911-698434).
+        # ONE-WAY DOOR: this arm must survive a revert of the code that
+        # WRITES the shape. Reverting both would leave every live cc1-
+        # claim matching neither arm, falling through to the
+        # human-override branch below, and becoming permanently
+        # unreclaimable — a silent repo-wide stranding. Reader landed
+        # before the writer for exactly this reason; drop it only after
+        # no cc1- claim exists anywhere.
+        # Anchored rather than a `cc1-*` glob so a real hostname that
+        # merely begins "cc1-" can never be mistaken for this shape,
+        # independently of arm ordering (a legacy plaintext claim like
+        # `cc1-box:/home/x` still matches the `*:/*` arm above first).
+        : # session-shaped — subject to the staleness window
+      elif [[ "$claimed_by" =~ ^[0-9a-fA-F]{6,}@ ]]; then
         : # session-shaped — subject to the staleness window
       else
         printf 'live'; return 0  # non-session claimant — human-assigned, never auto-reclaimable

@@ -184,6 +184,40 @@ EOF
   [ "$(_tc_reclaim_decide Coding deadbeef@cdw 99 99 2)" = "reclaimable" ]
 }
 
+# --- T20260911-698434: cc1- claimant shape (reader, landed before the writer) -
+
+@test "_tc_reclaim_decide: cc1- claimant is session-shaped -> subject to the staleness window" {
+  # The whole point of landing this arm first: without it a cc1- value
+  # matches neither the "<host>:<path>" nor the legacy "<sid>@<machine>"
+  # shape, falls to the human-override branch, and becomes permanently
+  # unreclaimable.
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide Review cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
+}
+
+@test "_tc_reclaim_decide: cc1- claimant still respects a fresh signal -> live" {
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 0 99999 2)" = "live" ]
+}
+
+@test "_tc_reclaim_decide: a LEGACY plaintext claim whose host begins 'cc1-' is not confused for the new shape" {
+  # `cc1-box:/home/x` is a <host>:<path> claim from a machine named
+  # "cc1-box"; it must match the *:/* arm, not the anchored cc1- regex.
+  # Both are session-shaped, so the observable outcome is the same — the
+  # test pins that neither arm ordering nor the anchor lets it fall through
+  # to the human-override branch.
+  [ "$(_tc_reclaim_decide Coding cc1-box:/home/x 99 99 2)" = "reclaimable" ]
+}
+
+@test "_tc_reclaim_decide: cc1--prefixed values that are NOT the exact shape stay human-assigned" {
+  # The anchor is what makes this hold: a bare "cc1-" glob would have
+  # swallowed all of these and silently made hand-assigned tasks reclaimable.
+  [ "$(_tc_reclaim_decide Coding cc1-Alex 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4 99 99 2)" = "live" ]                      # no path-hash
+  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e 99 99 2)" = "live" ]                 # hash too short
+  [ "$(_tc_reclaim_decide Coding cc1-A1B2C3D4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # uppercase, not our emitter
+  [ "$(_tc_reclaim_decide Coding cc2-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # unknown version
+}
+
 # --- T20260724-312324: live-run/PID liveness pre-check ----------------------
 # An optional 6th arg carries the caller-gathered liveness signal (in-progress
 # GH Actions run, or a live local PID for a same-host claim) — "1" means live,
