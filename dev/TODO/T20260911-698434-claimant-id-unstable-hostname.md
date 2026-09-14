@@ -58,11 +58,14 @@ soon-to-be-public repo.
 
 ### Decisions
 
-- **Format** — `claimed_by: cc1:<machine-id>:<path-hash>`. `cc1:` is a
-  versioned prefix; `<machine-id>` is 8 hex, random, cached at
-  `~/.claude/state/machine-id` (mirrors `session_cc_session_id`'s
-  `${raw:0:8}` convention in `_lib.sh`); `<path-hash>` is 16 hex of
-  `sha256(secret ‖ clone-path)`.
+- **Format** — `claimed_by: cc1-<machine-id>:<path-hash>`. `<machine-id>`
+  is 8 hex, random, cached at `~/.claude/state/machine-id` (mirrors
+  `session_cc_session_id`'s `${raw:0:8}` convention in `_lib.sh`);
+  `<path-hash>` is 16 hex of `sha256(secret ‖ clone-path)`. The `cc1-`
+  version marker rides *inside* the host field rather than being a field
+  of its own, which preserves the historical two-field `<host>:<path>`
+  shape — see "Format alternatives" below, this is the whole reason the
+  format looks like this.
 - **Secret** — a separate per-machine random value at
   `~/.claude/state/claimant-secret`, mode 600, never committed. The path
   hash is salted with the *secret*, not `<machine-id>`: `<machine-id>` is
@@ -70,16 +73,19 @@ soon-to-be-public repo.
   path brute-forceable from a guessed username list.
 - **`hostname` is no longer consulted**, which is what removes the drift
   this task was filed for. `session_machine()` loses its only caller.
-- **Three components, not one hash** — keeping `<machine-id>` separately
-  visible is load-bearing, not cosmetic: `_tc_cross_repo_mine` needs
-  "same machine, different clone" to remain decidable (see below). A
-  single combined hash would make that feature impossible.
-- **Reclaim** — add an explicit `cc1:*` arm to `_tc_reclaim_decide`'s
-  `case` (`task_claim.sh:256`), keeping `*:/*` and `^[0-9a-fA-F]{6,}@`
-  for legacy. Without it a `cc1:` value matches neither shape and falls to
-  the human-override arm, making every claim **permanently
-  unreclaimable**.
-- **Reader before writer** — the `cc1:` arm lands as an earlier, separate
+- **Two fields, not one hash** — keeping `<machine-id>` visible as its own
+  field is load-bearing, not cosmetic: `_tc_cross_repo_mine` needs "same
+  machine, different clone" to remain decidable (see below). A single
+  combined hash would make that feature impossible.
+- **Reclaim** — add an arm to `_tc_reclaim_decide`'s `case`
+  (`task_claim.sh:256`) matching the **anchored** shape
+  `^cc1-[0-9a-f]{8}:[0-9a-f]{16}$`, not a `cc1-*` glob, so a real hostname
+  that happens to start with `cc1-` can never be mistaken for the new
+  format independently of arm ordering. Keep `*:/*` and
+  `^[0-9a-fA-F]{6,}@` for legacy. Without the new arm a `cc1-` value
+  matches neither existing shape and falls to the human-override arm,
+  making every claim **permanently unreclaimable**.
+- **Reader before writer** — the `cc1-` arm lands as an earlier, separate
   commit than the code that writes the new format, and carries an in-code
   comment marking it a one-way door: reverting the writer is safe,
   reverting both silently strands every live claim.
@@ -93,18 +99,22 @@ soon-to-be-public repo.
   machine's path hash.
 - **Historical attribution** — `attribution.sh:114` keeps its existing
   first-colon path parsing as a fallback whenever the recovered value is
-  not `cc1:`-shaped, so every pre-migration retro still attributes
+  not `cc1-`-shaped, so every pre-migration retro still attributes
   correctly without touching git history.
 - **Cross-repo ownership** — `_tc_cross_repo_mine` (`task_claim.sh:613`)
-  currently does `claim_host="${claimed_by%%:*}"` /
-  `claim_path="${claimed_by#*:}"`. Under the new format `claim_host`
-  becomes the literal `cc1` for *every* claim, so the "a foreign host is
-  never mine" guard goes vacuous, and `basename "$my_path"` can no longer
-  match `<task-id>-*-target`, so the function returns 1 always and
-  cross-repo PRs regress to the exact `owned:` deferral T20260626-195977
-  fixed. Rewrite it to compare the `<machine-id>` component and to take
-  the real local clone path from `session_clone_path()` rather than
-  parsing it back out of the hashed id.
+  does `claim_host="${claimed_by%%:*}"` / `claim_path="${claimed_by#*:}"`.
+  Because `cc1-` lives inside the host field, `claim_host` evaluates to
+  `cc1-<machine-id>` — still distinct per machine — so **the host
+  comparison needs no change at all** and the "a foreign host is never
+  mine" guard keeps working. Only the tail needs fixing: `my_path` is now
+  a hash, so `basename "$my_path"` can no longer match
+  `<task-id>-*-target` and the function would return 1 always, regressing
+  cross-repo PRs to the exact `owned:` deferral T20260626-195977 fixed.
+  Take the real local clone path from `session_clone_path()` for that
+  check instead of parsing it back out of the id. (Under the rejected
+  `cc1:<mid>:<hash>` spelling `claim_host` would have collapsed to the
+  literal `cc1` for every claim, silently voiding the guard — the reason
+  the format changed.)
 - **Migration** — carve-out in `_tc_acquire`'s `other` branch: a legacy
   `<host>:<path>` claim whose path half equals my clone path is treated as
   mine and re-stamped. `main` carries zero live claims today, so this repo
@@ -128,9 +138,23 @@ soon-to-be-public repo.
   In scope: update the script, and add a **cross-check test asserting
   `sl-clone-id` equals `_tc_claimant_id`** so any future divergence fails
   loudly.
-- **Board and logs** — `sync.py:758` projects `cc1:<machine-id first 6>`
+- **Board and logs** — `sync.py:758` projects `cc1-<machine-id first 6>`
   plus the role instead of the raw value; `reclaim_sweep.sh:98`'s log line
   follows suit.
+
+### Format alternatives considered
+
+Recorded so this is not relitigated. The constraint that decides it: the
+frontmatter is parsed by real YAML (`sync.py:643`, `lint_tasks.py:54` both
+call `yaml.safe_load`), the value is grepped as a regex by the statusline,
+and it is passed as a shell word in test fixtures.
+
+| candidate | verdict |
+|---|---|
+| `cc1:<mid>:<hash>` | rejected — `${v%%:*}` collapses to `cc1` for every claim, silently voiding `_tc_cross_repo_mine`'s foreign-host guard |
+| `[cc1] <mid>:<hash>` | rejected — **`yaml.safe_load` raises `ParserError`** (`[cc1]` opens a flow sequence), breaking board sync and the task linter on every claimed task; `[`/`]` are also regex-special and the statusline's escaper only escapes `\` and `.`; the space invites word-splitting in unquoted fixtures |
+| `cc1@<mid>:<hash>` | viable — parses, discriminates, no regex-special chars. Rejected only to keep `@` meaning exactly one thing (the legacy `<sid>@<machine>` shape). Note `^[0-9a-fA-F]{6,}@` matches any 6+ hex-char prefix, so `ccdef1@…` *would* hit the legacy arm — `cc1@` is safe only by being 3 characters |
+| `cc1-<mid>:<hash>` | **chosen** — preserves the two-field `<host>:<path>` shape, parses as a plain YAML string, no whitespace, no regex-special characters, and leaves `@` unambiguous |
 
 ### Full change surface
 
@@ -147,21 +171,25 @@ the docs that pin the format — `_session/README.md` (5 sites),
 - **Identity**: stable across calls in one clone; unchanged when
   `hostname` changes mid-flight (the original drift repro); distinct for
   two clones on one machine
-- **Reclaim**: a `cc1:` claim is subject to the staleness window; a bare
+- **Reclaim**: a `cc1-` claim is subject to the staleness window; a bare
   human name still never auto-reclaims; legacy `h:/p` and `deadbeef@box`
   classify exactly as before
 - **Cross-repo**: same machine-id + ephemeral `<task-id>-*-target` clone
   reads `mine`; a foreign machine-id in the same ephemeral clone reads
   `owned:` (guards the vacuous-host-check regression)
 - **Migration**: a legacy claim whose path half matches re-stamps to
-  `cc1:` and reads as mine; a non-matching path half still refuses
-- **Attribution**: `cc1:` + `claimed_role: ccxp` → `ccxp`; a historical
+  `cc1-` and reads as mine; a non-matching path half still refuses
+- **Attribution**: `cc1-` + `claimed_role: ccxp` → `ccxp`; a historical
   plaintext value still resolves via the path fallback; missing role →
   `interactive`
 - **Statusline**: cross-check test asserts `sl-clone-id` output equals
   `_tc_claimant_id` output
 - **Failure**: unwritable `~/.claude/state/` aborts the claim non-zero
   with a readable message
+- **Format guard**: a written `claimed_by` round-trips through
+  `yaml.safe_load` as a plain string, and matches the anchored
+  `^cc1-[0-9a-f]{8}:[0-9a-f]{16}$` shape — the test that would have caught
+  the `[cc1] <mid>:<hash>` spelling
 - **Privacy regression guard**: assert no written `claimed_by` matches
   `/Users/|/home/|\.ts\.net|$(hostname)` — the test that stops this
   leak returning
@@ -194,7 +222,7 @@ across 9 source files plus 7 test files and 8 documents, with
 
 - [ ] `_tc_claimant_id()` no longer consults `hostname`, and no written
       `claimed_by` contains a hostname, username, or filesystem path
-- [ ] `cc1:` claims are auto-reclaimable; human overrides still never are
+- [ ] `cc1-` claims are auto-reclaimable; human overrides still never are
 - [ ] Cross-repo `pr-owner` still reports `mine` for the ephemeral target
       clone, and `owned:` for a foreign machine
 - [ ] Legacy plaintext claims self-heal on first touch; no operator step
