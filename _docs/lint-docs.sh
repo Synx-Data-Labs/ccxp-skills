@@ -34,8 +34,8 @@
 # forces the floor (test seam / distrust-npx override).
 #
 # Usage:
-#   bash ~/.claude/skills/_docs/lint-docs.sh [--fix] [path ...]   # no paths => dev/JOURNAL dev/TODO (vendored scope)
-#   source ~/.claude/skills/_docs/lint-docs.sh                     # then call lint_docs_run / _lint_docs_md032
+#   bash lint-docs.sh [--fix] [path ...]   # no paths => dev/JOURNAL dev/TODO (vendored scope)
+#   source lint-docs.sh                     # then call lint_docs_run / _lint_docs_md032
 #
 # Options:
 #   --fix      auto-correct via `markdownlint-cli2 --fix` when a runner is active.

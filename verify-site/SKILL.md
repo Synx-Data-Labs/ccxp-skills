@@ -32,7 +32,7 @@ The first run downloads Chromium for Playwright (~200 MB) and Lighthouse. Subseq
 
   ```bash
   BRANCH=$(git branch --show-current)
-  bash ~/.claude/skills/_gh/gh.sh pr list --head "$BRANCH" --state open --json number --jq '.[0].number'
+  bash ../_gh/gh.sh pr list --head "$BRANCH" --state open --json number --jq '.[0].number'
   ```
 
 - If no PR is found, stop and report.
@@ -40,7 +40,7 @@ The first run downloads Chromium for Playwright (~200 MB) and Lighthouse. Subseq
 ### 2. Read the test plan from the PR body
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr view "$PR" --json body --jq '.body' > /tmp/pr-body.md
+bash ../_gh/gh.sh pr view "$PR" --json body --jq '.body' > /tmp/pr-body.md
 ```
 
 The skill expects a `## Test plan` section with `- [ ]` / `- [x]` items. Only unchecked items are candidates for auto-ticking.
@@ -101,7 +101,7 @@ An item ticks green only if the associated check passed with zero failures acros
 For every auto-tickable item that passed, rewrite `- [ ]` → `- [x]`:
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr edit "$PR" --body-file /tmp/pr-body-updated.md
+bash ../_gh/gh.sh pr edit "$PR" --body-file /tmp/pr-body-updated.md
 ```
 
 Do NOT change items the automation couldn't match or that failed — those stay `- [ ]` and are listed in the report so the human reviewer can decide.

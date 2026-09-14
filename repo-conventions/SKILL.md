@@ -89,7 +89,7 @@ To author or edit a SKILL.md, use the `/skill-conventions` skill — it document
 Run the lint script and report violations:
 
 ```bash
-bash ~/.claude/skills/repo-conventions/scripts/lint.sh
+bash ../repo-conventions/scripts/lint.sh
 ```
 
 Checks (each is a separate exit-code-bearing assertion):
@@ -108,8 +108,8 @@ Report `✅` per check or `❌ <reason>` and exit non-zero on any failure.
 
 For each missing or empty file, offer to copy from the template:
 
-- `~/.claude/skills/repo-conventions/templates/CLAUDE.md`
-- `~/.claude/skills/repo-conventions/templates/guidelines.md`
+- `../repo-conventions/templates/CLAUDE.md`
+- `../repo-conventions/templates/guidelines.md`
 
 **Always show a diff and ask before overwriting** an existing non-empty file. Never clobber silently.
 

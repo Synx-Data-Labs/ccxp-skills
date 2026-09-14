@@ -29,7 +29,7 @@ One or more `T<id>`s, space-separated. Each must match an existing file
 - **Zero matches** → delegate the diagnosis to the shared clone-locality guard (T20260626-298293) — DRY with `/drive`, and it adds cross-repo awareness (it names the sibling clone that actually holds the task):
 
   ```bash
-  bash ~/.claude/skills/_taskid/in-this-repo.sh "T<id>"   # exit 3 = closed here; 1/2 = cross-repo (names the clone that has it)
+  bash ../_taskid/in-this-repo.sh "T<id>"   # exit 3 = closed here; 1/2 = cross-repo (names the clone that has it)
   ```
 
   Hard-fail after the guard prints its diagnosis:
@@ -76,7 +76,7 @@ for id in T<id> [T<id> ...]; do
 done
 git commit -m "docs(queue): stage T<id> [T<id> ...]"
 git push -u origin "$BRANCH"
-bash ~/.claude/skills/_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
+bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
 ```
 
 Then drive the PR to merge with `/address-pr <number>`. This is a pure

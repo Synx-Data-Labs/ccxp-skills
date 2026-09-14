@@ -24,7 +24,7 @@ Triage a traveler's "the internet is slow/broken" problem on macOS. Produce a re
 ### Step 1 — Run the probe
 
 ```bash
-bash ~/.claude/skills/help-net/scripts/probe.sh
+bash ../help-net/scripts/probe.sh
 ```
 
 ~30 s, read-only, never hangs. Outputs `KEY: VALUE` under `[INTERFACE]`, `[DNS]`, `[PING]`, `[HTTP]`, `[EXIT]`, `[IPV6]`, `[VPN]`, `[META]`.

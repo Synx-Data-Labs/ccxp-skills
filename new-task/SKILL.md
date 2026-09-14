@@ -59,7 +59,7 @@ question.
 ### 3. Mint the ID and write the file
 
 ```bash
-bash ~/.claude/skills/_taskid/new.sh --check ./dev
+bash ../_taskid/new.sh --check ./dev
 ```
 
 Write `dev/TODO/T<id>-<slug>.md` from
@@ -91,10 +91,10 @@ repo-wide, so this never touches an unrelated pre-existing doc as a side
 effect of filing one task:
 
 ```bash
-python3 ~/.claude/skills/repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
-bash ~/.claude/skills/_docs/lint-docs.sh --fix
-python3 ~/.claude/skills/repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
-python3 ~/.claude/skills/repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
+python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
+bash ../_docs/lint-docs.sh --fix
+python3 ../repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
+python3 ../repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
 ```
 
 `lint_tasks.py` is the hard gate — fix and re-check on any failure.

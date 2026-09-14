@@ -41,7 +41,10 @@ SCAFFOLD NOTES (delete this block once the task is filed):
 - A `BLOCKED` or `SUPERVISED` substring anywhere in `status:` (e.g.
   `Coding — SUPERVISED (needs VPN to GitLab)`) tells the consumer repo's `/ccxp`
   pre-flight gate not to wake an hourly cron session for this task.
-- Generate {ID} with `bash ~/.claude/skills/_taskid/new.sh --check ./dev`.
+- Generate {ID} with `bash _taskid/new.sh --check ./dev`, resolved relative
+  to wherever the ccxp-skills plugin is installed (a loaded skill's own
+  directory, printed as "Base directory for this skill" — not a hardcoded
+  path).
 - Do NOT add a `scheduled:` line by hand — only the IPM commit writes it, for
   whichever tasks land in that week's iteration; it is update-forward-only
   and never removed.

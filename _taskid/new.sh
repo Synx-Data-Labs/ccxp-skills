@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Generate a unique task ID in the canonical TYYYYMMDD-NNNNNN format.
 #
-# The format is defined in ~/.claude/skills/repo-conventions/templates/guidelines.md.
+# The format is defined in ../repo-conventions/templates/guidelines.md.
 # Every skill that creates a task MUST call this script (or `task-id-new`
 # after sourcing) instead of inlining its own generator — keeps the
 # format in one place and lets us add collision avoidance, locking, etc.
 # without touching every callsite.
 #
 # Usage:
-#   bash ~/.claude/skills/_taskid/new.sh                 # one ID to stdout
-#   bash ~/.claude/skills/_taskid/new.sh --check ./dev   # retry until unused under dev/{TODO,PARKING,JOURNAL}
+#   bash new.sh                 # one ID to stdout
+#   bash new.sh --check ./dev   # retry until unused under dev/{TODO,PARKING,JOURNAL}
 #
 # Sourceable form:
-#   source ~/.claude/skills/_taskid/new.sh
+#   source new.sh
 #   id=$(task-id-new)
 #   id=$(task-id-new --check ./dev)
 #

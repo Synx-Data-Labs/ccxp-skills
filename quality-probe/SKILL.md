@@ -46,7 +46,7 @@ run with no `--files`, an un-writable scoreboard).
 ## Workflow
 
 ```bash
-bash ~/.claude/skills/quality-probe/scripts/probe.sh \
+bash ../quality-probe/scripts/probe.sh \
   --task T20260610-123456 --repo-root /path/to/target-repo --design-score 86
 ```
 

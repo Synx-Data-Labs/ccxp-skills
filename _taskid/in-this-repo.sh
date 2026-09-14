@@ -25,11 +25,11 @@
 # unattended ccxp loop never picks a task it can't fully own from its own clone.
 #
 # Usage (CLI):
-#   bash ~/.claude/skills/_taskid/in-this-repo.sh T20260626-190842
-#   DRIVE_STRICT_CLONE=1 bash ~/.claude/skills/_taskid/in-this-repo.sh T...   # refuse
+#   bash in-this-repo.sh T20260626-190842
+#   DRIVE_STRICT_CLONE=1 bash in-this-repo.sh T...   # refuse
 #
 # Sourceable form:
-#   source ~/.claude/skills/_taskid/in-this-repo.sh
+#   source in-this-repo.sh
 #   taskid-in-this-repo T20260626-190842 || handle "$?"
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
   set -euo pipefail

@@ -34,14 +34,14 @@ Collect data from the last 7 days (or N*7 days if argument given). Do all reads 
 
 1. **Git log**: `git log --since="7 days ago" --oneline --stat` — what shipped
 2. **Journal entries**: Read all `dev/JOURNAL/*.md` files with dates in the window — completed tasks
-3. **Merged PRs**: `bash ~/.claude/skills/_gh/gh.sh pr list --state merged --search "merged:>YYYY-MM-DD" --json number,title,mergedAt,additions,deletions --limit 500` — PR throughput. `gh`'s default page size is 30, which undercounts on any week with real throughput (confirmed 30 vs a true 83 on 2026-07-10) — always pass an explicit `--limit` well above expected weekly volume, same principle as step 6 below.
-4. **Open PRs**: `bash ~/.claude/skills/_gh/gh.sh pr list --state open --json number,title,createdAt` — WIP that didn't land. Count entries where `createdAt` is older than 3 days from today for the Stale PRs row in Phase 3.
+3. **Merged PRs**: `bash ../_gh/gh.sh pr list --state merged --search "merged:>YYYY-MM-DD" --json number,title,mergedAt,additions,deletions --limit 500` — PR throughput. `gh`'s default page size is 30, which undercounts on any week with real throughput (confirmed 30 vs a true 83 on 2026-07-10) — always pass an explicit `--limit` well above expected weekly volume, same principle as step 6 below.
+4. **Open PRs**: `bash ../_gh/gh.sh pr list --state open --json number,title,createdAt` — WIP that didn't land. Count entries where `createdAt` is older than 3 days from today for the Stale PRs row in Phase 3.
 5. **Current TODO backlog**: count files in `dev/TODO/` and `dev/PARKING/` — backlog health
 6. **CI failures**: `--limit 30` silently undercounts on any repo doing more than 30 runs/week — this recurred 3 retros running (2026-06-26, 2026-07-03, 2026-07-10; T20260702-279977) before being fixed here. Fetch with an explicit `--created` filter (same technique `/ccxp` Phase 1.2.1's nightly check already uses) so the API does the date filtering instead of a client-side slice of the newest N runs, and raise the fetch cap enough to comfortably cover a week's volume:
 
    ```bash
    SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
-   bash ~/.claude/skills/_gh/gh.sh run list --created ">=$SINCE" --limit 1000 --json conclusion,name,createdAt
+   bash ../_gh/gh.sh run list --created ">=$SINCE" --limit 1000 --json conclusion,name,createdAt
    ```
 
    `--limit 1000` is `gh`'s API cap — if a single week's run volume ever exceeds it (check: the oldest returned `createdAt` should be ≤ `$SINCE`; if it's later, some of the window was dropped), note the gap explicitly in the retro rather than silently under-reporting, the same "no silent caps" principle as everywhere else. Group failures by `.name` and keep the top 3 by count for the Top failing workflows row in Phase 3.
@@ -91,7 +91,7 @@ For each memory entry, assess:
 - **Is it still current?** Check if the underlying fact is still true (e.g., a bug may have been fixed, a convention may have been adopted). Delete stale memories immediately (remove the file and its MEMORY.md entry).
 - **Should it be codified?** If a feedback memory has proven useful across sessions, it should be promoted to a permanent home:
   - Process rules → `dev/guidelines.md`
-  - Cross-repo skill behavior → the relevant global `SKILL.md` (`~/.claude/skills/<name>/SKILL.md`)
+  - Cross-repo skill behavior → the relevant skill's own `SKILL.md` in the ccxp-skills plugin source (`<name>/SKILL.md`, relative to the ccxp-skills repo root)
   - Behavior specific to a single repo's own skill → that repo's project-scoped `.claude/skills/<name>/SKILL.md` instead of the global one (e.g. a repo's own release skill, not `address-pr`/`ccxp`)
   - Pipeline/build conventions → `DEPENDENCIES.md` or workflow comments
   - Recurring cross-repo diagnostic patterns (a symptom + root cause + fix that isn't tied to one repo's specific build) → `gotchas.md`
@@ -114,7 +114,7 @@ Include a **Memory Review** section in the retro report (Phase 5) summarizing:
 
 **Procedure** — for each entry in `.claude/state/drive-threads.json` where `resolved` is `false`:
 
-1. **Rule A (PR-suffix auto-resolution).** If the key matches the pattern `T\d+-\d+-pr(\d+)$`, extract the trailing PR number and run `bash ~/.claude/skills/_gh/gh.sh pr view <N> --json state,mergedAt`. If the PR is `MERGED`, mark the entry:
+1. **Rule A (PR-suffix auto-resolution).** If the key matches the pattern `T\d+-\d+-pr(\d+)$`, extract the trailing PR number and run `bash ../_gh/gh.sh pr view <N> --json state,mergedAt`. If the PR is `MERGED`, mark the entry:
 
    ```json
    "resolved": true,
@@ -158,7 +158,7 @@ is a clean no-op — skip this phase entirely and report nothing for it.
 1. **List due chores**:
 
    ```bash
-   bash ~/.claude/skills/retro/scripts/chore-review.sh list-due --repo-root . --today "$(date -u +%F)"
+   bash ../retro/scripts/chore-review.sh list-due --repo-root . --today "$(date -u +%F)"
    ```
 
    Prints one `T<id>\t<goal>\t<started>` line per chore that is due: its Outcome column is
@@ -188,7 +188,7 @@ is a clean no-op — skip this phase entirely and report nothing for it.
 3. **Creation safety-net scan** — flag process-looking `dev/*.md` changes with no matching row:
 
    ```bash
-   bash ~/.claude/skills/retro/scripts/chore-review.sh scan-untracked --repo-root . --since "$(date -u -d '7 days ago' +%F)"
+   bash ../retro/scripts/chore-review.sh scan-untracked --repo-root . --since "$(date -u -d '7 days ago' +%F)"
    ```
 
    Prints repo-relative paths of `dev/*.md` files (root-level only — not `dev/TODO/`,
@@ -220,7 +220,7 @@ For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this se
 **Estimation-revision arc.** The final `estimation:` value hides whether a task was estimated once and held, or revised repeatedly mid-week — and which way. Pull the revision arc for each graded task from its file's git history, so the grade shows the trajectory (filed → revised → revised), not just the endpoint:
 
 ```bash
-bash ~/.claude/skills/retro/scripts/estimation-revisions.sh \
+bash ../retro/scripts/estimation-revisions.sh \
   --repo-root . --since "$(date -u -d '7 days ago' +%F)" T<id> T<id> ...
 ```
 
@@ -286,10 +286,10 @@ batch instead of one hub PR per task closure.
 3. Otherwise, commit and open one PR with all the renames:
 
    ```bash
-   bash ~/.claude/skills/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git commit -m "docs(tasks): batch journal-move for $(date +%F) (Friday sweep)"
    git push -u origin "retro/$(date +%F)-journal-sweep"
-   bash ~/.claude/skills/_gh/gh.sh pr create --title "docs(tasks): batch journal-move $(date +%F)" \
+   bash ../_gh/gh.sh pr create --title "docs(tasks): batch journal-move $(date +%F)" \
      --body "Friday retro journal sweep — moves $(printf '%s\n' "${swept[@]}" | wc -l | tr -d ' ') Done task(s): $(printf '%s; ' "${swept[@]}")"
    ```
 
@@ -334,10 +334,10 @@ Compute and report these metrics for the review period:
 
 For each "needs improvement" finding, create a concrete, actionable task:
 
-1. Generate task IDs using the shared helper (same one every skill uses — see `dev/guidelines.md` and `~/.claude/skills/_taskid/new.sh`):
+1. Generate task IDs using the shared helper (same one every skill uses — see `dev/guidelines.md` and `../_taskid/new.sh`):
 
    ```bash
-   bash ~/.claude/skills/_taskid/new.sh --check ./dev
+   bash ../_taskid/new.sh --check ./dev
    ```
 
    Run this once per action item. The helper checks `dev/{TODO,PARKING,JOURNAL}/` and retries on collision. Do NOT invent sequential IDs (e.g. `-100001`, `-100002`) and do NOT inline the `printf ... /dev/urandom ...` command.
@@ -349,7 +349,7 @@ For each "needs improvement" finding, create a concrete, actionable task:
    - Description: include the concrete action, clear definition of done, and any relevant context
 3. In the Description bullet, tag **process improvements** with `Category: process`
 4. In the Description bullet, tag **quality improvements** with `Category: quality`
-5. After writing each file, stamp its `scheduled:` into the **current** iteration so the action item lands on the board's Iterations view, not just the backlog: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` (token-free: committed IPM → Project API → next-Monday fallback; update-forward-only).
+5. After writing each file, stamp its `scheduled:` into the **current** iteration so the action item lands on the board's Iterations view, not just the backlog: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` (token-free: committed IPM → Project API → next-Monday fallback; update-forward-only).
 6. Do NOT create tasks for "what's fine" or "what went well" — those are informational
 
 ### Phase 4b: Escalate chronically-deferred tasks
@@ -371,21 +371,21 @@ Grade the skills exercised this week and improve the single worst offender. This
 **Step 1 — gather candidate signals (graceful degradation; no signal is a hard dependency):**
 
 - **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) for `## Skills invoked`.
-- **Authoring (when available):** if a rubric exists at `~/.claude/skills/writing-skills/SKILL.md`, grade each candidate skill against it and count violations. Until it exists, flag only obvious staleness by inspection — a skill citing a retired path, a renamed helper, or a removed phase.
+- **Authoring (when available):** if a rubric exists in the `superpowers:writing-skills` skill, grade each candidate skill against it and count violations. Until it exists, flag only obvious staleness by inspection — a skill citing a retired path, a renamed helper, or a removed phase.
 - **Compliance (when available):** grep the week's JOURNAL audit blocks for skills that should have fired but were skipped, or fired at the wrong phase. Absent the audit block, skip this signal.
 
 **Step 2 — pick the single worst offender (judgment-assisted, no formula):** rank by outcome-pain first; use authoring + compliance to break ties and escalate. If no skill clears a "worth touching this week" bar, report "none flagged" and end the phase — a valid and common outcome.
 
 **Step 3 — triage bounded vs needs-design:**
 
-- **Bounded prose edit** — a clarification, a missing trigger, a DRY fix, or a stale-path/stale-reference correction; mechanical, unambiguous intent. Draft it: in the `~/.claude/skills/` clone create a branch, make the edit, and open a ccxp-skills PR handed to `/address-pr` — **never a direct merge** (see the `feedback_invoke_address_pr_not_bypass_merge` memory).
+- **Bounded prose edit** — a clarification, a missing trigger, a DRY fix, or a stale-path/stale-reference correction; mechanical, unambiguous intent. Draft it: in the local ccxp-skills dev checkout create a branch, make the edit, and open a ccxp-skills PR handed to `/address-pr` — **never a direct merge** (see the `feedback_invoke_address_pr_not_bypass_merge` memory).
 - **Needs real design** — a structural change, touches multiple skills, changes a skill's contract, or the right fix is ambiguous. **Downgrade**: do not draft. File a `Category: quality` action item via Phase 4's task-creation steps (Source `Retro YYYY-MM-DD`) so it gets a proper `superpowers:brainstorming` → design pass when picked up.
 - **When unsure, downgrade.** If it is not obviously bounded, file the task.
 
 **Guards:**
 
 - No skills exercised this week (docs-only / planning week): report "no skill activity" and end.
-- The `~/.claude/skills/` clone is dirty or behind main: skip the bounded-draft path this week, downgrade to filing a task, and note it. Never edit a dirty clone.
+- The local ccxp-skills dev checkout is dirty or behind main: skip the bounded-draft path this week, downgrade to filing a task, and note it. Never edit a dirty clone.
 - `gh`/PAT fails while opening the draft PR: log it, downgrade to filing the task. Grading still completes.
 
 **Report**: add a `## Skill quality` section to the retro report (Phase 5) and a `Skill quality:` line to the Slack summary (Phase 6).
@@ -401,7 +401,7 @@ The **trailing** half of the code-quality bar. `/drive` Phase 3.8 appends one re
 - If neither is reachable, report "no scoreboard reachable for `<repo>`" and skip it — never block the retro (same posture as the cron-log step).
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh api \
+bash ../_gh/gh.sh api \
   "repos/${METRICS_OWNER}/<repo>/contents/dev/quality/metrics.jsonl" \
   --jq '.content' | base64 -d
 ```

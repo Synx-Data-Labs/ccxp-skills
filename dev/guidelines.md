@@ -16,7 +16,7 @@ The `main` branch is the source of truth. Never push directly to `main`.
 2. **Branch naming**: `t{task-id}-short-description` for tracked tasks; `fix/`, `feat/`, `docs/` prefixes for untracked work
 3. **Open a PR** — clear summary and test plan
 4. **CI must pass** — all checks green before merge
-5. **Merge method** — rebase and merge (`bash ~/.claude/skills/_gh/gh.sh pr merge --rebase --delete-branch`)
+5. **Merge method** — rebase and merge (`bash ../_gh/gh.sh pr merge --rebase --delete-branch`)
 6. **Delete the branch after merge**
 
 ## TODO Lifecycle

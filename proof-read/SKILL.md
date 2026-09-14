@@ -14,7 +14,7 @@ Proof-read one or two markdown documents for self- and cross-consistency. The sk
 - **Mode A (single doc):** `/proof-read path/to/doc.md`
 - **Mode B (parallel docs):** `/proof-read path/to/cn.md path/to/en.md`
 - Optional `--glossary <tsv>` — seed term mappings (TSV `cn<TAB>en`). If omitted, the skill infers a glossary from the doc(s).
-- Optional `--glossary-md <path>` — the canonical coined-term glossary to run the undefined-jargon check (3f) against (default: `~/.claude/skills/glossary.md`). Distinct from `--glossary`, which is the CN↔EN TSV.
+- Optional `--glossary-md <path>` — the canonical coined-term glossary to run the undefined-jargon check (3f) against (default: `../glossary.md`). Distinct from `--glossary`, which is the CN↔EN TSV.
 - Optional `--report <path>` — write the findings report to this path instead of printing. Default: print + also save next to the input as `<basename>.proof-read-report.md`.
 
 If no args are given, ask the user which doc(s) to check.
@@ -85,7 +85,7 @@ For each sentence:
 
 #### f. Undefined-jargon check (against the glossary)
 
-Cross-check the doc's coined terms and acronyms against the canonical glossary (`--glossary-md`, default `~/.claude/skills/glossary.md`). If neither is present, **skip this check with a logged note** — never error.
+Cross-check the doc's coined terms and acronyms against the canonical glossary (`--glossary-md`, default `../glossary.md`). If neither is present, **skip this check with a logged note** — never error.
 
 - Collect candidate jargon: ALL-CAPS acronyms (≥ 2 chars, e.g. `IPM`, `WF`, `SBOM`) plus the repeated coined multi-word terms step 3a already builds.
 - A candidate is **covered** if it appears as a glossary entry (a `**term**` line in the glossary doc) OR is expanded/defined inline in the doc on or before first use (e.g. "Iteration Planning Meeting (IPM)").

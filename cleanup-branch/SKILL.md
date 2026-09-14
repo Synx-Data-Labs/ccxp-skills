@@ -21,7 +21,7 @@ report; it does not re-derive the per-branch decisions.
 ## Workflow
 
 ```bash
-bash ~/.claude/skills/cleanup-branch/scripts/cleanup-branch.sh $ARGUMENTS
+bash ../cleanup-branch/scripts/cleanup-branch.sh $ARGUMENTS
 ```
 
 Relay its stdout as the report — a tab-separated `BRANCH / STATUS / PR` table

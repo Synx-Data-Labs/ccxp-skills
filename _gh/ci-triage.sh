@@ -16,9 +16,9 @@
 # log. A hard line cap backstops runs with pathologically many matches.
 #
 # Usage:
-#   bash ~/.claude/skills/_gh/ci-triage.sh 29670112823
-#   bash ~/.claude/skills/_gh/ci-triage.sh https://github.com/OWNER/REPO/actions/runs/29670112823
-#   bash ~/.claude/skills/_gh/ci-triage.sh 29670112823 --context 8
+#   bash ci-triage.sh 29670112823
+#   bash ci-triage.sh https://github.com/OWNER/REPO/actions/runs/29670112823
+#   bash ci-triage.sh 29670112823 --context 8
 #
 # Must run from the target repo's clone (gh resolves against $PWD's origin,
 # same assumption as every other _gh/_session/_taskid script).

@@ -203,18 +203,27 @@ inventory and its token cost.
 ## Skill scripts
 
 If a skill needs helper scripts (bash, python, etc.), put them under
-`<skill>/scripts/` and reference them by absolute path from `SKILL.md`:
+`<skill>/scripts/` and reference them from `SKILL.md` by a path relative
+to this skill's own directory (the harness prints that directory as "Base
+directory for this skill" when the skill loads — resolve against it, not
+against whatever the consumer repo's cwd happens to be):
 
 ```bash
-bash ~/.claude/skills/<name>/scripts/<script>.sh <args>
+bash ../<name>/scripts/<script>.sh <args>
 ```
 
-This keeps scripts colocated with the skill (no consumer-repo dependency)
-and works the same in every repo on the machine. Scripts must:
+There is no absolute path that works under every install method — a
+plugin-cache install's path is version-pinned and moves on every
+`/plugin update`, and the script runs against an arbitrary consumer
+repo's cwd, not this repo's. Scripts must:
 
 - Discover the consumer repo from cwd via
-  `bash ~/.claude/skills/_gh/gh.sh repo view --json nameWithOwner --jq .nameWithOwner`
+  `bash ../_gh/gh.sh repo view --json nameWithOwner --jq .nameWithOwner`
   — never hardcode `owner/repo`.
+- Resolve sibling shared-lib scripts from *within* a script itself via
+  `dirname "${BASH_SOURCE[0]}"`, never a hardcoded path — this is what
+  makes the script's own invocations robust regardless of caller cwd
+  (see `_taskid/in-this-repo.sh` for the pattern).
 - Accept a `REPO` env var override for explicit targeting.
 - Read shared config (e.g. `SLACK_WEBHOOK_URL`) from `~/.claude/.env`
   first, then `$(pwd)/.env`.

@@ -4,15 +4,19 @@ Shared helpers for the canonical `TYYYYMMDD-NNNNNN` task ID. Used by every skill
 that mints or references a task, so the format and link conventions live in one
 place.
 
+Commands below are shown relative to the ccxp-skills repo root (`bash
+_taskid/new.sh`); from within another loaded skill's own directory, go up one
+level instead (`bash ../_taskid/new.sh`).
+
 ## Surface
 
 ### `new.sh` — mint an ID
 
 ```bash
-bash ~/.claude/skills/_taskid/new.sh                 # one ID to stdout
-bash ~/.claude/skills/_taskid/new.sh --check ./dev   # retry until unused under dev/{TODO,PARKING,JOURNAL}
+bash _taskid/new.sh                 # one ID to stdout
+bash _taskid/new.sh --check ./dev   # retry until unused under dev/{TODO,PARKING,JOURNAL}
 # sourceable:
-source ~/.claude/skills/_taskid/new.sh; id=$(task-id-new)
+source _taskid/new.sh; id=$(task-id-new)
 ```
 
 **Minting an ID is not filing a task.** Create `dev/TODO/<id>-<slug>.md`
@@ -26,10 +30,10 @@ order.
 ### `check-orphaned-refs.sh` — catch a minted-but-never-filed ID
 
 ```bash
-bash ~/.claude/skills/_taskid/check-orphaned-refs.sh                          # whole repo (excl. dev/)
-bash ~/.claude/skills/_taskid/check-orphaned-refs.sh --changed-only           # vs origin/main
-bash ~/.claude/skills/_taskid/check-orphaned-refs.sh --changed-only <base>    # vs a specific ref
-bash ~/.claude/skills/_taskid/check-orphaned-refs.sh path/to/file.sh ...      # explicit paths
+bash _taskid/check-orphaned-refs.sh                          # whole repo (excl. dev/)
+bash _taskid/check-orphaned-refs.sh --changed-only           # vs origin/main
+bash _taskid/check-orphaned-refs.sh --changed-only <base>    # vs a specific ref
+bash _taskid/check-orphaned-refs.sh path/to/file.sh ...      # explicit paths
 ```
 
 Scans for `T<id>` references outside `dev/` and confirms each resolves to a
@@ -52,11 +56,11 @@ permalink, so the search matches even issues whose titles lack the ID). Repo
 slug is derived from `origin`, so it works in any repo with the `dev/` layout.
 
 ```bash
-bash ~/.claude/skills/_taskid/url.sh T20260427-298901           # blob URL to the current file
-bash ~/.claude/skills/_taskid/url.sh T20260427-298901 --issue   # stable issue URL (never rots)
-bash ~/.claude/skills/_taskid/url.sh --slack T20260427-298901   # Slack mrkdwn <url|TID>
+bash _taskid/url.sh T20260427-298901           # blob URL to the current file
+bash _taskid/url.sh T20260427-298901 --issue   # stable issue URL (never rots)
+bash _taskid/url.sh --slack T20260427-298901   # Slack mrkdwn <url|TID>
 # sourceable:
-source ~/.claude/skills/_taskid/url.sh
+source _taskid/url.sh
 url=$(taskid-url  T20260427-298901)
 link=$(taskid-slacklink T20260427-298901)   # for slack_send_message (mrkdwn <url|text>)
 ```
