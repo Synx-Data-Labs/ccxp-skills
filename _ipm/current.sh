@@ -24,8 +24,8 @@
 #       committed and is "newest committed".
 #
 # Usage:
-#   bash ~/.claude/skills/_ipm/current.sh [journal-dir]   # prints path or empty
-#   source ~/.claude/skills/_ipm/current.sh && _ipm_current [journal-dir]
+#   bash current.sh [journal-dir]   # prints path or empty
+#   source current.sh && _ipm_current [journal-dir]
 #
 # "today" is dependency-injected via $IPM_TODAY (YYYY-MM-DD) for testability;
 # it defaults to the system date.

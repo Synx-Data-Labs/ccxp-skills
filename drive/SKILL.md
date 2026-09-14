@@ -71,7 +71,7 @@ If task ID given:
 A task's claim, journal, and file all live in ONE repo. Working a task from a *different* clone takes the claim against the wrong `dev/` tree and leaves the clone-scoped status line blind to it. Before flipping status, assert the task file is actually in this clone:
 
 ```bash
-bash ~/.claude/skills/_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/cross-repo (prints where to look)
+bash ../_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/cross-repo (prints where to look)
 ```
 
 - **Exit 0** — present in this repo's `dev/TODO`/`dev/PARKING`; proceed.
@@ -86,7 +86,7 @@ After picking the task and updating its frontmatter `status:`, mirror that stage
 
 ```bash
 # Frontmatter status → Project Status single-select (e.g. Open → Design)
-bash ~/.claude/skills/_session/status.sh <task-id> <Design|Coding>
+bash ../_session/status.sh <task-id> <Design|Coding>
 ```
 
 This call is pure visualization — nothing depends on the write succeeding, and other sessions won't be blocked from picking the same task. See `_session/README.md` for the design. If it fails (missing PAT, network, etc.), it logs to stderr and exits 0 — continue with the task. The frontmatter `status:` field in the task file remains the source of truth; the Project Status field just mirrors it for the board view.
@@ -106,12 +106,12 @@ This makes "somebody is working on T<id>" true **on `main`** at claim time — d
 
 **Peer mode — cross-session claim lock (default; `CCXP_PEER_MODE=0` to disable):** Peer mode is **on by default** — ccxp and interactive sessions run as parallel peers (even sharing GitHub state), so the one-session-per-clone assumption no longer holds and the claim PR becomes the **cross-machine lock**, not just a status flip. (Default-on means *every* session claims — no env-var-symmetry gap.) The lock lives in a single frontmatter field the merge-to-`main` arbitrates atomically: `claimed_by: cc1-<machine-id>:<path-hash>` (the canonical single-line conflict point — a clone-stable identity that already carries the working-dir, so a new invocation in the same clone is the *same* claimant). Use `_session/task_claim.sh` instead of a bare `status:` flip:
 
-1. **Before picking, confirm the task is free:** `bash ~/.claude/skills/_session/task_claim.sh read <id>` → if `claimed_by` is non-empty and is **not** this session's id (`task_claim.sh claimant-id`), the task is held by another session — **do not pick it**. Check `task_claim.sh reclaimable <id>` (a stale claim — no open PR, no commits in N days — may be reclaimed); otherwise go back to `/todo next` for a different task.
+1. **Before picking, confirm the task is free:** `bash ../_session/task_claim.sh read <id>` → if `claimed_by` is non-empty and is **not** this session's id (`task_claim.sh claimant-id`), the task is held by another session — **do not pick it**. Check `task_claim.sh reclaimable <id>` (a stale claim — no open PR, no commits in N days — may be reclaimed); otherwise go back to `/todo next` for a different task.
 
-   **Also confirm it is not lint-frozen (T20260629-185057):** `bash ~/.claude/skills/_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation` (the [T20260626-353630] schema-fork class). If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason. `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
-2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash ~/.claude/skills/_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash ~/.claude/skills/_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: Coding`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`Coding`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
+   **Also confirm it is not lint-frozen (T20260629-185057):** `bash ../_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation` (the [T20260626-353630] schema-fork class). If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason. `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
+2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash ../_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash ../_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: Coding`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`Coding`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
 3. **Claim-PR conflict = you lost the race.** If the claim PR cannot merge because of a conflict on the `claimed_by:` line, another session acquired the same task in the same window. Do **not** force it — `git checkout main && git pull && git remote prune origin`, then re-pick via `/todo next`. **The merge conflict IS the lock rejecting your acquire.**
-4. **Release on close.** In Phase 7 (task done/parked), `bash ~/.claude/skills/_session/task_claim.sh release <id> <final-status>` clears `claimed_by` as part of the journal-move/close PR.
+4. **Release on close.** In Phase 7 (task done/parked), `bash ../_session/task_claim.sh release <id> <final-status>` clears `claimed_by` as part of the journal-move/close PR.
 
 With **`CCXP_PEER_MODE=0`** (the opt-out), the claim PR flips only `status:` exactly as described above — no lock, no `task_claim.sh` — for repos/sessions that don't want cross-session claiming.
 
@@ -137,7 +137,7 @@ If `Target repo` is unset **and** the change genuinely lands in this hub repo: *
 **Phase 1.5.0 — cross-repo existing-work guard (run BEFORE cloning/implementing — T20260629-332546).** `/drive`'s hub-side resume check (`git branch -r | grep <id>`, Phase 6) is **blind** to a cross-repo task's work: the work branches + PRs live in the *target* repo, and the hub task file's `status:` stays at its pre-implementation value (the cross-repo impl PR never flips the hub status to `Review`). So an unattended loop re-picks the same cross-repo task each tick, finds "no existing work" in the hub, and re-implements — opening a **duplicate** target PR every time (an observed run produced three convergent implementations across multiple open PRs for a single task, one of them broken despite green CI and nearly merged). Before you clone or write any code, query the **target** repo for existing work:
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "<task-id>" --state all \
+bash ../_gh/gh.sh pr list --repo "$TARGET_REPO" --search "<task-id>" --state all \
   --json number,state,title,headRefName,url --jq '.[]'
 ```
 
@@ -196,7 +196,7 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 7. **Design-score gate (hard gate — Phase 2 → Phase 3, per T20260609-204303 D3).** Before any code, score the merged design deterministically:
 
    ```bash
-   bash ~/.claude/skills/design-score/scripts/score.sh <task-file>
+   bash ../design-score/scripts/score.sh <task-file>
    ```
 
    Exit 0 (`score >= threshold`, default 70) ⇒ proceed to Phase 3.0. Exit 1 ⇒ the design is **not ready** — read the per-check breakdown, fix the gaps (missing §Common sections, anchor-less prose, unmapped done-criteria, placeholder text, missing alternatives-rejected) in a follow-up design commit, re-score, and only then proceed. **Kind-scaled** — `score.sh` auto-detects code-vs-docs (same classifier as Phase 3.0); pass `--kind code|docs` to override. This is a cheap deterministic counterpart to the Phase 3.6 completeness gate, run *up front* so design decay is caught before any code exists. (When the design PR is skipped — see below — run the gate against the on-`main` task file before coding all the same.)
@@ -323,7 +323,7 @@ directly.
 1. Read the design and test plan
 2. **Cross-repo mode:** `cd $TARGET` before touching any code. All subsequent git operations run in the target repo. Never edit target-repo files while cwd is still `$HUB` — that silently creates untracked files in the wrong place.
 
-   **cwd discipline**: Before *any* `git` or `gh pr` invocation in cross-repo mode, verify `pwd` literally matches the expected absolute path — `$TARGET` for implementation steps (Phase 3 + Phase 4), `$HUB` for the journal-move PR (Phase 7). The cost of one `pwd` check is trivial; the cost of committing to the wrong repo and force-pushing the "fix" is hours. If a session bounces between `~/.claude/skills`, the target repo's `/tmp/cc-...` clone, and the hub-repo hub, expect to lose cwd at least once and assert defensively.
+   **cwd discipline**: Before *any* `git` or `gh pr` invocation in cross-repo mode, verify `pwd` literally matches the expected absolute path — `$TARGET` for implementation steps (Phase 3 + Phase 4), `$HUB` for the journal-move PR (Phase 7). The cost of one `pwd` check is trivial; the cost of committing to the wrong repo and force-pushing the "fix" is hours. If a session bounces between the ccxp-skills checkout, the target repo's `/tmp/cc-...` clone, and the hub-repo hub, expect to lose cwd at least once and assert defensively.
 
    For cross-repo target clones, **always clone fresh under `/tmp/cc-<repo>-<purpose>-$(date +%s)`** — never reuse another session's clone or the maintainer's working clone. The Tasks-as-Issues mirror workflow runs on every push, so a stray commit in someone else's clone has visible consequences. The ephemeral clone pattern is what `/drive` Phase 1.5 codifies; this is the operational reinforcement.
 3. Write the code — follow `dev/guidelines.md` conventions (the target repo's guidelines take precedence when they differ)
@@ -343,9 +343,9 @@ directly.
 
 **New dependency discovered**: If implementation reveals a blocker not in the task file — or ANY new issue worth tracking on its own (a regression your own fix caused, a latent bug you tripped over, anything with a "why does this exist" a future reader would ask) — file it **before** touching any code for it:
 
-1. **Mint the ID and immediately create the task file** — `bash ~/.claude/skills/_taskid/new.sh --check ./dev` then write `dev/TODO/<id>-<slug>.md` from `repo-conventions/templates/task.md` in the same breath. **Do not reference the ID anywhere else — code comments, test names, commit messages — until the task file exists on disk.** An ID minted and used but never filed is an orphaned reference (`_taskid/check-orphaned-refs.sh` catches this in CI, but don't rely on the backstop over doing it in order — this rule exists because of a real observed incident, not a hypothetical one).
-2. It's a **dependency**, so auto-stage it into the **current** iteration by stamping `scheduled:` after the file is written: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` (token-free: committed IPM → Project API → next-Monday fallback; update-forward-only)
-3. **If you're about to fix it right now** (soft blocker, working around it inline): claim it first — `bash ~/.claude/skills/_session/task_claim.sh acquire <id>` on a claim-PR branch, same as any other task pickup (Phase 1) — *then* write the fix. Filed-but-unclaimed is fine when you're just noting it and moving on; claimed-and-being-worked-right-now without a claim on record is the gap this rule closes.
+1. **Mint the ID and immediately create the task file** — `bash ../_taskid/new.sh --check ./dev` then write `dev/TODO/<id>-<slug>.md` from `repo-conventions/templates/task.md` in the same breath. **Do not reference the ID anywhere else — code comments, test names, commit messages — until the task file exists on disk.** An ID minted and used but never filed is an orphaned reference (`_taskid/check-orphaned-refs.sh` catches this in CI, but don't rely on the backstop over doing it in order — this rule exists because of a real observed incident, not a hypothetical one).
+2. It's a **dependency**, so auto-stage it into the **current** iteration by stamping `scheduled:` after the file is written: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` (token-free: committed IPM → Project API → next-Monday fallback; update-forward-only)
+3. **If you're about to fix it right now** (soft blocker, working around it inline): claim it first — `bash ../_session/task_claim.sh acquire <id>` on a claim-PR branch, same as any other task pickup (Phase 1) — *then* write the fix. Filed-but-unclaimed is fine when you're just noting it and moving on; claimed-and-being-worked-right-now without a claim on record is the gap this rule closes.
 4. Escalate (see Slack Escalation Protocol):
    - Send: `*T{id}*: New blocker discovered — created T{new_id} ({title}). Continuing on T{id} if possible, otherwise stopping.`
    - Type: `blocker`
@@ -369,13 +369,13 @@ Before opening the PR (Phase 4), invoke `superpowers:verification-before-complet
 Before opening the PR, run the doc-freshness check so a behaviour / structure / setup change ships with the docs that describe it (the gate that would have caught a stale `README`):
 
 ```bash
-bash ~/.claude/skills/_docs/doc-impact.sh "${BASE_REF:-origin/main}"
+bash ../_docs/doc-impact.sh "${BASE_REF:-origin/main}"
 ```
 
 It flags repo docs (`README*`, `CLAUDE.md`, `dev/guidelines.md`, `*/SKILL.md`, `docs/**`) that reference what you changed, or that a newly-added workflow / action / script implies. For each flag: **update the doc on this branch** so it lands in the *same* PR, or — if it's genuinely unaffected — note "reviewed, no change needed". Kind-scaled via the Phase 3.0 classifier; for a large doc surface, escalate to `/proof-read` on the touched docs.
 
 - **Interactive (a human is driving):** soft gate — resolve every flag (update or acknowledge) before Phase 4.
-- **Unattended (ccxp loop):** never block the loop — update what's clearly in scope, then for any remaining flags **file a follow-up doc-conformance task** (`bash ~/.claude/skills/_taskid/new.sh --check ./dev`) — a **follow-up**, so stage it into the **next** iteration by stamping `scheduled:` after the file is written: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` — and proceed. Drift becomes tracked backlog, not a silent miss.
+- **Unattended (ccxp loop):** never block the loop — update what's clearly in scope, then for any remaining flags **file a follow-up doc-conformance task** (`bash ../_taskid/new.sh --check ./dev`) — a **follow-up**, so stage it into the **next** iteration by stamping `scheduled:` after the file is written: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` — and proceed. Drift becomes tracked backlog, not a silent miss.
 
 Cross-repo: run this in `$TARGET` (the repo whose code changed); doc updates land in the target PR.
 
@@ -384,7 +384,7 @@ Cross-repo: run this in `$TARGET` (the repo whose code changed); doc updates lan
 **Code-class tasks only** (per the Phase 3.0 classifier — docs-class changes touch no measurable code; skip with a one-line note). Before opening the PR, measure quality on the task's **touched files** and append one record to the target repo's append-only scoreboard:
 
 ```bash
-bash ~/.claude/skills/quality-probe/scripts/probe.sh \
+bash ../quality-probe/scripts/probe.sh \
   --task "T<id>" --range "${BASE_REF:-origin/main}...HEAD" \
   --repo-root "${TARGET:-.}" --design-score "<Phase 2 gate score, if known>"
 ```
@@ -402,7 +402,7 @@ Use the `/gcpr` skill workflow:
 **Same-repo mode:**
 
 1. Group changes into logical commits
-2. If this PR completes the task: **default** — flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ~/.claude/skills/_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; caught 2026-07-18 on T20260717-329670, where a hand-edit close needed a follow-up release PR), then write the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks (Phase 7.0) into the file as part of the commits. The weekly batch journal-sweep at Friday retro (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later — this collapses N per-task hub PRs into one weekly sweep PR.
+2. If this PR completes the task: **default** — flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ../_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; caught 2026-07-18 on T20260717-329670, where a hand-edit close needed a follow-up release PR), then write the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks (Phase 7.0) into the file as part of the commits. The weekly batch journal-sweep at Friday retro (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later — this collapses N per-task hub PRs into one weekly sweep PR.
    **Immediate override**: if `/drive` was invoked with `--immediate`, or the task's `status:` carries a `P0` suffix (e.g. `status: Done — P0`) or is otherwise customer-visible, run `task_claim.sh release <id> Done` first (as above), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`) as part of the commits.
 3. Push to feature branch
 4. Create PR with summary + test plan
@@ -421,7 +421,7 @@ Use the `/gcpr` skill workflow:
 4. Push and create PR in the target repo
 5. **Record the cross-repo pointer + flip the hub status (T20260629-332546)** — so the next tick's Phase-1.5.0 guard finds this PR by pointer instead of re-searching, and the board reads past-`Design`. The pointer recording closes the duplication window the moment the PR exists (don't defer it to Phase 7). On a short `t<id>-xrepo-pointer` branch **in `$HUB`** (a tiny docs PR — auto-merges as status-change tier):
    - Append a `## Cross-repo work` line to the hub task **body** (not frontmatter — a `target_pr:` frontmatter key would need a `lint_tasks.py` allowlist entry, coupling to the T20260626-353630 schema fork): `` - Implementation: <target-repo>#<pr-number> (`<headRefName>`) — opened <YYYY-MM-DD>. ``
-   - Flip the hub task `status:` → `Review` (it was `Coding` from the claim PR), and mirror it: `bash ~/.claude/skills/_session/status.sh <id> Review`.
+   - Flip the hub task `status:` → `Review` (it was `Coding` from the claim PR), and mirror it: `bash ../_session/status.sh <id> Review`.
    - **Lint-frozen fallback (T20260626-353630 class):** if the hub task file's pre-existing frontmatter trips the changed-mode `Lint task frontmatter` check (so even a body edit's whole-file lint fails), **skip the pointer edit** — the Phase-1.5.0 `gh pr list --search` guard already finds the PR with zero recorded state, so the safety net holds without an unmergeable edit.
 
 ### Phase 5: Address PR
@@ -434,18 +434,18 @@ If a pipeline or build is triggered for verification (5+ min wait), **wait in th
 
 When the current task (G, the goal) can't progress because it depends on another task (B, the blocker), do NOT switch laterally to an unrelated task. Chase B:
 
-1. **Identify the blocker.** A blocker is another `T{id}` task referenced from G's file as a `Blocked by` / `Depends on` entry, or discovered mid-work (e.g., a failing CI is the symptom of an undiagnosed bug — file it as a new task, that's B). A newly-filed blocker is a **dependency** → auto-stage it into the **current** iteration (`bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current`; see Important Notes).
+1. **Identify the blocker.** A blocker is another `T{id}` task referenced from G's file as a `Blocked by` / `Depends on` entry, or discovered mid-work (e.g., a failing CI is the symptom of an undiagnosed bug — file it as a new task, that's B). A newly-filed blocker is a **dependency** → auto-stage it into the **current** iteration (`bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current`; see Important Notes).
 2. **Park G minimally.** Commit and push any clean-state progress on G's branch. Leave G's branch in a pushable state. Record in G's task file: `Blocked by T{B} — resumed after B closes`. Do NOT mark G done. Mirror the block to the Project view:
 
    ```bash
-   bash ~/.claude/skills/_session/status.sh <G-task-id> Blocked
+   bash ../_session/status.sh <G-task-id> Blocked
    ```
 
    Best-effort; the local `Blocked by` line in the task file is the source of truth.
 
    **Checkpoint discipline (applies to ANY mid-task park, blocker or session-budget checkpoint):**
    - The task-file update recording the park (status + **the exact branch name** + what's done/what remains) must land **on main** (small docs PR — auto-merges as status-change tier). A progress note committed only to the work branch is invisible to every future session: main's task file still reads as un-started "Coding", and the resuming session re-does the work on a fresh branch (observed incident: a feature was implemented twice on two branches because a park/resume didn't record which branch had the in-progress work).
-   - **On resuming any `Coding` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash ~/.claude/skills/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing (T20260629-332546).
+   - **On resuming any `Coding` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash ../_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing (T20260629-332546).
    - Before exiting the session, return the clone to `main` (the cron wrapper executes from this working tree; a parked branch makes the wrapper itself go stale — see T20260605-862341 JOURNAL).
 3. **Recurse into B.** Default (no flag) — invoke the `/drive` workflow on B **inline, in this
    same conversation**:
@@ -500,7 +500,7 @@ After merge (auto or approved):
 
 **Final verification.** Before declaring the goal-task done, invoke `superpowers:verification-before-completion` once more from the merged-on-main perspective. Common catches: a follow-up cross-repo PR still needed (the hub journal-move PR); a source GitHub issue not yet closed; a memory rule worth saving from this task's surprises; unchecked "Done when" items.
 
-**Write the `## Closed (YYYY-MM-DD)` section** (standardized name — **not** "Resolution"/"Outcome"/"Done", so `/retro` and greps find it predictably) per [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md): shipped-in **PR #N** + run/evidence links, what's met, what's external/unverified and when it'll be confirmed, and any **follow-up tasks filed** (T-ids) — file each as a **follow-up** staged into the **next** iteration (`bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`; see Important Notes). Then —
+**Write the `## Closed (YYYY-MM-DD)` section** (standardized name — **not** "Resolution"/"Outcome"/"Done", so `/retro` and greps find it predictably) per [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md): shipped-in **PR #N** + run/evidence links, what's met, what's external/unverified and when it'll be confirmed, and any **follow-up tasks filed** (T-ids) — file each as a **follow-up** staged into the **next** iteration (`bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`; see Important Notes). Then —
 
 **Append a "Skills invoked" block to the task body** before the close (Phase 4/Phase 7 `status: Done` flip or immediate journal move), so `/retro` Phase 4c can grade compliance by grepping JOURNAL:
 
@@ -522,7 +522,7 @@ Fill the bracketed alternatives from what actually happened; the block lands in 
 ```bash
 # Status mirror → Done (the file move to JOURNAL is the source of truth;
 # this just keeps the board accurate without waiting for the mirror workflow)
-bash ~/.claude/skills/_session/status.sh <task-id> Done
+bash ../_session/status.sh <task-id> Done
 ```
 
 This call is best-effort, idempotent, and never blocks subsequent steps. If `/address-pr` already wrote `Status=Done` at merge time, the explicit call here is a no-op (same value).
@@ -531,12 +531,12 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 
 1. `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**)
 2. **Default**: verify the frontmatter `status: Done` in-place flip landed (should be in the PR from Phase 4) — the file stays in `dev/TODO/` until the Friday retro's batch journal-sweep (`/retro` Phase 2b) moves it. **Immediate override** (`--immediate` / a `P0` status suffix / customer-visible): verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed instead.
-3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip (T20260717-329670, 2026-07-18 — the close PR flipped status but left `claimed_by` set, needing a follow-up release PR). Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash ~/.claude/skills/_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
+3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip (T20260717-329670, 2026-07-18 — the close PR flipped status but left `claimed_by` set, needing a follow-up release PR). Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash ../_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
 4. If the task has `Source: GitHub issue #N`, update and close the issue:
 
    ```bash
-   bash ~/.claude/skills/_gh/gh.sh issue reopen <N>
-   bash ~/.claude/skills/_gh/gh.sh issue close <N> --comment "Fixed in PR #<pr-number>. See {task-id} for details." --reason completed
+   bash ../_gh/gh.sh issue reopen <N>
+   bash ../_gh/gh.sh issue close <N> --comment "Fixed in PR #<pr-number>. See {task-id} for details." --reason completed
    ```
 
 5. **If we recursed into this task as a blocker for a parent goal-task G**: pop back to G. Restore G's branch (`git checkout <g-branch>`), pull latest main, rebase if needed, update G's task file to clear the `Blocked by T{this}` line, and resume G from wherever it left off.
@@ -546,30 +546,30 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 
 1. In `$TARGET`: pull latest main, confirm the merge landed.
 2. `cd $HUB` and `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**).
-3. Open a **separate hub-repo PR** that closes the task. **Default**: flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ~/.claude/skills/_session/task_claim.sh release <id> Done` (not a hand-edit — see same-repo step 3 above) — the Friday retro's batch journal-sweep (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later:
+3. Open a **separate hub-repo PR** that closes the task. **Default**: flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ../_session/task_claim.sh release <id> Done` (not a hand-edit — see same-repo step 3 above) — the Friday retro's batch journal-sweep (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later:
 
    ```bash
    git checkout -b t<id>-close
-   bash ~/.claude/skills/_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically
+   bash ../_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically
    # Add "## Closed (YYYY-MM-DD)" pointing at the target PR URL, plus the "Skills invoked" block (Phase 7.0).
-   bash ~/.claude/skills/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
-   bash ~/.claude/skills/_gh/gh.sh pr create ...
+   bash ../_gh/gh.sh pr create ...
    ```
 
    **Immediate override** (`--immediate` / a `P0` status suffix / customer-visible): do the TODO → JOURNAL move now instead, exactly as before this change:
 
    ```bash
    git checkout -b t<id>-journal-move
-   bash ~/.claude/skills/_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically, before the move
+   bash ../_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically, before the move
    git mv dev/TODO/T<id>-<slug>.md dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    # Add a short "## Closed (YYYY-MM-DD)" section pointing at the target PR URL
    # (mv FIRST then edit, as above — else `git add` the JOURNAL path before committing)
-   bash ~/.claude/skills/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git add dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
    git show --stat HEAD   # must show insertions, NOT "100% rename / 0 insertions"
-   bash ~/.claude/skills/_gh/gh.sh pr create ...
+   bash ../_gh/gh.sh pr create ...
    ```
 
    Either PR is docs-only, typically auto-mergeable (pure status-change/status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr` on it as usual.
@@ -637,8 +637,8 @@ Follow `dev/guidelines.md`:
 ## Important Notes
 
 - **Auto-stage every task you CREATE into an iteration** (maintainer policy 2026-06-18) — so it lands on the board's *Iterations* view, not just the backlog. After writing the task file, stamp its `scheduled:` frontmatter with `_ipm/stamp-scheduled.sh <task-file> <current|next>`, keyed by **kind**:
-  - **Dependency / blocker** (Phase 3 "New dependency discovered", Phase 6 blocker discovered mid-work) → the **current** iteration: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` — it's needed to unblock the goal-task *now*.
-  - **Follow-up** (Phase 3.7 doc-conformance task, Phase 7 close-time follow-ups) → the **next** iteration: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` — deferred work, not this iteration's commitment.
+  - **Dependency / blocker** (Phase 3 "New dependency discovered", Phase 6 blocker discovered mid-work) → the **current** iteration: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` — it's needed to unblock the goal-task *now*.
+  - **Follow-up** (Phase 3.7 doc-conformance task, Phase 7 close-time follow-ups) → the **next** iteration: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` — deferred work, not this iteration's commitment.
 
   The stamper resolves the Monday token-free (committed IPM file → Project API → next-Monday fallback) and writes it **update-forward-only**, printing the effective date. Token-free means it still stages correctly in the ccxp cron (no PAT) — unlike the old `_session/iteration.sh` inline call, which returned empty without a token and silently left the task unscheduled (T20260626-190842). It only no-ops on a non-YAML/legacy task file. `scheduled` is a lint-allowlisted key. (Closed tasks get their iteration automatically from the close-date via `sync-tasks` — see that action; this rule is only for *live* tasks at creation.)
 

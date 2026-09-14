@@ -12,7 +12,7 @@
 # task was ever filed.
 #
 # Usage:
-#   bash ~/.claude/skills/_taskid/check-orphaned-refs.sh [--changed-only [<base>]] [path...]
+#   bash check-orphaned-refs.sh [--changed-only [<base>]] [path...]
 #
 # Default (no args): scans the whole repo (excluding dev/, .git/, and
 # common vendor/cache dirs) for T<id> references.
@@ -28,7 +28,7 @@
 # Exit 2: usage error.
 #
 # Sourceable form:
-#   source ~/.claude/skills/_taskid/check-orphaned-refs.sh
+#   source check-orphaned-refs.sh
 #   check-orphaned-refs "$@"
 
 set -euo pipefail

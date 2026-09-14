@@ -2,7 +2,7 @@
 # slack-notify.sh - Slack notification functions
 #
 # Usage:
-#   source ~/.claude/skills/slack/scripts/slack-notify.sh
+#   source slack-notify.sh
 #
 # Environment:
 #   SLACK_WEBHOOK_URL  - Slack Incoming Webhook URL (required)

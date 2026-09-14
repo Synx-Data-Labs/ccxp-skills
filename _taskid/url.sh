@@ -16,13 +16,13 @@
 # helper is repo-agnostic.
 #
 # Usage (CLI):
-#   bash ~/.claude/skills/_taskid/url.sh T20260427-298901            # blob URL to current file
-#   bash ~/.claude/skills/_taskid/url.sh T20260427-298901 --issue    # stable issue URL
-#   bash ~/.claude/skills/_taskid/url.sh --slack T20260427-298901    # Slack mrkdwn <url|TID>
-#   bash ~/.claude/skills/_taskid/url.sh --mdlink T20260427-298901   # markdown [TID](issue-url)
+#   bash url.sh T20260427-298901            # blob URL to current file
+#   bash url.sh T20260427-298901 --issue    # stable issue URL
+#   bash url.sh --slack T20260427-298901    # Slack mrkdwn <url|TID>
+#   bash url.sh --mdlink T20260427-298901   # markdown [TID](issue-url)
 #
 # Sourceable form:
-#   source ~/.claude/skills/_taskid/url.sh
+#   source url.sh
 #   url=$(taskid-url T20260427-298901)
 #   link=$(taskid-slacklink T20260427-298901)          # for slack_send_message (mrkdwn)
 #   link=$(taskid-mdlink T20260427-298901)             # for digest docs (ipm-weekly.md, etc.)

@@ -102,8 +102,8 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
 - Lint the touched file, scoped, never repo-wide:
 
   ```bash
-  python3 ~/.claude/skills/repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
-  bash ~/.claude/skills/_docs/lint-docs.sh --fix
+  python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
+  bash ../_docs/lint-docs.sh --fix
   ```
 
 Leave the change uncommitted — the caller decides how it lands (`/ccxp`

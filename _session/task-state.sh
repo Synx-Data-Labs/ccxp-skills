@@ -26,8 +26,8 @@
 # cycle and drowns the one-shot query in noise.
 #
 # Usage:
-#   bash ~/.claude/skills/_session/task-state.sh T20260629-281129
-#   bash ~/.claude/skills/_session/task-state.sh T20260629-281129 --json
+#   bash task-state.sh T20260629-281129
+#   bash task-state.sh T20260629-281129 --json
 #
 # Must run from the repo root (same assumption as every other _session/
 # _taskid script — they resolve dev/TODO etc. relative to cwd).

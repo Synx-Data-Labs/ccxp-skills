@@ -2,8 +2,8 @@
 # _gh/gh.sh — gh wrapper that picks the authenticated account with access to this repo.
 #
 # Usage (drop-in for `gh`):
-#   bash ~/.claude/skills/_gh/gh.sh pr list --state merged
-#   bash ~/.claude/skills/_gh/gh.sh api repos/OWNER/REPO --jq .default_branch
+#   bash gh.sh pr list --state merged
+#   bash gh.sh api repos/OWNER/REPO --jq .default_branch
 #
 # Why: machines with multiple gh-authenticated accounts (e.g. personal + work)
 # can't use plain `gh` reliably — it always uses the *active* account, which

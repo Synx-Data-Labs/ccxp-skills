@@ -42,12 +42,12 @@ into the commit — only when the change touches markdown:
 
 ```bash
 if git status --porcelain | grep -qE '\.md$'; then
-  bash ~/.claude/skills/_docs/lint-docs.sh --fix \
+  bash ../_docs/lint-docs.sh --fix \
     || echo "::warning::lint-docs: unfixable markdown issues remain — CI Markdown Lint will gate"
 fi
 ```
 
-`~/.claude/skills/_docs/lint-docs.sh` (T20260626-117003; moved here from build-pipeline's own
+`../_docs/lint-docs.sh` (T20260626-117003; moved here from build-pipeline's own
 scripts/ and generalized by T20260719-111051) ships with the skill, so it's available in every repo
 gcpr runs in (ccxp-skills / example-website.com / hub-repo / build-pipeline-repo) — no more
 per-repo `[ -f ]` no-op. Policy is **fix-then-continue**: `--fix` corrects what it can; a residual
@@ -62,7 +62,7 @@ about its own writing:
 ```bash
 CHANGED_TASKS=$(git status --porcelain | awk '{print $2}' | grep -E '^dev/(TODO|PARKING)/.*\.md$' || true)
 if [ -n "$CHANGED_TASKS" ]; then
-  python3 ~/.claude/skills/repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
+  python3 ../repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
 fi
 ```
 
@@ -77,7 +77,7 @@ Also auto-link task/issue/PR references in any changed `dev/TODO/`/`dev/JOURNAL/
 ```bash
 CHANGED_REFS=$(git status --porcelain | awk '{print $2}' | grep -E '^dev/(TODO|JOURNAL)/.*\.md$' || true)
 if [ -n "$CHANGED_REFS" ]; then
-  python3 ~/.claude/skills/repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
+  python3 ../repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
 fi
 ```
 
@@ -195,7 +195,7 @@ Task: https://github.com/<hub-owner>/<hub-repo>/blob/main/dev/TODO/T<id>-<slug>.
 
 Do not move the task file to JOURNAL in this PR — the task file lives in the hub repo, not this one. The `/drive` skill's Phase 7 opens a separate hub-repo PR for the journal move after this target PR merges.
 
-- Use: `bash ~/.claude/skills/_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
+- Use: `bash ../_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
 
 ### 6.5 Flip task-file Status to `Review`
 
@@ -208,8 +208,8 @@ Done in-place; no separate registry to update.
 Also right after `gh pr create` succeeds, if the work is tracked (the branch/PR maps to a `T<id>` task), append the PR ref to the task's Project item title so the board surfaces the task→PR mapping at a glance — e.g. `T20260510-285938: … (ccxp-skills#37)`:
 
 ```bash
-TASK_ID=$(bash ~/.claude/skills/_session/pr_task_id.sh <pr-number>)
-[ -n "$TASK_ID" ] && bash ~/.claude/skills/_session/set-pr-ref.sh "$TASK_ID" "<pr-url>"
+TASK_ID=$(bash ../_session/pr_task_id.sh <pr-number>)
+[ -n "$TASK_ID" ] && bash ../_session/set-pr-ref.sh "$TASK_ID" "<pr-url>"
 ```
 
 `<pr-url>` is the URL printed by `gh pr create`. Idempotent and best-effort — failures log to stderr and never block. `/address-pr` re-asserts the same stamp on entry, so a skipped or failed call here is recovered there. Skip silently for untracked work (no `T<id>`).

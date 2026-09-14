@@ -24,7 +24,7 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 - If empty, auto-pick (note `--author @me` — only our own PRs are ever auto-picked):
 
   ```bash
-  bash ~/.claude/skills/_gh/gh.sh pr list --author @me --state open --json number,title,createdAt --jq 'sort_by(.createdAt) | .[0]'
+  bash ../_gh/gh.sh pr list --author @me --state open --json number,title,createdAt --jq 'sort_by(.createdAt) | .[0]'
   ```
 
   If no open PRs, report "No open PRs to address" and exit.
@@ -34,8 +34,8 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 Auto-pick (§1) filters `--author @me`, but the explicit number/URL path does **not** — so a session handed `address-pr 877` (by a human, by `/drive`, or by the `/ccxp` cron) would otherwise run the full loop on a PR a *teammate* authored: posting a Claude Code review comment, editing the body, and **merging it**. That is "touching other people's PRs." Gate it before §1.5/§1.6:
 
 ```bash
-ME=$(bash ~/.claude/skills/_gh/gh.sh api user --jq .login 2>/dev/null)
-PR_AUTHOR=$(bash ~/.claude/skills/_gh/gh.sh pr view <number> --json author --jq '.author.login' 2>/dev/null)
+ME=$(bash ../_gh/gh.sh api user --jq .login 2>/dev/null)
+PR_AUTHOR=$(bash ../_gh/gh.sh pr view <number> --json author --jq '.author.login' 2>/dev/null)
 ```
 
 - **`PR_AUTHOR == ME`** → ours, proceed to §1.5. (PRs the automation opened are authored by the token's account — the same `@me` — so all `/drive`/`/ccxp`-created PRs pass.)
@@ -55,13 +55,13 @@ This gate is about **whose PR it is** (human-authorship); §1.6 is about **which
 3. **Append the PR ref to the task's Project item title** (`set-pr-ref.sh`) so the board shows the task→PR mapping at a glance. Idempotent — a no-op if `/gcpr` already stamped it, or on re-entry.
 
 ```bash
-TASK_ID=$(bash ~/.claude/skills/_session/pr_task_id.sh <number>)
+TASK_ID=$(bash ../_session/pr_task_id.sh <number>)
 if [ -n "$TASK_ID" ]; then
   # 1) Status=Review
-  bash ~/.claude/skills/_session/status.sh "$TASK_ID" Review
+  bash ../_session/status.sh "$TASK_ID" Review
   # 2) Append the PR ref to the item title (board task->PR mapping)
-  PR_URL=$(bash ~/.claude/skills/_gh/gh.sh pr view <number> --json url --jq .url 2>/dev/null)
-  [ -n "$PR_URL" ] && bash ~/.claude/skills/_session/set-pr-ref.sh "$TASK_ID" "$PR_URL"
+  PR_URL=$(bash ../_gh/gh.sh pr view <number> --json url --jq .url 2>/dev/null)
+  [ -n "$PR_URL" ] && bash ../_session/set-pr-ref.sh "$TASK_ID" "$PR_URL"
 fi
 ```
 
@@ -70,7 +70,7 @@ Both calls are best-effort: failures log to stderr and don't block the workflow.
 **Clone-locality note (informational only — T20260626-298293):** once `TASK_ID` is resolved you *may* run the guard for visibility:
 
 ```bash
-[ -n "$TASK_ID" ] && bash ~/.claude/skills/_taskid/in-this-repo.sh "$TASK_ID" || true
+[ -n "$TASK_ID" ] && bash ../_taskid/in-this-repo.sh "$TASK_ID" || true
 ```
 
 Unlike `/drive`, here a non-zero result is **expected and fine**: cross-repo `/address-pr` runs in the *target* clone (e.g. hub=hub-repo, target=ccxp-skills) where the task file is *not* present by design. So this is **warn-only/informational** in `/address-pr` — never refuse, and ignore `DRIVE_STRICT_CLONE` here. Its only purpose is to surface the rare case where you expected a same-repo PR but are standing in the wrong clone. `/address-pr` reads ownership (§1.6) and, on a `free` verdict, claims the task itself (see §1.6's `free` handling) — this note is about the *clone-locality* guard specifically, which stays informational-only here; the guard's harder, refusing teeth are in `/drive` and `/stage`.
@@ -88,7 +88,7 @@ The §1.5 Project-board writes (Status mirror + PR ref) are **soft visualization
 So before doing **any** work on the PR, resolve its owner from the task claim:
 
 ```bash
-OWN=$(bash ~/.claude/skills/_session/task_claim.sh pr-owner <number>)
+OWN=$(bash ../_session/task_claim.sh pr-owner <number>)
 case "$OWN" in
   mine|untracked) ;;        # our task, or not task-tracked — proceed
   free)                     # the task is unclaimed — claim it FIRST (see below), then proceed
@@ -114,7 +114,7 @@ esac
 
 **`free` → claim now, same mechanism as `/drive` Phase 1's Claim PR** (this is the one case where `/address-pr` *does* acquire, not just read):
 
-1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ~/.claude/skills/_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ~/.claude/skills/_session/task_claim.sh acquire <id>`.
+1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ../_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ../_session/task_claim.sh acquire <id>`.
 2. Commit (pure frontmatter change — status + `claimed_by`), push, `gh pr create`, and drive *that* claim PR through this same `/address-pr` loop to merge (it's docs-only, auto-merge-eligible under the status-change tier).
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
 4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, then continue to §2 on the *original* PR you were addressing.
@@ -147,10 +147,10 @@ This fires **every iteration** of the §2 loop, not just the first — each push
 **Doc-consistency check (alongside verification):** run the doc-freshness helper so a behaviour / structure / setup change doesn't merge with stale docs (especially `README`-like docs):
 
 ```bash
-bash ~/.claude/skills/_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref = the PR's base branch
+bash ../_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref = the PR's base branch
 ```
 
-If it flags docs the PR didn't touch, the change isn't done: push a commit updating them (a fresh §2 iteration), or — interactively — record an explicit "reviewed, no change needed". **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash ~/.claude/skills/_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost. It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
+If it flags docs the PR didn't touch, the change isn't done: push a commit updating them (a fresh §2 iteration), or — interactively — record an explicit "reviewed, no change needed". **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash ../_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost. It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
 
 Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification. (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found. The actual enforcement of Claude Code review findings is step d's own in-loop discipline (fix or justify before continuing), not a persisted, externally-checkable state. A session that skips step d entirely is not caught by the hard gate the way an unresolved Copilot thread used to be — this is a known reduction in cross-session backstop coverage, not an oversight. Consumer repos wanting that backstop back need to teach their own `pre-merge-check.sh` to look for the `**Claude Code review:**` marker instead of `reviewThreads`.
 
@@ -158,7 +158,7 @@ Then run the pre-merge check script. It is the single source of truth for CI, te
 bash scripts/pre-merge-check.sh <number>
 ```
 
-- If it outputs `✅ ALL CHECKS PASSED`: also check mergeability (`bash ~/.claude/skills/_gh/gh.sh pr view <number> --json mergeable`). If MERGEABLE → **exit the loop**. If CONFLICTING → rebase in step b.
+- If it outputs `✅ ALL CHECKS PASSED`: also check mergeability (`bash ../_gh/gh.sh pr view <number> --json mergeable`). If MERGEABLE → **exit the loop**. If CONFLICTING → rebase in step b.
 - If it outputs `❌ BLOCKED`: **read the failures and fix them in steps b-e below, then loop back to step a.**
 - **NEVER skip the hard gate. NEVER declare ready without it passing.**
 
@@ -167,7 +167,7 @@ bash scripts/pre-merge-check.sh <number>
 Check mergeability (the default branch may have advanced since last iteration):
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr view <number> --json mergeable --jq '.mergeable'
+bash ../_gh/gh.sh pr view <number> --json mergeable --jq '.mergeable'
 ```
 
 - If `UNKNOWN`: retry after 10 seconds
@@ -177,7 +177,7 @@ bash ~/.claude/skills/_gh/gh.sh pr view <number> --json mergeable --jq '.mergeab
 #### c. Fix CI failures
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr checks <number>
+bash ../_gh/gh.sh pr checks <number>
 ```
 
 - If any check is `fail`: read the failure logs, fix the code, commit, push.
@@ -191,17 +191,17 @@ No external bot. The reviewer is a **fresh, independent Claude agent** dispatche
 State lives on the PR itself, not in local files — the same durability requirement §1.5/§1.6 already impose elsewhere in this skill (re-invoking `/address-pr` from a different clone or session must re-derive the same state, not restart blind). Keyed to the **head SHA the review actually covered**, not just a timestamp — a timestamp-only comparison has a TOCTOU gap (a push landing between the diff fetch and the comment post would date-order *after* the comment despite never having been reviewed):
 
 ```bash
-OWNER=$(bash ~/.claude/skills/_gh/gh.sh repo view --json owner --jq .owner.login)
-NAME=$(bash ~/.claude/skills/_gh/gh.sh repo view --json name --jq .name)
-ME=$(bash ~/.claude/skills/_gh/gh.sh api user --jq .login 2>/dev/null)
+OWNER=$(bash ../_gh/gh.sh repo view --json owner --jq .owner.login)
+NAME=$(bash ../_gh/gh.sh repo view --json name --jq .name)
+ME=$(bash ../_gh/gh.sh api user --jq .login 2>/dev/null)
 
-HEAD_SHA=$(bash ~/.claude/skills/_gh/gh.sh pr view <NUMBER> --json headRefOid --jq .headRefOid)
+HEAD_SHA=$(bash ../_gh/gh.sh pr view <NUMBER> --json headRefOid --jq .headRefOid)
 
 # Our own most recent "Claude Code review:" comment carries the SHA it
 # reviewed in its body (posted in step 3 below) — extract it, not just the
 # comment's timestamp, so a push landing mid-dispatch can't be mistaken for
 # "already covered" by date ordering alone.
-LAST_REVIEWED_SHA=$(bash ~/.claude/skills/_gh/gh.sh api "/repos/$OWNER/$NAME/issues/<NUMBER>/comments" \
+LAST_REVIEWED_SHA=$(bash ../_gh/gh.sh api "/repos/$OWNER/$NAME/issues/<NUMBER>/comments" \
   | jq --arg me "$ME" -r '[.[] | select(.user.login==$me and (.body | startswith("**Claude Code review:**"))) | .body] | last // ""' \
   | grep -oE '\(sha: [0-9a-f]+\)' | grep -oE '[0-9a-f]+' || true)
 
@@ -217,7 +217,7 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 1. **Diff the PR**, scoped to the actual changed files:
 
    ```bash
-   bash ~/.claude/skills/_gh/gh.sh pr diff <NUMBER>
+   bash ../_gh/gh.sh pr diff <NUMBER>
    ```
 
 2. **Dispatch an independent review agent** via the `Agent` tool (`subagent_type: code-improvement-scanner`, or `general-purpose` if the diff is a workflow/config change outside that agent's usual scope). Give it the diff (or point it at the branch/files — its own choice how to read them) and an explicit review brief: find real bugs, correctness issues, security issues, and quality problems; if the diff is correct and complete, say so plainly (a clean bill) rather than manufacturing nitpicks. **Do not tell it what the implementation was trying to achieve beyond the PR's own title/description** — that context gap is what makes the review independent.
@@ -230,7 +230,7 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
      cat "$REVIEW_REPORT_FILE"   # the agent's report, written to a file — not interpolated
    } > /tmp/cc-review-comment.md
 
-   bash ~/.claude/skills/_gh/gh.sh pr comment <NUMBER> --body-file /tmp/cc-review-comment.md
+   bash ../_gh/gh.sh pr comment <NUMBER> --body-file /tmp/cc-review-comment.md
    ```
 
    This both preserves the audit trail a human skimming the PR used to get from Copilot's comments (visible on the PR itself, not just in this session's transcript) and re-derives cleanly next time this section runs — no local state to lose or hand off between sessions.
@@ -243,7 +243,7 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 **Auto-record every out-of-band gate as a pre-merge item FIRST (Layer B — the single source of truth).** The moment you kick off any verification that is NOT a required GitHub check on the PR — a labrun, a `--ref <branch>` pipeline dispatch, an external/manual check — immediately write it into the PR body's `### Pre-merge` section as an unchecked item carrying the run URL, BEFORE you start waiting on it:
 
 ```bash
-bash ~/.claude/skills/_gh/gh.sh pr edit <number> --body "$(...append '- [ ] labrun green — <run-url>'...)"
+bash ../_gh/gh.sh pr edit <number> --body "$(...append '- [ ] labrun green — <run-url>'...)"
 ```
 
 Tick the box only once that run is green. This is what makes the gate **cross-session**: `pre-merge-check.sh` §3 (and the ccxp-skills manual fallback) already block merge on any unchecked pre-merge item, so the instant the gate is on the PR, *every* session — including the `/ccxp` cron — is blocked until it's satisfied. A PR merged out from under a human precisely because its labrun gate lived only in session-private context and never on the PR. If it's a gate, it goes on the PR.
@@ -288,13 +288,13 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
    - Test plan status (all checked / N items need manual verification)
    - Current branch
 
-3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash ~/.claude/skills/_gh/gh.sh pr merge --rebase --delete-branch` for auto-merge tier, or notify for wait-for-approval tier.
+3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash ../_gh/gh.sh pr merge --rebase --delete-branch` for auto-merge tier, or notify for wait-for-approval tier.
 
 4. **Status=Done** (after merge succeeds):
 
    ```bash
    if [ -n "$TASK_ID" ]; then
-     bash ~/.claude/skills/_session/status.sh "$TASK_ID" Done
+     bash ../_session/status.sh "$TASK_ID" Done
    fi
    ```
 

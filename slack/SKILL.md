@@ -58,10 +58,10 @@ SLACK_WEBHOOK_URL_DEV=https://hooks.slack.com/services/...    # --channel dev, e
 
 ```bash
 # Default (no --channel):
-bash ~/.claude/skills/slack/scripts/slack-send.sh <remaining args>
+bash ../slack/scripts/slack-send.sh <remaining args>
 
 # Named channel, e.g. --channel foo:
-SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO" bash ~/.claude/skills/slack/scripts/slack-send.sh <remaining args>
+SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO" bash ../slack/scripts/slack-send.sh <remaining args>
 ```
 
 (The script loads `~/.claude/.env` itself, so no `source .env` wrapper is needed.)

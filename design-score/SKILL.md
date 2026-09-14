@@ -34,7 +34,7 @@ Exit **0** if `score >= threshold`, **1** otherwise (and on usage / IO errors).
 ## Workflow
 
 ```bash
-bash ~/.claude/skills/design-score/scripts/score.sh <task-file>
+bash ../design-score/scripts/score.sh <task-file>
 ```
 
 - Default output: a per-check breakdown + total + **PASS/FAIL**.

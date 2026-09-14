@@ -3,7 +3,7 @@
 # lint.sh — Check current repo against ccxp-skills repo-conventions rules.
 #
 # Usage:
-#   bash ~/.claude/skills/repo-conventions/scripts/lint.sh [path-to-repo]
+#   bash lint.sh [path-to-repo]
 #
 # Exits non-zero if any rule is violated.
 

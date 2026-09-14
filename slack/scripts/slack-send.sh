@@ -2,8 +2,8 @@
 # slack-send.sh - Send a Slack notification from the command line
 #
 # Usage:
-#   ~/.claude/skills/slack/scripts/slack-send.sh "hello world"
-#   ~/.claude/skills/slack/scripts/slack-send.sh --product NAME --version VER --status STATUS
+#   slack-send.sh "hello world"
+#   slack-send.sh --product NAME --version VER --status STATUS
 #
 # Environment / .env resolution (in order, first wins):
 #   1. SLACK_WEBHOOK_URL already exported in the environment

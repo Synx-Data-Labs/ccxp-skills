@@ -21,7 +21,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 
 ```bash
 # Get run details
-bash ~/.claude/skills/_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
+bash ../_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
   --jq '{name: .name, branch: .headBranch, conclusion: .conclusion, jobs: [.jobs[] | {name: .name, conclusion: .conclusion}]}'
 ```
 
@@ -35,7 +35,7 @@ For each failed job:
 ```bash
 # Failed job/step names + a bounded error-context window in one shot
 # (replaces a hand-rolled grep repeated across several past RCAs — T20260719-204917)
-bash ~/.claude/skills/_gh/ci-triage.sh <run-id>
+bash ../_gh/ci-triage.sh <run-id>
 ```
 
 **Dig deeper** — don't stop at the first error. Look for:
@@ -71,7 +71,7 @@ If neither is available — you have a hypothesis ("probably a network glitch") 
 - Has it happened before? Check recent runs:
 
   ```bash
-  bash ~/.claude/skills/_gh/gh.sh run list --workflow <workflow> --branch main --limit 5 \
+  bash ../_gh/gh.sh run list --workflow <workflow> --branch main --limit 5 \
     --json databaseId,conclusion --jq '.[] | "\(.databaseId) \(.conclusion)"'
   ```
 
@@ -114,14 +114,14 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
 1. Generate task ID with the shared helper (no inlined generator — same one every skill uses):
 
    ```bash
-   bash ~/.claude/skills/_taskid/new.sh --check ./dev
+   bash ../_taskid/new.sh --check ./dev
    ```
 
 2. Create `dev/TODO/<id>-<slug>.md` with the RCA findings
 3. **Auto-promote to current iteration's Tier 3** (red-pipeline rule, codified in T20260513-155615). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes; see T20260604-194697):
 
    ```bash
-   IPM_FILE=$(bash ~/.claude/skills/_ipm/current.sh)
+   IPM_FILE=$(bash ../_ipm/current.sh)
    ```
 
    If `$IPM_FILE` is non-empty, open it, locate the `## Tier 3 — Mid-week additions` table, and add a new data row:
@@ -137,7 +137,7 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
 4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the Tier-3 placement (without this the task sits in a Tier but is mapped to no board iteration — the gap T20260626-190842 fixed). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
 
    ```bash
-   bash ~/.claude/skills/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
+   bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
    ```
 
 5. Report the task ID, the `scheduled:` date the stamper printed, and that it was auto-promoted to current Tier 3 (or, if no committed IPM, deferred to the next iteration).
@@ -150,7 +150,7 @@ If classification is **Transient**:
 
 If classification is **Infrastructure**:
 
-- Retry the run: `bash ~/.claude/skills/_gh/gh.sh run rerun <run-id> --failed`
+- Retry the run: `bash ../_gh/gh.sh run rerun <run-id> --failed`
 - If retry also fails: create task — and apply Tier 3 auto-promote + `scheduled:` stamp (steps 3–4 above)
 
 ### 7. Update the local knowledge base

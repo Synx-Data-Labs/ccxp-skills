@@ -21,7 +21,7 @@ Archive a completed month of `dev/JOURNAL/*.md` task-closure files into
 2. Run:
 
    ```bash
-   bash ~/.claude/skills/_journal/compact.sh <month> --repo-root "$(git rev-parse --show-toplevel)"
+   bash ../_journal/compact.sh <month> --repo-root "$(git rev-parse --show-toplevel)"
    ```
 
 3. Review the printed summary (files archived, digest path), then commit

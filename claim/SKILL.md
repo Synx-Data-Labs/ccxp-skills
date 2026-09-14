@@ -36,7 +36,7 @@ There's no CI to gate a PR and no peer session to race against, so §1–§2's
 PR step is pure ceremony there — but the **branch** and the **claim commit
 landing on `main` before other work** both still earn their keep for a
 different reason: the statusline
-(`~/.claude/skills/statusline-setup/scripts/statusline-command.sh`) reads
+(`../statusline-setup/scripts/statusline-command.sh`) reads
 the **live working tree**, not a remote — `branch: <name>` is literally
 `git symbolic-ref --short HEAD` in the repo root, and `TASK: <id>: <title>`
 is whichever `dev/TODO/*.md` has `claimed_by:` matching this clone's
@@ -51,8 +51,8 @@ unchanged):
 ```bash
 git checkout main && git pull   # no-op locally if there's no remote work to pull
 git checkout -b t<id>-<slug>    # <slug> from the task title — this IS the "I'm on it" signal
-bash ~/.claude/skills/_session/task_claim.sh release-others T<id>
-bash ~/.claude/skills/_session/task_claim.sh acquire T<id>
+bash ../_session/task_claim.sh release-others T<id>
+bash ../_session/task_claim.sh acquire T<id>
 git add dev/TODO/*.md dev/PARKING/*.md 2>/dev/null
 git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
 
@@ -73,7 +73,7 @@ the later `--ff-only` merge back safe). At close (`/drive` Phase 7 or a
 plain `/claim release`):
 
 ```bash
-bash ~/.claude/skills/_session/task_claim.sh release T<id> <final-status>
+bash ../_session/task_claim.sh release T<id> <final-status>
 git add -A   # + any Closed-section / journal-move edits
 git commit -m "docs(tasks): close T<id>"   # or fold into the last work commit
 git checkout main && git merge --ff-only t<id>-<slug> && git push
@@ -90,17 +90,17 @@ mode note there is kept in sync with this one.
 
 ### §1. `/claim T<id>` — claim, releasing everything else this clone holds
 
-1. **Clone-locality guard.** `bash ~/.claude/skills/_taskid/in-this-repo.sh T<id>`
+1. **Clone-locality guard.** `bash ../_taskid/in-this-repo.sh T<id>`
    — exit 0 = the task file lives in this repo's `dev/TODO`/`dev/PARKING`;
    non-zero = wrong clone (it names the sibling clone that has it). Don't
    proceed past a non-zero result — `cd` there instead.
 2. **Free + claimable checks.**
-   - `bash ~/.claude/skills/_session/task_claim.sh read T<id>` — if
+   - `bash ../_session/task_claim.sh read T<id>` — if
      `claimed_by` is set and is **not** this session's own id
      (`task_claim.sh claimant-id`), the task is held by another agent. Check
      `task_claim.sh reclaimable T<id>` — `live` means stop and report who
      holds it; `reclaimable` means a stale claim you may take over.
-   - `bash ~/.claude/skills/_session/lint_frozen.sh is-frozen dev/TODO/T<id>-*.md`
+   - `bash ../_session/lint_frozen.sh is-frozen dev/TODO/T<id>-*.md`
      — exit 0 (frozen) means the claim PR cannot merge (a pre-existing
      frontmatter lint failure the changed-mode check will re-trip). Report
      the freeze reason and stop rather than opening an un-mergeable PR.
@@ -111,8 +111,8 @@ mode note there is kept in sync with this one.
    ```bash
    git checkout main && git pull
    git checkout -b t<id>-claim
-   bash ~/.claude/skills/_session/task_claim.sh release-others T<id>
-   bash ~/.claude/skills/_session/task_claim.sh acquire T<id>
+   bash ../_session/task_claim.sh release-others T<id>
+   bash ../_session/task_claim.sh acquire T<id>
    ```
 
    `release-others` frees every task this `cc1-<machine-id>:<path-hash>` identity
@@ -127,7 +127,7 @@ mode note there is kept in sync with this one.
    git add dev/TODO/*.md dev/PARKING/*.md 2>/dev/null
    git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
    git push -u origin t<id>-claim
-   bash ~/.claude/skills/_gh/gh.sh pr create --title "docs(claim): claim T<id>" --body "..."
+   bash ../_gh/gh.sh pr create --title "docs(claim): claim T<id>" --body "..."
    ```
 
    Hand off to `/address-pr` — it auto-merges under the pure-status-change
@@ -146,7 +146,7 @@ Same branch/commit/PR shape as §1.3–§1.6 (or the Solo-repo mode equivalent),
 but only:
 
 ```bash
-bash ~/.claude/skills/_session/task_claim.sh release T<id> Open
+bash ../_session/task_claim.sh release T<id> Open
 ```
 
 (pass a different final status — e.g. `Blocked by T...` — if that's why the
@@ -160,12 +160,12 @@ history note), producing a false positive. Use `task_claim.sh read`, which
 parses only the frontmatter fence, per candidate file:
 
 ```bash
-ME=$(bash ~/.claude/skills/_session/task_claim.sh claimant-id)
+ME=$(bash ../_session/task_claim.sh claimant-id)
 for f in dev/TODO/*.md dev/PARKING/*.md; do
   [ -f "$f" ] || continue
   id=$(basename "$f" | grep -oP '^T\d{8}-\d{6}')
   [ -n "$id" ] || continue
-  out=$(bash ~/.claude/skills/_session/task_claim.sh read "$id" 2>/dev/null)
+  out=$(bash ../_session/task_claim.sh read "$id" 2>/dev/null)
   [ "$(printf '%s' "$out" | cut -f2)" = "$ME" ] && echo "$id: $out"
 done
 ```

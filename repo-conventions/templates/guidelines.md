@@ -16,7 +16,7 @@ The `main` branch is the source of truth. Never push directly to `main`.
 2. **Branch naming**: `t{task-id}-short-description` for tracked tasks; `fix/`, `feat/`, `docs/` prefixes for untracked work
 3. **Open a PR** — clear summary and test plan
 4. **CI must pass** — all checks green before merge
-5. **Merge method** — rebase and merge (`bash ~/.claude/skills/_gh/gh.sh pr merge --rebase --delete-branch`)
+5. **Merge method** — rebase and merge, via the ccxp-skills `_gh/gh.sh` wrapper (`pr merge --rebase --delete-branch`) — resolve its path relative to wherever the ccxp-skills plugin is installed, not a hardcoded location
 6. **Delete the branch after merge**
 
 ## TODO Lifecycle
@@ -36,8 +36,12 @@ TYYYYMMDD-NNNNNN
 Generate with the shared helper — single source of truth, so every skill that creates a task uses the same generator and the same collision-avoidance rules:
 
 ```bash
-bash ~/.claude/skills/_taskid/new.sh --check ./dev
+bash _taskid/new.sh --check ./dev
 ```
+
+(Resolve `_taskid/new.sh` relative to wherever the ccxp-skills plugin is
+installed on this machine — a loaded skill's own directory, printed as
+"Base directory for this skill", not a hardcoded path.)
 
 Pass `--check <dev-dir>` so the helper rejects any ID that already exists under `dev/{TODO,PARKING,JOURNAL}/` and retries. Do NOT inline the `printf ... /dev/urandom ...` command in a new skill or script — add a call to this helper instead.
 

@@ -25,7 +25,7 @@ extreme slot" contract as `/top`, just the opposite slot.)
 
 Same resolution and hard-stop rules as `/stage` step 1 — glob
 `dev/TODO/T<id>-*.md`, delegate zero-match diagnosis to
-`bash ~/.claude/skills/_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
+`bash ../_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
 that doesn't resolve to a file in this repo's `dev/TODO/`. Do not partially
 apply — resolve every ID before touching `queue.md`.
 
@@ -61,7 +61,7 @@ git checkout -b "$BRANCH"
 git add dev/TODO/queue.md
 git commit -m "docs(queue): move T<id> [T<id> ...] to the bottom"
 git push -u origin "$BRANCH"
-bash ~/.claude/skills/_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
+bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
 ```
 
 Then drive the PR to merge with `/address-pr <number>`. Pure `queue.md`

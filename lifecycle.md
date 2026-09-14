@@ -24,7 +24,7 @@ Where `NNNNNN` is a 6-digit random number. Generate with:
 printf "T%s-%06d\n" "$(date +%Y%m%d)" "$(od -An -tu4 -N4 /dev/urandom | tr -d ' ' | cut -c1-6)"
 ```
 
-Or via the ccxp-skills helper: `bash ~/.claude/skills/_taskid/new.sh`.
+Or via the ccxp-skills helper: `bash _taskid/new.sh`, run from the ccxp-skills repo root (or `../_taskid/new.sh` when invoked from within another loaded skill's own directory).
 
 Open TODO tasks previously tracked as legacy IDs (T26, T29, etc.) were migrated to the `TYYYYMMDD-NNNNNN` format using their original creation date. Historical journal entries and filenames may still retain legacy `TNN` IDs.
 
@@ -130,7 +130,7 @@ A task **deferred ("cut")** at an IPM has its `scheduled` *advanced* to next Mon
 
 Tasks carry a free-text time-based estimate (e.g. `1h`, `0.5d`, `2w`). For a small team, time estimates are more grounded than story points — `1d` tells you whether work fits in a day, while `3 points` requires a calibrated team velocity to interpret.
 
-**`lint-tasks` v5 requires `estimation` to START with a bare duration** — regex `^\d+(m|h|d|w)\b`, units `m|h|d|w` only (no `s`). So `~2d remaining …` FAILS (the `~` prefix breaks the match) but `2d remaining …` passes (trailing prose after the duration is fine). It lints only a PR's **changed** task files (`mode: changed`), so pre-existing non-conforming `estimation:` values already on `main` are not valid precedent — they simply haven't been re-touched under v5 yet. Validate locally before pushing: `python3 ~/.claude/skills/repo-conventions/scripts/lint_tasks.py --changed <file>` (exit 0 = conforms).
+**`lint-tasks` v5 requires `estimation` to START with a bare duration** — regex `^\d+(m|h|d|w)\b`, units `m|h|d|w` only (no `s`). So `~2d remaining …` FAILS (the `~` prefix breaks the match) but `2d remaining …` passes (trailing prose after the duration is fine). It lints only a PR's **changed** task files (`mode: changed`), so pre-existing non-conforming `estimation:` values already on `main` are not valid precedent — they simply haven't been re-touched under v5 yet. Validate locally before pushing: `python3 repo-conventions/scripts/lint_tasks.py --changed <file>`, run from the ccxp-skills repo root (exit 0 = conforms).
 
 (The previous Estimate→Size Fibonacci bucket mapping was used by `_claims/sync-tasks.sh` to derive a Project board `Size` field; that derivation was removed in T20260513-422869 along with the rest of the `_claims/` machinery. If formal-bucket grouping comes back, the previous mapping is in git history.)
 
