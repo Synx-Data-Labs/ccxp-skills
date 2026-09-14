@@ -3,7 +3,7 @@
   "name": "ccxp-skills",
   "displayName": "ccxp-skills",
   "description": "Task lifecycle, PR automation, CI/RCA and retro skills for the ccxp-family workflow suite, plus general-purpose dev-tool skills (Cloudflare, docs, email, web-perf).",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": {
     "name": "Synx Data Labs",
     "url": "https://github.com/Synx-Data-Labs"

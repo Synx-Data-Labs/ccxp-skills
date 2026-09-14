@@ -9,8 +9,6 @@ or config-driven via environment variables with no baked-in default.
 
 ## Install
 
-### As a plugin (recommended)
-
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
 so `/plugin` can install all 42 skills in one step:
 
@@ -20,55 +18,24 @@ so `/plugin` can install all 42 skills in one step:
 ```
 
 Update later with `/plugin update ccxp-skills`, and remove with
-`/plugin uninstall ccxp-skills`. `/plugin` manages the clone for you —
-there is nothing to symlink and no `install.sh` to run.
+`/plugin uninstall ccxp-skills`. `/plugin` manages the clone for you.
 
 The skills live at the repo root rather than under `skills/`, which the
 manifest declares via `"skills": "."`. That keeps each skill a sibling of
 the shared libs (`_gh/`, `_session/`, `_taskid/`, `_ipm/`, `_docs/`,
 `_journal/`), so the `../_gh/gh.sh`-style references inside the skills
-resolve unchanged whether the repo is installed as a plugin or symlinked
-by hand.
+resolve correctly under a plugin install.
 
-### By symlink (alternative)
-
-Use this instead of the plugin when you want the skills to coexist with
-another, independently-git-tracked skills repo under the same
-`~/.claude/skills/`, or when you want to edit them in place in a clone you
-control.
-
-Claude Code's skill loader is exactly one level deep —
-`~/.claude/skills/<name>/SKILL.md` — it does **not** recurse into a
-repo-root clone placed under `~/.claude/skills/`. So clone this repo
-somewhere else, then symlink each skill/shared-lib into
-`~/.claude/skills/` with the included installer. This is what lets it
-coexist as a sibling skill set alongside another, independently-git-tracked
-skills repo (e.g. a private, company-specific one) on the same machine —
-Claude Code follows symlinks and reads `SKILL.md` from the target:
-
-```bash
-git clone git@github.com:Synx-Data-Labs/ccxp-skills.git ~/workspace/ccxp-skills
-bash ~/workspace/ccxp-skills/scripts/install.sh
-```
-
-`install.sh` symlinks every top-level skill (a directory with a
-`SKILL.md`) and every shared lib (a leading-underscore directory) into
-`~/.claude/skills/`. It's idempotent (safe to re-run) and never touches
-an existing name it didn't create itself — see `--target DIR` to install
-elsewhere, `--dry-run` to preview, `--uninstall` to remove only the
-symlinks it owns, and `--wire-hooks` to also wire the `_gh/auto-switch.sh`
-`SessionStart` hook into `settings.json` (see `_gh/auto-switch.sh` under
-[Shared helpers](#shared-helpers-_name) below).
-
-Update later with:
-
-```bash
-cd ~/workspace/ccxp-skills && git pull
-```
-
-No re-install needed — the symlinks point at the same clone, so `git
-pull` alone picks up new/changed skills. Re-run `install.sh` only when a
-*new* skill directory is added upstream (it needs its own new symlink).
+The `_gh/auto-switch.sh` `SessionStart` hook (see
+[Shared helpers](#shared-helpers-_name) below) wires itself automatically
+via `hooks/hooks.json` — nothing to do. `statusLine.command`
+(`statusline-setup/SKILL.md`) is the one exception: Claude Code has no
+per-plugin statusline mechanism, so it still needs a one-time, manual
+`settings.json` entry pointing at wherever `/plugin install` put this
+plugin — and if that install used a marketplace (not the `directory`
+source this repo's own dev checkout uses), the cache path is
+version-pinned (e.g. `.../ccxp-skills/1.0.1/...`) and needs re-pointing
+after `/plugin update` bumps it.
 
 ## Prerequisites
 
@@ -278,36 +245,8 @@ stay invisible as skills). Current set:
   call. Exits 0 in every case (not a git repo, already-correct account, no
   account can see the repo) — it never blocks session start.
 
-  Wire it once per machine with:
-
-  ```bash
-  bash ~/workspace/ccxp-skills/scripts/install.sh --wire-hooks
-  ```
-
-  `--wire-hooks` (requires `jq`) merges a `SessionStart` entry into
-  `settings.json` next to the `--target` skills dir (default
-  `~/.claude/settings.json`) — idempotent (skips if already wired,
-  recognizing both the absolute and `~`-spelled form), additive (leaves
-  every other key and hook untouched), symlink-safe (writes through
-  `settings.json` if it's itself a symlink, e.g. into a dotfiles repo,
-  rather than replacing it), and composes with `--dry-run` (preview only)
-  and `--uninstall` (`--wire-hooks --uninstall` removes just this hook
-  entry). Or edit `settings.json` by hand — merge this into your existing
-  `hooks.SessionStart` array if you already have one:
-
-  ```json
-  {
-    "hooks": {
-      "SessionStart": [
-        {
-          "hooks": [
-            { "type": "command", "command": "bash ~/.claude/skills/_gh/auto-switch.sh" }
-          ]
-        }
-      ]
-    }
-  }
-  ```
+  Wired automatically by the plugin via `hooks/hooks.json`
+  (`${CLAUDE_PLUGIN_ROOT}/_gh/auto-switch.sh`) — nothing to do.
 
 - `_session/` — on-main task claim lock, Project V2 board mirror,
   PR-ownership resolution, reclaim sweep for dead claims. See
