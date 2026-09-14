@@ -97,8 +97,8 @@ Cross-check the doc's coined terms and acronyms against the canonical glossary (
 Soft-enforces the `synx-skills/engineering-standards.md` "Markdown writing style" convention (prefer bullets over long prose paragraphs) — a style preference, not a structural rule, so this check is always **Info**-severity and never blocks:
 
 - For each paragraph (a run of prose lines with no list marker, heading, or code fence), count sentences.
-- Flag a paragraph as **Info** — "wall-of-text: N-sentence paragraph with no bullets — consider breaking into a list (see `engineering-standards.md` § Markdown writing style)" — when it exceeds **4 sentences** with zero list items in the surrounding ±3 lines.
-- Known exceptions (never flagged): a root-cause narrative or rationale that genuinely doesn't decompose (heuristic: a paragraph immediately under a `## Root cause` or `## Why` heading), quoted text (`>` blockquotes), and code/figure blocks (already excluded by the "prose lines" definition above).
+- Flag a paragraph as **Info** — "wall-of-text: N-sentence paragraph with no bullets — consider breaking into a list (see `engineering-standards.md` § Markdown writing style)" — when it exceeds **4 sentences** with zero list items within 3 lines above its first line or 3 lines below its last line (i.e. measured from the paragraph's own span, not a fixed point inside it).
+- Known exceptions (never flagged): every paragraph inside a `## Root cause` or `## Why` section (not just the first — a multi-paragraph root-cause narrative is still one undecomposable story), quoted text (`>` blockquotes), and code/figure blocks (already excluded by the "prose lines" definition above).
 - This is deliberately a nudge, not a gate — the same "report, don't fix" philosophy as every other check in this skill; a human decides whether the paragraph is a legitimate exception.
 
 ### 4. Mode B: parallel-doc consistency
