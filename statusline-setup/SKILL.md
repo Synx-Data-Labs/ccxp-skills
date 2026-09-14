@@ -35,11 +35,11 @@ change," not editing.)
 
 ### Deploy (default, no argument)
 
-1. Pull the merge into the live clone Claude Code actually reads:
-
-   ```bash
-   git -C ~/.claude/skills pull
-   ```
+1. `/plugin update ccxp-skills` pulls the merged change into the plugin
+   cache. `statusLine.command` is the one thing the plugin can't wire for
+   itself — Claude Code has no per-plugin statusline mechanism, only one
+   `statusLine.command` is active per config dir — so after installing or
+   updating, confirm it (step 3 below) still points at the right path.
 
 2. Find every Claude config dir in play, not just the default `~/.claude`.
    Claude Code honors `$CLAUDE_CONFIG_DIR`, and it's common to have a second
@@ -53,33 +53,38 @@ change," not editing.)
    declare -f | grep -i -B2 CLAUDE_CONFIG_DIR   # catches function wrappers too (bash and zsh) — -B2 to include the function's name line, not -A1
    ```
 
-   `skills/` under an alternate config dir is often a **symlink** back to
-   `~/.claude/skills` (one script, shared) — but `settings.json` is never
-   shared, it's a real per-config-dir file. A `statusLine.command` set up in
-   `~/.claude/settings.json` does nothing for sessions launched against
-   `~/.claude-personal`; each config dir needs its own entry.
+   The plugin (and its cache) is installed separately per config dir, and
+   `settings.json` is never shared either — a `statusLine.command` set up
+   in `~/.claude/settings.json` does nothing for sessions launched against
+   `~/.claude-personal`; each config dir needs its own `/plugin update` and
+   its own `statusLine.command` entry.
 
 3. For **each** config dir found (default `~/.claude` plus any alternates),
    confirm its `settings.json` has `statusLine.command` pointing at *that
-   dir's own* path (one-time setup, already done for `~/.claude` when this
-   skill was created — but redo this check whenever a new config dir shows
-   up, e.g. a new alias or a new machine):
+   dir's own* plugin install path:
 
    ```json
-   "command": "bash /Users/YOUR_USERNAME/.claude/skills/statusline-setup/scripts/statusline-command.sh"
+   "command": "bash /Users/YOUR_USERNAME/.claude/plugins/cache/ccxp-skills/ccxp-skills/<version>/statusline-setup/scripts/statusline-command.sh"
    ```
 
-   and for an alternate dir, e.g.:
+   A `directory`-source install (pointing straight at a dev checkout, e.g.
+   via `/plugin marketplace add <local-path>`) has a stable path instead:
 
    ```json
-   "command": "bash /Users/YOUR_USERNAME/.claude-personal/skills/statusline-setup/scripts/statusline-command.sh"
+   "command": "bash /Users/YOUR_USERNAME/workspace/ccxp-skills/statusline-setup/scripts/statusline-command.sh"
    ```
+
+   A marketplace-sourced install's cache path is version-pinned
+   (`.../ccxp-skills/<version>/...`) and needs re-pointing after any
+   `/plugin update` that bumps the version directory — check
+   `~/.claude/plugins/cache/ccxp-skills/ccxp-skills/` if unsure which
+   version is current.
 
 ### Edit
 
-1. Edit `scripts/statusline-command.sh` in the working clone at
-   `~/workspace/your-org/ccxp-skills` — not the live mirror at
-   `~/.claude/skills`, which is read-only and only updated via `git pull`.
+1. Edit `scripts/statusline-command.sh` in your own working clone (e.g.
+   `~/workspace/ccxp-skills`) — not the plugin cache, which is managed by
+   `/plugin` and overwritten on every update.
 2. Test (see below).
 3. PR + merge to `main` as normal.
 4. Run this skill with no argument (deploy) to pick up the merged change.
