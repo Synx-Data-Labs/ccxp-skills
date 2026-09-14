@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Coding
 estimation: 30m
 source: session 2026-09-14 — PII sweep + history rewrite; blocked on permissions the session could not exercise
 related: T20260911-698434
 description: Delete four redundant branches and decide on unverified-commit signatures, then the repo is ready to switch public
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-14
 ---
 
 # T20260914-234656: Finish the pre-public cleanup (branches + commit signatures)
