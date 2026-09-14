@@ -92,6 +92,15 @@ Cross-check the doc's coined terms and acronyms against the canonical glossary (
 - Flag each uncovered candidate as **Info** — "undefined jargon: `<term>` — expand on first use, or add it to `glossary.md`." Whitelist common English/tech acronyms (`CI`, `PR`, `API`, `URL`, `JSON`, `YAML`, `HTTP`, `SQL`, …) and the doc's own heading words.
 - This extends the within-doc drift detection (3a) outward to the fleet-wide canonical vocabulary, so coined terms can't silently diverge across repos.
 
+#### g. Wall-of-text / bullet-preference check
+
+Soft-enforces the `synx-skills/engineering-standards.md` "Markdown writing style" convention (prefer bullets over long prose paragraphs) — a style preference, not a structural rule, so this check is always **Info**-severity and never blocks:
+
+- For each paragraph (a run of prose lines with no list marker, heading, or code fence), count sentences.
+- Flag a paragraph as **Info** — "wall-of-text: N-sentence paragraph with no bullets — consider breaking into a list (see `engineering-standards.md` § Markdown writing style)" — when it exceeds **4 sentences** with zero list items in the surrounding ±3 lines.
+- Known exceptions (never flagged): a root-cause narrative or rationale that genuinely doesn't decompose (heuristic: a paragraph immediately under a `## Root cause` or `## Why` heading), quoted text (`>` blockquotes), and code/figure blocks (already excluded by the "prose lines" definition above).
+- This is deliberately a nudge, not a gate — the same "report, don't fix" philosophy as every other check in this skill; a human decides whether the paragraph is a legitimate exception.
+
 ### 4. Mode B: parallel-doc consistency
 
 Run these in addition to Mode A applied to each side:
