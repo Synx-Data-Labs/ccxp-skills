@@ -8,6 +8,7 @@ reprioritize.
 
 - [T20260910-872316](T20260910-872316-retro-slack-summary-no-webhook-fallback.md): Retro's Slack summary has no webhook fallback, unlike standup/IPM
 - [T20260911-140914](T20260911-140914-gh-account-picker-prefers-read-only.md): `_gh/gh.sh` account-picker can cache a read-only account
-- [T20260911-698434](T20260911-698434-claimant-id-unstable-hostname.md): `_tc_claimant_id()` uses bare `hostname`, which can drift
 - [T20260911-347027](T20260911-347027-ccxp-epic-progress-in-standup.md): `/ccxp` standup should report epic-level progress from the hub repo's `dev/EPICS.md`
 - [T20260912-279229](T20260912-279229-grill-me-pre-ipm-design-pass.md): `/ccxp` Phase 2a.3 delegates the pre-IPM design pass to a new `/grill-me` skill
+- [T20260910-919422](T20260910-919422-lint-docs-fix-corrupts-content.md): `lint-docs.sh --fix` corrupts prose and always lints repo-wide
+- [T20260914-234656](T20260914-234656-finish-public-release-prep.md): Finish the pre-public cleanup (branches + commit signatures)

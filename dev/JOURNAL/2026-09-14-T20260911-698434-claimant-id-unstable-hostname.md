@@ -1,8 +1,9 @@
 ---
-status: Open
+status: Done
 estimation: 1d
 source: consumer-repo session, 2026-09-09 — discovered while running /address-pr on a multi-account clone
 related: T20260911-140914
+scheduled: 2026-09-14
 ---
 
 # T20260911-698434: `_tc_claimant_id()` uses bare `hostname`, which can drift on the same machine
@@ -268,15 +269,89 @@ across 9 source files, 1 new and 7 migrated test suites, and 8 documents, with
 
 ## Done criteria
 
-- [ ] `_tc_claimant_id()` no longer consults `hostname`, and no written
+- [x] `_tc_claimant_id()` no longer consults `hostname`, and no written
       `claimed_by` contains a hostname, username, or filesystem path
-- [ ] `cc1-` claims are auto-reclaimable; human overrides still never are
-- [ ] Cross-repo `pr-owner` still reports `mine` for the ephemeral target
+- [x] `cc1-` claims are auto-reclaimable; human overrides still never are
+- [x] Cross-repo `pr-owner` still reports `mine` for the ephemeral target
       clone, and `owned:` for a foreign machine
-- [ ] Legacy plaintext claims self-heal on first touch; no operator step
-- [ ] Statusline resolves the claimed task, with a cross-check test
+- [x] Legacy plaintext claims self-heal on first touch; no operator step
+- [x] Statusline resolves the claimed task, with a cross-check test
       pinning it to `_tc_claimant_id`
-- [ ] Claiming fails closed, loudly, when `~/.claude/state/` is unwritable
-- [ ] `tests/claimant_id.bats` exists and pins the format contract, the
+- [x] Claiming fails closed, loudly, when `~/.claude/state/` is unwritable
+- [x] `tests/claimant_id.bats` exists and pins the format contract, the
       privacy guard and the YAML guard; no suite still asserts against a
       plaintext claimant fixture
+
+## Outcome
+
+Landed on `main` in three sequenced commits (reader, writer, presentation +
+docs), later squashed into `2afef98` by the pre-publication history rewrite.
+
+### Fix
+
+`claimed_by` is now `cc1-<machine-id>:<path-hash>`. `<machine-id>` is random
+and cached in `~/.claude/state/machine-id`, so `hostname` is never consulted
+and drift cannot reach it; `<path-hash>` is `sha256(secret ‖ clone-path)`
+salted with a separate local secret. Nothing derived from the machine name,
+the OS user or the filesystem path is written to a task file any more.
+
+The reader landed first, deliberately: `_tc_reclaim_decide` classifies an
+unrecognised shape as a human override that is NEVER auto-reclaimable, so
+had the writer gone first every claim would have become permanently
+unreclaimable. That arm is marked in-code as a one-way door.
+
+### What the grill caught that the original sketch missed
+
+- **Shape detection.** A `cc1-` value matches neither `*:/*` nor the legacy
+  `hex@` arm. Without a new arm, every claim strands.
+- **Cross-repo guard.** `_tc_is_own_cross_repo_clone` splits `claimed_by` on
+  the first `:`. Under the rejected `cc1:<mid>:<hash>` spelling that yields
+  the literal `cc1` for every claim, voiding the foreign-machine guard. The
+  chosen spelling keeps the marker inside the host field so the guard needs
+  no change at all — only the ephemeral-target check needed the real local
+  path.
+- **Second implementation.** `statusline-command.sh` reimplemented the format,
+  coupled only by a comment, and fails silently on a mismatch while its own
+  tests pinned the old shape against itself. Both now source one definition.
+- **YAML.** `sync.py` and `lint_tasks.py` both `yaml.safe_load` the
+  frontmatter. The `[cc1] <mid>:<hash>` candidate raises `ParserError` and
+  would have broken board sync on every claimed task, invisibly to bats.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `_session/claimant-id.sh` | **new** — the single definition of the identity; side-effect-free so the statusline can source it per prompt render |
+| `_session/task_claim.sh` | `_tc_claimant_id` rewrite; `cc1-` reclaim arm; cross-repo `$4`; legacy-claim carve-out; `claimed_role` write/clear |
+| `_session/attribution.sh` | consume `claimed_role`; keep path parsing for pre-migration history |
+| `_session/claim_gap.sh` | adopt the portable sha256 helper (bare `sha256sum` is GNU-only) |
+| `_session/reclaim_sweep.sh` | render the claimant via `claimant_display` |
+| `statusline-setup/scripts/statusline-command.sh` | source the shared definition instead of reimplementing it |
+| `actions/sync-tasks/sync.py` | `claim_display()`; project short form + role; `claimed_role` scalar key |
+| `repo-conventions/scripts/lint_tasks.py` | allow `claimed_role` |
+| `tests/claimant_id.bats` | **new** — format contract, privacy guard, YAML guard, fail-closed, portability |
+| `tests/task_claim.bats` | migrate fixtures off plaintext; reclaim, migration, cross-repo cases |
+| `tests/statusline_setup.bats` | cross-check `sl-clone-id` == `_tc_claimant_id` |
+| `tests/attribution.bats` | role plus legacy path fallback |
+| `actions/sync-tasks/test_sync.py` | projection + `claim_display` shapes |
+| 9 documents | `_session/README.md` (reasoning, not just the string), `claim`, `address-pr`, `drive`, `ccxp`, `glossary`, `statusline-setup`, `templates/task.md` |
+
+574 bats assertions pass, python suites green, doc lint clean.
+
+### Bugs found by running the code, not reasoning about it
+
+- `local name="$1" file="$DIR/$name"` silently yields an empty `$name` — bash
+  expands every word of a `local` before assigning any of them.
+- `shasum` prints `<hash>  -`, so `awk '{print $NF}'` grabs the dash.
+- `env PATH=… bash` cannot find `bash` under the restricted PATH.
+
+### Next steps
+
+- Board/log rendering now exists in bash and Python. A cross-language test
+  pins them together; if a third consumer appears, that pairing needs
+  revisiting.
+- The migration carve-out matches on clone path alone (it cannot compare
+  hostnames — drift is the bug). Two machines sharing an identical clone path
+  can each read the other's legacy claim as their own during the migration
+  window. Merge-to-`main` still arbitrates, so this changes who wins a race,
+  not whether the lock holds. Window closes once every claim is re-stamped.
