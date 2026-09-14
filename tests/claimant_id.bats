@@ -162,3 +162,35 @@ print('ok')
   [ "$status" -eq 0 ]
   [ "$output" = "ok" ]
 }
+
+# --- human-facing rendering -------------------------------------------------
+
+@test "claimant_display shortens a current id and appends the role" {
+  [ "$(claimant_display 'cc1-a1b2c3d4:9f8e7d6c5b4a3210' ccxp)" = "cc1-a1b2c3 (ccxp)" ]
+  [ "$(claimant_display 'cc1-a1b2c3d4:9f8e7d6c5b4a3210')" = "cc1-a1b2c3" ]
+}
+
+@test "claimant_display passes legacy and human-assigned values through untouched" {
+  # Pre-migration log lines and board rows must not change shape underneath
+  # anyone, and a hand-assigned name is already the most readable form.
+  [ "$(claimant_display 'cdw:/home/ci/repo')" = "cdw:/home/ci/repo" ]
+  [ "$(claimant_display 'Alex')" = "Alex" ]
+  [ "$(claimant_display 'cc1-a1b2c3d4')" = "cc1-a1b2c3d4" ]
+  [ -z "$(claimant_display '')" ]
+}
+
+@test "claimant_display agrees with sync.py's claim_display (same value, two languages)" {
+  # The rendering exists in bash (logs) and Python (the Project board). They
+  # must not drift; this is the only thing that would catch it.
+  command -v python3 >/dev/null 2>&1 || skip "python3 unavailable"
+  local id='cc1-a1b2c3d4:9f8e7d6c5b4a3210'
+  local from_sh from_py
+  from_sh="$(claimant_display "$id" ccxp)"
+  from_py="$(cd "$REPO_ROOT" && GH_REPO=o/r GH_TOKEN=x PROJECT_OWNER=o PROJECT_NUMBER=1 \
+    python3 -c "
+import sys; sys.path.insert(0, 'actions/sync-tasks')
+from sync import claim_display
+print(claim_display(sys.argv[1], 'ccxp'))
+" "$id")"
+  [ "$from_sh" = "$from_py" ]
+}

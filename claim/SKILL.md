@@ -40,7 +40,7 @@ different reason: the statusline
 the **live working tree**, not a remote — `branch: <name>` is literally
 `git symbolic-ref --short HEAD` in the repo root, and `TASK: <id>: <title>`
 is whichever `dev/TODO/*.md` has `claimed_by:` matching this clone's
-`<hostname>:<repo-root>` id. Staying on `main` the whole time, or
+`cc1-<machine-id>:<path-hash>` id. Staying on `main` the whole time, or
 collapsing acquire-then-immediately-release into one uncommitted moment,
 means both signals never show anything useful — which is exactly the gap
 this mode closes.
@@ -115,7 +115,7 @@ mode note there is kept in sync with this one.
    bash ~/.claude/skills/_session/task_claim.sh acquire T<id>
    ```
 
-   `release-others` frees every task this `<machine>:<clone-path>` identity
+   `release-others` frees every task this `cc1-<machine-id>:<path-hash>` identity
    currently holds except `T<id>` (release-on-pickup — keeps the claim count
    at ≤1 per clone); `acquire` sets `T<id>`'s `claimed_by` and flips
    `status: Coding` (or `Design`, matching `/drive` Phase 1's own-judgment

@@ -69,7 +69,7 @@ reclaim_sweep() {
     return 0
   fi
 
-  local dir mine f id status claimed_by verdict
+  local dir mine f id status claimed_by verdict shown
   dir="$(_tc_task_dir)"
   mine="$(_tc_claimant_id)"
 
@@ -95,8 +95,12 @@ reclaim_sweep() {
         continue
       fi
     fi
-    printf 'reclaimed %s — dead claimant %s (was %s)\n' "$id" "$claimed_by" "$status"
-    _session_log "  ⚠ reclaim_sweep: freed $id (dead claimant: $claimed_by, was $status)"
+    # Render via claimant_display: a raw current-format id is 26 characters of
+    # opaque hash, and the short form plus role is what a person reading this
+    # line can actually use. Legacy values pass through unchanged.
+    shown="$(claimant_display "$claimed_by" "$(_tc_fm_get "$f" claimed_role)")"
+    printf 'reclaimed %s — dead claimant %s (was %s)\n' "$id" "$shown" "$status"
+    _session_log "  ⚠ reclaim_sweep: freed $id (dead claimant: $shown, was $status)"
   done
 
   return 0

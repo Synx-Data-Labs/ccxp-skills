@@ -102,3 +102,21 @@ claimant_id() {
 claimant_is_current_shape() {
   [[ "${1:-}" =~ ^cc1-[0-9a-f]{8}:[0-9a-f]{16}$ ]]
 }
+
+# Human-facing rendering of a claimed_by value, for logs and any other place a
+# person reads one. $1 claimed_by, $2 claimed_role (optional).
+#
+# The id is opaque by design, and a full "cc1-a1b2c3d4:9f8e7d6c5b4a3210" tells a
+# reader nothing its first few characters do not. Legacy "<host>:<path>" values
+# and deliberate human assignments pass through untouched so pre-migration logs
+# stay readable. Mirrored in Python by sync.py's claim_display(); both are
+# pinned by tests.
+claimant_display() {
+  local raw="${1:-}" role="${2:-}"
+  [ -n "$raw" ] || { printf ''; return 0; }
+  claimant_is_current_shape "$raw" || { printf '%s' "$raw"; return 0; }
+  local short="${raw%%:*}"           # cc1-<machine-id>
+  short="cc1-${short#cc1-}"
+  short="${short:0:10}"              # cc1- + 6 hex
+  if [ -n "$role" ]; then printf '%s (%s)' "$short" "$role"; else printf '%s' "$short"; fi
+}

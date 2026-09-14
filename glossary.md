@@ -27,7 +27,7 @@ source skill / phase / doc.
 ## Quality & process
 
 - **cc-owned** — *(retired)* the old per-session PR label + marker comment for anti-steal; replaced by **PR ownership derived from the task claim** — a stranded marker under a dead session was the recurring pain, and a PR is now owned by whoever holds its task (`task_claim.sh pr-owner`, `/address-pr` §1.6).
-- **PR ownership (derived)** — a PR is owned by whoever owns the **task it implements** (that task's `claimed_by: <host>:<path>` on `main`); there is no separate PR-resident ownership state. Resolved by `task_claim.sh pr-owner <pr>` → `mine`/`free`/`untracked`/`owned:<by>`/`unknown`; a dead owner's claim self-clears via release-on-pickup or the reclaim sweep.
+- **PR ownership (derived)** — a PR is owned by whoever owns the **task it implements** (that task's `claimed_by: cc1-<machine-id>:<path-hash>` on `main`); there is no separate PR-resident ownership state. Resolved by `task_claim.sh pr-owner <pr>` → `mine`/`free`/`untracked`/`owned:<by>`/`unknown`; a dead owner's claim self-clears via release-on-pickup or the reclaim sweep.
 - **code-class / docs-class** — the change classification that routes `/drive`: code-class invokes TDD before implementing; docs-class skips TDD and uses lighter verification (`/drive` Phase 3.0).
 - **decide-don't-wait** — the maintainer policy to make and record a defensible call rather than escalate-and-wait, reserving blocking escalation for genuinely un-decidable forks, irreversible actions, or missing access (`/drive`).
 - **design-score** — a deterministic 0–100 scorer for a design doc's structural quality, gating `/drive` Phase 2 → 3 before any code is written.
