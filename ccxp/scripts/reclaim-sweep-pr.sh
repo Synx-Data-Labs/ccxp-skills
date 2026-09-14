@@ -22,11 +22,17 @@
 # the PR URL. Prints nothing when there was nothing to reclaim.
 set -euo pipefail
 
+# Resolve sibling scripts relative to this script's own directory — not a
+# hardcoded ~/.claude/skills/... path, which only exists under the retired
+# symlink-install layout (T20260914-871616). Overridable via SKILLS_ROOT for
+# tests (same seam as _taskid/url.sh's TASKID_GH).
+SKILLS_ROOT="${SKILLS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+
 if [ "${CCXP_PEER_MODE:-1}" == "0" ]; then
   exit 0
 fi
 
-reclaimed=$(bash ~/.claude/skills/_session/reclaim_sweep.sh 2>/dev/null || true)
+reclaimed=$(bash "$SKILLS_ROOT/_session/reclaim_sweep.sh" 2>/dev/null || true)
 if [ -z "$reclaimed" ]; then
   exit 0
 fi
@@ -38,12 +44,12 @@ restore_main() {
 
 trap restore_main EXIT
 git checkout -b "$branch_name"
-bash ~/.claude/skills/_session/reclaim_sweep.sh --apply >/dev/null   # free on the branch
-bash ~/.claude/skills/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+bash "$SKILLS_ROOT/_session/reclaim_sweep.sh" --apply >/dev/null   # free on the branch
+bash "$SKILLS_ROOT/_docs/lint-docs.sh" --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
 git add dev/TODO/*.md
 git commit -m "chore(reclaim): free dead task-claims (ccxp Phase-0 sweep)" -m "$reclaimed"
 git push -u origin HEAD
-pr_url=$(bash ~/.claude/skills/_gh/gh.sh pr create --fill)
+pr_url=$(bash "$SKILLS_ROOT/_gh/gh.sh" pr create --fill)
 trap - EXIT
 git checkout main   # never leave the cron working tree on a branch
 

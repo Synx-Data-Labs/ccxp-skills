@@ -21,7 +21,7 @@ fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-REPO="$(bash ~/.claude/skills/_gh/gh.sh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
+REPO="$(bash "$HERE/../../_gh/gh.sh" repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
 if [ -z "$REPO" ]; then
   echo "Error: could not determine repo from cwd." >&2
   exit 2
@@ -30,7 +30,7 @@ echo "Repo: $REPO"
 echo "PR:   #$PR"
 
 BODY_FILE=$(mktemp /tmp/verify-body.XXXXXX)
-bash ~/.claude/skills/_gh/gh.sh pr view "$PR" --repo "$REPO" --json body --jq '.body' > "$BODY_FILE"
+bash "$HERE/../../_gh/gh.sh" pr view "$PR" --repo "$REPO" --json body --jq '.body' > "$BODY_FILE"
 
 cleanup() {
   bash "$HERE/preview-down.sh" || true
@@ -120,7 +120,7 @@ TICKED=$(bash "$HERE/match-testplan.sh" "$BODY_FILE" "$RESULTS" "$UPDATED_BODY")
 echo "Ticked $TICKED item(s)."
 
 if [ "$TICKED" -gt 0 ]; then
-  bash ~/.claude/skills/_gh/gh.sh pr edit "$PR" --repo "$REPO" --body-file "$UPDATED_BODY" >/dev/null
+  bash "$HERE/../../_gh/gh.sh" pr edit "$PR" --repo "$REPO" --body-file "$UPDATED_BODY" >/dev/null
   echo "PR body updated."
 fi
 
