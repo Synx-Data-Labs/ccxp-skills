@@ -99,6 +99,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `todo` | List open tasks, pick the next actionable, reorder/clean up the backlog |
 | `claim` | Claim/check/release a task outside the full `/drive` loop |
 | `stage` | Ensure a task is present in `dev/TODO/queue.md` |
+| `migrate-task` | Move a task file (and its `queue.md` entry) from one repo's `dev/TODO/` to another's |
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
 | `new-task` | File a new task to the `dev/TODO` backlog |
 | `grill-me` | Adversarial frontier-round interview of a task/plan before implementation; the `/ccxp` Phase 2a.3 pre-IPM design pass |
