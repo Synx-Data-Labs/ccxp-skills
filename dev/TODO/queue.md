@@ -15,3 +15,4 @@ reprioritize.
 - [T20260914-384424](T20260914-384424-stale-skills-path-examples.md): Update stale `~/.claude/skills/...` example paths across skill docs
 - [T20260914-412750](T20260914-412750-learn-from-mattpocock-skills.md): Learn from `mattpocock/skills` and apply improvements to ccxp-skills
 - [T20260914-359646](T20260914-359646-todo-next-as-local-script.md): Convert `/todo next`'s queue-walk logic into a token-free local script
+- [T20260914-135681](T20260914-135681-drop-todo-sweep-consolidate.md): Simplify `/todo sweep` by dropping the "Consolidate" recommendation
