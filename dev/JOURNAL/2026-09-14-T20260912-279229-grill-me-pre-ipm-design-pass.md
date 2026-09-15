@@ -1,5 +1,5 @@
 ---
-status: Review
+status: Done
 estimation: 2h
 source: this conversation, 2026-09-12 — user asked to bring the Hermes grill-me skill into the ccxp suite
 scheduled: 2026-09-07
@@ -51,3 +51,36 @@ description: Add /grill-me to the suite and make /ccxp Phase 2a.3 delegate the p
 - Manual: in a consumer repo, run `/grill-me T<id>` on an `Open` task and
   confirm it stops for answers each round, then writes only the Design
   section + estimation.
+
+## Closed (2026-09-14)
+
+- Shipped directly to `main` in commit `22070b9` (2026-09-12,
+  "feat(grill-me): add /grill-me and make /ccxp 2a.3 delegate the pre-IPM
+  design pass to it") — no PR trail found for this commit; landed via a
+  direct-to-main workflow rather than the usual claim→PR→close cycle,
+  which is why the task file itself was never flipped to `Done` at the
+  time.
+- Caught and closed by `/todo sweep` (2026-09-14, Phase 3 pruning) —
+  "already done" signal: `grill-me/SKILL.md` exists, `ccxp/SKILL.md`
+  Phase 2a.3 is rewired to call `/grill-me T<id>` exactly per this task's
+  Design section, and `README.md` carries the skill table row. All three
+  match the commit's own message and this task's "Done looks like"
+  criteria verbatim.
+- All Done criteria met: `grill-me/SKILL.md` shipped, `ccxp/SKILL.md`
+  2a.3 rewired, task-file lifecycle bookkeeping (claim/status/estimation)
+  left untouched by the skill as designed.
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — prose-only skill, no
+  BATS per `/skill-conventions` §5.
+- Verification (`superpowers:verification-before-completion`): yes (at
+  close time, via `/todo sweep`) — confirmed `grill-me/SKILL.md`,
+  `ccxp/SKILL.md`'s Phase 2a.3 wiring, and `README.md`'s skill-table row
+  all exist on `main` before closing, rather than trusting the commit
+  message alone.
+- Systematic debugging (`superpowers:systematic-debugging`): no.
+- Receiving code review (`superpowers:receiving-code-review`): unknown —
+  no PR trail found for commit `22070b9`, so whether it went through
+  review at implementation time is not recorded here.
