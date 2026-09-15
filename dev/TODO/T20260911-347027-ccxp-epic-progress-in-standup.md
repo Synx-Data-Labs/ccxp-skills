@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 estimation: 1d
 source: maintainer conversation 2026-09-11 — standups are task-focused and never surface epic-level progress
 related: T20260906-306082
 description: Read a hub-repo dev/EPICS.md and add a token-free "Epic progress" block to the ccxp daily standup + Slack
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-14
 ---
 
@@ -194,38 +194,45 @@ scheduled: 2026-09-14
 
 ## Test plan
 
-- [ ] `bats tests/epic-status.bats` green (fixtures under
-      `tests/fixtures/epics/`) — covers `fetch`/`resolve`/`render`
-- [ ] `ROADMAP_TARGET_REPO` unset → `render` prints the skip line, exit 0
-- [ ] `render --slack` output matches the per-epic one-line format
-- [ ] `resolve` on a task ID that exists only in a non-hub repo falls back
+- [x] `bats tests/epic-status.bats` green (fixtures under
+      `tests/fixtures/epics/`) — covers `fetch`/`resolve`/`render` — 40/40
+      pass; full suite `bats tests/*.bats` 588/588
+- [x] `ROADMAP_TARGET_REPO` unset → `render` prints the skip line, exit 0
+- [x] `render --slack` output matches the per-epic one-line format
+- [x] `resolve` on a task ID that exists only in a non-hub repo falls back
       to the `gh api` contents search path
-- [ ] `resolve` on a genuinely unresolvable ID (typo/deleted, matches
+- [x] `resolve` on a genuinely unresolvable ID (typo/deleted, matches
       neither local dirs nor the hub search) returns `unknown`, and
       `render` surfaces it as `⚠ T<id> unresolved` instead of miscounting it
-- [ ] `_gh_pick_account "$ROADMAP_TARGET_REPO"` (sourced, not `main()`) is
+- [x] `_gh_pick_account "$ROADMAP_TARGET_REPO"` (sourced, not `main()`) is
       what `fetch`/`resolve`'s cross-repo calls use — a fixture with two
       fake accounts (one hub-scoped, one not) confirms the hub-scoped one
-      is picked regardless of `$PWD`'s own origin
+      is picked regardless of `$PWD`'s own origin — verified this test
+      actually gates the regression (fails when the guard is reverted,
+      passes when restored)
 - [ ] Live: run `epic-status.sh render` from a consumer-repo clone against
       the hub repo's `dev/EPICS.md`; all epics resolve, cross-repo IDs
-      included
+      included — **external**, needs a real hub repo with
+      `ROADMAP_TARGET_REPO`/`dev/EPICS.md` set up; not verifiable in this
+      environment
 - [ ] One cron-mode `/ccxp` standup on a consumer repo shows the new
-      section + Slack lines (post-merge, manual verification)
+      section + Slack lines (post-merge, manual verification) — **external**,
+      same reason
 
 ## Done criteria
 
-- [ ] `ccxp/scripts/epic-status.sh` exists, sourceable, BATS-covered —
+- [x] `ccxp/scripts/epic-status.sh` exists, sourceable, BATS-covered —
       `tests/epic-status.bats`
-- [ ] `ccxp/SKILL.md` Phase 1.3 (near `ccxp/SKILL.md:323`) and Phase 1.4
+- [x] `ccxp/SKILL.md` Phase 1.3 (near `ccxp/SKILL.md:323`) and Phase 1.4
       reference `epic-status.sh render`/`--slack`
-- [ ] `ccxp/SKILL.md` Phase 2b (`ccxp/SKILL.md:837`) documents the weekly
+- [x] `ccxp/SKILL.md` Phase 2b (`ccxp/SKILL.md:837`) documents the weekly
       `EPICS.md` write path
-- [ ] `README.md`'s "Skill scripts" section and `ccxp/SKILL.md` (Done
+- [x] `README.md`'s "Skill scripts" section and `ccxp/SKILL.md` (Done
       criteria bullet above) both document the `dev/EPICS.md` format,
       matching what `tests/epic-status.bats`'s fixtures actually parse
 - [ ] Test plan's live-run item confirms a real standup renders `## Epic
-      progress`, linked from this task's `## Closed` section at Phase 7
+      progress`, linked from this task's `## Closed` section at Phase 7 —
+      **external**, deferred to the first real cron-mode standup post-merge
 
 ## Notes
 
@@ -233,3 +240,53 @@ scheduled: 2026-09-14
   (tracked as its own task in the consumer repo, not this one) — the script
   must degrade gracefully without it (see Test plan), but the feature only
   delivers value once it is set.
+
+## Closed (2026-09-14)
+
+- Shipped in **PR #24** (design in PR #23, 86/100 on `design-score`).
+- `ccxp/scripts/epic-status.sh` + `tests/epic-status.bats` (40 cases,
+  588/588 across the full suite), `ccxp/SKILL.md` Phase 1.3/1.4/2b wiring,
+  and `README.md`'s `dev/EPICS.md` format section all merged as scoped.
+- **Met**: every Done criterion except the standup-integration one below;
+  every Test plan item except the two marked external.
+- **External / unverified**: the live cross-repo run and the first real
+  cron-mode `/ccxp` standup rendering `## Epic progress` both need a
+  consumer box with `ROADMAP_TARGET_REPO` configured against a real hub
+  `dev/EPICS.md` — neither exists in this environment. Confirm at the next
+  real `/ccxp` cron tick on a box that has it set.
+- **Follow-ups filed**: none — the `/todo next` scoring slice mentioned in
+  the Plan as optional was cut to keep this within the 1d estimate, and
+  isn't tracked as a separate task (revisit only if the maintainer wants
+  it later).
+- **Post-implementation review** (background workflow, adversarial verify
+  stage) found and this session fixed two real bugs before merge: a
+  doubled `## Epic progress` heading (`epic-status.sh`'s text mode no
+  longer emits its own — the `SKILL.md` template supplies it), and a
+  neutered `|| true` on `tests/epic-status.bats`'s one assertion guarding
+  the account-scoping fix's local-repo path (verified the fixed assertion
+  actually fails when the fix is reverted).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — driven via a
+  sequential Workflow (design→implement→test→verify) per `/drive` Phase
+  3.1's substantive-code-class routing, not the inline TDD skill; the
+  Workflow's Test stage still wrote/ran BATS before the Implement stage
+  was accepted as done.
+- Verification (`superpowers:verification-before-completion`): yes —
+  Phase 3.6, plus this session's own manual regression check (revert the
+  account-scoping guard, confirm the test fails; restore, confirm it
+  passes) before closing.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no
+  stuck-after-2-attempts test failure; the Workflow's Implement stage
+  found and fixed a SIGPIPE/pipefail race on its own during initial
+  authoring (documented inline in `epic-status.sh`'s comments), not a
+  debugging escalation.
+- Receiving code review (`superpowers:receiving-code-review`): yes — twice.
+  Once during Phase 2 (design PR #23, 6 findings from an independent
+  review agent, all verified and fixed — cross-repo account scoping,
+  EPICS.md authorship, doc-wiring gap, status-bucket coverage, cross-repo
+  staleness, unresolvable-ID handling). Once during Phase 3 (the
+  Workflow's own adversarial Verify stage, 2 findings, both verified
+  against the actual files and fixed — the doubled heading and the
+  neutered test assertion).
