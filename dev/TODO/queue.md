@@ -16,3 +16,4 @@ reprioritize.
 - [T20260914-359646](T20260914-359646-todo-next-as-local-script.md): Convert `/todo next`'s queue-walk logic into a token-free local script
 - [T20260914-135681](T20260914-135681-drop-todo-sweep-consolidate.md): Simplify `/todo sweep` by dropping the "Consolidate" recommendation
 - [T20260914-871616](T20260914-871616-fix-stale-plugin-paths.md): Fix stale `~/.claude/skills/...` paths left by the plugin-install switch
+- [T20260914-422854](T20260914-422854-drive-always-journal-immediately.md): `/drive` always journal-moves on close; `/retro` reads both `dev/TODO` and `dev/JOURNAL` for the week's finished tasks
