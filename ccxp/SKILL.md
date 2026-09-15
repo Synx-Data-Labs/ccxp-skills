@@ -326,6 +326,15 @@ resolves. "Nothing merged yesterday" if empty — never an empty section.}
 1. {<…|Tid> — one-line what + why it's next (queue position, unblocks, deadline)}
 2. ...
 
+## Epic progress
+(From `epic-status.sh render`, T20260911-347027 — token-free, deterministic; reads
+the hub repo's `dev/EPICS.md`. Paste its stdout verbatim; the script itself
+prints a one-line note instead of the heading's body when `ROADMAP_TARGET_REPO`
+is unset, `dev/EPICS.md` is unreadable, or no epics are defined yet — so this
+section, like Resolved/Nightly/Attention/Top-5, is never simply omitted.)
+
+{verbatim output of `bash ../ccxp/scripts/epic-status.sh render`}
+
 ## Weekly focus progress
 
 (Skip this block if no `*-ipm-weekly.md` exists yet — first IPM hasn't run.)
@@ -399,6 +408,17 @@ residual surfaces loudly but does not block (the PR's `Markdown Lint` check is t
 gate). Committing docs via `/gcpr` runs this automatically (Step 1.5) — this explicit call covers
 the ad-hoc standup-commit path that bypasses `/gcpr`.
 
+#### 1.3c Generate the epic-progress section
+
+```bash
+bash ../ccxp/scripts/epic-status.sh render
+```
+
+Paste the output verbatim under the `## Epic progress` heading in the daily
+summary (see 1.3's template). The script degrades gracefully — see its own
+fail-quiet notes — so this call never blocks the standup and never needs a
+try/catch here.
+
 #### 1.4 Slack the standup
 
 Send daily summary to `#claude-notification` via MCP `slack_send_message`.
@@ -467,6 +487,13 @@ uses mrkdwn — links are `<url|text>`, **not** `[text](url)` (which renders
 literally). Build each link with `taskid-slacklink` and drop the `<…|Tid>` string
 straight into the message; never paste a bare `T…` ID.
 
+**Epic progress line(s).** One compact line per epic, from the same script as 1.3c's
+section, in `--slack` mode:
+
+```bash
+bash ../ccxp/scripts/epic-status.sh render --slack
+```
+
 ```
 *Daily Standup* (YYYY-MM-DD)
 
@@ -484,6 +511,10 @@ straight into the message; never paste a bare `T…` ID.
 *📋 Top 5 next*
 {numbered 1-5: <…|Tid> — one-line what + why it's next}
 
+*🎯 Epic progress*
+{one line per epic from `epic-status.sh render --slack`}
+{omit this whole block, header included, when the script emits no lines}
+
 *📌 Weekly focus*
 • {X}/{N} shipped, {Y} in flight, {Z} not started
 • Trend: {On-track / Slipping / At-risk}
@@ -498,7 +529,11 @@ straight into the message; never paste a bare `T…` ID.
 ```
 
 (Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md`
-exists yet. Omit the whole `*📊 Attribution*` block on a no-data day. Every
+exists yet. Omit the whole `*📊 Attribution*` block on a no-data day. Omit the
+whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack`
+emits no lines (unset `ROADMAP_TARGET_REPO`, unreadable `EPICS.md`, or no
+epics defined) — same optional-block class as Weekly focus/Attribution, not
+one of the four always-render headline sections. Every
 other section — Resolved, Nightly, Needs your attention, Top 5 next — always
 renders, using its "None"/"Nothing"/"all green" fallback rather than being
 cut; those four are the sections a reader scans for first, so a missing one
@@ -849,6 +884,13 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
    - Write a retro report to `dev/JOURNAL/`
    - Slack a summary
 3. Report: "Retro filed. {N} action items created. Starting focused work."
+4. **Optionally propose an `EPICS.md` update** (new task IDs discovered under
+   an epic this week, an epic newly done): reuse `update-roadmap.sh`'s
+   `clone`/`commit-pr` machinery against the same `ROADMAP_TARGET_REPO`,
+   editing `dev/EPICS.md` instead of `dev/ROADMAP.md` in the ephemeral clone.
+   This is the **only** write path for `EPICS.md` — Phase 1.3/1.4's daily
+   render stays strictly read-only. Skip silently when there's nothing to
+   propose; never block the retro on this step.
 
 **If a Friday session is missed**, the next Friday's retro covers the gap (it always looks at the last 7 days).
 

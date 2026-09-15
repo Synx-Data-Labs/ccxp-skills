@@ -228,6 +228,32 @@ repo's cwd, not this repo's. Scripts must:
 - Read shared config (e.g. `SLACK_WEBHOOK_URL`) from `~/.claude/.env`
   first, then `$(pwd)/.env`.
 
+### `dev/EPICS.md` format (hub repo)
+
+`ccxp/scripts/epic-status.sh` (T20260911-347027) reads a human-owned
+`dev/EPICS.md` in `ROADMAP_TARGET_REPO` to roll up epic-level progress into
+the daily `/ccxp` standup. Per epic:
+
+```markdown
+### E1 — <title>
+Goal: <one line — the standing goal this epic exists for>
+Done when: <one line — the concrete completion condition>
+Deadline: YYYY-MM-DD          # optional
+- T20260101-000001            # any repo; local tasks resolve from this
+- T20260101-000002            # clone, others via the hub-scoped `gh api`
+```
+
+- No status rows in the file — status is always derived at standup time
+  (from each task's own frontmatter + PR state), so the file can never drift
+  out of sync with reality.
+- `Deadline:` is optional; omit the line entirely when an epic has none.
+- The bullet list is order-significant only for the "Leading" task tie-break
+  (first-listed wins a rank tie) — otherwise unordered.
+- This is the exact shape `tests/fixtures/epics/EPICS.md` exercises and
+  `epic-status.sh`'s parser/render tests assert against — keep the two in
+  sync rather than letting this doc drift from what the script actually
+  parses.
+
 ## Shared helpers (`_<name>/`)
 
 Helpers shared across skills live in leading-underscore directories at the
