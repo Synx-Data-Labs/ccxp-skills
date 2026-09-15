@@ -247,7 +247,7 @@ migrate-task() {
     local staged queue_before queue_after
     staged="$(mktemp)"; queue_before="$(mktemp)"; queue_after="$(mktemp)"
     # shellcheck disable=SC2064  # intentional: expand the paths now, not at trap time
-    trap "rm -f '$staged' '$queue_before' '$queue_after'" RETURN
+    trap "rm -f '$staged' '$queue_before' '$queue_after'" EXIT
 
     cp "$source_file" "$staged"
     mt-fm-delete "$staged" target-repo
