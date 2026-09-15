@@ -120,6 +120,47 @@ EOF
   [[ "$output" == *"T20260101-000002"* ]]
 }
 
+@test "mt-blocking-check fails when the migrated task is the SECOND id in a multi-blocker status" {
+  # lifecycle.md documents "Blocked by T{id} (list all blockers)", and
+  # lint_tasks.py's check_blocked_by uses findall — a status line can legally
+  # name more than one blocker (e.g. "Blocked by T1, T2"). The migrated task
+  # must be caught regardless of its position in that list.
+  src="$BATS_TEST_TMPDIR/src"; mkdir -p "$src/dev/TODO"
+  f="$src/dev/TODO/T20260101-000001-demo.md"; _mk_task_file "$f"
+  cat > "$src/dev/TODO/T20260101-000002-other.md" <<'EOF'
+---
+estimation: 1h
+status: Blocked by T20260101-000003, T20260101-000001
+---
+
+# T20260101-000002: Other task
+EOF
+  run mt-blocking-check "$src/dev/TODO" T20260101-000001 "$f"
+  [ "$status" -ne 0 ]
+}
+
+@test "mt-blocking-check's self-skip works even when task_file is spelled relative and todo_dir absolute" {
+  # Regression: migrate-task() calls this with an absolute todo_dir but a
+  # relative source_file (both point at the same file, spelled differently).
+  # Give the file itself a (corrupt/contrived) self-referential status so the
+  # scan loop would find a false positive on its OWN line unless the
+  # self-skip comparison correctly recognizes "this is the file being
+  # migrated" regardless of how the path was spelled.
+  src="$BATS_TEST_TMPDIR/src"; mkdir -p "$src/dev/TODO"
+  f="$src/dev/TODO/T20260101-000001-demo.md"
+  cat > "$f" <<'EOF'
+---
+estimation: 1h
+status: Blocked by T20260101-000001
+---
+
+# T20260101-000001: Self-referential fixture
+EOF
+  cd "$src"
+  run mt-blocking-check "$src/dev/TODO" T20260101-000001 "dev/TODO/T20260101-000001-demo.md"
+  [ "$status" -eq 0 ]
+}
+
 # --- target-side "blocked by the migrated task" lookup (pure) --------------
 
 @test "mt-target-blocked-by returns empty when nothing in target is blocked by it" {
@@ -141,6 +182,19 @@ EOF
 ---
 estimation: 1h
 status: Blocked by T20260101-000001 — waiting on the migrated task
+---
+
+# T2: Other
+EOF
+  [ "$(mt-target-blocked-by "$dst/dev/TODO" T20260101-000001)" = "T2" ]
+}
+
+@test "mt-target-blocked-by finds it as the second id in a multi-blocker status" {
+  dst="$BATS_TEST_TMPDIR/dst"; mkdir -p "$dst/dev/TODO"
+  cat > "$dst/dev/TODO/T2-other.md" <<'EOF'
+---
+estimation: 1h
+status: Blocked by T20260101-000099, T20260101-000001
 ---
 
 # T2: Other
@@ -282,4 +336,78 @@ EOF
   run migrate-task T20260101-000001 "$dst" --dry-run
   [ "$status" -ne 0 ]
   [[ "$output" == *"claimed_by"* ]]
+}
+
+# --- argument / path safety --------------------------------------------------
+
+@test "migrate-task rejects a task-id that isn't the canonical T<8digits>-<6digits> shape" {
+  src="$BATS_TEST_TMPDIR/src-repo5"; dst="$BATS_TEST_TMPDIR/dst-repo5"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  mkdir -p "$src/dev/TODO" "$src/dev/PARKING"
+  # A parked (not TODO) task, which a path-escaping id could otherwise reach.
+  # dev/TODO must exist (even empty) for "dev/TODO/../PARKING" to resolve at
+  # all during glob pathname expansion — this is not a fixture nicety, it's
+  # what makes the escape reachable in the first place.
+  _mk_task_file "$src/dev/PARKING/T20260101-000005-parked.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  mkdir -p "$dst/dev/TODO"; git -C "$dst" add -A 2>/dev/null; git -C "$dst" commit -qm base --allow-empty
+
+  cd "$src"
+  run migrate-task '../PARKING/T20260101-000005' "$dst" --dry-run
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"Demo task"* ]]   # never read the escaped file's content
+}
+
+@test "migrate-task hard-fails (not silently picks one) when two files match the id in source TODO" {
+  src="$BATS_TEST_TMPDIR/src-repo6"; dst="$BATS_TEST_TMPDIR/dst-repo6"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  mkdir -p "$src/dev/TODO"
+  _mk_task_file "$src/dev/TODO/T20260101-000001-demo.md"
+  _mk_task_file "$src/dev/TODO/T20260101-000001-duplicate.md"
+  printf '# TODO Queue\n' > "$src/dev/TODO/queue.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  mkdir -p "$dst/dev/TODO"; printf '# TODO Queue\n' > "$dst/dev/TODO/queue.md"
+  git -C "$dst" add -A && git -C "$dst" commit -qm base
+
+  cd "$src"
+  run migrate-task T20260101-000001 "$dst" --dry-run
+  [ "$status" -ne 0 ]
+}
+
+@test "migrate-task rejects an unrecognized flag instead of silently swallowing it as the target" {
+  run migrate-task T20260101-000001 --verbose /some/target
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"unrecognized"* || "$output" == *"unknown"* ]]
+}
+
+@test "migrate-task rejects a stray extra positional argument" {
+  run migrate-task T20260101-000001 /some/target extra-arg
+  [ "$status" -ne 0 ]
+}
+
+@test "--dry-run preserves a title containing a literal backslash-n sequence on one line" {
+  src="$BATS_TEST_TMPDIR/src-repo7"; dst="$BATS_TEST_TMPDIR/dst-repo7"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  mkdir -p "$src/dev/TODO"
+  cat > "$src/dev/TODO/T20260101-000001-demo.md" <<'EOF'
+---
+estimation: 1h
+status: Open
+---
+
+# T20260101-000001: Fix C:\new-path handling
+EOF
+  printf '# TODO Queue\n' > "$src/dev/TODO/queue.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  mkdir -p "$dst/dev/TODO"; printf '# TODO Queue\n' > "$dst/dev/TODO/queue.md"
+  git -C "$dst" add -A && git -C "$dst" commit -qm base
+
+  cd "$src"
+  run migrate-task T20260101-000001 "$dst" --dry-run
+  [ "$status" -eq 0 ]
+  # The queue line must stay a single line — a literal newline here means the
+  # backslash-n in the title got escape-interpreted instead of passed through
+  # by awk -v. The full title text (both sides of the "\n") must appear
+  # together on one line of the printed diff.
+  [[ "$output" == *'+- [T20260101-000001](T20260101-000001-demo.md): Fix C:\new-path handling'* ]]
 }
