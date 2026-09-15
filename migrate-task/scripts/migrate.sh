@@ -59,7 +59,7 @@ mt-collision-check() {
 # Bidirectional Links": neither the migrated task's own blocks: field nor
 # another source task's "Blocked by T<id>" pointing at it may be non-empty.
 mt-blocking-check() {
-  local todo_dir="$1" task_id="$2" task_file="$3" blocks other
+  local todo_dir="$1" task_id="$2" task_file="$3" blocks other self_base
 
   blocks="$(mt-fm-get "$task_file" blocks)"
   if [ -n "$blocks" ] && [ "$blocks" != "[]" ]; then
@@ -67,10 +67,18 @@ mt-blocking-check() {
     return 1
   fi
 
+  # Compare by basename, not full path: the caller may pass an absolute
+  # todo_dir alongside a relative task_file (both naming the same file),
+  # which would never string-compare equal.
+  self_base="$(basename "$task_file")"
   for other in "$todo_dir"/*.md; do
     [ -f "$other" ] || continue
-    [ "$other" = "$task_file" ] && continue
-    if grep -qE "^status:[[:space:]]*Blocked by ${task_id}\b" "$other"; then
+    [ "$(basename "$other")" = "$self_base" ] && continue
+    # Blocked-by status lines may name more than one blocker
+    # (lifecycle.md: "list all blockers"; lint_tasks.py's check_blocked_by
+    # extracts every id via findall) — the migrated id can appear anywhere
+    # after "Blocked by ", not only immediately after it.
+    if grep -qE "^status:[[:space:]]*Blocked by .*\b${task_id}\b" "$other"; then
       echo "another source task ($(basename "$other")) is Blocked by $task_id"
       return 1
     fi
@@ -90,7 +98,7 @@ mt-target-blocked-by() {
   local todo_dir="$1" task_id="$2" other base
   for other in "$todo_dir"/*.md; do
     [ -f "$other" ] || continue
-    if grep -qE "^status:[[:space:]]*Blocked by ${task_id}\b" "$other"; then
+    if grep -qE "^status:[[:space:]]*Blocked by .*\b${task_id}\b" "$other"; then
       base="$(basename "$other")"
       # Canonical id is T + 8 digits + '-' + 6 digits; fall back to
       # "up to the first '-'" for non-canonical fixture-style ids (T2-*.md).
@@ -121,8 +129,12 @@ mt-queue-insert() {
   if [ -n "$blocks" ] && grep -qE "^- \[${blocks}\]" "$queue"; then
     local tmp lineno
     tmp="$(mktemp)"
-    lineno="$(grep -nE "^- \[${blocks}\]" "$queue" | head -1 | cut -d: -f1)"
-    awk -v n="$lineno" -v new="$line" 'NR==n { print new } { print }' "$queue" > "$tmp"
+    lineno="$(grep -m1 -nE "^- \[${blocks}\]" "$queue" | cut -d: -f1)"
+    # MT_QUEUE_NEW_LINE via ENVIRON, not `awk -v` — awk -v assignments are
+    # escape-processed (a literal "\n" in a title would become a real
+    # newline and split one queue entry into two lines).
+    MT_QUEUE_NEW_LINE="$line" awk -v n="$lineno" \
+      'NR==n { print ENVIRON["MT_QUEUE_NEW_LINE"] } { print }' "$queue" > "$tmp"
     mv "$tmp" "$queue"
   else
     printf '%s\n' "$line" >> "$queue"
@@ -147,11 +159,36 @@ migrate-task() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --dry-run) dry_run=1; shift ;;
-      *) if [ -z "$task_id" ]; then task_id="$1"; else target_arg="$1"; fi; shift ;;
+      -*)
+        echo "migrate-task: unrecognized flag: $1" >&2
+        return 2
+        ;;
+      *)
+        if [ -z "$task_id" ]; then
+          task_id="$1"
+        elif [ -z "$target_arg" ]; then
+          target_arg="$1"
+        else
+          echo "migrate-task: unexpected extra argument: $1" >&2
+          return 2
+        fi
+        shift
+        ;;
     esac
   done
   if [ -z "$task_id" ] || [ -z "$target_arg" ]; then
     echo "usage: migrate-task <task-id> <target-repo> [--dry-run]" >&2
+    return 2
+  fi
+
+  # Canonical id shape only (T + 8-digit date + '-' + 6-digit random, per
+  # _taskid/new.sh) — rejects anything containing a path separator or other
+  # traversal-relevant character BEFORE it ever reaches a glob. Without this,
+  # a caller-controlled id like "../PARKING/T20260101-000005" resolves the
+  # dev/TODO/"$task_id"-*.md glob straight out of dev/TODO/ into an arbitrary
+  # file, which the rest of this function would then happily read and print.
+  if [[ ! "$task_id" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then
+    echo "migrate-task: '$task_id' is not a canonical task id (T<8 digits>-<6 digits>)" >&2
     return 2
   fi
 
@@ -160,6 +197,10 @@ migrate-task() {
   matches=(dev/TODO/"${task_id}"-*.md)
   if [ ! -f "${matches[0]:-}" ]; then
     echo "migrate-task: ${task_id} not found under dev/TODO/ in $(pwd)" >&2
+    return 3
+  fi
+  if [ "${#matches[@]}" -gt 1 ]; then
+    echo "migrate-task: ${task_id} matches ${#matches[@]} files under dev/TODO/ — expected exactly one: ${matches[*]}" >&2
     return 3
   fi
   source_file="${matches[0]}"
@@ -203,15 +244,17 @@ migrate-task() {
   local target_blocks; target_blocks="$(mt-target-blocked-by "$target_dir/dev/TODO" "$task_id")"
 
   if [ "$dry_run" -eq 1 ]; then
-    local staged; staged="$(mktemp)"
+    local staged queue_before queue_after
+    staged="$(mktemp)"; queue_before="$(mktemp)"; queue_after="$(mktemp)"
+    # shellcheck disable=SC2064  # intentional: expand the paths now, not at trap time
+    trap "rm -f '$staged' '$queue_before' '$queue_after'" RETURN
+
     cp "$source_file" "$staged"
     mt-fm-delete "$staged" target-repo
     mt-fm-delete "$staged" target-path
     echo "=== would add to ${target_dir}/dev/TODO/${slug} ==="
     diff -u /dev/null "$staged" || true
 
-    local queue_before queue_after
-    queue_before="$(mktemp)"; queue_after="$(mktemp)"
     if [ -f "$target_dir/dev/TODO/queue.md" ]; then
       cp "$target_dir/dev/TODO/queue.md" "$queue_before"
     else
@@ -224,7 +267,6 @@ migrate-task() {
     if [ -n "$target_blocks" ]; then
       echo "(inserted immediately before $target_blocks — it is Blocked by $task_id)"
     fi
-    rm -f "$staged" "$queue_before" "$queue_after"
 
     echo "=== would git mv source to dev/JOURNAL/<today>-${slug} ==="
     echo "(status: Done; ## Migrated section added; removed from source queue.md)"
