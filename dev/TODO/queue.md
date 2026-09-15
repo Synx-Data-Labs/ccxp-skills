@@ -20,3 +20,4 @@ reprioritize.
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
 - [T20260810-632933](T20260810-632933-stamp-scheduled-stale-ipm-tier1.md): `_ipm/stamp-scheduled.sh` Tier 1 silently uses a stale IPM file
+- [T20260915-104747](T20260915-104747-drata-soc2-boost-skill.md): Build a drata-boost skill — weekly SOC2 compliance-automation driver
