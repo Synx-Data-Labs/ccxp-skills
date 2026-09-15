@@ -17,3 +17,6 @@ reprioritize.
 - [T20260914-135681](T20260914-135681-drop-todo-sweep-consolidate.md): Simplify `/todo sweep` by dropping the "Consolidate" recommendation
 - [T20260914-871616](T20260914-871616-fix-stale-plugin-paths.md): Fix stale `~/.claude/skills/...` paths left by the plugin-install switch
 - [T20260914-422854](T20260914-422854-drive-always-journal-immediately.md): `/drive` always journal-moves on close; `/retro` reads both `dev/TODO` and `dev/JOURNAL` for the week's finished tasks
+- [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
+- [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
+- [T20260810-632933](T20260810-632933-stamp-scheduled-stale-ipm-tier1.md): `_ipm/stamp-scheduled.sh` Tier 1 silently uses a stale IPM file
