@@ -268,7 +268,7 @@ EOF
   [ "$st" = "unknown" ]
 }
 
-@test "epic_resolve: an unresolvable id never triggers a gh pr list call" {
+@test "epic_resolve: never calls gh pr list under any outcome (that's epic_pr_state's job, called separately by render)" {
   bash -c "source '$SCRIPT'; epic_resolve T20260101-999999" > /dev/null
   ! grep -q '^pr ' "$EPIC_FAKE_GH_CALLLOG"
 }
@@ -398,6 +398,16 @@ EOF
   run env -u ROADMAP_TARGET_REPO -u ENV_FILE bash -c "source '$SCRIPT'; epic_render --slack"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "epic_render --slack: a title containing a printf-%b-special backslash sequence is not truncated" {
+  run env EPIC_FAKE_GH_HUB_DIR="$BATS_TEST_TMPDIR/backslash-hub" bash -c "
+    mkdir -p '$BATS_TEST_TMPDIR/backslash-hub/dev'
+    cp '$FIXTURES/EPICS-backslash-title.md' '$BATS_TEST_TMPDIR/backslash-hub/dev/EPICS.md'
+    source '$SCRIPT'; epic_render --slack"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'Ship \cool feature'* ]]
+  [[ "$output" == *"0D/0R/0C/0Dsg/0B·P/1O"* ]]
 }
 
 @test "epic_render --slack: zero epics -> emits nothing, exit 0" {

@@ -233,7 +233,14 @@ epic_resolve() {
   # typo'd/deleted id), not a script error; render checks the status column,
   # not the exit code.
   local id="${1:-}"
-  [ -n "$id" ] || { printf 'unknown\t\t\t\t\t\n'; return 0; }
+  # Reachable with raw, unvalidated argv from `main`'s `resolve` dispatch
+  # (unlike every other caller, which only ever passes ids already
+  # extracted via epic_parse_file's strict T-id regex) — a shape check here
+  # closes that off before $id ever reaches _epic_hub_lookup's --jq string
+  # interpolation (harmless today since jq has no shell-exec primitive
+  # reachable that way, but cheap to make impossible rather than merely
+  # safe).
+  [[ "$id" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || { printf 'unknown\t\t\t\t\t\n'; return 0; }
 
   local file
   if file="$(taskid-path "$id" 2>/dev/null)"; then
@@ -453,18 +460,27 @@ epic_render() {
         done <<<"$unresolved"
       fi
     else
+      # Real UTF-8 bytes via ANSI-C quoting, not literal \xHH escapes fed
+      # through `printf '%b'` — %b re-interprets EVERY backslash escape in
+      # its argument, including any that happen to originate from
+      # hub-authored $title/$leading_status text (a literal "\c" in an
+      # EPICS.md title would make %b silently stop producing output mid-line).
+      # Building the markers as real bytes up front and printing with %s
+      # means no runtime escape interpretation ever touches interpolated
+      # content.
+      local em=$'\xe2\x80\x94' dot=$'\xc2\xb7' warn=$'\xe2\x9a\xa0'
       local line
-      line="*${eid} \xe2\x80\x94 ${title}*: ${counts[Done]:-0}D/${counts[Review]:-0}R/${counts[Coding]:-0}C/${counts[Design]:-0}Dsg/$(( ${counts[Blocked]:-0} + ${counts[Parked]:-0} ))B\xc2\xb7P/${counts[Open]:-0}O"
+      line="*${eid} ${em} ${title}*: ${counts[Done]:-0}D/${counts[Review]:-0}R/${counts[Coding]:-0}C/${counts[Design]:-0}Dsg/$(( ${counts[Blocked]:-0} + ${counts[Parked]:-0} ))B${dot}P/${counts[Open]:-0}O"
       if [ -n "$leading_id" ]; then
-        line="${line} \xe2\x80\x94 leading ${leading_id} (${leading_status}"
+        line="${line} ${em} leading ${leading_id} (${leading_status}"
         [ "$pr_line" != "no PR" ] && line="${line}, ${pr_line}"
         line="${line})"
       fi
-      [ "$stale" -eq 1 ] && line="${line} \xc2\xb7 \xe2\x9a\xa0 stale"
+      [ "$stale" -eq 1 ] && line="${line} ${dot} ${warn} stale"
       local n_unresolved=0
       [ -n "$unresolved" ] && n_unresolved=$(grep -c . <<<"$unresolved")
-      [ "$n_unresolved" -gt 0 ] && line="${line} \xc2\xb7 \xe2\x9a\xa0 ${n_unresolved} unresolved"
-      printf '%b\n' "$line"
+      [ "$n_unresolved" -gt 0 ] && line="${line} ${dot} ${warn} ${n_unresolved} unresolved"
+      printf '%s\n' "$line"
     fi
   done <<<"$epic_ids"
   return 0
