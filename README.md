@@ -281,6 +281,17 @@ stay invisible as skills). Current set:
   call. Exits 0 in every case (not a git repo, already-correct account, no
   account can see the repo) — it never blocks session start.
 
+  Once an account is confirmed (already-active or reached by switching),
+  it also wires the current repo's **local** git config (`.git/config`
+  only — never `~/.gitconfig`) so a bare `git push`/`pull`/`fetch` stops
+  depending on the SSH agent's currently-loaded key: `credential.helper`
+  is pointed at `gh auth git-credential` (so it authenticates as whichever
+  account was just selected) and `url."https://github.com/".insteadOf` is
+  set for both `git@github.com:` and `ssh://git@github.com/`, forcing
+  GitHub-origin traffic onto HTTPS so the credential helper actually gets
+  consulted. `gh auth switch` and the SSH agent's active identity are
+  independent auth paths — fixing one says nothing about the other.
+
   Wired automatically by the plugin via `hooks/hooks.json`
   (`${CLAUDE_PLUGIN_ROOT}/_gh/auto-switch.sh`) — nothing to do.
 

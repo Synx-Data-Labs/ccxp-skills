@@ -17,11 +17,21 @@
 # selection, on purpose, because that's the only lever available to fix a
 # *bare*, unwrapped `gh` call made by something outside this repo's scripts.
 #
+# Once an account is confirmed to see the repo (already-active, or reached
+# by switching), this ALSO wires the current repo's LOCAL git config
+# (`.git/config` — never `~/.gitconfig`, never global) so that plain `git
+# push`/`pull`/`fetch` route through that same account over HTTPS instead
+# of depending on the SSH agent's currently-loaded key. `gh auth switch`
+# and the SSH-agent's active identity are two entirely independent auth
+# paths — fixing the former says nothing about the latter, and a repo
+# whose origin is `git@github.com:...` will still shell out to SSH
+# regardless of which `gh` account is active. See `_auto_switch_wire_git_credentials`.
+#
 # Exits 0 in all cases — never block session start.
 #   - Not a git repo: no-op.
-#   - Active account already sees the repo: no-op.
-#   - Switched: stays switched for the rest of the session.
-#   - All accounts 404: no-op (leaves whatever was active).
+#   - Active account already sees the repo: wires git credentials, no switch.
+#   - Switched: wires git credentials, stays switched for the rest of the session.
+#   - All accounts 404: no-op (leaves whatever was active, git config untouched).
 #
 # Testing: bats tests/auto-switch.bats
 
@@ -47,6 +57,30 @@ _auto_switch_list_accounts() {
     }'
 }
 
+_auto_switch_wire_git_credentials() {
+  # Repo-LOCAL only (`git config --local`, i.e. this repo's `.git/config`)
+  # — never touches `~/.gitconfig` or any global/system config, and never
+  # touches the SSH agent or `~/.ssh/config`. Idempotent: unset-all before
+  # add, so re-running every session start (the normal case) doesn't pile
+  # up duplicate entries.
+  #
+  # credential.helper: reset the inherited helper chain for this repo
+  # (empty string is git's documented way to clear it, gitcredentials(1))
+  # then point it at `gh auth git-credential`, which authenticates as
+  # whichever account `gh auth switch` just selected above.
+  #
+  # url.<...>.insteadOf: rewrite SSH-style GitHub remotes to HTTPS at the
+  # transport level so `credential.helper` actually gets consulted — a
+  # credential helper is never invoked for SSH transport, only HTTP(S).
+  git config --local --unset-all credential.helper 2>/dev/null
+  git config --local --add credential.helper '' 2>/dev/null
+  git config --local --add credential.helper '!gh auth git-credential' 2>/dev/null
+  git config --local --unset-all 'url.https://github.com/.insteadOf' 2>/dev/null
+  git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:' 2>/dev/null
+  git config --local --add 'url.https://github.com/.insteadOf' 'ssh://git@github.com/' 2>/dev/null
+  return 0
+}
+
 _auto_switch_run() {
   local origin org_repo user
   origin=$(git -C "$PWD" config --get remote.origin.url 2>/dev/null) || return 0
@@ -55,14 +89,20 @@ _auto_switch_run() {
   org_repo=$(_auto_switch_org_repo "$origin")
   [ -z "$org_repo" ] || [ "$org_repo" = "/" ] && return 0
 
-  # Already works? Done.
-  gh api "repos/$org_repo" --silent 2>/dev/null && return 0
+  # Already works? Wire git credentials for this session and done.
+  if gh api "repos/$org_repo" --silent 2>/dev/null; then
+    _auto_switch_wire_git_credentials
+    return 0
+  fi
 
   # Try each configured account until one can see the repo.
   while read -r user; do
     [ -z "$user" ] && continue
     gh auth switch --user "$user" >/dev/null 2>&1 || continue
-    gh api "repos/$org_repo" --silent 2>/dev/null && return 0
+    if gh api "repos/$org_repo" --silent 2>/dev/null; then
+      _auto_switch_wire_git_credentials
+      return 0
+    fi
   done < <(_auto_switch_list_accounts)
 
   return 0
