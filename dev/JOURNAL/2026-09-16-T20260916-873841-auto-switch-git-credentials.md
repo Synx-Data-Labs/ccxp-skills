@@ -61,6 +61,16 @@ description: auto-switch.sh also wires local git credential.helper + url.instead
   (via `GIT_TRACE=1`) confirmed HTTPS transport + `gh auth
   git-credential`, and a real `git push` succeeded with no SSH key
   involved.
+- **Known limitation, hit live while dogfooding this on `ccxp-skills`
+  itself**: `_auto_switch_run()`'s own account check
+  (`gh api "repos/$org_repo" --silent`) is read-liveness only, same as
+  `_gh_pick_account()` in `_gh/gh.sh` — see T20260911-140914. On this
+  machine, `75033us` passed that check (org-member read access to
+  `Synx-Data-Labs/ccxp-skills`) but `git push` still 403'd; `xinzweb` (the
+  actual write-access account) had to be selected manually. This task's
+  git-credential wiring inherits whichever account `_auto_switch_run`
+  picks — it does not fix the underlying picker; that's T20260911-140914's
+  scope, filed separately.
 
 ### Test Plan
 
