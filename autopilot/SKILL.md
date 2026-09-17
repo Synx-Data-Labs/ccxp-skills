@@ -15,8 +15,8 @@ Keep calling bare `/drive` back-to-back until at least `<duration>` has elapsed,
 
 ### Phase 1: Establish the end-time
 
-- **First invocation** (the prompt is the user's original `<duration>` text, not a `... until <timestamp>` resume): compute `end_time = now + <duration>` (ISO 8601, e.g. `2026-09-17T20:30:00Z`). Also initialize `stuck_count = 0` and start a running tally of the summary this run will report at Phase 5 (cycles run, tasks merged, time spent backing off).
-- **Resumed invocation** (the prompt reads `/autopilot until <end_time>`): reuse that `end_time` verbatim. `stuck_count` and the running tally do not survive a resume in the prompt text itself — reconstruct what you can for the final summary from what actually happened in this conversation, but don't block the loop on it; the loop's correctness never depends on the tally.
+- **Resumed invocation**: the prompt matches `/autopilot until <ISO-8601 timestamp> stuck=<n>` *exactly* (e.g. `/autopilot until 2026-09-17T20:30:00Z stuck=2`) — a strict format check on the timestamp, not a loose match on the word "until". Reuse `end_time` and `stuck_count = <n>` verbatim. The running summary tally does not survive a resume in the prompt text — reconstruct what you can for the final report from this conversation's history, but don't block the loop on it; the loop's correctness depends only on `end_time` and `stuck_count`, both of which ARE threaded through every resume, never on the tally.
+- **First invocation** (anything else, including free text that happens to contain the word "until" — e.g. `/autopilot until 5pm` — since it doesn't match the strict resume format above): treat the whole argument as `<duration>` and compute `end_time = now + <duration>` (ISO 8601, e.g. `2026-09-17T20:30:00Z`). Initialize `stuck_count = 0` and start a running tally of the summary this run will report at Phase 5 (cycles run, tasks merged, time spent backing off).
 
 ### Phase 2: Stop check
 
@@ -28,13 +28,13 @@ Invoke `/drive` with no argument (bare auto-pick). Let it run to completion — 
 
 ### Phase 4: Classify the outcome and reschedule
 
-- **Progress** — `/drive` merged something, or left a task in a normal transient wait state (e.g. PR open, CI running, awaiting review): reset `stuck_count = 0`, then `ScheduleWakeup(delaySeconds: 60, prompt: "/autopilot until <end_time>", noop: false, reason: "continuing autopilot — last /drive cycle made progress")`. Done with this turn.
+- **Progress** — `/drive` merged something, or left a task in a normal transient wait state (e.g. PR open, CI running, awaiting review) **and did not invoke its own Escalation Rules (`drive/SKILL.md`'s Slack-and-stop paths)**: reset `stuck_count = 0`, then `ScheduleWakeup(delaySeconds: 60, prompt: "/autopilot until <end_time> stuck=0", noop: false, reason: "continuing autopilot — last /drive cycle made progress")`. Done with this turn.
 - **Empty queue / nothing actionable** — `/drive` reports no free, unblocked, ungated task exists: go to Phase 5 with stop reason `queue-empty`. Don't reschedule — there is nothing a further wake would change.
-- **Stuck** — `/drive` errored, or returned having neither merged anything nor advanced any task's state (the same task it started with is still sitting in the same status with no new commit/PR): `stuck_count += 1`, `delay = min(300 * 2^(stuck_count - 1), 1800)` seconds (5m → 10m → 20m → 30m, capped). If `now + delay >= end_time`: go to Phase 5 with stop reason `elapsed` (don't schedule a wake past the window's own end). Otherwise `ScheduleWakeup(delaySeconds: delay, prompt: "/autopilot until <end_time>", noop: true, reason: "backing off after a stuck /drive cycle (stuck_count=<n>)")`. Done with this turn.
+- **Stuck** — `/drive` errored; returned having neither merged anything nor advanced any task's state (the same task it started with is still sitting in the same status with no new commit/PR); **or stopped via its own Escalation Rules** (sent a Slack notification and stopped per `drive/SKILL.md`'s escalation table — e.g. repeated test/CI failure, missing credentials — even if it made a partial commit first): `stuck_count += 1`, `delay = min(300 * 2^(stuck_count - 1), 1800)` seconds (5m → 10m → 20m → 30m, capped). If `now + delay >= end_time`: go to Phase 5 with stop reason `elapsed` (don't schedule a wake past the window's own end). Otherwise `ScheduleWakeup(delaySeconds: delay, prompt: "/autopilot until <end_time> stuck=<stuck_count>", noop: true, reason: "backing off after a stuck /drive cycle (stuck_count=<n>)")`. Done with this turn.
 
 ### Phase 5: Stop
 
-1. Build a short summary: requested duration vs. actually elapsed, number of `/drive` cycles run, tasks merged (ids + titles, if known this turn), and the stop reason (`elapsed` or `queue-empty`).
+1. Build a short summary: requested duration vs. actually elapsed, and the stop reason (`elapsed` or `queue-empty`). Add `/drive` cycles run and tasks merged (ids + titles) as best-effort from this conversation's history — the tally isn't guaranteed to survive a resume, so don't claim precision it can't back up.
 2. Post that summary to `/slack` (no `--channel` — the default automation-alerts channel is exactly for this).
 3. Report the same summary to the user in this turn's response.
 
