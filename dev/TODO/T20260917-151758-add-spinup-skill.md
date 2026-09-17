@@ -4,7 +4,7 @@ estimation: 2h
 source: this conversation, 2026-09-17
 ---
 
-# T20260917-151758: Add /spinup skill for repo+skill conventions setup
+# T20260917-151758: Add `/spinup` skill for repo+skill conventions setup
 
 ## Problem
 
