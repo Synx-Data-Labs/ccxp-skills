@@ -95,6 +95,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | Skill | Purpose |
 |-------|---------|
 | `ccxp` | Day-or-week orchestrator — daily standup, Monday IPM, focused work, Friday retro |
+| `autopilot` | Keep calling bare `/drive` back-to-back for a set duration (e.g. "for the next 6 hours") |
 | `drive` | Pick ONE task, drive it to done — recurse into blockers, never switch laterally |
 | `todo` | List open tasks, pick the next actionable, reorder/clean up the backlog |
 | `claim` | Claim/check/release a task outside the full `/drive` loop |
