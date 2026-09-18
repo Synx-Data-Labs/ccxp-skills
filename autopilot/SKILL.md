@@ -45,8 +45,8 @@ Done:
 
 Needs your attention:
 - PR #<n> (T<id>, <slug>) still open — <specific status>, pick up via /address-pr <n>
-- Stuck on T<id> (<slug>) after <k> retries — <reason>, still backing off when the window closed
-("- Nothing outstanding" if there is truly nothing left mid-flight)
+- Stuck after <k> consecutive backoff cycles (most recently on T<id>, <slug> — or "no task identified" if /drive errored before selecting one) — <reason>, still backing off when the window closed
+(one bullet per item left mid-flight; "- Nothing outstanding" if there is truly nothing left)
 ```
 
 1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
