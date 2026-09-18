@@ -31,7 +31,24 @@ git diff --stat
 git diff --staged --stat
 ```
 
-If there are no changes (no untracked, no modified, no staged), stop and tell the user "nothing to commit".
+If there are no changes (no untracked, no modified, no staged), don't stop yet — a clean
+tree doesn't mean there's nothing left to do. Check whether the current branch is already
+ahead of `main` with committed work that hasn't made it into a PR:
+
+```bash
+git rev-parse --abbrev-ref HEAD                  # skip this check entirely if this is "main"
+git log --oneline main..HEAD                     # any commits ahead?
+bash ../_gh/gh.sh pr list --head <branch> --state all   # does a PR already exist?
+```
+
+- **On `main`, no ahead-commits**: genuinely nothing to do — stop and tell the user "nothing
+  to commit".
+- **Not on `main`, no commits ahead of `main`**: same — stop and report "nothing to commit".
+- **Not on `main`, commits ahead of `main`, no PR found**: skip steps 2-4 (nothing to
+  group/commit) and jump straight to step 5 (push) → step 6 (create PR) → step 7 (hand off
+  to `/address-pr`).
+- **Not on `main`, commits ahead of `main`, a PR already exists**: don't create a duplicate —
+  report that PR's URL and hand off directly to `/address-pr <number>`.
 
 ### 1.5 Doc-lint guard (pre-commit) — catch MD032 before docs reach `main`
 
@@ -154,8 +171,14 @@ For each logical group:
 
 ### 5. Push branch
 
+On a machine with multiple `gh`-authenticated accounts, a bare `git push` can silently
+authenticate as whichever account is globally active — which may not have write access to
+this repo. Route through `_gh/git.sh`, which auto-detects the account with write access the
+same way `_gh/gh.sh` does for `gh` calls (process-scoped `GH_TOKEN`, no global `gh auth
+switch` — T20260911-140914):
+
 ```bash
-git push -u origin <branch>
+bash ../_gh/git.sh push -u origin <branch>
 ```
 
 ### 6. Create PR
