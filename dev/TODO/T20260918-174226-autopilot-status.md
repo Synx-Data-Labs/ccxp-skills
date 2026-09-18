@@ -1,6 +1,6 @@
 ---
 estimation: 2h
-status: Coding
+status: Review
 source: conversation 2026-09-18
 description: Add cross-session status persistence + `/autopilot status` to the autopilot skill
 ---
