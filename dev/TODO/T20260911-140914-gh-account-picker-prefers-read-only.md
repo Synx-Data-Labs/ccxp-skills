@@ -1,5 +1,5 @@
 ---
-status: Coding
+status: Review
 estimation: 1h
 scheduled: 2026-09-14
 source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on a multi-account clone
