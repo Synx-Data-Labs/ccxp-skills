@@ -29,6 +29,8 @@ Keep calling bare `/drive` back-to-back until at least `<duration>` has elapsed,
 
 `last_task` is `{"id": "T...", "slug": "..."}` or `null`. Everything else this skill might want to report (which tasks merged, which PRs are still open) is **not** stored here — Phase 0 derives it live from `dev/TODO/`, `dev/JOURNAL/`, and `gh`, since those are the actual source of truth and a cached copy here would drift.
 
+## Workflow
+
 ### Phase 0: Status (read-only)
 
 If the argument is exactly `status` (case-insensitive, nothing else): read `dev/.autopilot-state.json`.
