@@ -34,7 +34,7 @@ Invoke `/drive` with no argument (bare auto-pick). Let it run to completion — 
 
 ### Phase 5: Stop
 
-Build one report, in this exact bullet-list template — never a prose paragraph — and use it verbatim for both the Slack post and the in-chat report (step 3 below): a wall-of-text summary is a bug, not a style choice.
+Build one report, in this exact bullet-list template — never a prose paragraph — and use it verbatim for both the Slack post and the in-chat report below: a wall-of-text summary is a bug, not a style choice.
 
 ```
 Autopilot run: <requested> requested, <elapsed> elapsed — stopped: <reason>
