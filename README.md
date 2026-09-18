@@ -267,9 +267,18 @@ stay invisible as skills). Current set:
   access to the current repo. **Use this everywhere instead of bare
   `gh`.** On machines with multiple gh accounts, bare `gh` always uses the
   *active* account, which may not have access to the repo. The wrapper
-  probes `gh auth status` accounts and runs `gh` under the one that can
-  read `origin`, scoped per-process via `GH_TOKEN` (no global mutation, no
-  `gh auth switch`).
+  probes `gh auth status` accounts, prefers one with **write** access over
+  a merely-readable one, and runs `gh` under it, scoped per-process via
+  `GH_TOKEN` (no global mutation, no `gh auth switch`). Self-heals: if a
+  cached pick still fails a write op with a permission-shaped error (e.g.
+  "must be a collaborator"), it drops the cache entry and retries once
+  with a different account (T20260911-140914).
+- `_gh/git.sh` — same account-picking logic as `gh.sh`, for `git` commands
+  that need GitHub auth over HTTPS (`push`, mainly). **Use this instead of
+  a bare `git push`** on a multi-account machine — same rationale as
+  `gh.sh`: don't hardcode `GH_TOKEN="$(gh auth token --user <name>)"` by
+  hand, let the wrapper auto-detect the write-capable account
+  (T20260911-140914).
 - `_gh/auto-switch.sh` — `SessionStart` hook complement to `gh.sh` above.
   It covers what `gh.sh` can't: a **bare, unwrapped** `gh` call (a Bash-tool
   invocation running `gh pr view` directly, a human typing `gh` in the

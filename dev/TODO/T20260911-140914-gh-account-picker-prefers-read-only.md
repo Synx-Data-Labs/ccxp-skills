@@ -1,6 +1,7 @@
 ---
-status: Open
+status: Review
 estimation: 1h
+scheduled: 2026-09-14
 source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on a multi-account clone
 ---
 
@@ -39,42 +40,50 @@ source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on 
   it — so once a wrong pick is cached, every subsequent write silently
   fails until someone notices and manually fixes the cache file.
 
-## Solution (proposed, not yet implemented)
+## Solution (implemented)
 
-- Prefer accounts with `viewerPermission` of `WRITE`/`MAINTAIN`/`ADMIN`
-  over `READ`/`TRIAGE` when picking, e.g. `gh api repos/<slug> --jq
-  .permissions` or `gh repo view <slug> --json viewerPermission`) instead
-  of a bare `gh repo view <slug> >/dev/null` liveness check.
-- If no account has write access, still pick the first read-capable one
-  (today's behavior) — some operations (`pr list`, `pr view`) are
-  legitimately read-only, so don't regress those.
-- Add a self-healing path: if a cached account's use of `gh pr create`
-  / `gh pr merge` / similar write op fails with a permission-shaped error
-  (e.g. "must be a collaborator"), drop that cache line and re-probe
-  before failing outright, rather than requiring a human to edit the
-  cache file by hand.
-  - **Implementation obstacle**: `main()` ends with `exec env
-    GH_TOKEN="$tok" gh "$@"` (line 101) — `exec` replaces the wrapper's
-    own process image with `gh`, so the wrapper never regains control to
-    inspect `gh`'s exit code or output. Self-healing requires dropping
-    the `exec` for a capture-then-retry shape (run `gh` as a normal
-    child, check its exit status, drop the cache + re-probe + re-run on
-    a permission-shaped failure, otherwise pass through its exit code)
-    — a real restructuring of `main()`, not a one-line addition.
+- `_gh_account_tier()` replaces the bare `gh repo view <slug> >/dev/null`
+  liveness check with one `gh api repos/<slug> --jq .permissions.push`
+  call — gets liveness and permission level (`write`/`read`) in a single
+  probe.
+- `_gh_pick_account()` now runs two passes: prefer the first account with
+  `write`; only settle for the first `read`-capable one if none has
+  write. Order from `gh auth status` still doesn't imply permission
+  level, but it no longer matters for the pick.
+- Self-heal: `main()` dropped its `exec env GH_TOKEN=... gh "$@"` tail
+  for a capture-then-retry shape — stdout streams straight through
+  untouched (so `--jq`-piping callers see no behavior change), stderr is
+  captured to a temp file. On a non-zero exit whose stderr matches
+  `_gh_permission_error()` (collaborator/403/write-access-shaped text),
+  the cached `(slug, account)` line is dropped, the picker re-probes, and
+  — if a *different* account comes back — the command is retried once
+  with it. Anything else (a genuine 404, bad args, network error) passes
+  through unchanged, no retry.
+- Also added `_gh/git.sh`: the same picking logic, for `git push` (not a
+  `gh` subcommand, so `gh.sh` itself can't wrap it) — retires the ad-hoc
+  `GH_TOKEN="$(gh auth token --user <name>)" git push ...` pattern.
+  `gcpr/SKILL.md` step 5 now routes through it.
 
 ## Test plan
 
-- [ ] Unit-test-style repro: two fake accounts against a test repo, one
+- [x] Unit-test-style repro: two fake accounts against a test repo, one
       read-only, one write — confirm the picker prefers the write
       account regardless of `gh auth status` ordering
-- [ ] Confirm a stale read-only cache entry self-heals on the next
+      (`tests/gh.bats`, `tests/fixtures/gh/fake-gh.sh`)
+- [x] Confirm a stale read-only cache entry self-heals on the next
       write-shaped call instead of requiring manual cache editing
+      (`main() self-heals a stale read-only cached pick...` in
+      `tests/gh.bats`)
+- [x] Manually reproduced and fixed live against this repo's real
+      accounts (`75033us` read-only, `xinzweb` write) — see this task's
+      PR description
 
 ## Done criteria
 
-- [ ] `_gh_pick_account()` (or a new helper) checks permission level, not
+- [x] `_gh_pick_account()` (or a new helper) checks permission level, not
       just readability
-- [ ] Self-heal path added for a write failure against a cached pick
-- [ ] Existing callers (`address-pr`, `gcpr`, `drive`, etc.) need no
+- [x] Self-heal path added for a write failure against a cached pick
+- [x] Existing callers (`address-pr`, `gcpr`, `drive`, etc.) need no
       changes — this is an internal fix to the picker, not an interface
-      change
+      change (the new `git.sh` is additive; `gh.sh`'s own CLI interface
+      is unchanged)
