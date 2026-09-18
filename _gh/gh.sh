@@ -13,9 +13,13 @@
 # every shell and Claude Code session on the box.
 #
 # This wrapper probes each authenticated account (read from `gh auth status`)
-# until one can read the repo at $PWD's `origin`, then runs `gh "$@"` with
-# that account's token via `GH_TOKEN=...` (process-scoped, no global mutation).
-# The (repo, account) pick is cached for the rest of the script's lifetime.
+# and prefers one with WRITE access to the repo at $PWD's `origin` — falling
+# back to a read-only account only if none has write — then runs `gh "$@"`
+# with that account's token via `GH_TOKEN=...` (process-scoped, no global
+# mutation). The (slug, account) pick is cached across invocations
+# (`$_gh_cache_file`); if a cached pick still fails a write op with a
+# permission-shaped error (e.g. "must be a collaborator"), the cache entry
+# is dropped and re-probed once before giving up (T20260911-140914).
 
 # -e deliberately omitted (matches every other sourceable script in this repo,
 # e.g. _session/task_claim.sh): sourcing a `set -e` script pollutes the
@@ -69,6 +73,20 @@ _gh_token_for() {
 
 _gh_cache_file="${TMPDIR:-/tmp}/.gh-account-cache-${USER:-anon}"
 
+# $1 slug, $2 token -> "write" if this account can push, "read" if it can
+# only read, empty (non-zero exit) if it can't see the repo at all. One
+# `gh api` call gets both liveness and permission level, replacing the old
+# `gh repo view` liveness-only probe.
+_gh_account_tier() {
+  local slug="$1" tok="$2" push
+  push="$(GH_TOKEN="$tok" gh api "repos/$slug" --jq '.permissions.push' 2>/dev/null)" || return 1
+  if [[ "$push" == "true" ]]; then
+    printf 'write'
+  else
+    printf 'read'
+  fi
+}
+
 _gh_pick_account() {
   local slug="$1" cached user
   if [[ -f "$_gh_cache_file" ]]; then
@@ -78,27 +96,79 @@ _gh_pick_account() {
       return 0
     fi
   fi
+  # Two passes: prefer a WRITE-capable account; only settle for read-only if
+  # no account has write access. Order from `gh auth status` says nothing
+  # about permission level, so a single first-match pass would silently
+  # cache whichever account merely happens to be read-capable and listed
+  # first (T20260911-140914).
+  local best_read="" user_tok tier
   for user in $(_gh_list_accounts); do
-    local tok
-    tok="$(_gh_token_for "$user")" || continue
-    if GH_TOKEN="$tok" gh repo view "$slug" >/dev/null 2>&1; then
-      # Append; future runs read first match. No locking — duplicate lines are harmless.
+    user_tok="$(_gh_token_for "$user")" || continue
+    tier="$(_gh_account_tier "$slug" "$user_tok")" || continue
+    if [[ "$tier" == "write" ]]; then
       printf '%s\t%s\n' "$slug" "$user" >> "$_gh_cache_file"
       printf '%s' "$user"
       return 0
     fi
+    [[ -z "$best_read" ]] && best_read="$user"
   done
+  if [[ -n "$best_read" ]]; then
+    printf '%s\t%s\n' "$slug" "$best_read" >> "$_gh_cache_file"
+    printf '%s' "$best_read"
+    return 0
+  fi
   return 1
 }
 
+# $1 = combined gh stderr text -> 0 (true) if it looks like a
+# permission/collaborator error worth self-healing the cache over, 1
+# otherwise (e.g. a genuine 404, bad args, network error — don't retry those).
+_gh_permission_error() {
+  grep -qiE 'must be a collaborator|resource not accessible|http 403|requires? (push|write) access|must have (push|write) access' <<<"$1"
+}
+
+# Drop the ($1 slug, $2 user) line from the cache file, if present.
+_gh_invalidate_cache() {
+  local slug="$1" user="$2" tmp
+  [[ -f "$_gh_cache_file" ]] || return 0
+  tmp="$(mktemp)" || return 0
+  awk -v s="$slug" -v u="$user" -F'\t' '!($1 == s && $2 == u)' "$_gh_cache_file" > "$tmp" \
+    && mv "$tmp" "$_gh_cache_file"
+}
+
 main() {
-  local slug user tok
+  local slug user tok status errfile
   slug="$(_gh_repo_slug)" || _gh_die "no github 'origin' remote in $PWD"
   [[ -n "$slug" && "$slug" == */* ]] || _gh_die "could not parse owner/repo from origin URL"
   user="$(_gh_pick_account "$slug")" \
     || _gh_die "no authenticated gh account has access to $slug (try: gh auth login)"
   tok="$(_gh_token_for "$user")" || _gh_die "could not read token for account $user"
-  exec env GH_TOKEN="$tok" gh "$@"
+
+  # Not `exec`: a permission-shaped failure needs the wrapper to regain
+  # control to invalidate the cache and retry with a different account
+  # (T20260911-140914). stdout streams straight through untouched (callers
+  # piping `--jq` output see no behavior change); only stderr is captured,
+  # so it can be inspected, then relayed after the command finishes.
+  errfile="$(mktemp)" || _gh_die "could not create temp file for stderr capture"
+  trap 'rm -f "$errfile"' RETURN
+
+  GH_TOKEN="$tok" gh "$@" 2>"$errfile"
+  status=$?
+
+  if [[ $status -ne 0 ]] && _gh_permission_error "$(cat "$errfile")"; then
+    _gh_invalidate_cache "$slug" "$user"
+    local retry_user retry_tok
+    retry_user="$(_gh_pick_account "$slug")"
+    if [[ -n "$retry_user" && "$retry_user" != "$user" ]] \
+      && retry_tok="$(_gh_token_for "$retry_user")"; then
+      : > "$errfile"
+      GH_TOKEN="$retry_tok" gh "$@" 2>"$errfile"
+      status=$?
+    fi
+  fi
+
+  cat "$errfile" >&2
+  return $status
 }
 
 # Run only if executed directly (not sourced) — lets tests source this file
