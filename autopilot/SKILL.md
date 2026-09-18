@@ -34,9 +34,25 @@ Invoke `/drive` with no argument (bare auto-pick). Let it run to completion — 
 
 ### Phase 5: Stop
 
-1. Build a short summary: requested duration vs. actually elapsed, and the stop reason (`elapsed` or `queue-empty`). Add `/drive` cycles run and tasks merged (ids + titles) as best-effort from this conversation's history — the tally isn't guaranteed to survive a resume, so don't claim precision it can't back up.
-2. Post that summary to `/slack` (no `--channel` — the default automation-alerts channel is exactly for this).
-3. Report the same summary to the user in this turn's response.
+Build one report, in this exact bullet-list template — never a prose paragraph — and use it verbatim for both the Slack post and the in-chat report (step 3 below): a wall-of-text summary is a bug, not a style choice.
+
+```
+Autopilot run: <requested> requested, <elapsed> elapsed — stopped: <reason>
+
+Done:
+- Merged T<id> (<slug>) — PR #<n>
+(one bullet per merged task this run; "- No tasks merged this run" if none)
+
+Needs your attention:
+- PR #<n> (T<id>, <slug>) still open — <specific status>, pick up via /address-pr <n>
+- Stuck on T<id> (<slug>) after <k> retries — <reason>, still backing off when the window closed
+("- Nothing outstanding" if there is truly nothing left mid-flight)
+```
+
+1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
+2. **Done** lists only what actually merged this run. **Needs your attention** lists everything left mid-flight at stop time — an open PR with unresolved CI/review, a Stuck task still mid-backoff when `elapsed` fired, or (for the `queue-empty` stop reason) nothing at all if the queue is genuinely clear. The tally isn't guaranteed to survive a `ScheduleWakeup` resume — reconstruct what you can from this conversation's history, but don't claim precision it can't back up.
+3. Post the report to `/slack` (no `--channel` — the default automation-alerts channel is exactly for this).
+4. Report the same template, filled in the same way, to the user in this turn's response.
 
 ## Important Notes
 
