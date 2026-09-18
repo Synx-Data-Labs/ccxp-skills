@@ -23,3 +23,4 @@ reprioritize.
 - [T20260915-315552](T20260915-315552-repo-conventions-mode-solo-team-switch.md): Add `/repo-conventions mode {solo|team}` to switch a repo between solo and team branch policy
 - [T20260917-151758](T20260917-151758-add-spinup-skill.md): Add `/spinup` skill for repo+skill conventions setup
 - [T20260918-414727](T20260918-414727-ccxp-script-paths-assume-wrong-cwd-on-some-boxes.md): `ccxp/SKILL.md`'s relative script paths don't resolve from a `/ccxp` session's actual cwd on at least one box
+- [T20260918-214522](T20260918-214522-op-inject-exit-code-not-checked.md): `1password-env-setup.sh` reports "materialized" even when `op inject` fails
