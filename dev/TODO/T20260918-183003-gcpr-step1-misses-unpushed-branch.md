@@ -1,5 +1,5 @@
 ---
-status: Coding
+status: Review
 estimation: 30m
 scheduled: 2026-09-14
 source: this conversation, 2026-09-18 — discovered running /land on a branch with a committed-but-unpushed change and no PR yet
