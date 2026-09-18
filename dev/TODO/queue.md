@@ -24,3 +24,4 @@ reprioritize.
 - [T20260917-151758](T20260917-151758-add-spinup-skill.md): Add `/spinup` skill for repo+skill conventions setup
 - [T20260918-414727](T20260918-414727-ccxp-script-paths-assume-wrong-cwd-on-some-boxes.md): `ccxp/SKILL.md`'s relative script paths don't resolve from a `/ccxp` session's actual cwd on at least one box
 - [T20260918-214522](T20260918-214522-op-inject-exit-code-not-checked.md): `1password-env-setup.sh` reports "materialized" even when `op inject` fails
+- [T20260918-404944](T20260918-404944-pr-owner-unknown-for-stage-prs-new-task-file.md): `task_claim.sh pr-owner` always returns `unknown` for `/stage` PRs that introduce a brand-new task file
