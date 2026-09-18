@@ -141,6 +141,21 @@ case "${1:-}" in
         val="${!key:-${EPIC_FAKE_GH_COMMIT_DATE:-}}"
         [ -n "$val" ] && printf '%s\n' "$val"
         exit 0 ;;
+      repos/*)
+        # Bare "repos/<owner>/<repo>" (no /contents, no /commits) — this is
+        # _gh_account_tier()'s permission probe (_gh/gh.sh, T20260911-140914),
+        # `gh api repos/<slug> --jq .permissions.push`, which replaced the
+        # old `gh repo view <slug>` liveness-only check. Reuses
+        # EPIC_FAKE_GH_ACCESS the same way the old "repo view" branch did:
+        # a token/slug pair listed there now means "has WRITE access"
+        # (prints "true"), matching prior pass/fail semantics — no test
+        # here exercises the read-only fallback tier specifically.
+        slug="${url#repos/}"
+        if grep -qxF "${GH_TOKEN:-} $slug" <<<"${EPIC_FAKE_GH_ACCESS:-}"; then
+          printf 'true\n'
+          exit 0
+        fi
+        exit 1 ;;
       *) exit 99 ;;
     esac
     ;;

@@ -281,7 +281,9 @@ EOF
   run bash -c "source '$SCRIPT'; epic_resolve T20260202-000001"
   [ "$status" -eq 0 ]
   [[ "$output" == Open* ]]
-  grep -q "repo view hub-org/hub-repo" "$EPIC_FAKE_GH_CALLLOG"
+  # _gh_account_tier() (T20260911-140914) probes via `gh api repos/<slug>
+  # --jq .permissions.push`, not the old `gh repo view <slug>`.
+  grep -q "api repos/hub-org/hub-repo" "$EPIC_FAKE_GH_CALLLOG"
 }
 
 @test "epic_resolve: local staleness epoch comes from git log, not wall-clock time" {
@@ -439,7 +441,9 @@ EOF
     bash -c "source '$SCRIPT'; epic_pr_state T20260101-000001 local-org/local-repo"
   [ "$status" -eq 0 ]
   [ "$output" = "PR #7 MERGED" ]
-  grep -q "repo view local-org/local-repo" "$EPIC_FAKE_GH_CALLLOG"
+  # _gh_account_tier() (T20260911-140914) probes via `gh api repos/<slug>
+  # --jq .permissions.push`, not the old `gh repo view <slug>`.
+  grep -q "api repos/local-org/local-repo" "$EPIC_FAKE_GH_CALLLOG"
 }
 
 # ============================================================================
