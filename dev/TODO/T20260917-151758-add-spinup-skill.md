@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 2h
 source: this conversation, 2026-09-17
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-14
 ---
 
 # T20260917-151758: Add `/spinup` skill for repo+skill conventions setup
