@@ -115,6 +115,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `journal-compact` | Compact a month of `dev/JOURNAL/` into a digest |
 | `repo-conventions` | CLAUDE.md/guidelines.md structure, `dev/` TODO lifecycle, conventions lint |
 | `skill-conventions` | Conventions for authoring a SKILL.md in this suite |
+| `spinup` | Bring a repo online — check/fix `repo-conventions`, dispatch other setup skills (e.g. `1password-env-setup`) |
 
 ### Notification & integration
 
