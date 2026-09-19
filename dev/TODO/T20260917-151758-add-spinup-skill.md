@@ -60,7 +60,11 @@ scheduled: 2026-09-14
        that safety rather than re-implementing it).
     4. If `<path>/.env.tpl` exists, dispatch `/1password-env-setup <path>`.
        Skip silently otherwise — most repos don't use the 1Password-backed
-       secrets flow.
+       secrets flow. (`1password-env-setup`'s own description gates on "the
+       user explicitly asks" — the explicit ask is `/spinup` itself; the
+       user asking to bring a repo fully online subsumes its setup
+       sub-steps, the same precedent `/drive` already sets by dispatching
+       `/address-pr`/`/gcpr` without a separate per-call ask.)
     5. Report a summary: what was checked, what was fixed, what's still
        open. Explicitly out of scope: authoring brand-new skills — point at
        `/skill-conventions` + `superpowers:writing-skills` for that instead
@@ -97,6 +101,8 @@ scheduled: 2026-09-14
   present, making no changes (idempotent on an already-clean repo).
 - [ ] `claude plugin validate .` passes (frontmatter well-formed, no schema
   errors).
+- [ ] `README.md:97-117` skill table has a `spinup` row — test:
+  `grep spinup README.md`.
 
 ## Done criteria
 
@@ -110,4 +116,5 @@ scheduled: 2026-09-14
   RED-GREEN-REFACTOR subagent process — test plan item 2; pass recorded in
   the Closed section.
 - [ ] `README.md:97-117` skill table gets a `spinup` row (Task lifecycle &
-  PR automation section) — test: `grep spinup README.md`.
+  PR automation section) — test: `grep spinup README.md` (test plan item
+  5).
