@@ -158,4 +158,22 @@ landed in **PR #48**.
   `/drive` skill gate but required by this task's own Done criteria):
   yes — RED-GREEN-REFACTOR-style application/edge-case/gap-finding pass
   against the shipped `spinup/SKILL.md` text; 6 real gaps found, all
-  closed in a REFACTOR edit before the implementation commit.
+  closed in a REFACTOR edit before the implementation commit:
+  1. step 3's "until clean" loop condition was unreachable whenever a
+     repo has a violation category `sync` can't fix;
+  2. step 4 (secrets bootstrap) didn't state it runs independently of
+     step 3's outcome;
+  3. step 5's summary didn't ask for *why* an item is still open;
+  4. step 4's "skip silently" read as "omit from the summary" as well
+     as "don't interrupt mid-flow" — disambiguated to the latter;
+  5. the idempotency note's "every check" was ambiguous between
+     `/spinup`'s own surface and everything `/repo-conventions check`
+     reports;
+  6. step 3's two sub-bullets read as mutually exclusive outcomes of
+     one `check` run, when a real run can return both at once.
+  A second review pass on PR #50 (post-REFACTOR) found one more, a
+  dead branch left by gap 1's fix — step 3's first bullet still named
+  `CLAUDE.md` missing as a case it handles, even though step 2 already
+  stops the workflow before step 3 can ever see that case — split into
+  the two cases step 3 can actually observe (`CLAUDE.md` present-but-
+  empty, or `guidelines.md` missing/empty).
