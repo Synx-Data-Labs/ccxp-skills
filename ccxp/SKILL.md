@@ -594,11 +594,11 @@ ccxp runs unattended via cron (see "Cron integration" below — `claude --danger
 
    (The actual recipe is the same logic /todo sweep documents in its "Phase 1: Fix stale blockers" section. Don't duplicate that prose; reference it as the source of truth.)
 
-2. **Run the full prune step** (`/todo sweep` Phase 2 — park / close / consolidate). Same scoring as `/todo sweep` documents — find tasks that look superseded / indefinitely-blocked / consolidatable / `Revisit`-status legacy, then move them to `dev/PARKING/` (park), `dev/JOURNAL/` with a "Closed by sweep" stub (close), or merge related rows into a single consolidated TODO (consolidate). Git history captures every move; if a sweep was over-eager, revert is one `git revert` away.
+2. **Run the full prune step** (`/todo sweep` Phase 3 — auto-close / park). Same scoring as `/todo sweep` documents — `Done`/superseded tasks auto-close straight to `dev/JOURNAL/` (no approval needed), while indefinitely-blocked / `Revisit`-status legacy tasks are surfaced as Park candidates and only moved to `dev/PARKING/` after the maintainer approves. Git history captures every move; if a sweep was over-eager, revert is one `git revert` away.
 
 3. **Skip cleanly if zero candidates.** Don't add a `## Housekeeping` block if there's nothing to surface; daily summaries shouldn't carry empty sections.
 
-Append the sweep summary (counts of struck-blockers, parked, closed, consolidated) to the standup `## Housekeeping` section so the maintainer sees what changed each day.
+Append the sweep summary (counts of struck-blockers, auto-closed, parked) to the standup `## Housekeeping` section so the maintainer sees what changed each day.
 
 #### 2a.1 Carry over WIP (Tier 1)
 
