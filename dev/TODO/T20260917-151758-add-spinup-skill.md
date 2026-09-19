@@ -1,9 +1,9 @@
 ---
-status: Coding
+status: Done
 estimation: 2h
 source: this conversation, 2026-09-17
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-14
 ---
 
@@ -124,3 +124,38 @@ scheduled: 2026-09-14
 - [x] `README.md:97-117` skill table gets a `spinup` row (Task lifecycle &
   PR automation section) — test: `grep spinup README.md` (test plan item
   5).
+
+## Closed (2026-09-19)
+
+Shipped in **PR #49** (design) + **PR #50** (implementation), claim
+landed in **PR #48**.
+
+- All four Done criteria met — see checked boxes above, each with its
+  verification command/result inline.
+- Nothing external/unverified remains; no follow-up tasks filed. Step
+  4's dispatch-signal set (currently just `.env.tpl` →
+  `1password-env-setup`) is deliberately minimal by design, not a gap —
+  extending it is noted as explicit future work in the skill's own
+  Important Notes.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change
+  (Phase 3.0 classifier: `spinup/SKILL.md`, `README.md`, task-file only).
+- Verification (`superpowers:verification-before-completion`): yes —
+  Phase 3.6 (full fresh-evidence pass: `claude plugin validate .`,
+  `grep spinup README.md`, doc-lint, paragraph-lint, task-lint,
+  design-score, all re-run immediately before the implementation
+  commit) + `/address-pr` §2.a per iteration.
+- Systematic debugging (`superpowers:systematic-debugging`): no — never
+  got stuck; no test kept failing after 2 attempts.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d ×2 (PR #48: 1 pushback with rationale on a
+  Test-Plan-section finding that applied to the wrong PR boundary; PR
+  #49: 1 real finding fixed + 1 real finding addressed with a design
+  clarification, both confirmed by two independent review passes).
+- `superpowers:writing-skills` (pressure-testing, not a standard
+  `/drive` skill gate but required by this task's own Done criteria):
+  yes — RED-GREEN-REFACTOR-style application/edge-case/gap-finding pass
+  against the shipped `spinup/SKILL.md` text; 6 real gaps found, all
+  closed in a REFACTOR edit before the implementation commit.
