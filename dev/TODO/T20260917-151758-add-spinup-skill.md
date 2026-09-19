@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 2h
 source: this conversation, 2026-09-17
 claimed_by: cc1-9a4074da:94a83ff0e786a885
@@ -92,29 +92,35 @@ scheduled: 2026-09-14
 
 ## Test plan
 
-- [ ] Prose-only skill (no `scripts/` added) — per `skill-conventions` §5,
-  no BATS tests required.
-- [ ] Pressure-test via `superpowers:writing-skills`'s RED-GREEN-REFACTOR
-  subagent process before declaring done.
-- [ ] Manual dry run: point `/spinup` at this repo (`ccxp-skills` itself)
-  and confirm it reports conventions already satisfied / no `.env.tpl`
-  present, making no changes (idempotent on an already-clean repo).
-- [ ] `claude plugin validate .` passes (frontmatter well-formed, no schema
-  errors).
-- [ ] `README.md:97-117` skill table has a `spinup` row — test:
-  `grep spinup README.md`.
+- [x] Prose-only skill (no `scripts/` added) — per `skill-conventions` §5,
+  no BATS tests required. Verified: `spinup/` holds only `SKILL.md`.
+- [x] Pressure-test via `superpowers:writing-skills`'s RED-GREEN-REFACTOR
+  subagent process before declaring done. Ran an application/edge-case/
+  gap-finding pass (fresh subagent, SKILL.md content only, 3 scenarios);
+  6 real gaps found in the loop-termination and step-ordering wording —
+  closed in a REFACTOR pass. Details in Closed section.
+- [x] Manual dry run: point `/spinup` at this repo (`ccxp-skills` itself).
+  `CLAUDE.md`/`guidelines.md` checks clean, no `.env.tpl` (dispatch
+  skipped), pre-existing unrelated unlinked-reference violations in 3
+  unrelated task files correctly reported as out-of-scope rather than
+  silently treated as clean or auto-fixed — matches the (refactored)
+  Important Notes idempotency scoping. No files changed by the dry run.
+- [x] `claude plugin validate .` passes (frontmatter well-formed, no schema
+  errors). Verified: `✔ Validation passed`.
+- [x] `README.md:97-117` skill table has a `spinup` row — test:
+  `grep spinup README.md` → `README.md:118`.
 
 ## Done criteria
 
-- [ ] `spinup/SKILL.md` exists with `name`, `description` (Use-when
+- [x] `spinup/SKILL.md` exists with `name`, `description` (Use-when
   trigger), `argument-hint` frontmatter — test: `claude plugin validate .`
   (test plan item 4).
-- [ ] `/spinup` dispatches to `/repo-conventions` and
+- [x] `/spinup` dispatches to `/repo-conventions` and
   `/1password-env-setup` per the Workflow section — test: manual dry run
   (test plan item 3).
-- [ ] `spinup/SKILL.md` pressure-tested via `superpowers:writing-skills`'s
+- [x] `spinup/SKILL.md` pressure-tested via `superpowers:writing-skills`'s
   RED-GREEN-REFACTOR subagent process — test plan item 2; pass recorded in
   the Closed section.
-- [ ] `README.md:97-117` skill table gets a `spinup` row (Task lifecycle &
+- [x] `README.md:97-117` skill table gets a `spinup` row (Task lifecycle &
   PR automation section) — test: `grep spinup README.md` (test plan item
   5).
