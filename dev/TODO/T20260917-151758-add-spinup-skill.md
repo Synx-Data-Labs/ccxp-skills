@@ -127,8 +127,8 @@ scheduled: 2026-09-14
 
 ## Closed (2026-09-19)
 
-Shipped in **PR #49** (design) + **PR #50** (implementation), claim
-landed in **PR #48**.
+Shipped in **[PR #49](https://github.com/Synx-Data-Labs/ccxp-skills/pull/49)** (design) + **[PR #50](https://github.com/Synx-Data-Labs/ccxp-skills/pull/50)** (implementation), claim
+landed in **[PR #48](https://github.com/Synx-Data-Labs/ccxp-skills/pull/48)**.
 
 - All four Done criteria met — see checked boxes above, each with its
   verification command/result inline.
@@ -150,7 +150,7 @@ landed in **PR #48**.
 - Systematic debugging (`superpowers:systematic-debugging`): no — never
   got stuck; no test kept failing after 2 attempts.
 - Receiving code review (`superpowers:receiving-code-review`): yes —
-  `/address-pr` §2.d ×2 (PR #48: 1 pushback with rationale on a
+  `/address-pr` §2.d ×2 ([PR #48](https://github.com/Synx-Data-Labs/ccxp-skills/pull/48): 1 pushback with rationale on a
   Test-Plan-section finding that applied to the wrong PR boundary; PR
   #49: 1 real finding fixed + 1 real finding addressed with a design
   clarification, both confirmed by two independent review passes).
@@ -171,7 +171,7 @@ landed in **PR #48**.
      reports;
   6. step 3's two sub-bullets read as mutually exclusive outcomes of
      one `check` run, when a real run can return both at once.
-  A second review pass on PR #50 (post-REFACTOR) found one more, a
+  A second review pass on [PR #50](https://github.com/Synx-Data-Labs/ccxp-skills/pull/50) (post-REFACTOR) found one more, a
   dead branch left by gap 1's fix — step 3's first bullet still named
   `CLAUDE.md` missing as a case it handles, even though step 2 already
   stops the workflow before step 3 can ever see that case — split into
