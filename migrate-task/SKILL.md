@@ -9,7 +9,7 @@ Move a task file — and its `dev/TODO/queue.md` entry — from the current
 repo's `dev/TODO/` to another repo's, landing the destination first and
 removing the source second (see [`## Solution`](../../dev/TODO/T20260827-201400-migrate-task-skill.md#solution)
 of the design task for full rationale). Distilled from
-T20260827-420045's by-hand migration (3 tasks, `synxdb-team` → `ccxp-skills`).
+T20260827-420045's by-hand migration (3 tasks, `hub-repo` → `ccxp-skills`).
 
 ## Argument
 
@@ -81,7 +81,7 @@ soup beyond the one optional preview flag.
   remove-then-add risks losing the task if the destination PR fails.
 - **`--dry-run` is the regression-check mechanism**, not a general preview
   toy — it's what validates this skill against T20260827-420045's
-  already-merged diffs ([#28](https://github.com/Synx-Data-Labs/ccxp-skills/pull/28), [#564](https://github.com/Synx-Data-Labs/synxdb-team/pull/564))
+  already-merged diffs ([#28](https://github.com/Synx-Data-Labs/ccxp-skills/pull/28), [#564](https://github.com/your-org/hub-repo/pull/564))
   without re-migrating anything.
 - **Pure logic lives in `scripts/migrate.sh`**, sourceable and BATS-tested
   (`tests/migrate_task.bats`, repo root): frontmatter get/delete, the

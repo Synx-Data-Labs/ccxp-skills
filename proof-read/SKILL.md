@@ -94,7 +94,7 @@ Cross-check the doc's coined terms and acronyms against the canonical glossary (
 
 #### g. Wall-of-text / bullet-preference check
 
-Soft-enforces the `synx-skills/engineering-standards.md` "Markdown writing style" convention (prefer bullets over long prose paragraphs) — a style preference, not a structural rule, so this check is always **Info**-severity and never blocks:
+Soft-enforces the `private-skills-repo/engineering-standards.md` "Markdown writing style" convention (prefer bullets over long prose paragraphs) — a style preference, not a structural rule, so this check is always **Info**-severity and never blocks:
 
 - For each paragraph (a run of prose lines with no list marker, heading, or code fence), count sentences.
 - Flag a paragraph as **Info** — "wall-of-text: N-sentence paragraph with no bullets — consider breaking into a list (see `engineering-standards.md` § Markdown writing style)" — when it exceeds **4 sentences** with zero list items within 3 lines above its first line or 3 lines below its last line (i.e. measured from the paragraph's own span, not a fixed point inside it).

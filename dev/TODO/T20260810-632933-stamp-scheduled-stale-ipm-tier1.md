@@ -16,7 +16,7 @@ related: T20260515-128802
 - **Note as of migration (2026-09-14)**: `_ipm/` now lives in `ccxp-skills`
   (post T20260827-280088 split) — re-verify the file's exact behavior/line
   numbers at pickup against this repo's copy, not the historical
-  `synxdb-team`-relative description above.
+  `hub-repo`-relative description above.
 
 ## Solution (not yet designed — sketch only)
 
@@ -35,8 +35,8 @@ related: T20260515-128802
 
 ## Migrated (2026-09-14)
 
-- Migrated from `synxdb-team/dev/TODO/` by T20260827-420045 — the task's
-  `target-repo: Synx-Data-Labs/synx-skills` field (set 2026-08-10, before
+- Migrated from `hub-repo/dev/TODO/` by T20260827-420045 — the task's
+  `target-repo: your-org/private-skills-repo` field (set 2026-08-10, before
   the ccxp-skills split shipped) is stale: `_ipm/` is now ccxp-skills' own
   shared lib, so this is "work about ccxp-skills itself" per that repo's
-  CLAUDE.md — landing here directly instead of `synx-skills`.
+  CLAUDE.md — landing here directly instead of `private-skills-repo`.

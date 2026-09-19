@@ -1,7 +1,7 @@
 ---
 status: Open
 estimation: 2h
-source: Discovered 2026-09-19 during a synxdb-build-pipeline autopilot run — bare /address-pr auto-pick never reached any of that session's own open PRs
+source: Discovered 2026-09-19 during a build-pipeline-repo autopilot run — bare /address-pr auto-pick never reached any of that session's own open PRs
 related: T20260622-404636 (PR ownership derivation — the mechanism this bug interacts with)
 ---
 
@@ -14,8 +14,8 @@ PR authored by us. If that PR's task is owned by another agent (or, per this ins
 via `owner: Ed` in the task frontmatter) and stays open indefinitely, auto-pick **defers silently
 and exits** every single invocation — it never falls through to the next-oldest PR.
 
-Concretely observed 2026-09-19 in `synxdb-build-pipeline`: PR
-[#1841](https://github.com/Synx-Data-Labs/synxdb-build-pipeline/pull/1841) (open since 2026-06-30,
+Concretely observed 2026-09-19 in `build-pipeline-repo`: PR
+[#1841](https://github.com/your-org/build-pipeline-repo/pull/1841) (open since 2026-06-30,
 `owned:Ed`) is the oldest open PR authored by us. `/drive`'s Phase 0 (which calls bare
 `/address-pr` once per cycle) checked it and deferred on 5+ separate autopilot cycles in a row
 (cycles 6-11 that day) — correctly, per the ownership guard — but never once reached any of the

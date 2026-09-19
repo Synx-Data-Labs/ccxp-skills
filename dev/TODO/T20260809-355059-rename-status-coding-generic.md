@@ -11,18 +11,18 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
 ## Problem
 
 - The TODO lifecycle's `status: Coding` value (`Open → Design → Coding → Review → Done`,
-  `synx-skills/lifecycle.md:70`) is a misnomer for the many tasks in this system that aren't
+  `private-skills-repo/lifecycle.md:70`) is a misnomer for the many tasks in this system that aren't
   code at all — legal filings, marketing audits, research write-ups. Concretely:
-  `task_claim.sh acquire` on [T20260529-651055](https://github.com/Synx-Data-Labs/synxdb-team/issues/187) (file IRS Form 8822-B) forced
+  `task_claim.sh acquire` on [T20260529-651055](https://github.com/your-org/hub-repo/issues/187) (file IRS Form 8822-B) forced
   `status: Coding` even though the only remaining step was printing and mailing a signed
-  form; had to hand-correct it back to `Review` in a follow-up PR (synxdb-team PR #471).
+  form; had to hand-correct it back to `Review` in a follow-up PR (hub-repo PR #471).
 - Leading replacement candidate discussed: **"In Progress"** — matches the term nearly every
   task tool (Jira, Linear, GitHub Projects, Trello) already uses for "someone's actively on
   this," reads correctly regardless of task domain. Runner-up if a single word matching the
   `Open`/`Design`/`Review`/`Done` style is preferred: **"Working"**. Ruled out: "Implementing"
   — still code-flavored, doesn't fix the actual problem.
 - Not a one-string find/replace — evidence from grepping all 4 repos that share these skills
-  (`synx-skills`, `synxdata.com`, `synxdb-team`, `synxdb-build-pipeline`):
+  (`private-skills-repo`, `example-website.com`, `hub-repo`, `build-pipeline-repo`):
   - **Script logic** hardcodes the literal `Coding` string in multiple places that must stay
     consistent with each other or the state machine breaks silently:
     - `_session/task_claim.sh:237,371,428` (case-statement branches: what counts as
@@ -31,7 +31,7 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
     - `_session/attribution.sh:182`, `_session/reclaim_sweep.sh:8,80`,
       `_session/_lib.sh:105,204` (all pattern-match on the literal status string)
     - `_ipm/ipm-iteration-drain-check.sh:11,28` (carry-over detection)
-  - **Docs** define/repeat the flow and must move together: `synx-skills/lifecycle.md` (the
+  - **Docs** define/repeat the flow and must move together: `private-skills-repo/lifecycle.md` (the
     canonical definition), `glossary.md`, `repo-conventions/templates/{guidelines,task,
     design-doc}.md`, `_session/README.md`, and the `SKILL.md` for `repo-conventions`, `todo`,
     `ccxp`, `drive`, `address-pr`, `gcpr`, `claim`, `retro` (each references the flow or the
@@ -44,11 +44,11 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
   - **Existing task files already at the old value** (as of 2026-08-09; `dev/JOURNAL/` is
     archival/exempt per `repo-conventions/SKILL.md:57` — leave those untouched, they're a
     point-in-time record):
-    - `synxdb-team/dev/TODO/`: 2 (`T20260806-240910`, `T20260609-543188`)
-    - `synxdb-build-pipeline/dev/TODO/`: 8 (`T20260806-179397`, `T20260508-415907`,
+    - `hub-repo/dev/TODO/`: 2 (`T20260806-240910`, `T20260609-543188`)
+    - `build-pipeline-repo/dev/TODO/`: 8 (`T20260806-179397`, `T20260508-415907`,
       `T20260419-238879`, `T20260608-240817`, `T20260629-416270`, `T20260622-007566`,
       `T20260428-679767`, `T20260604-530187`)
-    - `synx-skills/dev/TODO/`, `synxdata.com/dev/TODO/`: 0
+    - `private-skills-repo/dev/TODO/`, `example-website.com/dev/TODO/`: 0
   - **Note as of migration (2026-09-14)**: the script paths above (`_session/`, `_ipm/`) now
     live in `ccxp-skills` (post T20260827-280088 split) — re-verify the exact line numbers at
     pickup, they will have drifted since 2026-08-09.
@@ -57,7 +57,7 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
 
 1. Confirm the replacement term (default to "In Progress" absent objection).
 2. Enumerate every true status-enum reference across the repos that share these skills
-   (`ccxp-skills`, `synx-skills`, `synxdb-team`, `synxdb-build-pipeline`, `synxdata.com`) —
+   (`ccxp-skills`, `private-skills-repo`, `hub-repo`, `build-pipeline-repo`, `example-website.com`) —
    explicitly exclude the "Copilot Coding Agent" / Cloudflare false positives above.
 3. Update `ccxp-skills` first (source of truth for the shared script logic and skill docs
    post-split), plus `_session/tests/task_claim.bats` (and any other bats coverage asserting
@@ -69,7 +69,7 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
 
 ## Done when
 
-- Canonical name is decided and documented in `synx-skills/lifecycle.md` + the 3 templates
+- Canonical name is decided and documented in `private-skills-repo/lifecycle.md` + the 3 templates
   (now in `ccxp-skills/repo-conventions/templates/`).
 - All script logic listed above uses the new value consistently — a `grep -rn "Coding"` over
   `ccxp-skills/_session` and `_ipm` after the change returns only unrelated hits (Copilot
@@ -86,8 +86,8 @@ source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651
 
 ## Migrated (2026-09-14)
 
-- Migrated from `synxdb-team/dev/TODO/` by T20260827-420045 — the task's
-  `target-repo: Synx-Data-Labs/synx-skills` field (set 2026-08-09, before
+- Migrated from `hub-repo/dev/TODO/` by T20260827-420045 — the task's
+  `target-repo: your-org/private-skills-repo` field (set 2026-08-09, before
   the ccxp-skills split shipped) is stale: `_session/`/`_ipm/` are now
   ccxp-skills' own shared libs, so this is "work about ccxp-skills itself"
-  per that repo's CLAUDE.md — landing here directly instead of `synx-skills`.
+  per that repo's CLAUDE.md — landing here directly instead of `private-skills-repo`.

@@ -23,7 +23,7 @@ _mk_task_file() {
 estimation: 1h
 status: Open
 source: test fixture
-target-repo: Synx-Data-Labs/synx-skills
+target-repo: your-org/private-skills-repo
 ${extra}
 ---
 

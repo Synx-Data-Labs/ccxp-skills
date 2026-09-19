@@ -1,7 +1,7 @@
 ---
 status: Open
 estimation: 1h
-source: Retro 2026-09-18 (synxdb-build-pipeline) — Phase 4c skill quality review
+source: Retro 2026-09-18 (build-pipeline-repo) — Phase 4c skill quality review
 related: none yet — no existing task covers this
 ---
 
@@ -16,20 +16,20 @@ related: none yet — no existing task covers this
   the session's cwd is *inside a sibling directory of `ccxp` within the
   ccxp-skills checkout* (e.g. `ccxp-skills/todo/` → `../ccxp/scripts/...`
   finds `ccxp-skills/ccxp/scripts/...`).
-- On the `synxdb-build-pipeline` cron box (session
-  `-home-rocky-crontab-synxdb-build-pipeline`), a `/ccxp` session's actual
+- On the `build-pipeline-repo` cron box (session
+  `-home-ci-crontab-build-pipeline-repo`), a `/ccxp` session's actual
   Bash-tool cwd is the **target repo's root**
-  (`/home/rocky/crontab/synxdb-build-pipeline`), not anywhere inside the
+  (`/home/ci/crontab/build-pipeline-repo`), not anywhere inside the
   `ccxp-skills` checkout. Every `../ccxp/scripts/...` / `../_gh/gh.sh` /
   `../_session/...` reference in the doc resolves to a nonexistent path
-  from there (e.g. `../ccxp` → `/home/rocky/crontab/ccxp`, which doesn't
-  exist — the real location is `/home/rocky/ccxp-skills/ccxp`).
+  from there (e.g. `../ccxp` → `/home/ci/crontab/ccxp`, which doesn't
+  exist — the real location is `/home/ci/ccxp-skills/ccxp`).
 - **This was already known and worked around, but only in per-session
   memory, never fixed at the source**: a migrated memory file
   (`reference_skills_dir_actual_git_repo_path.md`, originally written in
-  the cron clone's now-stale `-home-rocky-focus-synxdb-build-pipeline`
+  the cron clone's now-stale `-home-ci-focus-build-pipeline-repo`
   memory pool, recovered and re-homed by this same retro) already
-  documents "pass `--skills-dir /home/rocky/ccxp-skills`" as the
+  documents "pass `--skills-dir /home/ci/ccxp-skills`" as the
   workaround for Phase 0's sync script specifically — but the underlying
   relative-path assumption is baked into essentially every script
   invocation across the whole `ccxp/SKILL.md` workflow, not just that one
@@ -39,7 +39,7 @@ related: none yet — no existing task covers this
 - **Cost observed today**: every single script call in a full `/ccxp` run
   (standup, nightly RCA, IPM-adjacent checks, retro) needed the relative
   path manually substituted for an absolute one
-  (`/home/rocky/ccxp-skills/<skill>/...`) discovered by trial and error at
+  (`/home/ci/ccxp-skills/<skill>/...`) discovered by trial and error at
   session start, rather than working as documented.
 
 ## What "done" looks like

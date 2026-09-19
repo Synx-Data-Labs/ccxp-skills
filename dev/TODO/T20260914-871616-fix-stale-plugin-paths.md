@@ -11,13 +11,13 @@ scheduled: 2026-09-14
 
 - **Type**: bug
 - `~/.claude/settings.json`'s `SessionStart` hook still runs
-  `bash /home/rocky/.claude/skills/_gh/auto-switch.sh` — a path that only
+  `bash /home/ci/.claude/skills/_gh/auto-switch.sh` — a path that only
   exists under the old symlink-install layout (`scripts/install.sh`
   linking each skill into `~/.claude/skills/`). Every session start prints
-  `bash: /home/rocky/.claude/skills/_gh/auto-switch.sh: No such file or
+  `bash: /home/ci/.claude/skills/_gh/auto-switch.sh: No such file or
   directory`.
 - `~/.claude/settings.json`'s `statusLine.command` has the same problem —
-  `bash /home/rocky/.claude/skills/statusline-setup/scripts/statusline-command.sh`
+  `bash /home/ci/.claude/skills/statusline-setup/scripts/statusline-command.sh`
   doesn't exist either, so the statusline silently goes blank.
 - Root cause: this repo switched to Claude Code **plugin** distribution
   (`.claude-plugin/plugin.json`, `"skills": "."`) per T20260914-234656's
@@ -67,7 +67,7 @@ scheduled: 2026-09-14
 - This machine's `~/.claude/settings.json`: removed the dangling
   `SessionStart` hook entry (superseded by `hooks/hooks.json` once the
   plugin cache picks up the merged change) and repointed
-  `statusLine.command` at `/home/rocky/ccxp-skills/statusline-setup/scripts/statusline-command.sh`
+  `statusLine.command` at `/home/ci/ccxp-skills/statusline-setup/scripts/statusline-command.sh`
   (this machine's marketplace is a `directory` source pointing straight at
   the live repo, so this path is stable here). Smoke-tested: the script
   runs and prints a normal statusline.

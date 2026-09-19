@@ -1,7 +1,7 @@
 ---
 status: Done
 estimation: 1h
-source: consumer-repo session (pointer, 75033us/pointer), 2026-09-16 — /stage's own `git push -u origin` failed with "Repository not found" because the loaded SSH key belonged to a different gh-authenticated account than the one `gh auth switch` had already selected
+source: consumer-repo session (pointer, your-org/consumer-repo), 2026-09-16 — /stage's own `git push -u origin` failed with "Repository not found" because the loaded SSH key belonged to a different gh-authenticated account than the one `gh auth switch` had already selected
 scheduled: 2026-09-14
 description: auto-switch.sh also wires local git credential.helper + url.insteadOf, so bare git push/pull/fetch stop depending on the SSH agent
 ---
@@ -16,10 +16,10 @@ description: auto-switch.sh also wires local git credential.helper + url.instead
   identity are two **independent** auth paths. Fixing the former says
   nothing about the latter.
 - Observed failure: `gh auth status` showed the correct account
-  (`75033us`) active in a consumer repo, yet `git push -u origin
+  (`<consumer-account>`) active in a consumer repo, yet `git push -u origin
   <branch>` failed with `ERROR: Repository not found` — `ssh -T
   git@github.com` proved the loaded SSH key actually belonged to a
-  different account (`xinzweb`) with no access to that repo.
+  different account (`<owner-account>`) with no access to that repo.
 - Every skill that does a bare `git push`/`pull`/`fetch` (`stage`,
   `gcpr`, `top`, `bottom`, `claim`, `retro`, …) was silently exposed to
   this — none of them route through `_gh/gh.sh` (which only fixes calls
@@ -56,8 +56,8 @@ description: auto-switch.sh also wires local git credential.helper + url.instead
   Extending the existing `SessionStart` hook fixes every bare call
   automatically, matching its own stated purpose ("the only lever
   available to fix a *bare*, unwrapped call").
-- Verified end-to-end against a real repo (`75033us/pointer`): rewired
-  local git config + `gh auth switch --user 75033us`, then `git ls-remote`
+- Verified end-to-end against a real repo (`your-org/consumer-repo`): rewired
+  local git config + `gh auth switch --user <consumer-account>`, then `git ls-remote`
   (via `GIT_TRACE=1`) confirmed HTTPS transport + `gh auth
   git-credential`, and a real `git push` succeeded with no SSH key
   involved.
@@ -65,8 +65,8 @@ description: auto-switch.sh also wires local git credential.helper + url.instead
   itself**: `_auto_switch_run()`'s own account check
   (`gh api "repos/$org_repo" --silent`) is read-liveness only, same as
   `_gh_pick_account()` in `_gh/gh.sh` — see T20260911-140914. On this
-  machine, `75033us` passed that check (org-member read access to
-  `Synx-Data-Labs/ccxp-skills`) but `git push` still 403'd; `xinzweb` (the
+  machine, `<consumer-account>` passed that check (org-member read access to
+  `Synx-Data-Labs/ccxp-skills`) but `git push` still 403'd; `<owner-account>` (the
   actual write-access account) had to be selected manually. This task's
   git-credential wiring inherits whichever account `_auto_switch_run`
   picks — it does not fix the underlying picker; that's T20260911-140914's
@@ -95,5 +95,5 @@ description: auto-switch.sh also wires local git credential.helper + url.instead
 
 ## Closed
 
-- Shipped alongside the fix in `75033us/pointer`'s own `/stage` PR
+- Shipped alongside the fix in `your-org/consumer-repo`'s own `/stage` PR
   (#122), which is what surfaced this gap.

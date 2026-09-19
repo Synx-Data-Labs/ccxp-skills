@@ -25,7 +25,7 @@ scheduled: 2026-09-14
   - `claude/vibrant-carson-x9yiee`, `t20260911-347027-file-task`,
     `t20260912-279229-grill-me-pre-ipm` — all landed
 - **Two of four commits on `main` show as Unverified**: `890c1ce` and
-  `2afef98` carry `committer = Shine Love Jean <723898+xinzweb@…>` rather than
+  `2afef98` carry `committer = Shine Love Jean <…@users.noreply.github.com>` rather than
   `noreply@anthropic.com`. The other two already use the right pattern
   (author = human, committer = Claude).
 
