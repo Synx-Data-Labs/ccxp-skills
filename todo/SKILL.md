@@ -137,7 +137,7 @@ A true P0 — production down, customer-blocked, security incident — preempts 
 
 ## Workflow: `sweep`
 
-Clean up the TODO backlog: sync the queue, fix stale blockers, then prune. Unlike `list`/`next` (which only report), `sweep` modifies files.
+Clean up the TODO backlog: sync the queue, fix stale blockers, then prune. Unlike `list`/`next` (which only report), `sweep` modifies files. **Phases 1, 2, and Phase 3's auto-close step all act without asking** — they're mechanical (membership sync, stale-blocker resolution, ordering) or unambiguous (a task already marked `Done`, or already pointed at its superseding task). The **only** point where `sweep` stops and asks is Phase 3's Park recommendation — a move between `dev/TODO/` and `dev/PARKING/` is a judgment call about whether work is still worth tracking, so it always gets user sign-off first.
 
 ### Phase 1: Sync `queue.md` with `dev/TODO/`
 
@@ -148,6 +148,8 @@ Clean up the TODO backlog: sync the queue, fix stale blockers, then prune. Unlik
 This is pure membership sync — it never reorders an existing, still-valid line.
 
 ### Phase 2: Fix stale blockers + enforce blocker ordering
+
+Fully automatic — no approval needed. Resolving a stale blocker is reading a fact off the filesystem (does T{id} still exist in `dev/TODO/`?), and enforcing topological order is mechanical once a violation is found.
 
 1. For each task with status containing `Blocked by T{id}` (treat as prefix — status may have trailing notes like `— waiting on X`):
    - Check whether T{id} exists in `dev/TODO/`.
@@ -162,35 +164,37 @@ This is pure membership sync — it never reorders an existing, still-valid line
 
 ### Phase 3: Prune the backlog
 
-**Goal: keep the backlog actionable — consolidate related work, close superseded tasks, park indefinitely-blocked items. Never skip chores — consolidate them instead.**
+**Goal: keep the backlog actionable — auto-close finished/superseded work, ask before parking anything blocked or stale.** No task merging: two related tasks stay two tasks — a prior "Consolidate" recommendation was dropped because merging didn't reduce real work, it just added bookkeeping.
 
-1. Score each task for prune-worthiness using these signals (any match = candidate):
-   - **Superseded**: task mentions another task that covers the same scope (e.g. "absorbed by T{id}"), or the work has already been done
-   - **Blocked indefinitely**: blocked by an external dependency (upstream team, infrastructure) with no ETA
-   - **Revisit**: already in `Revisit` status — belongs in parking lot, not active backlog
-   - **Consolidatable**: two or more related tasks that share a theme (e.g. "bake X into container" + "bake Y into container") — merge into one. Keep bite-sized (≤ 4h); don't create mega-tasks.
+**Step A — auto-close (no approval needed):**
+
+These two signals require no judgment call — reading a status flag or an explicit cross-reference, not an interpretation:
+
+- **Done**: `status: Done` but the file is still sitting in `dev/TODO/` (should have moved when it was marked Done — this just catches up).
+- **Superseded**: task mentions another task that covers the same scope (e.g. "absorbed by T{id}"), or the work has already been done.
+
+For each: add `## Closed (YYYY-MM-DD)` with a pointer (the covering task/PR, or "marked Done" for the Done signal), `git mv dev/TODO/{file} dev/JOURNAL/yyyy-mm-dd-{file}`, and remove its line from `queue.md`. Report what was closed — git history makes every move revertable, so there's no need to gate this behind approval.
+
+**Step B — ask before parking:**
+
+1. Score remaining tasks for park-worthiness:
+   - **Blocked indefinitely**: blocked by an external dependency (upstream team, infrastructure) with no ETA.
+   - **Revisit**: already in legacy `Revisit` status — belongs in the parking lot, not active backlog.
 
 2. Present candidates in a table:
 
 ```
-| ID(s) | Title(s) | Signal | Recommendation |
-|-------|----------|--------|----------------|
+| ID | Title | Signal | Recommendation |
+|----|-------|--------|-----------------|
 ```
 
-Recommendations are one of:
+Recommendation is always **Park** — move to `dev/PARKING/`.
 
-- **Park** — not actionable now but worth revisiting. Move to `dev/PARKING/`.
-- **Close** — superseded or already done. Move to `dev/JOURNAL/` with a pointer to the covering task/PR.
-- **Consolidate** — merge N related tasks into one new task in `dev/TODO/`. Move originals to `dev/JOURNAL/` pointing to new task. New task gets the most advanced status of the group and sets estimation to the nearest allowed bucket at or above the summed estimate, capped at `4h` (allowed: `15m`, `30m`, `1h`, `2h`, `4h`).
+3. **Ask the user for approval** before acting. The user may override individual recommendations. This is the one step in `sweep` that always waits for a human: moving something out of the active backlog (even to the parking lot, not JOURNAL) is a call about whether it's still worth tracking, not a fact `sweep` can read off the file.
 
-3. **Ask the user for approval** before acting. The user may override individual recommendations.
+4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md` — in the same commit, so `queue.md` never drifts out of sync with what Phase 3 just did.
 
-4. For approved actions — each one also updates `queue.md` in the same commit, so it never drifts out of sync with what Phase 3 just did:
-   - **Park**: Update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task file body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md`.
-   - **Close**: Add `## Closed (YYYY-MM-DD)` with pointer, `git mv dev/TODO/{file} dev/JOURNAL/yyyy-mm-dd-{file}`, and remove its line from `queue.md`.
-   - **Consolidate**: Create one new task combining scope (with `## Consolidated from` listing originals). Move originals to `dev/JOURNAL/` pointing to new task. Remove the originals' lines from `queue.md` and add one new line for the consolidated task at the position of the topmost original (preserves the group's relative priority).
-
-5. Show final summary: queue sync (Phase 1) + blockers fixed (Phase 2) + tasks pruned (Phase 3) + remaining open count + parking lot count.
+5. Show final summary: queue sync (Phase 1) + blockers fixed (Phase 2) + tasks auto-closed (Step A) + tasks parked (Step B) + remaining open count + parking lot count.
 
 ### Parking Lot (`dev/PARKING/`)
 
