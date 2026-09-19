@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Done
 estimation: 30m
 source: this conversation, 2026-09-14
 ---
@@ -21,3 +21,13 @@ source: this conversation, 2026-09-14
   prune recommendations — the "Consolidatable" signal, the "Consolidate" recommendation
   row, and its step-4 procedure are removed; the recommendation table and any other text
   referencing "Consolidate"/"consolidation" are updated to match the two-option shape.
+
+## Closed (2026-09-18)
+
+Done, folded into a broader sweep-automation pass (this conversation,
+2026-09-18): `todo/SKILL.md` Phase 3 dropped the "Consolidatable" signal and
+"Consolidate" recommendation entirely — remaining recommendations are
+**auto-close** (Done, Superseded — no approval needed) and **Park**
+(Blocked indefinitely, Revisit — still asks for approval). Also fixed the
+stale "Phase 2 — park/close/consolidate" reference in `ccxp/SKILL.md`'s
+daily housekeeping section to match.
