@@ -21,7 +21,7 @@ Example usage (illustrative, not the only options):
 |------|---------|---------|---------|
 | *(none — default)* | `#slack-automation-alerts` | `SLACK_WEBHOOK_URL` | Automation alerts, build notifications, testing |
 | `cloud` | `#acme-cloud` | `SLACK_WEBHOOK_URL_CLOUD` | Release announcements only — use sparingly |
-| `dev` | `#claude-notification` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use, MCP is still the default path for this channel |
+| `dev` | `#claude-notification` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* `/autopilot`'s Phase 5 stop-summary (`autopilot/SKILL.md`), which is intentionally routed here; MCP is still the default path for every other use of this channel |
 
 ## Argument
 
