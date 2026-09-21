@@ -80,7 +80,7 @@ Needs your attention:
 1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
 2. **Done** lists only what actually merged this run. **Needs your attention** applies the same **Needs-your-attention filter** as Phase 0 (see Important Notes) — a Stuck task still mid-backoff when `elapsed` fired always qualifies (that's the definition of Stuck: no skill resolved it); a merely-open PR or a task `Blocked by T{id}` does not, since a fresh `/autopilot`/`/drive` invocation drains/recurses into those automatically — omit them even though the run has stopped. For the `queue-empty` stop reason this is usually "Nothing outstanding". The tally isn't guaranteed to survive a `ScheduleWakeup` resume — reconstruct what you can from this conversation's history, but don't claim precision it can't back up.
 3. Update the state file (see § State file): `status: "stopped"`, `stop_reason: <reason>`. Leave `stuck_count`/`cycle_count`/`last_*` at whatever Phase 4 (or the `queue-empty` branch) last set — this is what makes the report reconstructible by a later `/autopilot status` even after this conversation is gone.
-4. Post the report to `/slack` (no `--channel` — the default automation-alerts channel is exactly for this).
+4. Post the report to `/slack --channel dev` (`#claude-notification` — not the default automation-alerts channel).
 5. Report the same template, filled in the same way, to the user in this turn's response.
 
 ## Important Notes
@@ -102,6 +102,6 @@ Needs your attention:
 
 - `/drive` — does all the actual task-selection/implementation/merge work, once per cycle
 - `/ccxp` — the full ritual-aware orchestrator this skill deliberately does not replace
-- `/slack` — posts the stop summary
+- `/slack` — posts the stop summary (`--channel dev`, i.e. `#claude-notification`)
 - `superpowers` `ScheduleWakeup` — the resume mechanism between cycles
 - `dev/.autopilot-state.json` — this skill's own gitignored state file (§ State file), read by Phase 0's `status` report
