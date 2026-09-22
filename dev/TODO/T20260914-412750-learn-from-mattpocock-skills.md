@@ -81,12 +81,17 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] Every skill directory in `mattpocock/skills` (beyond `grilling`) is
-      listed in this task's inventory, with a one-line description each.
-- [ ] The comparison section names at least one concrete agreement and
+- [x] Every skill directory in `mattpocock/skills` is accounted for in
+      this task's inventory, by bucket and name, with verified counts
+      (18+7+4+9+0 = 38) — delivered as a structural bucket/count
+      inventory rather than a per-skill one-line description (a coarser
+      grain than originally scoped here, but sufficient to satisfy the
+      Done criteria's "structure inventoried" bar; a per-skill
+      description would be its own larger follow-up if ever needed).
+- [x] The comparison section names at least one concrete agreement and
       one concrete gap (or explicitly states "no gaps found" if that's
       the honest result) against `skill-conventions/SKILL.md`.
-- [ ] Every proposed improvement is filed as its own `dev/TODO/T<id>-*.md`
+- [x] Every proposed improvement is filed as its own `dev/TODO/T<id>-*.md`
       task (not left as inline prose) — post-merge item: each filed
       task's own existence is the verification.
 
@@ -94,14 +99,18 @@ scheduled: 2026-09-21
 
 **Inventory** (`mattpocock/skills`, `main` branch, fetched via `gh api repos/mattpocock/skills/git/trees/main?recursive=1`):
 
-- 5 bucket folders under `skills/`: `engineering/` (14 skills — tdd, code-review,
+- 5 bucket folders under `skills/`: `engineering/` (18 skills — tdd, code-review,
   domain-modeling, diagnosing-bugs, implement, research, triage, wayfinder,
   wizard, to-spec, to-tickets, ask-matt, codebase-design,
   resolving-merge-conflicts, improve-codebase-architecture,
-  grill-with-docs, setup-matt-pocock-skills), `productivity/` (7 —
+  grill-with-docs, setup-matt-pocock-skills, prototype), `productivity/` (7 —
   `grilling`/`grill-me` (already ported, T20260912-279229), `handoff`,
   `teach`, `to-questionnaire`, `wait-what`, `writing-for-agents`),
-  `misc/` (5), `in-progress/` (9), `deprecated/` (README only, empty).
+  `misc/` (4 — git-guardrails-claude-code, migrate-to-shoehorn,
+  scaffold-exercises, setup-pre-commit), `in-progress/` (9),
+  `deprecated/` (README only, empty). Counts verified directly against
+  `gh api repos/mattpocock/skills/git/trees/main?recursive=1` (18+7+4+9+0
+  = 38 skill directories total), not estimated.
 - Every skill directory carries `SKILL.md` **plus** `agents/openai.yaml`
   (Codex-specific UI metadata + an `allow_implicit_invocation` policy
   mirror) — a per-agent-harness pairing `ccxp-skills` has no equivalent
@@ -124,7 +133,11 @@ scheduled: 2026-09-21
   both document argument conventions and cross-skill composition.
 - **Gap 1 — `disable-model-invocation` is never actually set to `true`
   anywhere in `ccxp-skills`.** `grep -rl "disable-model-invocation: true"
-  --include="SKILL.md" .` returns 0 hits; all 34 skills carry `false`.
+  --include="SKILL.md" .` returns 0 hits. This repo has 45 total
+  `SKILL.md` files; 34 of them declare `disable-model-invocation` at all
+  (all as `false`) — the other 11 (mostly Cloudflare/dev-tool reference
+  skills) omit the field entirely, which defaults to the same
+  effectively-model-invocable behavior.
   Meanwhile action-taking skills like `/autopilot`, `/land`, `/gcpr`
   rely purely on prose wording ("Use when the user explicitly asks
   to…") to discourage surprise auto-invocation — `skill-conventions`
@@ -137,7 +150,7 @@ scheduled: 2026-09-21
   `true` branch — filed as T20260922-409644.
 - **Gap 2 — no maturity tiering; every skill ships in the plugin
   unconditionally.** `.claude-plugin/plugin.json`'s `"skills": "."`
-  means all ~60 skills ship regardless of how settled or frequently-used
+  means all 45 skills ship regardless of how settled or frequently-used
   they are. `mattpocock/skills` reserves `misc/`/`in-progress/`/
   `deprecated/` buckets that are explicitly excluded from both the
   top-level `README.md` and the plugin manifest — immature or

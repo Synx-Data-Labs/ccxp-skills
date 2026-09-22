@@ -31,7 +31,7 @@ description: Scope whether ccxp-skills should adopt a maturity tier (promoted vs
 ## Context
 
 - Discovered via T20260914-412750's research pass. `ccxp-skills` currently
-  has ~60 skills at the flat repo root (no bucket subdirectories) — several
+  has 45 skills at the flat repo root (no bucket subdirectories) — several
   visibly still-settling ones exist in the current `dev/TODO/` backlog
   (e.g. skill-authoring cleanup tasks), suggesting some skills here would
   plausibly qualify as "in-progress" under this scheme today.
