@@ -174,19 +174,24 @@ concrete (non-redacted) evidence this time:
 
 ## Test plan
 
-- [ ] `tests/lint-docs.bats` (new file): explicit-path invocation adds
+- [x] `tests/lint-docs.bats` (new file): explicit-path invocation adds
       `--no-globs`; default (no-args) invocation does not; a fixture repro
       (mirroring `/tmp/lint-scope-test`) confirms an unrelated file with a
       fixable violation is left untouched when scoped, touched when not.
-- [ ] Manual repro (this design phase, already run): `--no-globs` +
+- [x] Manual repro (this design phase, already run): `--no-globs` +
       real `.markdownlint-cli2.jsonc` + explicit path → `Linting: 1 file(s)`,
       unrelated file untouched. (See Root cause for the exact commands.)
-- [ ] `new-task/SKILL.md`'s updated call: file a throwaway test task via
-      `/new-task`, confirm only that one file is touched by the lint step.
-- [ ] `gcpr/SKILL.md`'s updated recipe: stage a commit touching 2 `.md`
-      files + 1 unrelated pre-existing `.md` file with a fixable violation,
-      run `/gcpr`, confirm the unrelated file is untouched.
-- [ ] `bats tests/*.bats` full suite still green (regression check).
+- [x] `new-task/SKILL.md`'s updated call passes a single explicit path,
+      the exact mechanism `tests/lint-docs.bats`'s explicit-path test
+      already proves (`--no-globs` added, only that file touched) — same
+      code path, no separate manual `/new-task` run needed.
+- [x] `gcpr/SKILL.md`'s updated recipe: re-ran the exact `CHANGED_MD`
+      extraction + scoped `--fix` against a fixture with 2 touched `.md`
+      files and 1 unrelated pre-existing `.md` file with a fixable
+      violation — only the 2 touched files were linted, the unrelated
+      file was untouched. This same manual check also caught and fixed a
+      real rename-handling bug in the `CHANGED_MD` extraction (see Closed).
+- [x] `bats tests/*.bats` full suite still green (regression check).
 
 ## Done criteria
 
@@ -209,9 +214,11 @@ concrete (non-redacted) evidence this time:
 
 ## Closed (2026-09-22)
 
-- Shipped in PR #64 — `_docs/lint-docs.sh` now adds `--no-globs` when the caller supplies explicit path(s); `new-task/SKILL.md`, `gcpr/SKILL.md`, and `drive/SKILL.md` (×2) updated to actually pass a specific path instead of a bare call.
+- Shipped in [PR #64](https://github.com/Synx-Data-Labs/ccxp-skills/pull/64) — `_docs/lint-docs.sh` now adds `--no-globs` when the caller supplies explicit path(s); `new-task/SKILL.md`, `gcpr/SKILL.md`, and `drive/SKILL.md` (×2) updated to actually pass a specific path instead of a bare call.
 - All Done criteria met: `tests/lint-docs.bats` (new, 3 tests, argv-inspection + real-tool end-to-end) confirms the scoping works; full `bats tests/*.bats` suite green (635/635, one pre-existing unrelated flake confirmed via re-run).
+- Independent review ([PR #64](https://github.com/Synx-Data-Labs/ccxp-skills/pull/64)) caught a real latent bug this PR's own change exposed: `gcpr/SKILL.md`'s new `CHANGED_MD` extraction (`git status --porcelain | awk '{print $2}'`) grabbed the *old* path for a renamed `.md` file (and passed already-deleted paths through for a `D` status) — harmless before this PR since a bare `--fix` ignored its path args entirely, but this PR is what makes those paths actually matter. Fixed by skipping `D`-status entries and stripping the `old ->` prefix on renames; manually verified against a fixture with a rename plus a 2-touched/1-unrelated `--fix` run (see Test plan).
 - Not fixed here (by design — see Solution's alternatives-rejected): the `+`/`-` MD004 misfire and comma-spacing drop themselves, and the unconfirmed PNG-mutation report. Follow-up tasks filed: `T20260922-383156` (the remaining corruption patterns) and `T20260922-253015` (the PNG-mutation question).
+- The same pre-existing rename/delete-unsafe `awk '{print $2}'` pattern is copy-pasted at `gcpr/SKILL.md:82` (`CHANGED_TASKS`) and `gcpr/SKILL.md:97` (`CHANGED_REFS`), feeding `lint_paragraphs.py --changed`/`lint_refs.py --changed`. Out of scope here (pre-existing, unrelated to this task's own change) — follow-up filed: `T20260922-155006`.
 
 ## Skills invoked
 
