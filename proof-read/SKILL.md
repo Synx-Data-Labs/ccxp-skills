@@ -157,7 +157,7 @@ figure heading rather than diffing every occurrence.)
   the pair of its endpoints (`(2, 5)`), never decomposed into two separate single-figure entries.
   (Decomposing a range would let it spuriously "match" unrelated single references to its
   endpoint numbers elsewhere in the section.)
-- Within each section already aligned by (4a), build the **multiset** of CN reference entries and
+- Within each section already aligned by (a), build the **multiset** of CN reference entries and
   the multiset of EN reference entries — order-independent, duplicates counted (two separate
   "Figure 3" mentions count as two entries of that value).
 - **Compare the two multisets, not a positional pairing** — prose can legitimately reorder figure
@@ -168,9 +168,19 @@ figure heading rather than diffing every occurrence.)
   reference always shows up as an unequal multiset:
   - **Equal multisets** — no flag, regardless of order.
   - **Unequal multisets** — **Error**: "figure-reference number mismatch in this section: CN
-    cites `{<CN multiset>}` (e.g. line N), EN cites `{<EN multiset>}` (e.g. line M) — sets don't
-    match." Cite one representative line per side — the first occurrence of a value/range present
-    on only one side.
+    cites `{<CN multiset>}` (e.g. line N), EN cites `{<EN multiset>}` (e.g. line M) — multisets
+    don't match." Cite one representative line per side: the first occurrence of a value/range
+    present on only one side, or — when every value is present on both sides but at a different
+    *multiplicity* (e.g. CN cites Fig. 3 three times, EN twice) — the first occurrence of that
+    value on each side, noting the count difference explicitly in the finding text.
+- **Known limitation**: a mistranslation that swaps content between two figures while leaving the
+  section's overall multiset unchanged (e.g. both sides cite `{2, 3}`, but attached to swapped
+  sentences) will not be flagged by this check. This is an accepted cost of fixing the positional
+  version's reordering false-positives, not an oversight — contrary to this skill's general
+  "prefer false positives over false negatives" philosophy, but the alternative (positional
+  pairing) produced false positives on ordinary, correct translations, which is worse in
+  practice. No other Mode B check covers this residual case either; a future check specifically
+  for cross-language figure-content-swap detection is out of scope here.
 
 ### 5. Emit findings report
 
