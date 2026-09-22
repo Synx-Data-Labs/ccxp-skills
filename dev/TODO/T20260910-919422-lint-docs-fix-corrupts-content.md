@@ -74,10 +74,14 @@ concrete (non-redacted) evidence this time:
   flagged all 7 corrupted lines by cross-referencing against `origin/main`'s actual
   content — none of it was caught by the tool itself or by the author before review.
   All 7 reverted before merge (`75033us/lsc-pa#29`).
-- This confirms the bug is not a one-off from the 2026-09-10 session — it's a real,
-  reproducible defect in `markdownlint-cli2 --fix`'s handling of leading `+` (and
-  apparently also inter-word comma spacing) that will keep silently corrupting
-  permanent JOURNAL records in every consumer repo until fixed.
+- This confirms the `+` → `-` bug is not a one-off from the 2026-09-10 session — it's
+  a real, reproducible defect in `markdownlint-cli2 --fix`'s handling of a leading `+`
+  that will keep silently corrupting permanent JOURNAL records in every consumer repo
+  until fixed. The comma-spacing drop is a separate, so-far-unexplained observation
+  from the same lint pass — not yet confirmed to share a root cause with the `+`/`-`
+  flip (comma-spacing normalization isn't a documented markdownlint-cli2/MD004
+  behavior); flag it as a second symptom to investigate during the design phase,
+  not an established fact.
 
 ## Root cause candidates (not yet confirmed — for the design phase)
 
