@@ -48,6 +48,37 @@ claimed_role: interactive
   unintended file changes before committing the actual task file being filed
   there.
 
+## Confirmed recurrence (2026-09-22, lsc-pa repo)
+
+Same failure mode hit again in a second, unrelated consumer repo (`75033us/lsc-pa`,
+via `/gcpr`'s doc-lint guard step during an unrelated task-parking commit), with full
+concrete (non-redacted) evidence this time:
+
+- **Same `+` → `-` corruption, 5 confirmed instances, 3 files** (all wrapped-continuation
+  prose lines beginning with a literal `+` meaning "and/plus", none of them list items):
+  - `dev/JOURNAL/T20260714-963726-training-tutorial-md-content.md:33`: `+ PDF)` → `- PDF)`
+  - `dev/JOURNAL/T20260905-058581-sunday-0906-service-pptx.md:104`: `+ \`.rels\`)` → `- \`.rels\`)`
+  - `dev/JOURNAL/T20260916-807752-sunday-0920-lyrics-mix.md:133,221,234`: three instances,
+    same pattern
+- **New variant, not previously documented**: dropped the space after a comma in 2 more
+  lines (not a `+`/`-` flip, but the same "fix" pass touching content it shouldn't):
+  - `dev/JOURNAL/T20260409-655304-skill-reorg.md:14`: `*.lyrics.md,*.service.md` (space
+    stripped from `*.lyrics.md, *.service.md`)
+  - `dev/JOURNAL/T20260717-493786-highlight-reel-skill.md:108`: `_013.mp4,_014.mp4` (space
+    stripped from `_013.mp4, _014.mp4`)
+- **Scope-mismatch also reconfirmed**: this run was meant to accompany a single-file
+  task-parking commit but touched ~45 unrelated pre-existing `dev/JOURNAL`/`dev/TODO`
+  files repo-wide, matching this task's existing "always lints repo-wide" finding.
+- **How it was caught this time**: an independent review agent (dispatched per
+  `address-pr/SKILL.md` step d, given only the PR diff and no implementation context)
+  flagged all 7 corrupted lines by cross-referencing against `origin/main`'s actual
+  content — none of it was caught by the tool itself or by the author before review.
+  All 7 reverted before merge (`75033us/lsc-pa#29`).
+- This confirms the bug is not a one-off from the 2026-09-10 session — it's a real,
+  reproducible defect in `markdownlint-cli2 --fix`'s handling of leading `+` (and
+  apparently also inter-word comma spacing) that will keep silently corrupting
+  permanent JOURNAL records in every consumer repo until fixed.
+
 ## Root cause candidates (not yet confirmed — for the design phase)
 
 - `markdownlint-cli2 --fix`'s ul-style normalization (likely MD004) treating a
