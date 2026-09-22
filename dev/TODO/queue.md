@@ -27,3 +27,4 @@ reprioritize.
 - [T20260918-174144](T20260918-174144-skill-logic-to-scripts-convention.md): Document convention: move deterministic skill logic into bundled scripts
 - [T20260919-266165](T20260919-266165-address-pr-autopick-stalls-behind-permanently-blocked-oldest-pr.md): `/address-pr`'s bare auto-pick silently stalls forever behind a permanently-blocked oldest PR
 - [T20260919-231319](T20260919-231319-lint-internal-identifiers-pre-merge.md): Catch internal identifiers before they reach the public repo
+- [T20260922-195629](T20260922-195629-autopilot-waiting-outcome-ambiguity.md): Clarify whether `/autopilot`'s `WAITING` outcome is ever reachable from a bare `/drive` dispatch
