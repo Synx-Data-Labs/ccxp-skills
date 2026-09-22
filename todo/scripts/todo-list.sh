@@ -28,8 +28,9 @@ function todo-list-main() {
   local -A status_counts=()
   local total=0 claimed_mine=0 claimed_peers=0 committed=0
   local pos=0 line parsed id relpath title task_file status est deadline scheduled claim claimed_col
-  local this_monday
-  this_monday="$(date -d 'monday' +%F 2>/dev/null || date -v-monday +%F 2>/dev/null || printf '')"
+  local this_monday today
+  this_monday="$(todo-current-monday)"
+  today="${SESSION_TODAY:-$(date +%F)}"
 
   while IFS= read -r line; do
     parsed="$(todo-parse-queue-line "$line")" || continue
@@ -60,12 +61,17 @@ function todo-list-main() {
       reclaimable:*) claimed_col="${claim#reclaimable:}"; claimed_peers=$((claimed_peers+1)) ;;
     esac
 
-    if [ -n "$scheduled" ] && [ -n "$this_monday" ] && [[ "$scheduled" > "$this_monday" || "$scheduled" == "$this_monday" ]]; then
+    local deadline_col="$deadline" scheduled_col="$scheduled"
+    if [ -n "$deadline" ] && [[ "$deadline" < "$today" ]]; then
+      deadline_col="$deadline ⚠"
+    fi
+    if [ -n "$scheduled" ] && [[ "$scheduled" > "$this_monday" || "$scheduled" == "$this_monday" ]]; then
       committed=$((committed+1))
+      scheduled_col="$scheduled ✓"
     fi
 
     printf '| %d | %s | %s | %s | %s | %s | %s | %s |\n' \
-      "$pos" "$id" "$title" "$status" "$est" "$deadline" "$scheduled" "$claimed_col"
+      "$pos" "$id" "$title" "$status" "$est" "$deadline_col" "$scheduled_col" "$claimed_col"
 
     if [[ "$status" =~ ^Blocked\ by\ (T[0-9-]+) ]]; then
       local blocker_id="${BASH_REMATCH[1]}"
@@ -73,6 +79,22 @@ function todo-list-main() {
         printf 'stale blocker: %s is Blocked by %s, which is no longer in dev/TODO/ — run /todo sweep\n' "$id" "$blocker_id"
       fi
     fi
+
+    # SKILL.md step 4 also scans body "## Dependencies"-style sections for
+    # stale T{id} references, not just the frontmatter status line — scoped
+    # to just that section (not the whole file) to avoid flagging every
+    # casual T-id mention (a `related:` field, prose referencing history).
+    local dep_id
+    while IFS= read -r dep_id; do
+      [ -n "$dep_id" ] || continue
+      if ! compgen -G "$TODO_DIR/${dep_id}-*.md" > /dev/null 2>&1; then
+        printf 'stale dependency reference: %s references %s, which is no longer in dev/TODO/ — run /todo sweep\n' "$id" "$dep_id"
+      fi
+    done < <(awk '
+      /^## Dependencies/ { insec=1; next }
+      /^## / { insec=0 }
+      insec { print }
+    ' "$task_file" | grep -oE 'T[0-9]+-[0-9]+' | sort -u | grep -v "^${id}$" || true)
   done < "$QUEUE_FILE"
 
   local f base task_id untracked=0

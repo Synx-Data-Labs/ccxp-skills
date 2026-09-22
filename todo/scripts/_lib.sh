@@ -67,6 +67,21 @@ function todo-claim-state() {
   fi
 }
 
+# Print the ISO date (YYYY-MM-DD) of the Monday that starts the current
+# week. Same logic as _session/task_claim.sh's private _tc_current_monday
+# (weekday-offset subtraction, not `date -d 'monday'`, which resolves to
+# the NEXT Monday on any day that isn't itself Monday — a real bug caught
+# by an independent PR #73 review, 2026-09-22). Respects SESSION_TODAY for
+# testability, same hook as _tc_current_monday/iteration.sh.
+function todo-current-monday() {
+  local today="${SESSION_TODAY:-$(date +%F)}"
+  python3 -c "
+import datetime
+d = datetime.date.fromisoformat('${today}')
+print((d - datetime.timedelta(days=d.weekday())).isoformat())
+"
+}
+
 # Repo root this lib was sourced from — callers rely on this for locating
 # _session/task_claim.sh, dev/TODO/, etc. relative to the *sourcing* script,
 # not the caller's own cwd.
