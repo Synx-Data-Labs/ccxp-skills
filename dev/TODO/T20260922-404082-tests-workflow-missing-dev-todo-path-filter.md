@@ -46,7 +46,7 @@ scheduled: 2026-09-21
 
 ## Closed (2026-09-22)
 
-- Shipped in PR #<PR_NUMBER_PLACEHOLDER> — added `dev/TODO/**` and `dev/JOURNAL/**` to both `push.paths` and `pull_request.paths` in `.github/workflows/tests.yml`.
+- Shipped in PR #59 — added `dev/TODO/**` and `dev/JOURNAL/**` to both `push.paths` and `pull_request.paths` in `.github/workflows/tests.yml`.
 - Verified pre-merge: `python3 -c "import yaml; yaml.safe_load(...)"` and `actionlint` both clean (exit 0).
 - Not yet verified: whether a future `dev/TODO/**`-only PR actually triggers `lint-tasks`/`sync-tasks` — external, confirmed on the next such PR (T20260922-195629's eventual research work, or any other `/stage`/`/new-task` PR, will be the first real test).
 - No follow-up tasks filed — this closes the gap flagged while addressing PR #56.
