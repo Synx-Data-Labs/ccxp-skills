@@ -209,7 +209,7 @@ concrete (non-redacted) evidence this time:
 
 ## Closed (2026-09-22)
 
-- Shipped in PR #<PR_NUMBER_PLACEHOLDER> — `_docs/lint-docs.sh` now adds `--no-globs` when the caller supplies explicit path(s); `new-task/SKILL.md`, `gcpr/SKILL.md`, and `drive/SKILL.md` (×2) updated to actually pass a specific path instead of a bare call.
+- Shipped in PR #64 — `_docs/lint-docs.sh` now adds `--no-globs` when the caller supplies explicit path(s); `new-task/SKILL.md`, `gcpr/SKILL.md`, and `drive/SKILL.md` (×2) updated to actually pass a specific path instead of a bare call.
 - All Done criteria met: `tests/lint-docs.bats` (new, 3 tests, argv-inspection + real-tool end-to-end) confirms the scoping works; full `bats tests/*.bats` suite green (635/635, one pre-existing unrelated flake confirmed via re-run).
 - Not fixed here (by design — see Solution's alternatives-rejected): the `+`/`-` MD004 misfire and comma-spacing drop themselves, and the unconfirmed PNG-mutation report. Follow-up tasks filed: `T20260922-383156` (the remaining corruption patterns) and `T20260922-253015` (the PNG-mutation question).
 
