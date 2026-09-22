@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 estimation: 2h
 source: conversation 2026-09-10 (cross-repo, from a downstream consumer-repo session)
 description: lint-docs.sh --fix silently corrupts prose and always lints repo-wide despite the docs promising per-file scoping
-claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_by:
 scheduled: 2026-09-14
-claimed_role: interactive
+claimed_role:
 ---
 
 # T20260910-919422: lint-docs.sh --fix corrupts prose (+ -> -) and always lints repo-wide despite path args
@@ -190,12 +190,12 @@ concrete (non-redacted) evidence this time:
 
 ## Done criteria
 
-- [ ] `_docs/lint-docs.sh` adds `--no-globs` when given explicit path(s), unchanged for the bare default call — `tests/lint-docs.bats`
-- [ ] `new-task/SKILL.md` step 4 passes its specific task-file path instead of a bare call — `new-task/SKILL.md:88-96`
-- [ ] `gcpr/SKILL.md`'s canonical recipe (Step 1.5) passes the actual changed `.md` files — `gcpr/SKILL.md:59-63`
-- [ ] `drive/SKILL.md`'s two Phase 7 close-commit calls pass their known single path — `drive/SKILL.md:555,568`
-- [ ] Full `bats tests/*.bats` suite still green after all of the above — regression check
-- [ ] Follow-up tasks filed via `bash ../_taskid/new.sh` for the `+`/`-` MD004 misfire, the comma-spacing drop, and the unconfirmed PNG-mutation report — not fixed in this task; scoping contains blast radius but doesn't eliminate the underlying corruption risk to the one file actually being linted; filed T-ids recorded in Closed at merge
+- [x] `_docs/lint-docs.sh` adds `--no-globs` when given explicit path(s), unchanged for the bare default call — `tests/lint-docs.bats`
+- [x] `new-task/SKILL.md` step 4 passes its specific task-file path instead of a bare call — `new-task/SKILL.md:88-96`
+- [x] `gcpr/SKILL.md`'s canonical recipe (Step 1.5) passes the actual changed `.md` files — `gcpr/SKILL.md:59-63`
+- [x] `drive/SKILL.md`'s two Phase 7 close-commit calls pass their known single path — `drive/SKILL.md:555,568`
+- [x] Full `bats tests/*.bats` suite still green after all of the above — regression check (635/635 pass)
+- [x] Follow-up tasks filed via `bash ../_taskid/new.sh` for the `+`/`-` MD004 misfire, the comma-spacing drop, and the unconfirmed PNG-mutation report — not fixed in this task; scoping contains blast radius but doesn't eliminate the underlying corruption risk to the one file actually being linted; filed T-ids recorded in Closed below
 
 ## Repo file references
 
@@ -206,3 +206,16 @@ concrete (non-redacted) evidence this time:
 | `gcpr/SKILL.md` | 59-63 | "Canonical recipe" other skills copy — pass actual changed `.md` files |
 | `drive/SKILL.md` | 555, 568 | Phase 7 close-commit calls — each knows a single closed-task-file path |
 | `tests/lint-docs.bats` | new | No existing coverage for this script at all |
+
+## Closed (2026-09-22)
+
+- Shipped in PR #<PR_NUMBER_PLACEHOLDER> — `_docs/lint-docs.sh` now adds `--no-globs` when the caller supplies explicit path(s); `new-task/SKILL.md`, `gcpr/SKILL.md`, and `drive/SKILL.md` (×2) updated to actually pass a specific path instead of a bare call.
+- All Done criteria met: `tests/lint-docs.bats` (new, 3 tests, argv-inspection + real-tool end-to-end) confirms the scoping works; full `bats tests/*.bats` suite green (635/635, one pre-existing unrelated flake confirmed via re-run).
+- Not fixed here (by design — see Solution's alternatives-rejected): the `+`/`-` MD004 misfire and comma-spacing drop themselves, and the unconfirmed PNG-mutation report. Follow-up tasks filed: `T20260922-383156` (the remaining corruption patterns) and `T20260922-253015` (the PNG-mutation question).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class; wrote `tests/lint-docs.bats` first, watched all 3 cases fail for the expected reason (missing `--no-globs`, and the real unrelated-file-touched bug), then implemented `--no-globs` scoping to green
+- Verification (`superpowers:verification-before-completion`): yes — confirmed full test-suite regression check (635/635), shellcheck clean, and re-ran the suite a second time to distinguish a real regression from pre-existing flakiness (`attribution.bats`, confirmed unrelated and passing in isolation)
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck; the design phase's empirical repro already isolated the exact mechanism before implementation started
+- Receiving code review (`superpowers:receiving-code-review`): yes — design [PR #63](https://github.com/Synx-Data-Labs/ccxp-skills/pull/63)'s independent review reproduced the `--no-globs` claim from scratch and returned a clean bill; no pushback needed
