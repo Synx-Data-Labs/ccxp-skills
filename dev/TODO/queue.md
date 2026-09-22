@@ -28,3 +28,4 @@ reprioritize.
 - [T20260919-266165](T20260919-266165-address-pr-autopick-stalls-behind-permanently-blocked-oldest-pr.md): `/address-pr`'s bare auto-pick silently stalls forever behind a permanently-blocked oldest PR
 - [T20260919-231319](T20260919-231319-lint-internal-identifiers-pre-merge.md): Catch internal identifiers before they reach the public repo
 - [T20260922-195629](T20260922-195629-autopilot-waiting-outcome-ambiguity.md): Clarify whether `/autopilot`'s `WAITING` outcome is ever reachable from a bare `/drive` dispatch
+- [T20260922-404082](T20260922-404082-tests-workflow-missing-dev-todo-path-filter.md): `tests.yml`'s path filters omit `dev/TODO/**` and `dev/JOURNAL/**`, so `lint-tasks`/`sync-tasks` never run on a pure task-file change
