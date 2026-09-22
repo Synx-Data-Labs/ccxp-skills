@@ -1,10 +1,11 @@
 ---
-status: Open
+status: Coding
 estimation: 2h
 source: conversation 2026-09-10 (cross-repo, from a downstream consumer-repo session)
 description: lint-docs.sh --fix silently corrupts prose and always lints repo-wide despite the docs promising per-file scoping
-claimed_by:
+claimed_by: cc1-9a4074da:94a83ff0e786a885
 scheduled: 2026-09-14
+claimed_role: interactive
 ---
 
 # T20260910-919422: lint-docs.sh --fix corrupts prose (+ -> -) and always lints repo-wide despite path args
