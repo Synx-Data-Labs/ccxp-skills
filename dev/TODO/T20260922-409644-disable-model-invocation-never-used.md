@@ -12,8 +12,9 @@ description: Adopt disable-model-invocation:true for skills that must be human-t
 ## Problem
 
 - `grep -rl "disable-model-invocation: true" --include="SKILL.md" .` returns
-  0 hits across all 34 `SKILL.md` files in this repo — every skill sets
-  `disable-model-invocation: false` (or omits it, same default), meaning
+  0 hits. This repo has 45 total `SKILL.md` files; 34 of them declare
+  `disable-model-invocation` at all (all as `false`), and the other 11
+  omit it (same effective default) — none use the `true` branch, meaning
   every skill, including clearly action-taking, side-effecting ones
   (`/autopilot`, `/drive`, `/gcpr`, `/land`), is technically model-invocable.
 - The only guardrail against a model surprise-firing one of these is prose:
@@ -39,7 +40,7 @@ description: Adopt disable-model-invocation:true for skills that must be human-t
 
 ## Solution
 
-- Audit all 34 `SKILL.md` files and classify each by the "could the model
+- Audit all 45 `SKILL.md` files and classify each by the "could the model
   usefully reach for this autonomously?" test from `.agents/invocation.md`:
   - Reference/diagnostic skills (e.g. `/rca`, `/proof-read`,
     `/skill-conventions`) — keep `disable-model-invocation: false`, they're
