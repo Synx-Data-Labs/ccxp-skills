@@ -511,11 +511,31 @@ Creation safety-net — process-looking docs with no matching `dev/chore.md` row
 
 ## Prior retro follow-up
 (status of action items from previous retro — completed, in progress, or dropped)
+
+## Housekeeping
+- Slack summary: Posted via MCP / Posted via webhook fallback — MCP send failed / Both MCP and webhook fallback failed (see Phase 6)
 ```
 
 ### Phase 6: Notify
 
-Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`:
+Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`.
+
+**Webhook fallback on MCP send failure (T20260910-872316, same pattern as `ccxp/SKILL.md` Phase 1.4 / 2a.6, T20260717-433409).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result. Don't let a failed send silently drop the week's retro from Slack:
+
+1. Attempt `slack_send_message` once, then one retry on error — 2 attempts total, no further looping (same policy as T20260717-433409/Phase 1.4).
+2. If both attempts error, capture the retro summary text into a variable and fall back to the same underlying script the `/slack` skill's `dev` channel uses:
+
+   ```bash
+   RETRO_MESSAGE="$(cat <<'EOF'
+   <the *Weekly Retro* (YYYY-MM-DD) mrkdwn block composed below>
+   EOF
+   )"
+   SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_DEV" bash ../slack/scripts/slack-send.sh "$RETRO_MESSAGE"
+   ```
+
+   Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s Prerequisites documents (already-exported env var → `~/.claude/.env` → repo `.env`).
+3. Record which path succeeded in the retro report's own `## Housekeeping` section (see Phase 5 template) — `Posted via MCP` vs. `Posted via webhook fallback — MCP send failed` — mirroring Phase 1.4's convention, so the record stays visible even on a week Slack itself shows no gap.
+4. If **both** the MCP send and the webhook fallback fail, that's the hard-stop worth flagging loudly — note it in the report's Housekeeping section rather than silently giving up.
 
 ```
 *Weekly Retro* (YYYY-MM-DD)
