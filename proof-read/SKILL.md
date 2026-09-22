@@ -44,7 +44,7 @@ For each input file, parse into:
 - **Sentence list per section** — split on sentence boundaries (`。` / `.` / `!` / `?` for CJK + Latin). Preserve line numbers.
 - **Fenced code blocks** — every <code>```…```</code> block. For each, detect whether it looks like an ASCII figure (contains box-drawing chars `┌ ┐ └ ┘ ─ │` or arrows `► ◄ ▲ ▼`) or a code/shell block (starts with a shebang, or contains typical code tokens).
 - **Figure labels** — for each ASCII figure, extract all numeric labels (e.g. `101`, `203-1`, `205`), all boxed text snippets, and any arrow connections (source → target).
-- **References** — scan prose for `Figure N`, `图 N`, `Step N`, `步骤 N`, `Module N`, `模块 N`, **and ranges** (`Figs. N-M`, `Figures N to M`, `图N-图M`, `图N至图M`). Record (reference, line, target); for a range, record both endpoints, not just the span's first/last mention. Exhaustive — every occurrence in the doc, not a sample.
+- **References** — scan prose for `Figure N`, `图 N`, `Step N`, `步骤 N`, `Module N`, `模块 N`, **and ranges** (`Figs. N-M`, `Figures N to M`, `图N-图M`, `图N至图M`). Record (reference, line, target); a range is recorded as **one entry carrying both endpoints** `(N, M)` — never split into two separate single-figure entries. Exhaustive — every occurrence in the doc, not a sample.
 
 ### 3. Mode A: self-consistency checks
 
@@ -141,30 +141,36 @@ For each aligned section, compute sentence counts. Flag sections where |CN − E
 #### f. Figure-reference number diff (CN↔EN)
 
 Catches off-by-one and other reference-number drift that (e) "Figure parity" and (c) "Numeric
-parity" can miss — those check structural/numeric *counts*, not that each individual reference
-*cites the right number*. A uniform off-by-one shift across a range (e.g. CN `图2-图5` → EN
-"Figs. 1-4") preserves both the figure count (e) and, often, the individual numeric tokens
-elsewhere in the section (c) — neither check is positioned to catch it. (T20260804-151091: this
-is exactly the defect class that slipped through undetected on one patent while being caught on
-another, because the prior implementation only compared citations adjacent to a figure heading
-rather than diffing every occurrence.)
+parity" can miss. (e) compares **ASCII-diagram structure** — box/arrow/label counts pulled from
+fenced code blocks — a completely different artifact from prose figure citations; it has no
+visibility into prose text at all. (c) diffs numeric tokens per aligned section without pairing
+them to specific figure citations, so a shifted reference can dodge it if some unrelated number
+in the section still happens to line up. A uniform off-by-one shift across a range (e.g. CN
+`图2-图5` → EN "Figs. 1-4") is exactly the kind of drift neither check is positioned to catch.
+(T20260804-151091: this is the defect class that slipped through undetected on one patent while
+being caught on another, because the prior implementation only compared citations adjacent to a
+figure heading rather than diffing every occurrence.)
 
 - From the References list built in step 2 (now including ranges), take EVERY occurrence on both
   sides — do not sample or restrict to references adjacent to a figure heading.
-- Align CN and EN references positionally: within each section aligned by (4a), pair the i-th CN
-  reference with the i-th EN reference in document order.
-- For each paired reference:
-  - **Single reference**: CN's cited number must equal EN's cited number exactly (`图N` ↔
-    `Fig. N` / `Figure N` — same numeral).
-  - **Range reference**: CN's `图A-图B` must equal EN's `Figs. A-B` on *both* endpoints, not just
-    the span length (`图2-图5` is 4 figures; so is a mistranslated `Figs. 1-4` — count alone can't
-    tell them apart).
-  - Any numeral mismatch (single or either range endpoint) is an **Error**: "figure-reference
-    number mismatch: CN says `<cn-ref>` (line N), EN says `<en-ref>` (line M) — expected the same
-    figure number(s)."
-- If CN and EN have a different *count* of references in an aligned section, don't force a
-  pairing — fall through to (e) Figure parity's structural-mismatch flag instead; this check is
-  for when the counts already match but the numbers themselves drifted.
+- **Each reference is one entry** — a single reference is the numeral itself (`5`); a range is
+  the pair of its endpoints (`(2, 5)`), never decomposed into two separate single-figure entries.
+  (Decomposing a range would let it spuriously "match" unrelated single references to its
+  endpoint numbers elsewhere in the section.)
+- Within each section already aligned by (4a), build the **multiset** of CN reference entries and
+  the multiset of EN reference entries — order-independent, duplicates counted (two separate
+  "Figure 3" mentions count as two entries of that value).
+- **Compare the two multisets, not a positional pairing** — prose can legitimately reorder figure
+  mentions across a translation (e.g. a section citing the same two figures twice each may not
+  cite them in the same order on both sides), so pairing by document position produces spurious
+  flags on a correct translation. Multiset comparison is order-independent by construction and
+  needs no separate handling for a reference-count difference — a dropped, added, or renumbered
+  reference always shows up as an unequal multiset:
+  - **Equal multisets** — no flag, regardless of order.
+  - **Unequal multisets** — **Error**: "figure-reference number mismatch in this section: CN
+    cites `{<CN multiset>}` (e.g. line N), EN cites `{<EN multiset>}` (e.g. line M) — sets don't
+    match." Cite one representative line per side — the first occurrence of a value/range present
+    on only one side.
 
 ### 5. Emit findings report
 
