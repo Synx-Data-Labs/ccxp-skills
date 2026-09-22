@@ -5,6 +5,7 @@ on:
     paths:
       - 'actions/sync-tasks/**'
       - 'repo-conventions/scripts/**'
+      - '_gh/**'
       - '_session/**'
       - '_docs/**'
       - 'slack/**'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'actions/sync-tasks/**'
       - 'repo-conventions/scripts/**'
+      - '_gh/**'
       - '_session/**'
       - '_docs/**'
       - 'slack/**'
