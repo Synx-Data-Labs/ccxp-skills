@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: "<duration> | status"
 ---
 
-Keep calling bare `/drive` back-to-back until at least `<duration>` has elapsed, using `ScheduleWakeup` to survive the whole span without staying in one long-running turn. No standup/IPM/retro rituals — that's `/ccxp`'s job. This skill owns only the duration/loop/stop bookkeeping; task selection, claiming, implementing, PR babysitting, and merging are entirely `/drive`'s.
+Keep dispatching bare `/drive` cycles back-to-back until at least `<duration>` has elapsed, using `ScheduleWakeup` to survive the whole span without staying in one long-running turn. No standup/IPM/retro rituals — that's `/ccxp`'s job. This skill owns only the duration/loop/stop bookkeeping; task selection, claiming, implementing, PR babysitting, and merging are entirely `/drive`'s. Each cycle's `/drive` run happens in a dispatched sub-agent, not inline (see Phase 3) — this skill's own context only ever grows by one compact report per cycle, which is what actually lets a multi-hour run stay small; automatic compaction is a backstop, not the mechanism.
 
 ## Argument
 
@@ -52,9 +52,29 @@ If `now >= end_time`: go to Phase 5 with stop reason `elapsed`.
 
 ### Phase 3: Run one cycle
 
-Invoke `/drive` with no argument (bare auto-pick). Let it run to completion — it owns `/todo sweep`, `/todo next`, claiming, implementation, PR, CI, merge, and recursing into blockers on its own.
+Dispatch `/drive` (bare auto-pick) via the `Agent` tool instead of invoking it inline — `subagent_type: general-purpose` (needs `/drive`'s full tool surface: git, `gh`, Bash, Edit, Skill), no `isolation`. Cycles are strictly sequential — nothing else touches this clone while a cycle runs, so a worktree isn't needed here, unlike `/drive`'s own `--dispatch-blockers` mode, which needs `isolation: "worktree"` specifically because a blocker's branch checkout would otherwise clobber the goal-task's own in-progress branch (no such concurrent goal-task exists at the top of an `/autopilot` cycle). This mirrors that same `--dispatch-blockers` pattern (`drive/SKILL.md` "Recurse into B", T20260719-204917) for the same reason: keeping a full `/drive` cycle's internal work (git diffs, CI polling, review iterations, journal writes) out of `/autopilot`'s own context is what bounds a multi-hour run's context growth — there is no `/clear`/`/compact` this skill can trigger itself (neither is exposed as a tool; `/compact` also already runs automatically as a harness-level backstop regardless), so dispatch is the only mechanism actually available to it.
+
+The dispatch prompt must be self-contained — the sub-agent has no memory of this conversation. State plainly: this is `/autopilot` invoking `/drive` for its next unattended cycle (bare, auto-pick — no specific task), name the repo/working directory, and require the agent to run `/drive` to completion and end its final message in exactly this format, so Phase 4 can classify mechanically without reading the sub-agent's full transcript:
+
+```
+MERGED: T<id> (<slug>) — PR #<n>
+(one line per task merged this cycle, including via blocker recursion; omit the whole section if none)
+
+STUCK: <short reason> — last task T<id> (<slug>) [or "no task identified" if /drive errored before selecting one]
+(only if /drive stopped without merging or hit one of its own Escalation Rules — see Phase 4's Stuck conditions; omit otherwise)
+
+QUEUE-EMPTY
+(only if /todo next found no free, unblocked, ungated task; omit otherwise)
+
+WAITING: <what's pending, e.g. "CI still running on PR #<n>", "review genuinely still pending">
+(only if the cycle ended in a wait state that resolves without further /drive action; omit otherwise)
+```
+
+Wait for the dispatched agent's completion notification before proceeding to Phase 4 — do not poll, do not schedule a separate `ScheduleWakeup` for this wait (same pattern as waiting on any other background agent). If the dispatch itself fails or the agent's final message doesn't parse into the format above, treat it as the **Stuck** case in Phase 4 with `last_stuck_reason: "dispatch failed or report unparseable"`.
 
 ### Phase 4: Classify the outcome and reschedule
+
+Everything below reads off the dispatched agent's final report (Phase 3's fixed format), not a directly-witnessed `/drive` run — "`/drive` reports/returns/errored" means what the report says (or its absence/malformed shape, per Phase 3's parse-failure fallback).
 
 - **Progress** — none of the four Stuck conditions below fired this cycle, **and** either `/drive` merged something or the cycle ended in a wait state that resolves **without further `/drive` action** (CI still running, a review genuinely still pending) — the all-four-clear condition gates the whole bucket, not just the wait-state case, since a multi-task cycle can merge one task via blocker recursion and still hit a Stuck condition on another before returning: reset `stuck_count = 0`. Update the state file: `stuck_count: 0`, `cycle_count += 1`, `last_cycle_at: now`, `last_outcome: "progress"`, `last_task`/`last_stuck_reason: null`. Then `ScheduleWakeup(delaySeconds: 60, prompt: "/autopilot until <end_time> stuck=0", noop: false, reason: "continuing autopilot — last /drive cycle made progress")`. Done with this turn.
 - **Empty queue / nothing actionable** — `/drive` reports no free, unblocked, ungated task exists: update the state file (`cycle_count += 1`, `last_cycle_at: now`, `last_outcome: "queue-empty"`, `stuck_count: 0`, `last_task`/`last_stuck_reason: null` — clearing these prevents a stale Stuck bullet in a later `status` report for a run that actually stopped cleanly), then go to Phase 5 with stop reason `queue-empty`. Don't reschedule — there is nothing a further wake would change.
@@ -93,6 +113,7 @@ Needs your attention:
   - A task whose `status:` line itself flags a human-only condition — e.g. `SUPERVISED`, "needs a human", an external/live-environment spot-check, a maintainer sign-off/design decision — since no skill has the access or authority to close it.
   This keeps the report a to-do list of things only the maintainer can act on, not a live mirror of `/drive`'s in-progress backlog.
 - **Never loop within a single turn.** Each `/drive` cycle is exactly one `ScheduleWakeup` boundary — this is what lets a multi-hour `/autopilot` survive context compaction and interruptions cleanly, the same way `/loop`'s dynamic mode does.
+- **Context growth is bounded by dispatch, not by clearing.** Neither `/clear` nor `/compact` is available to this skill as an action — both are CLI built-ins a human types, not tools; automatic compaction is the harness's own passive backstop and fires regardless of anything in this file. Phase 3's sub-agent dispatch is what actually keeps `/autopilot`'s own context flat across an arbitrarily long run: a full `/drive` cycle's internal work never enters this conversation, only its compact report does. This is also why `last_task`/tally reconstruction (Phase 5, point 1) is already written to degrade gracefully — the same "no surviving detail, fall back to the bare id" posture applies whether the gap came from a `ScheduleWakeup` resume or from reading only a dispatched agent's summary.
 - **Stuck backoff is silent — from `/autopilot`'s side.** `/autopilot` itself only posts to Slack once, at the final Phase 5 stop — a backing-off cycle just reschedules quietly (`noop: true`) and moves on. A Stuck cycle folded in from `/drive`'s own Escalation Rules may already have sent its own Slack message before `/autopilot` ever classified the outcome; that's `/drive`'s notification, not a repeat autopilot post, and it can recur once per backoff retry for as long as the underlying escalation cause persists. The `/address-pr`-delegated Stuck case (safety valve, unresolvable conflict, unverifiable item) posts **no** notification of its own — it's silent through every backoff retry it causes, with no way out but the window elapsing (this path never produces the `queue-empty` reason, only `elapsed`), so the only visibility is this skill's own Phase 5 summary once that happens.
 - **Queue-empty is a stop, not a backoff case.** If there is genuinely nothing actionable, waking up again on a timer won't change that; only a future `/stage`/`/todo sweep` adding new work would, and the user can just re-run `/autopilot` then.
 - **This does not replace `/ccxp`.** `/ccxp` is the full ritual-aware orchestrator (standup, IPM, retro) meant for the daily/weekly cron cadence; `/autopilot` is a plain duration-boxed `/drive` loop for an interactive "go work for N hours" ask.
@@ -100,7 +121,8 @@ Needs your attention:
 
 ## Cross-references
 
-- `/drive` — does all the actual task-selection/implementation/merge work, once per cycle
+- `/drive` — does all the actual task-selection/implementation/merge work, once per cycle, run via a dispatched sub-agent (Phase 3), not inline
+- `drive/SKILL.md`'s `--dispatch-blockers` mode — the precedent this skill's Phase 3 dispatch pattern mirrors (Agent tool, compact report only, T20260719-204917)
 - `/ccxp` — the full ritual-aware orchestrator this skill deliberately does not replace
 - `/slack` — posts the stop summary (`--channel dev`, i.e. `#claude-notification`)
 - `superpowers` `ScheduleWakeup` — the resume mechanism between cycles
