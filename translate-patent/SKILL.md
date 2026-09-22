@@ -174,7 +174,7 @@ This applies, per language, in one deterministic pass:
 Skip this step entirely if `--no-proofread` was passed.
 
 - Invoke `/proof-read` Mode A on the post-processed CN MD alone (self-consistency), unless `--en-only` was passed — `--en-only` skips the standalone CN proof-read report per its definition under `## Argument`.
-- Unless `--cn-only` was passed, invoke `/proof-read` Mode B on the CN + EN MDs together (cross-language consistency, including the figure-parity check).
+- Unless `--cn-only` was passed, invoke `/proof-read` Mode B on the CN + EN MDs together (cross-language consistency, including the figure-parity and figure-reference-number-diff checks).
 - Findings are surfaced only — do not auto-edit based on the report, per `/proof-read`'s own contract (`proof-read/SKILL.md` § Out of scope).
 
 ### 10. Generate PDFs

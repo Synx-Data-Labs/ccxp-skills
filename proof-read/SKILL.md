@@ -44,7 +44,7 @@ For each input file, parse into:
 - **Sentence list per section** — split on sentence boundaries (`。` / `.` / `!` / `?` for CJK + Latin). Preserve line numbers.
 - **Fenced code blocks** — every <code>```…```</code> block. For each, detect whether it looks like an ASCII figure (contains box-drawing chars `┌ ┐ └ ┘ ─ │` or arrows `► ◄ ▲ ▼`) or a code/shell block (starts with a shebang, or contains typical code tokens).
 - **Figure labels** — for each ASCII figure, extract all numeric labels (e.g. `101`, `203-1`, `205`), all boxed text snippets, and any arrow connections (source → target).
-- **References** — scan prose for `Figure N`, `图 N`, `Step N`, `步骤 N`, `Module N`, `模块 N`. Record (reference, line, target).
+- **References** — scan prose for `Figure N`, `图 N`, `Step N`, `步骤 N`, `Module N`, `模块 N`, **and ranges** (`Figs. N-M`, `Figures N to M`, `图N-图M`, `图N至图M`). Record (reference, line, target); for a range, record both endpoints, not just the span's first/last mention. Exhaustive — every occurrence in the doc, not a sample.
 
 ### 3. Mode A: self-consistency checks
 
@@ -138,6 +138,34 @@ For each aligned section, compute sentence counts. Flag sections where |CN − E
   - Same arrow topology (box A → box B should correspond on both sides)
 - Flag any structural mismatches with specific labels.
 
+#### f. Figure-reference number diff (CN↔EN)
+
+Catches off-by-one and other reference-number drift that (e) "Figure parity" and (c) "Numeric
+parity" can miss — those check structural/numeric *counts*, not that each individual reference
+*cites the right number*. A uniform off-by-one shift across a range (e.g. CN `图2-图5` → EN
+"Figs. 1-4") preserves both the figure count (e) and, often, the individual numeric tokens
+elsewhere in the section (c) — neither check is positioned to catch it. (T20260804-151091: this
+is exactly the defect class that slipped through undetected on one patent while being caught on
+another, because the prior implementation only compared citations adjacent to a figure heading
+rather than diffing every occurrence.)
+
+- From the References list built in step 2 (now including ranges), take EVERY occurrence on both
+  sides — do not sample or restrict to references adjacent to a figure heading.
+- Align CN and EN references positionally: within each section aligned by (4a), pair the i-th CN
+  reference with the i-th EN reference in document order.
+- For each paired reference:
+  - **Single reference**: CN's cited number must equal EN's cited number exactly (`图N` ↔
+    `Fig. N` / `Figure N` — same numeral).
+  - **Range reference**: CN's `图A-图B` must equal EN's `Figs. A-B` on *both* endpoints, not just
+    the span length (`图2-图5` is 4 figures; so is a mistranslated `Figs. 1-4` — count alone can't
+    tell them apart).
+  - Any numeral mismatch (single or either range endpoint) is an **Error**: "figure-reference
+    number mismatch: CN says `<cn-ref>` (line N), EN says `<en-ref>` (line M) — expected the same
+    figure number(s)."
+- If CN and EN have a different *count* of references in an aligned section, don't force a
+  pairing — fall through to (e) Figure parity's structural-mismatch flag instead; this check is
+  for when the counts already match but the numbers themselves drifted.
+
 ### 5. Emit findings report
 
 Write a markdown report with this shape:
@@ -188,7 +216,7 @@ Write a markdown report with this shape:
 
 Severity rubric:
 
-- **Error** — will confuse a reader or break a reference (broken Figure link, missing numeric parity, figure/prose contradiction).
+- **Error** — will confuse a reader or break a reference (broken Figure link, missing numeric parity, figure-reference number mismatch, figure/prose contradiction).
 - **Warning** — inconsistency that a reviewer should spot-check (term drift, sentence-count skew).
 - **Info** — potential drift worth knowing but not actionable (rare-term variants, 1-2 one-sided numbers).
 
