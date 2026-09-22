@@ -1,9 +1,9 @@
 ---
-status: Coding
+status: Done
 estimation: 15m
 source: this conversation, 2026-09-22 — noticed while /address-pr'ing PR #56, a pure task-filing PR that only got Markdown Lint as its CI signal
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -41,6 +41,19 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] YAML still parses (`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/tests.yml'))"`)
-- [ ] A PR touching only `dev/TODO/**` now triggers `lint-tasks`/`sync-tasks`
-      (this PR's own diff, once opened, is the test case)
+- [x] YAML still parses (`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/tests.yml'))"`) and `actionlint` reports 0 issues
+- [ ] **Post-merge**: a future PR touching only `dev/TODO/**`/`dev/JOURNAL/**` triggers `lint-tasks`/`sync-tasks` — can't be verified within this PR's own diff, since GitHub evaluates `pull_request` path filters against the *target* branch's current workflow definition (which doesn't have this fix until it merges), and this PR's own commits also touch `.github/workflows/tests.yml` directly (already always-triggering), so its own CI run doesn't exercise the new filter in isolation
+
+## Closed (2026-09-22)
+
+- Shipped in PR #<PR_NUMBER_PLACEHOLDER> — added `dev/TODO/**` and `dev/JOURNAL/**` to both `push.paths` and `pull_request.paths` in `.github/workflows/tests.yml`.
+- Verified pre-merge: `python3 -c "import yaml; yaml.safe_load(...)"` and `actionlint` both clean (exit 0).
+- Not yet verified: whether a future `dev/TODO/**`-only PR actually triggers `lint-tasks`/`sync-tasks` — external, confirmed on the next such PR (T20260922-195629's eventual research work, or any other `/stage`/`/new-task` PR, will be the first real test).
+- No follow-up tasks filed — this closes the gap flagged while addressing PR #56.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — technically code-class (workflow YAML), but a two-line path-filter addition has no meaningful unit-testable behavior; verification is YAML-parse + `actionlint` + an inherently post-merge CI observation (see Test plan)
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6, confirmed real `actionlint`/YAML-parse exit codes rather than assuming clean output
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck, single mechanical edit
+- Receiving code review (`superpowers:receiving-code-review`): {pending — filled in after `/address-pr`}
