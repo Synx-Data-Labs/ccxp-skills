@@ -114,3 +114,29 @@ scheduled: 2026-09-21
       mirroring Phase 1.4's "Posted via MCP" vs. "Posted via webhook
       fallback" convention — satisfied by the `retro/SKILL.md` Phase 5
       template diff in this task's PR.
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #66** (`t20260910-872316-slack-webhook-fallback`).
+- Both Done criteria met — `retro/SKILL.md` Phase 6 now carries the same
+  1-retry-then-webhook-fallback pattern as `ccxp/SKILL.md` Phase 1.4/2a.6,
+  and the Phase 5 report template gained a `## Housekeeping` line recording
+  which send path succeeded.
+- External/unverified: the fallback path itself (webhook send succeeding on
+  an MCP failure) is exercised live only the next time a `/retro` run
+  actually hits 2 consecutive `slack_send_message` failures — same
+  post-merge-only verification posture as the original `ccxp/SKILL.md`
+  Phase 1.4 fallback (T20260717-433409) had at its own close.
+- No follow-up tasks filed — scope stayed within the 1h estimate.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change, no
+  executable code
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate (81/100), `lint-docs.sh`, `lint_paragraphs.py`,
+  `lint_tasks.py`, and a Done-criteria-to-diff mapping check before PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck
+- Receiving code review (`superpowers:receiving-code-review`): pending —
+  addressed as part of PR #66's `/address-pr` loop
