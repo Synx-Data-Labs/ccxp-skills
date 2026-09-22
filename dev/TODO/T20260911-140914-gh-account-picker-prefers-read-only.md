@@ -5,7 +5,6 @@ scheduled: 2026-09-14
 source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on a multi-account clone
 claimed_by: cc1-9a4074da:94a83ff0e786a885
 claimed_role: interactive
-scheduled: 2026-09-21
 ---
 
 # T20260911-140914: `_gh/gh.sh` account-picker can cache a read-only account, silently breaking write operations
