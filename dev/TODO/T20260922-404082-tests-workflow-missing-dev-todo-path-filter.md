@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Coding
 estimation: 15m
 source: this conversation, 2026-09-22 — noticed while /address-pr'ing PR #56, a pure task-filing PR that only got Markdown Lint as its CI signal
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260922-404082: `tests.yml`'s path filters omit `dev/TODO/**` and `dev/JOURNAL/**`, so `lint-tasks`/`sync-tasks` never run on a pure task-file change

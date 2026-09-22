@@ -3,7 +3,7 @@ status: Review
 estimation: 1h
 scheduled: 2026-09-14
 source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on a multi-account clone
-claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_by:
 claimed_role: interactive
 ---
 
