@@ -1,8 +1,8 @@
 ---
 status: Open
-scheduled: 2026-10-05
+scheduled: 2026-09-28
 estimation: 15m
-source: Claude Code review on synxdb-team#576 (claim PR for T20260922-539293), 2026-09-22
+source: Claude Code review on an internal consumer-repo claim PR, 2026-09-22
 ---
 
 # T20260922-229218: `_tc_release_others` clears `claimed_by` but leaves `claimed_role` orphaned
@@ -22,12 +22,17 @@ source: Claude Code review on synxdb-team#576 (claim PR for T20260922-539293), 2
   Contrast with the full `_tc_release` verb (task close), which explicitly
   clears both fields as one contract: `_session/task_claim.sh:556`
   (`# same clear-on-close contract as claimed_by`).
-- Observed instance: `synxdb-team` `dev/TODO/T20260914-126541-*.md` was left
-  with `claimed_by:` (empty) but `claimed_role: interactive` still set, after
-  a `release-others` call from an unrelated claim pickup
-  (synxdb-team PR #576). Caught by an independent Claude Code review pass,
-  not by any lint — worked around by hand-clearing the field in that PR since
-  fixing the shared script was out of scope there.
+- Observed instance: an internal consumer-repo task file was left with
+  `claimed_by:` (empty) but `claimed_role: interactive` still set, after a
+  `release-others` call from an unrelated claim pickup. Caught by an
+  independent Claude Code review pass, not by any lint — worked around by
+  hand-clearing the field in that PR since fixing the shared script was out
+  of scope there.
+- Also reproduced live in **this** repo: `release-others` calls made earlier
+  in the same session that filed this task left
+  `dev/TODO/T20260911-140914-gh-account-picker-prefers-read-only.md` with
+  the identical orphaned `claimed_role: interactive` (no `claimed_by`) —
+  confirms this isn't a one-off, it's the shared script's actual behavior.
 - Risk: an orphaned `claimed_role` with no `claimed_by` is an inconsistent
   state — tooling that branches on `claimed_role` without also checking
   `claimed_by` is empty could misread a released task as still
