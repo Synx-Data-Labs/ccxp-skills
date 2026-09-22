@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Coding — Design skipped (research task; the investigation itself is the design, per Phase 2 self-evident carve-out)
 estimation: 4h
 source: this conversation, 2026-09-14
 related: T20260912-279229
 description: Research mattpocock/skills to find next-level improvements for ccxp-skills
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260914-412750: Learn from `mattpocock/skills` and apply improvements to ccxp-skills
