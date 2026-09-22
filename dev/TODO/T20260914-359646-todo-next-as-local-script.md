@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to speed up `/todo next`; scope broadened 2026-09-16 — maintainer asked why `/todo list`'s table costs an LLM turn too, when it's just as deterministic a read of already-persisted `queue.md`/frontmatter
 related: T20260911-347027
 description: Port /todo list's table + /todo next's queue-walk logic into sourceable bash scripts so neither needs an LLM turn
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260914-359646: Convert `/todo list`'s table and `/todo next`'s queue-walk into token-free local scripts
