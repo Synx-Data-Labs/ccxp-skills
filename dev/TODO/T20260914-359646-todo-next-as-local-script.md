@@ -171,8 +171,8 @@ scheduled: 2026-09-21
 
 ## Closed (2026-09-22)
 
-- Shipped in **PR #TBD** (`t20260914-359646-scripts`) — this task's own
-  design PR (#72) merged first, implementation follows in this PR.
+- Shipped in **PR #73** (`t20260914-359646-scripts`) — this task's own
+  design PR (#72) merged first, implementation followed in this PR.
 - Both Done criteria met: `todo/scripts/{_lib,todo-list,todo-next}.sh`
   exist and are BATS-covered (21 tests across `tests/todo-{lib,list,next}.bats`);
   `todo/SKILL.md`'s `list`/`next` workflow sections now instruct running
