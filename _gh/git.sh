@@ -34,7 +34,7 @@ main_git() {
   user="$(_gh_pick_account "$slug")" \
     || _gh_die "no authenticated gh account has access to $slug (try: gh auth login)"
   tok="$(_gh_token_for "$user")" || _gh_die "could not read token for account $user"
-  exec env GH_TOKEN="$tok" git "$@"
+  GH_TOKEN="$tok" exec git "$@"
 }
 
 # Run only if executed directly (not sourced) — same convention as gh.sh.
