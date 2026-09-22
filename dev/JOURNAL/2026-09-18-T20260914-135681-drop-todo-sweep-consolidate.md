@@ -2,6 +2,8 @@
 status: Done
 estimation: 30m
 source: this conversation, 2026-09-14
+scheduled: 2026-09-14
+description: Drop /todo sweep's "Consolidate" recommendation; Phase 3 auto-closes Done/Superseded and only asks approval for Park
 ---
 
 # T20260914-135681: Simplify `/todo sweep` by dropping the "Consolidate" recommendation
