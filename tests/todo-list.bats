@@ -93,6 +93,61 @@ append_queue_line() {
   [[ "$output" == *"T20260914-100099"* ]]
 }
 
+@test "correctly counts a task scheduled for THIS week's Monday as committed, on a mid-week run" {
+  # Regression test for a real bug: `date -d 'monday'` resolves to NEXT
+  # Monday on any non-Monday day, undercounting "committed to active
+  # iteration" 6 days out of 7 (caught by an independent PR #73 review).
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T20260914-100001 "this week" "Open" "scheduled: 2026-09-21"
+  append_queue_line T20260914-100001 "this week"
+
+  SESSION_TODAY=2026-09-22 run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 committed to active iteration"* ]]
+}
+
+@test "marks a past-deadline row with a warning marker" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T20260914-100001 "overdue" "Open" "deadline: 2026-01-01"
+  append_queue_line T20260914-100001 "overdue"
+
+  SESSION_TODAY=2026-09-22 run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"⚠"* ]]
+}
+
+@test "appends a checkmark to a Scheduled date landed in the active iteration" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T20260914-100001 "scheduled" "Open" "scheduled: 2026-09-21"
+  append_queue_line T20260914-100001 "scheduled"
+
+  SESSION_TODAY=2026-09-22 run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"2026-09-21 ✓"* ]]
+}
+
+@test "detects a stale Blocked-by reference inside a body ## Dependencies section" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  cat > "dev/TODO/T20260914-100001-slug.md" <<'EOF'
+---
+status: Open
+estimation: 1h
+---
+
+# T20260914-100001: title
+
+## Dependencies
+
+- **T20260914-100099** — some prerequisite
+EOF
+  append_queue_line T20260914-100001 "title"
+
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T20260914-100001"* ]]
+  [[ "$output" == *"T20260914-100099"* ]]
+}
+
 @test "empty queue still renders a header and zero counts, no error" {
   echo "# TODO Queue" > dev/TODO/queue.md
 

@@ -73,6 +73,30 @@ EOF
 
 # --- todo-claim-state ---------------------------------------------------------
 
+# --- todo-current-monday -------------------------------------------------
+
+@test "returns the same date when today is already a Monday" {
+  SESSION_TODAY=2026-09-21 run todo-current-monday
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-09-21" ]
+}
+
+@test "returns THIS week's Monday (in the past), not next Monday, on a Tuesday" {
+  # The bug this test guards against: `date -d 'monday'` (no last/next
+  # qualifier) resolves to the NEXT occurrence of that weekday on any day
+  # that isn't itself Monday — one week too late for "this week's Monday"
+  # (caught by an independent PR #73 review, 2026-09-22).
+  SESSION_TODAY=2026-09-22 run todo-current-monday
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-09-21" ]
+}
+
+@test "returns this week's Monday on a Sunday (end of the ISO week)" {
+  SESSION_TODAY=2026-09-27 run todo-current-monday
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-09-21" ]
+}
+
 @test "CCXP_PEER_MODE=0 always reports unclaimed, regardless of actual claim state" {
   CCXP_PEER_MODE=0 run todo-claim-state T4
   [ "$status" -eq 0 ]

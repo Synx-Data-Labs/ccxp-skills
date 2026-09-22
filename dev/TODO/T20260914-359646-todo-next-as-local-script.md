@@ -184,6 +184,21 @@ scheduled: 2026-09-21
   and test fixtures using non-representative task IDs (`T1` instead of
   the real `T{8digits}-{6digits}` shape) that silently broke the
   untracked-file-detection regex.
+- An independent PR #73 review caught 3 more real gaps, all fixed before
+  merge: (1) `todo-list.sh` used `date -d 'monday'` to compute "this
+  week's Monday" — a real bug, since that resolves to **next** Monday on
+  any day that isn't itself Monday, undercounting "committed to active
+  iteration" 6 days out of 7; fixed by adding `todo-current-monday()` to
+  `_lib.sh`, reusing `_session/task_claim.sh`'s already-correct
+  weekday-offset-subtraction logic instead of the shell-out-to-`date`
+  approach, with 3 new regression tests pinning Monday/Tuesday/Sunday
+  behavior. (2) `todo-list.sh`'s table was missing SKILL.md step 5's `⚠`
+  past-deadline marker and `✓` committed-scheduled marker — added both,
+  with tests. (3) `todo-list.sh`'s stale-blocker detection only checked
+  the frontmatter `status:` line, not SKILL.md step 4's additional
+  "scan dependency sections (e.g. `## Dependencies`)" requirement — added
+  a section-scoped scan (not a whole-file scan, to avoid flagging every
+  casual T-id mention), with a test.
 - Quality probe: shellcheck clean (0 error/warning, 2 info — pre-existing
   SC1091 "not following" notes on the dynamic `_lib.sh` source path, not
   addressable without hardcoding); `design_score=78`. `file_loc`/
