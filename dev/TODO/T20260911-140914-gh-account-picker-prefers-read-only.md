@@ -1,10 +1,10 @@
 ---
-status: Review
+status: Done
 estimation: 1h
 scheduled: 2026-09-14
 source: consumer-repo session, 2026-09-09 — discovered while running /gcpr on a multi-account clone
 claimed_by:
-claimed_role: interactive
+claimed_role:
 ---
 
 # T20260911-140914: `_gh/gh.sh` account-picker can cache a read-only account, silently breaking write operations
@@ -89,3 +89,30 @@ claimed_role: interactive
       changes — this is an internal fix to the picker, not an interface
       change (the new `git.sh` is additive; `gh.sh`'s own CLI interface
       is unchanged)
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #40** (`fix(_gh): write-aware account picker + /gcpr
+  unpushed-branch check`, merged 2026-09-22T15:16:14Z) — a prior claim PR
+  (#55) also merged for this task, but the task file itself was never
+  flipped to `Done` after PR #40 landed. This close catches that up.
+- All Test plan and Done criteria items were already checked (see above)
+  and are re-verified against the merged PR: `_gh_account_tier()` +
+  two-pass `_gh_pick_account()` + self-heal retry all landed in
+  `_gh/gh.sh`; `_gh/git.sh` added for the `git push` case; `tests/gh.bats`
+  covers both the write-preference and self-heal cases.
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — per PR #40's own
+  test plan (`tests/gh.bats`, `tests/fixtures/gh/fake-gh.sh`); not
+  re-run by this closing session, which only did bookkeeping
+- Verification (`superpowers:verification-before-completion`): yes —
+  re-checked the merged PR's diff against every Test plan / Done
+  criteria line before flipping status
+- Systematic debugging (`superpowers:systematic-debugging`): n/a — this
+  session performed no debugging, only task closure
+- Receiving code review (`superpowers:receiving-code-review`): n/a —
+  no new review round; PR #40's own review already happened at
+  implementation time
