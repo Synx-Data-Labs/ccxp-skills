@@ -235,6 +235,7 @@ scheduled: 2026-09-21
   isolation (narrowing from the full pattern down to the minimal failing
   two-group case) rather than guessing at a fix
 - Receiving code review (`superpowers:receiving-code-review`): yes —
-  `/address-pr` §2.d, 2 iterations, 4 real findings across both rounds
-  (2 in the design PR, 3 in the implementation PR incl. a genuine
-  correctness bug) fixed, 0 pushback
+  `/address-pr` §2.d, 2 review rounds (design PR #72 + implementation PR
+  #73), 4 real findings total across both (1 in the design PR — missing
+  `next` step 5 scope; 3 in the implementation PR incl. a genuine
+  correctness bug — see `## Closed`) fixed, 0 pushback
