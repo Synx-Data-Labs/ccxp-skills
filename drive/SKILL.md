@@ -552,7 +552,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    git checkout -b t<id>-close
    bash ../_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically
    # Add "## Closed (YYYY-MM-DD)" pointing at the target PR URL, plus the "Skills invoked" block (Phase 7.0).
-   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh --fix "dev/TODO/T<id>-<slug>.md" || true   # doc-lint guard, scoped to just this file (T20260910-919422) — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
    bash ../_gh/gh.sh pr create ...
    ```
@@ -565,7 +565,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    git mv dev/TODO/T<id>-<slug>.md dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    # Add a short "## Closed (YYYY-MM-DD)" section pointing at the target PR URL
    # (mv FIRST then edit, as above — else `git add` the JOURNAL path before committing)
-   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh --fix "dev/JOURNAL/$(date +%F)-T<id>-<slug>.md" || true   # doc-lint guard, scoped to just this file (T20260910-919422) — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git add dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
    git show --stat HEAD   # must show insertions, NOT "100% rename / 0 insertions"

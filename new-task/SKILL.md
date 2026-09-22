@@ -92,7 +92,7 @@ effect of filing one task:
 
 ```bash
 python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
-bash ../_docs/lint-docs.sh --fix
+bash ../_docs/lint-docs.sh --fix dev/TODO/T<id>-<slug>.md
 python3 ../repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
 python3 ../repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
 ```

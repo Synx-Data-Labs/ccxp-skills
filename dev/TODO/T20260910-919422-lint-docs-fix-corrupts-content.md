@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 2h
 source: conversation 2026-09-10 (cross-repo, from a downstream consumer-repo session)
 description: lint-docs.sh --fix silently corrupts prose and always lints repo-wide despite the docs promising per-file scoping

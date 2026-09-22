@@ -58,8 +58,10 @@ recurring formatting class (chiefly MD032, blanks-around-lists) is auto-fixed lo
 into the commit — only when the change touches markdown:
 
 ```bash
-if git status --porcelain | grep -qE '\.md$'; then
-  bash ../_docs/lint-docs.sh --fix \
+CHANGED_MD=$(git status --porcelain | awk '{print $2}' | grep -E '\.md$' || true)
+if [ -n "$CHANGED_MD" ]; then
+  # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
+  bash ../_docs/lint-docs.sh --fix $CHANGED_MD \
     || echo "::warning::lint-docs: unfixable markdown issues remain — CI Markdown Lint will gate"
 fi
 ```
