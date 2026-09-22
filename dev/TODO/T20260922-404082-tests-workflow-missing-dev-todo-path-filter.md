@@ -42,13 +42,12 @@ scheduled: 2026-09-21
 ## Test plan
 
 - [x] YAML still parses (`python3 -c "import yaml; yaml.safe_load(open('.github/workflows/tests.yml'))"`) and `actionlint` reports 0 issues
-- [ ] **Post-merge**: a future PR touching only `dev/TODO/**`/`dev/JOURNAL/**` triggers `lint-tasks`/`sync-tasks` — can't be verified within this PR's own diff, since GitHub evaluates `pull_request` path filters against the *target* branch's current workflow definition (which doesn't have this fix until it merges), and this PR's own commits also touch `.github/workflows/tests.yml` directly (already always-triggering), so its own CI run doesn't exercise the new filter in isolation
+- [x] A `dev/TODO/**`-only push (no workflow-file touch) triggers `lint-tasks`/`sync-tasks`/`bats` — verified **pre-merge**, on this very PR: commit `6262501` touched only the task file itself, and all three jobs ran and passed (this corrects an earlier, wrong assumption in this PR's own body that GitHub only evaluates `pull_request` path filters against the *target* branch's workflow definition — it evidently also honors the *head* branch's version, since the new filter wasn't on `main` yet when this fired)
 
 ## Closed (2026-09-22)
 
 - Shipped in PR #59 — added `dev/TODO/**` and `dev/JOURNAL/**` to both `push.paths` and `pull_request.paths` in `.github/workflows/tests.yml`.
-- Verified pre-merge: `python3 -c "import yaml; yaml.safe_load(...)"` and `actionlint` both clean (exit 0).
-- Not yet verified: whether a future `dev/TODO/**`-only PR actually triggers `lint-tasks`/`sync-tasks` — external, confirmed on the next such PR (T20260922-195629's eventual research work, or any other `/stage`/`/new-task` PR, will be the first real test).
+- Verified pre-merge, both items: YAML parse + `actionlint` clean, and — directly on this PR's own branch (commit `6262501`, a task-file-only push) — `lint-tasks`/`sync-tasks`/`bats` all triggered and passed. No post-merge verification needed; the fix was empirically confirmed working before merge.
 - No follow-up tasks filed — this closes the gap flagged while addressing PR #56.
 
 ## Skills invoked
