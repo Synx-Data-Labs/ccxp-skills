@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to speed up `/todo next`; scope broadened 2026-09-16 — maintainer asked why `/todo list`'s table costs an LLM turn too, when it's just as deterministic a read of already-persisted `queue.md`/frontmatter
 related: T20260911-347027
 description: Port /todo list's table + /todo next's queue-walk logic into sourceable bash scripts so neither needs an LLM turn
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -168,3 +168,56 @@ scheduled: 2026-09-21
 - [x] `todo/scripts/todo-next.sh` and `todo/scripts/todo-list.sh` exist, sourceable, BATS-covered — `todo/scripts/todo-next.sh`, `todo/scripts/todo-list.sh`, `todo/scripts/_lib.sh`, `tests/todo-next.bats`, `tests/todo-list.bats`, `tests/todo-lib.bats`
 - [x] `todo/SKILL.md`'s `list` and `next` workflow sections invoke the scripts instead of re-deriving the walk/table — `todo/SKILL.md`'s `list`/`next` workflow sections
 - [x] No behavior change to `/todo sweep` — `todo/SKILL.md`'s `sweep` workflow section is untouched by this task's diff
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #TBD** (`t20260914-359646-scripts`) — this task's own
+  design PR (#72) merged first, implementation follows in this PR.
+- Both Done criteria met: `todo/scripts/{_lib,todo-list,todo-next}.sh`
+  exist and are BATS-covered (21 tests across `tests/todo-{lib,list,next}.bats`);
+  `todo/SKILL.md`'s `list`/`next` workflow sections now instruct running
+  the script first, keeping the algorithm prose for `sweep` reuse; `sweep`
+  itself is untouched.
+- TDD caught two real bugs before they shipped: a bash parser quirk where
+  an inline `[[ =~ ]]` pattern combining a `[^]...]` bracket expression
+  with unquoted parens gets mis-tokenized (fixed with a pattern variable),
+  and test fixtures using non-representative task IDs (`T1` instead of
+  the real `T{8digits}-{6digits}` shape) that silently broke the
+  untracked-file-detection regex.
+- Quality probe: shellcheck clean (0 error/warning, 2 info — pre-existing
+  SC1091 "not following" notes on the dynamic `_lib.sh` source path, not
+  addressable without hardcoding); `design_score=78`. `file_loc`/
+  `max_fn_lines` regressions flagged are expected for a repo's first
+  substantial contribution to a previously-tiny `todo/` skill — record +
+  warn only, non-blocking per T20260609-204303 D2.
+- Function names drifted slightly from the design doc during
+  implementation (`todo-parse-queue-line`/`todo-fm-get`/`todo-claim-state`,
+  hyphenated, vs the design's `todo_parse_queue_line`/
+  `todo_read_frontmatter`/`todo_claim_state`) — a normal implementation
+  refinement (a single-field getter called per-field turned out simpler
+  than a bulk multi-field getter), not a behavior change.
+- External/unverified: this repo's own CI (`tests.yml`'s `bats` job) is
+  the actual verification that the corrected `tests/` path (not
+  `todo/tests/`) is picked up — confirmed locally via
+  `bats tests/*.bats _docs/*.bats`, same command CI runs.
+- No follow-up tasks filed — scope stayed within the original estimate.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — every function in
+  `_lib.sh`, `todo-next.sh`, and `todo-list.sh` was written test-first;
+  RED verified for all 21 tests (7+7+7 across the three BATS files, plus
+  2 more added after an initial coverage gap review), 2 real bugs caught
+  by watching RED for the wrong reason (a parser quirk, a fixture bug)
+  rather than the expected "feature missing"
+- Verification (`superpowers:verification-before-completion`): yes —
+  Test-plan-vs-coverage cross-check surfaced a real gap (missing
+  peer-claimed/reclaimable-stale coverage), fixed before closing; full
+  repo BATS suite + shellcheck + doc-impact + quality-probe all run
+  before commit
+- Systematic debugging (`superpowers:systematic-debugging`): yes — the
+  split-regex bash-parser bug was root-caused via binary-search
+  isolation (narrowing from the full pattern down to the minimal failing
+  two-group case) rather than guessing at a fix
+- Receiving code review (`superpowers:receiving-code-review`): pending —
+  addressed as part of this implementation PR's `/address-pr` loop
