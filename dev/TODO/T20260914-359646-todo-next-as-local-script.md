@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to speed up `/todo next`; scope broadened 2026-09-16 — maintainer asked why `/todo list`'s table costs an LLM turn too, when it's just as deterministic a read of already-persisted `queue.md`/frontmatter
 related: T20260911-347027
@@ -156,15 +156,15 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] BATS coverage (`next`): queue with a mix of Open/Done/Parked/peer-claimed/reclaimable-stale entries → script picks the correct top 3, in queue order (`todo/tests/todo-next.bats`)
-- [ ] BATS coverage (`next`, step 5): a top-3 survivor with `status: Blocked by T{id}` where `{id}` still has a `dev/TODO/` file → script prints the `/todo sweep` callout; where `{id}`'s file is gone → no callout (stale-blocker resolution is `sweep`'s job, not `next`'s) (`todo/tests/todo-next.bats`)
-- [ ] BATS coverage (`list`): renders the full table + counts correctly; detects an untracked task file, a stale queue line, and a stale `Blocked by T{id}` reference (`todo/tests/todo-list.bats`)
-- [ ] `CCXP_PEER_MODE=0` → no claim filtering (both scripts, where applicable) (`todo/tests/todo-next.bats`)
-- [ ] Empty queue / all-skipped queue → both scripts report that plainly instead of erroring (`todo/tests/todo-next.bats`, `todo/tests/todo-list.bats`)
-- [ ] Manual: script output matches `/todo list`'s and `/todo next`'s own current output structure, from a real ccxp-skills checkout — run against this repo's live `dev/TODO/queue.md`
+- [x] BATS coverage (`next`): queue with a mix of Open/Done/Parked/live-peer-claimed/reclaimable-stale entries → script picks the correct top 3, in queue order (`tests/todo-next.bats` — note: tests live in the repo's top-level `tests/`, not `todo/tests/`, per `.github/workflows/tests.yml`'s `bats tests/*.bats _docs/*.bats`; corrected from this design's original path during implementation)
+- [x] BATS coverage (`next`, step 5): a top-3 survivor with `status: Blocked by T{id}` where `{id}` still has a `dev/TODO/` file → script prints the `/todo sweep` callout; where `{id}`'s file is gone → no callout (stale-blocker resolution is `sweep`'s job, not `next`'s) (`tests/todo-next.bats`)
+- [x] BATS coverage (`list`): renders the full table + counts correctly; detects an untracked task file, a stale queue line, and a stale `Blocked by T{id}` reference (`tests/todo-list.bats`)
+- [x] `CCXP_PEER_MODE=0` → no claim filtering (both scripts, where applicable) (`tests/todo-next.bats`)
+- [x] Empty queue / all-skipped queue → both scripts report that plainly instead of erroring (`tests/todo-next.bats`, `tests/todo-list.bats`)
+- [x] Manual: script output matches `/todo list`'s and `/todo next`'s own current output structure, from a real ccxp-skills checkout — run against this repo's live `dev/TODO/queue.md`, confirmed correct output for both scripts
 
 ## Done criteria
 
-- [ ] `todo/scripts/todo-next.sh` and `todo/scripts/todo-list.sh` exist, sourceable, BATS-covered — `todo/scripts/todo-next.sh`, `todo/scripts/todo-list.sh`, `todo/scripts/_lib.sh`, `todo/tests/*.bats`
-- [ ] `todo/SKILL.md`'s `list` and `next` workflow sections invoke the scripts instead of re-deriving the walk/table — `todo/SKILL.md`'s `list`/`next` workflow sections
-- [ ] No behavior change to `/todo sweep` — `todo/SKILL.md`'s `sweep` workflow section is untouched by this task's diff
+- [x] `todo/scripts/todo-next.sh` and `todo/scripts/todo-list.sh` exist, sourceable, BATS-covered — `todo/scripts/todo-next.sh`, `todo/scripts/todo-list.sh`, `todo/scripts/_lib.sh`, `tests/todo-next.bats`, `tests/todo-list.bats`, `tests/todo-lib.bats`
+- [x] `todo/SKILL.md`'s `list` and `next` workflow sections invoke the scripts instead of re-deriving the walk/table — `todo/SKILL.md`'s `list`/`next` workflow sections
+- [x] No behavior change to `/todo sweep` — `todo/SKILL.md`'s `sweep` workflow section is untouched by this task's diff

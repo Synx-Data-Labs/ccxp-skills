@@ -80,6 +80,13 @@ If `$ARGUMENTS` is empty, default to `list`.
 
 ## Workflow: `list`
 
+Run `bash todo/scripts/todo-list.sh` and print its output verbatim — this
+is a fully deterministic read of `queue.md` + task frontmatter (no
+judgment involved), so it costs no model call (T20260914-359646). The
+algorithm below is what the script implements; it stays documented here
+for `sweep`'s own reuse (Phase 2/3 share the same drift/stale-blocker
+checks) and for a human reading this skill — don't re-derive it by hand.
+
 1. Read `dev/TODO/queue.md` for order.
 2. For each listed ID, read its `dev/TODO/T{id}-*.md`: title, Status, Estimation, `scheduled`, `claimed_by`.
 3. **Detect drift** (report, don't fix — that's `sweep`'s job):
@@ -115,6 +122,15 @@ silently filtered. If the top 3 turn out to be mostly non-actionable, that's
 a signal to run `/todo sweep` (which does the deeper analysis: fixing stale
 blockers, enforcing blocker order, pruning), not something this workflow
 tries to work around itself.
+
+Run `bash todo/scripts/todo-next.sh` and print its output verbatim — the
+skip logic and claim-state check are fully deterministic (no judgment
+involved), so this costs no model call (T20260914-359646). One line is
+explicitly **not** ported to the script and stays a judgment call for
+whoever reads the top pick's file: step 4's "the next concrete action to
+move it forward, if evident from the file" — that requires interpreting
+free-form task-body prose. The algorithm below is what the script
+implements; it stays documented here for a human reading this skill.
 
 1. Read `dev/TODO/queue.md` for order — this is the walk order, top to bottom. Do not re-sort it by deadline, estimation, or anything else; if the order is wrong, that's a `/top`/`/stage`/hand-edit problem, not something this workflow second-guesses.
 2. **Walk the queue top to bottom, skipping only**:
