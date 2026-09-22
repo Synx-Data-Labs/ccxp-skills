@@ -13,10 +13,12 @@ source: Claude Code review on synxdb-team#576 (claim PR for T20260922-539293), 2
   the release-on-pickup helper invoked by `/drive` Phase 1 / `/address-pr` §1.6
   before a new claim) clears `claimed_by` to empty but never touches
   `claimed_role`:
+
   ```
   599:      _tc_fm_set "$f" claimed_by ""        || return 1
   600:      _tc_fm_set "$f" status "$status"     || return 1
   ```
+
   Contrast with the full `_tc_release` verb (task close), which explicitly
   clears both fields as one contract: `_session/task_claim.sh:556`
   (`# same clear-on-close contract as claimed_by`).
