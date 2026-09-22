@@ -1,8 +1,10 @@
 ---
-status: Review
+status: Done
 estimation: 30m
 scheduled: 2026-09-14
 source: this conversation, 2026-09-18 — discovered running /land on a branch with a committed-but-unpushed change and no PR yet
+claimed_by:
+claimed_role:
 ---
 
 # T20260918-183003: `/gcpr` step 1 stops at "nothing to commit" without checking for an unpushed/PR-less branch
@@ -60,3 +62,29 @@ source: this conversation, 2026-09-18 — discovered running /land on a branch w
 - [x] `gcpr/SKILL.md` step 1 documents the ahead-of-main / PR-exists
       check and the branch to step 5-7 vs. genuine stop
 - [x] `land/SKILL.md` needs no changes — it forwards to `gcpr` unchanged
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #40** (`fix(_gh): write-aware account picker + /gcpr
+  unpushed-branch check`, merged 2026-09-22T15:16:14Z), alongside
+  T20260911-140914 — the task file itself was never flipped to `Done`
+  after the PR landed. This close catches that up.
+- Both Done criteria met — `gcpr/SKILL.md` step 1 now documents the
+  ahead-of-main / PR-exists check per the design above.
+- Test plan: item 1 (the manual repro that surfaced the gap) is checked;
+  items 2-3 remain honestly unchecked as documented — doc-only change,
+  not separately exercised live.
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change
+  (skill-doc prose, no executable code)
+- Verification (`superpowers:verification-before-completion`): yes —
+  re-checked the merged PR's `gcpr/SKILL.md` diff against every Done
+  criteria line before flipping status
+- Systematic debugging (`superpowers:systematic-debugging`): n/a — this
+  session performed no debugging, only task closure
+- Receiving code review (`superpowers:receiving-code-review`): n/a —
+  no new review round; PR #40's own review already happened at
+  implementation time
