@@ -21,9 +21,12 @@
 #     defaults when the target repo has no such config.
 #   * Runner-preferring: an installed `markdownlint-cli2`, else `npx --yes
 #     markdownlint-cli2@<pinned>` (exact CI parity). Both exit 0 (clean) / 1
-#     (violations) — authoritative. With a repo config present the runner lints
-#     the FULL config-glob doc set (dev/**/*.md + *.md) — i.e. exactly what its
-#     CI lints — so path args only ADD globs; they cannot narrow below the config.
+#     (violations) — authoritative. With NO explicit path args, a repo config's
+#     FULL config-glob doc set (dev/**/*.md + *.md) is linted — i.e. exactly
+#     what its CI lints — for the default-scope pre-commit-guard use case.
+#     With EXPLICIT path args (T20260910-919422), `--no-globs` is added so
+#     those paths are the SOLE file selector — the config's own `globs` no
+#     longer apply, and only the exact given file(s) are ever touched.
 #   * Vendored MD032 floor: a dependency-free awk check that runs when no runner
 #     can execute (truly offline / no node), so the guard never silently passes a
 #     malformed doc. Scoped to MD032 — the entire recurring failure class — over
@@ -167,10 +170,15 @@ _lint_docs_vendored() {
 # returns 0 (clean) / 1 (violations) when it actually ran, or 3 when it could
 # not run (e.g. npx offline) — the caller treats 3 as "fall back to vendored".
 # With no explicit paths the tool uses .markdownlint-cli2.jsonc globs (full CI
-# parity); explicit paths are passed through as globs.
+# parity, unchanged); explicit paths get --no-globs (T20260910-919422) so the
+# CLI path(s) become the SOLE file-selection mechanism instead of merging with
+# the config's own globs (verified: a config's globs are otherwise additive,
+# never narrowed by CLI args — and a globs-stripped temp-config override does
+# NOT work either, since markdownlint-cli2 falls back to its own hardcoded
+# **/*.md default with no top-level globs present at all).
 _lint_docs_run_tool() {
-  local runner="$1" fix="$2"
-  shift 2
+  local runner="$1" fix="$2" explicit="$3"
+  shift 3
   local cmd=()
   case "$runner" in
     markdownlint-cli2) cmd=(markdownlint-cli2) ;;
@@ -178,6 +186,7 @@ _lint_docs_run_tool() {
     *)                 return 3 ;;
   esac
   [ "$fix" -eq 1 ] && cmd+=(--fix)
+  [ "$explicit" -eq 1 ] && cmd+=(--no-globs)
 
   local out rc
   out="$("${cmd[@]}" "$@" 2>&1)" && rc=0 || rc=$?
@@ -200,13 +209,17 @@ lint_docs_run() {
       *)            paths+=("$arg") ;;
     esac
   done
-  [ "${#paths[@]}" -eq 0 ] && paths=("${_LINT_DOCS_DEFAULT_PATHS[@]}")
+  # Explicit-path scoping (--no-globs) only applies when the CALLER gave a
+  # path — the default-scope fallback below still wants full config-glob
+  # coverage, so this must be captured before the default substitution.
+  local explicit=1
+  [ "${#paths[@]}" -eq 0 ] && { explicit=0; paths=("${_LINT_DOCS_DEFAULT_PATHS[@]}"); }
 
   local runner
   runner="$(_lint_docs_runner)"
   if [ -n "$runner" ]; then
     local rc=0
-    _lint_docs_run_tool "$runner" "$fix" "${paths[@]}" || rc=$?
+    _lint_docs_run_tool "$runner" "$fix" "$explicit" "${paths[@]}" || rc=$?
     if [ "$rc" -le 1 ]; then
       return "$rc"
     fi
