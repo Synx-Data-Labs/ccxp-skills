@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Coding — Design approved in-conversation 2026-09-22 (self-evident, mirrors ccxp/SKILL.md Phase 1.4/2a.6 pattern)
 estimation: 1h
 source: /ccxp session 2026-09-11 (01:03Z tick), discovered while verifying the 2026-09-11 retro's Slack post
 related: T20260717-433409
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260910-872316: Retro's Slack summary has no webhook fallback, unlike standup/IPM
