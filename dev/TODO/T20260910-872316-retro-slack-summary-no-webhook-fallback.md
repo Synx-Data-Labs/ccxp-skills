@@ -138,5 +138,6 @@ scheduled: 2026-09-21
   `lint_tasks.py`, and a Done-criteria-to-diff mapping check before PR
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't
   get stuck
-- Receiving code review (`superpowers:receiving-code-review`): pending —
-  addressed as part of PR #66's `/address-pr` loop
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d, 1 iteration, 1 real finding (a stale "pending"
+  self-reference in this section) fixed, 0 pushback
