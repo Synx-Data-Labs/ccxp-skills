@@ -29,7 +29,9 @@ scheduled: 2026-09-21
 
 - **In scope — `next`**: skip `Done`/legacy `Revisit`/`Parked`; peer-mode
   claim filtering via `task_claim.sh read`/`claimant-id`/`reclaimable`,
-  disable via `CCXP_PEER_MODE=0`.
+  disable via `CCXP_PEER_MODE=0`; a plain `/todo sweep` callout when a
+  top-3 survivor is still `Blocked by T{id}` and `{id}`'s file still
+  exists in `dev/TODO/` (`todo/SKILL.md`'s `next` step 5).
 - **In scope — `list`**: the table (all 8 columns per `todo/SKILL.md`'s
   `list` workflow), the summary counts (total, by status,
   committed-to-iteration, claimed mine/peers), the parking-lot count, and
@@ -86,7 +88,14 @@ scheduled: 2026-09-21
   another live session per `todo_claim_state`, collects the first 3
   survivors, and prints each one's queue position, verbatim status,
   deadline/scheduled, claim state, and `Unblocks:` list if the frontmatter
-  has one. **Deliberately out of scope**: `next`'s "the next concrete
+  has one. **In scope — `next` step 5** (a real gap an independent
+  design review caught 2026-09-22, added here before implementation): if
+  a survivor's status contains `Blocked by T{id}`, check whether `{id}`
+  still has a file in `dev/TODO/` — if so, print a plain callout pointing
+  at `/todo sweep` (same existence check `list`'s stale-blocker detection
+  already does; the script does **not** try to interpret the block
+  further, matching `todo/SKILL.md`'s own "don't try to interpret it
+  further" instruction). **Deliberately out of scope**: `next`'s "the next concrete
   action to move it forward, if evident from the file" line — that
   requires reading and interpreting a task's free-form body prose, which
   is exactly the judgment call a token-free script can't make. The
@@ -94,11 +103,11 @@ scheduled: 2026-09-21
   reading the top pick's file can still add that interpretation on top,
   same as today.
 - `todo/SKILL.md`'s `list` and `next` workflow sections are rewritten to
-  say "run `bash todo/scripts/todo-list.sh`" / "run `bash
-  todo/scripts/todo-next.sh`" and print the result, instead of re-deriving
-  the walk inline — but the underlying algorithm description stays in the
-  skill doc (for `sweep`'s Phase 2/3 reuse, and for a human reader), per
-  this task's own Scope note.
+  say "run `todo/scripts/todo-list.sh`" / "run `todo/scripts/todo-next.sh`"
+  and print the result, instead of re-deriving the walk inline — but the
+  underlying algorithm description stays in the skill doc (for `sweep`'s
+  Phase 2/3 reuse, and for a human reader), per this task's own scoping
+  note above.
 - **Alternatives rejected**:
   - *One script with `list`/`next` subcommands* — the task's own "Done
     looks like" line offers this as an option; rejected in favor of two
@@ -148,6 +157,7 @@ scheduled: 2026-09-21
 ## Test plan
 
 - [ ] BATS coverage (`next`): queue with a mix of Open/Done/Parked/peer-claimed/reclaimable-stale entries → script picks the correct top 3, in queue order (`todo/tests/todo-next.bats`)
+- [ ] BATS coverage (`next`, step 5): a top-3 survivor with `status: Blocked by T{id}` where `{id}` still has a `dev/TODO/` file → script prints the `/todo sweep` callout; where `{id}`'s file is gone → no callout (stale-blocker resolution is `sweep`'s job, not `next`'s) (`todo/tests/todo-next.bats`)
 - [ ] BATS coverage (`list`): renders the full table + counts correctly; detects an untracked task file, a stale queue line, and a stale `Blocked by T{id}` reference (`todo/tests/todo-list.bats`)
 - [ ] `CCXP_PEER_MODE=0` → no claim filtering (both scripts, where applicable) (`todo/tests/todo-next.bats`)
 - [ ] Empty queue / all-skipped queue → both scripts report that plainly instead of erroring (`todo/tests/todo-next.bats`, `todo/tests/todo-list.bats`)
