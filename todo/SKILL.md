@@ -74,7 +74,7 @@ Start from the canonical scaffold: [`repo-conventions/templates/task.md`](../rep
 
 - `list` — show all open tasks in queue order (reports stale blockers and queue/`dev/TODO/` drift but does not modify files)
 - `next` — show the top 3 non-done, non-peer-claimed tasks off the queue (does not check blocked-by/lint-frozen — that's `sweep`'s job)
-- `sweep` — sync `queue.md` with `dev/TODO/`, fix stale blockers, then prune the backlog (park, close, or consolidate low-value tasks)
+- `sweep` — sync `queue.md` with `dev/TODO/`, fix stale blockers, then prune the backlog (auto-close finished/superseded work, ask before parking anything blocked or stale)
 
 If `$ARGUMENTS` is empty, default to `list`.
 
