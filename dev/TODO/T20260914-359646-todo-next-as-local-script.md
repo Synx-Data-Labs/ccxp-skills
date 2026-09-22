@@ -234,5 +234,7 @@ scheduled: 2026-09-21
   split-regex bash-parser bug was root-caused via binary-search
   isolation (narrowing from the full pattern down to the minimal failing
   two-group case) rather than guessing at a fix
-- Receiving code review (`superpowers:receiving-code-review`): pending —
-  addressed as part of this implementation PR's `/address-pr` loop
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d, 2 iterations, 4 real findings across both rounds
+  (2 in the design PR, 3 in the implementation PR incl. a genuine
+  correctness bug) fixed, 0 pushback
