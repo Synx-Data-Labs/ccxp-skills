@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 4h
 source: maintainer conversation, 2026-09-15
 description: Add `/repo-conventions mode {solo|team}` to toggle a repo's Branch and Merge Policy plus actual GitHub branch protection
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260915-315552: Add `/repo-conventions mode {solo|team}` to switch a repo between solo and team branch policy
