@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1h
 source: Retro 2026-09-18 (build-pipeline-repo) — Phase 4c skill quality review
 related: none yet — no existing task covers this
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260918-414727: `ccxp/SKILL.md`'s relative script paths (`../ccxp/scripts/...`, `../_gh/gh.sh`, etc.) don't resolve from a `/ccxp` session's actual cwd on at least one box
