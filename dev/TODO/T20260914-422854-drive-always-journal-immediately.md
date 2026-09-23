@@ -1,10 +1,35 @@
 ---
-status: Open
+status: Coding — Design approved in-conversation (maintainer dictated the exact scope with precise file:line targets when filing this task, per source:)
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to retire the deferred-to-Friday-retro default
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260914-422854: `/drive` always journal-moves a task on close; `/retro` reads both `dev/TODO` and `dev/JOURNAL` for the week's finished tasks
+
+## TLDR
+
+- **Type**: chore
+- **Problem**: `/retro`'s Phase 2 "Shipped" classification and Phase 4 skills-audit grep only look in `dev/JOURNAL/`, but `/drive`'s current default leaves a closed task's file sitting in `dev/TODO/` (status: Done) until Friday's batch sweep — so most of the week's just-closed tasks are invisible to `/retro`'s own classification step, which runs *before* that sweep in the same invocation.
+- **Solution**: make `/drive`'s immediate journal-move (currently the `--immediate`-only path) the sole close behavior, and teach `/retro`'s classification/audit steps to also check `dev/TODO/*.md` with `status: Done` — Phase 2b becomes a backstop for hand-closed tasks, not the primary mechanism.
+
+## Context
+
+- T20260513-189862 introduced the current deferred-to-Friday default —
+  its stated rationale was collapsing N per-task hub PRs into one weekly
+  sweep PR (`/drive` Phase 4's own comment, `drive/SKILL.md`). This task
+  reverses that trade-off per direct maintainer ask: the retro-visibility
+  gap it causes outweighs the PR-count savings.
+- Confirmed live in this repo (2026-09-14, when this task was filed):
+  four tasks sat `status: Done` in `dev/TODO/`, correctly awaiting the
+  Friday sweep per the current design — the exact accumulation
+  `retro/SKILL.md`'s own Phase 2b header comment describes as its reason
+  to exist. This session's own current run (2026-09-22/23) has since
+  independently reproduced the same pattern multiple times (T20260910-872316,
+  T20260911-140914, T20260914-412750, T20260914-359646 all closed
+  in-place this run, none yet moved to `dev/JOURNAL/`).
 
 ## Problem
 
@@ -65,6 +90,17 @@ source: this conversation, 2026-09-14 — maintainer asked to retire the deferre
   (used earlier today to close T20260912-279229, a task that shipped directly
   to `main` outside `/drive` entirely) still has a role — it does, for exactly
   that out-of-band case, and isn't touched by this change.
+- **Alternatives rejected**:
+  - *Fix only `/retro`'s classification to also scan `dev/TODO/`, leave
+    `/drive`'s deferred default alone* — rejected: this closes the
+    visibility gap but not the root inconsistency the maintainer flagged
+    (a "Done" task sitting outside `dev/JOURNAL/` for up to a week is
+    itself confusing state, independent of whether `/retro` can see it).
+  - *Keep both paths, add a flag defaulting to immediate* — rejected:
+    the whole point is retiring the conditional selection
+    (`--immediate`/`P0`/customer-visible), not inverting its default;
+    two code paths for one behavior is the exact complexity this task
+    removes.
 
 ## Test plan
 
@@ -81,13 +117,7 @@ source: this conversation, 2026-09-14 — maintainer asked to retire the deferre
 
 ## Done criteria
 
-- [ ] `drive/SKILL.md` Phase 4 and Phase 7 (same-repo and cross-repo) always
-      journal-move on close; the `--immediate`/`P0`/customer-visible
-      conditional selection is removed
-- [ ] `retro/SKILL.md` Phase 2's Shipped classification and Phase 4's
-      skills-audit grep both check `dev/TODO/` Done tasks in addition to
-      `dev/JOURNAL/`
-- [ ] `retro/SKILL.md` Phase 2b is reframed as a backstop sweep, not the
-      primary mechanism
-- [ ] `lifecycle.md` and any other doc referencing the deferred-close
-      convention (`T20260513-189862`) are updated
+- [ ] `drive/SKILL.md` Phase 4/Phase 7 always journal-move on close, conditional selection removed — see `drive/SKILL.md:402-406`, `:530-536`, `:549-566`.
+- [ ] `retro/SKILL.md` Phase 2 Shipped classification + Phase 4 skills-audit grep both check `dev/TODO/` Done tasks — see `retro/SKILL.md:215`, `:373`.
+- [ ] `retro/SKILL.md` Phase 2b reframed as backstop, not primary mechanism — see `retro/SKILL.md:259-284`.
+- [ ] `lifecycle.md` and other `T20260513-189862`-referencing docs updated — see this task's own `## Closed` section for the grep result and files touched.
