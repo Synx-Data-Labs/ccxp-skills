@@ -1,10 +1,10 @@
 ---
-status: Coding
+status: Done
 estimation: 1h
 source: this conversation, 2026-09-18
 related: T20260718-160579, T20260922-324422
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -279,85 +279,85 @@ file (see that section for why) — so this case gets its **own** verdict,
 
 ## Test plan
 
-- [ ] Baseline: `bats tests/task_claim.bats` passes on `main` today (before
-      any code change) — establishes there's no pre-existing breakage this
-      task could be blamed for.
-- [ ] New unit test: `resolve_task_location_head: task file present on the
+- [x] Baseline: `bats tests/task_claim.bats` passes on `main` today (before
+      any code change) — 83 cases, all passing prior to this task's changes.
+- [x] New unit test: `resolve_task_location_head: task file present on the
       PR's own HEAD ref but absent from main -> resolves via head-ref
       fallback` (`tests/task_claim.bats`, alongside the existing
       `resolve_task_location: same-repo, task file present in NEITHER dir ->
       fails closed (unknown)` case).
-- [ ] New unit test: `pr-owner: cross-repo Task: link present but
+- [x] New unit test: `pr-owner: cross-repo Task: link present but
       unresolvable (ambiguous/mismatched) -> unknown, NEVER falls through to
       the same-repo head-ref search` — guards Design review (second pass)
       Finding 1; must not regress `tests/task_claim.bats:773,780,788,796`'s
       existing fail-closed guarantees one layer up in `_tc_pr_owner`.
-- [ ] New unit test: `pr-owner: task file new in this PR (absent on main,
+- [x] New unit test: `pr-owner: task file new in this PR (absent on main,
       present on head, no claimed_by) -> new` (verdict is `new`, not `free`
       — see the design revision above).
-- [ ] New unit test: `pr-owner: task file new in this PR but already carries a
+- [x] New unit test: `pr-owner: task file new in this PR but already carries a
       claimed_by (mine) on head -> mine` and `... (another agent's) on head ->
       owned:<by>` (the raced-restage edge case named in Solution's
       rejected-alternative above) — both flow through the *unchanged*
       `mine`/`owned:` paths, only the unclaimed case gets the new verdict.
-- [ ] `bats tests/task_claim.bats` — full suite passes locally **after** the
-      change (all pre-existing cases + the new ones above).
-- [ ] Manual smoke: re-run `bash _session/task_claim.sh pr-owner 39` against
+- [x] `bats tests/task_claim.bats` — full suite passes locally **after** the
+      change: 98 cases, all passing (15 new). Full repo suite (`bats tests/`):
+      705 cases, all passing — no regressions.
+- [x] Manual smoke: re-run `bash _session/task_claim.sh pr-owner 39` against
       the real PR #39 (already merged) is not repeatable as a live repro since
-      the file is on `main` now — instead verify against **this task's own
-      claim PR** while it is still open (a same-repo PR whose diff adds no new
-      task file, so it must still resolve exactly as before — regression
-      check, not a new-file repro).
+      the file is on `main` now — instead verified against **this task's own
+      claim PR (#93)**, merged, a same-repo PR whose diff added no new task
+      file: `bash _session/task_claim.sh pr-owner 93` → `mine` — the
+      main-resolved path is unaffected, exactly as before this change.
 - [ ] Manual/documentation verification: `address-pr/SKILL.md` §1.6's new
       `new` case is exercised the next time a real `/stage`-introduces-a-new-
       file PR is addressed (can't be dry-run in bats, since it's a documented
-      *procedure* for the driving session, not a pure function) — post-merge
-      item, tracked via this task's own eventual `/stage` usage or the next
-      one encountered.
+      *procedure* for the driving session, not a pure function) — **post-merge
+      item, left unchecked**: genuinely external, will be confirmed the next
+      time such a PR goes through `/address-pr`.
 
 ## Done criteria
 
-- [ ] `_tc_pr_owner` returns `new` (not `unknown`, not `free`) for a same-repo
+- [x] `_tc_pr_owner` returns `new` (not `unknown`, not `free`) for a same-repo
       PR whose diff introduces the task file and that file carries no
       `claimed_by` — `tests/task_claim.bats` test `pr-owner: task file new in
       this PR (absent on main, present on head, no claimed_by) -> new`.
-- [ ] `_tc_pr_owner` returns `mine`/`owned:<by>` (not `new`) for the same
+- [x] `_tc_pr_owner` returns `mine`/`owned:<by>` (not `new`) for the same
       shape but with a `claimed_by` already stamped on the head-ref copy —
       `tests/task_claim.bats` tests for both sub-cases.
-- [ ] `_tc_resolve_task_location_head` only runs after
+- [x] `_tc_resolve_task_location_head` only runs after
       `_tc_resolve_task_location` (the `main`-ref lookup) fails, and never
       changes `_tc_resolve_task_location`'s own 2-field return contract —
       `tests/task_claim.bats` test `resolve_task_location_head: task file
       present on the PR's own HEAD ref but absent from main -> resolves via
       head-ref fallback`.
-- [ ] All pre-existing `_tc_resolve_task_location` / `_tc_pr_owner` bats cases
+- [x] All pre-existing `_tc_resolve_task_location` / `_tc_pr_owner` bats cases
       at `tests/task_claim.bats:585-880` still pass unchanged — no regression
-      to the `main`-resolved path (full-suite run: `bats tests/task_claim.bats`).
-- [ ] `_tc_fetch_fm_field` (`_session/task_claim.sh:682`) accepts an optional
+      to the `main`-resolved path (full-suite run: `bats tests/task_claim.bats`,
+      98/98 passing).
+- [x] `_tc_fetch_fm_field` (`_session/task_claim.sh:682`) accepts an optional
       ref argument, default `main` — existing callers that omit it are
       unaffected (same bats full-suite run as above covers this).
-- [ ] `address-pr/SKILL.md` §1.6 documents the `new` case's own claim
+- [x] `address-pr/SKILL.md` §1.6 documents the `new` case's own claim
       procedure (checkout the PR's own branch, not a fresh branch off `main`,
-      including the "lost the race" step) — text review at PR time, not
-      bats-testable (it's operator-facing documentation, not code).
-- [ ] `_tc_pr_has_cross_repo_task_link` reports true only when the body has a
+      including the "lost the race" step) — done.
+- [x] `_tc_pr_has_cross_repo_task_link` reports true only when the body has a
       `Task:`-prefixed line **containing a github blob-link URL** (the exact
       `_tc_resolve_task_location:642-644` condition) — never on bare
       `Task:`-line presence alone, and never `false` on its own fetch
       failure — both new unit tests below.
-- [ ] A cross-repo PR whose `Task:` link fails to resolve for any of the
+- [x] A cross-repo PR whose `Task:` link fails to resolve for any of the
       pre-existing reasons (ambiguous, ID mismatch, fetch failure) still
       returns `unknown` from `_tc_pr_owner` and never reaches
       `_tc_resolve_task_location_head` — `tests/task_claim.bats` test
       `pr-owner: cross-repo Task: link present but unresolvable -> unknown,
       NEVER falls through to the same-repo head-ref search`.
-- [ ] New unit test: `pr-owner: body has a Task:-prefixed line with NO blob
+- [x] New unit test: `pr-owner: body has a Task:-prefixed line with NO blob
       link (not a real cross-repo pointer) -> still falls through to the
       head-ref search, verdict new` — the negative counterpart to the item
       above; guards Design review (third pass) Finding A — a `Task:`-worded
       line alone must never block the fallback, only an actual blob link
       does.
-- [ ] New unit test: `pr_has_cross_repo_task_link: its own body-fetch failure
+- [x] New unit test: `pr_has_cross_repo_task_link: its own body-fetch failure
       fails CLOSED (reports "link present", blocking the fallback)` — guards
       Design review (third pass) Finding B.
 
@@ -402,3 +402,55 @@ file (see that section for why) — so this case gets its **own** verdict,
   branch/body-link mismatch on a rescoped PR) and T20260922-324422 (another
   `pr-owner` misresolution class) — same function family, different root
   causes; no blocking relationship.
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #94** (design, merged) and the implementation PR opened
+  immediately after this section was written (see the PR this task file's
+  own commit history points to — same branch `t20260918-404944-impl`).
+- **Met**: `_tc_pr_owner` now returns `new` for a same-repo PR (e.g. `/stage`)
+  that introduces its own task file, unclaimed, not yet on `main` — instead
+  of `unknown`. The fallback is correctly gated so cross-repo PRs with an
+  unresolvable `Task:` link still return `unknown` (no regression to the
+  fail-closed guarantees `tests/task_claim.bats:773,780,788,796` protect).
+  `address-pr/SKILL.md` §1.6 documents the `new` case's own claim procedure.
+  All Done criteria items checked; 98/98 `task_claim.bats` cases and 705/705
+  full-repo bats cases pass.
+- **External/unverified**: the one post-merge Test-plan item — exercising
+  `address-pr/SKILL.md` §1.6's new `new` case against a *real* `/stage`
+  PR through `/address-pr` — is left unchecked; it's a documented procedure
+  for a driving session, not something a unit test can exercise. Will be
+  confirmed the next time such a PR is addressed.
+- **Design process note**: this task's design went through four independent
+  review rounds (see `## Design review` above) before implementation — three
+  found real, escalating-precision bugs in the fallback-gating mechanism
+  (the `free`-verdict reuse itself, then two rounds narrowing exactly which
+  cross-repo failures must still block the fallback); the fourth was a clean
+  bill. Worth noting for future `/drive` runs on this task family: the
+  `pr-owner`/`_tc_resolve_task_location` function family is unusually
+  fail-closed-sensitive — small gating changes there deserve the same
+  scrutiny this task got, not less.
+- **Follow-up tasks filed**: none — no new blockers or issues surfaced beyond
+  what's already tracked in `related:` (T20260718-160579, T20260922-324422).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — this is a same-repo,
+  code-class task where the design doc itself (after independent review)
+  fully specified the exact test cases before implementation; tests were
+  written alongside the implementation from that spec rather than a
+  separate red-green-refactor loop, but every new branch is covered (98
+  `task_claim.bats` cases, 15 new).
+- Verification (`superpowers:verification-before-completion`): yes — ran the
+  full bats suite (705 cases) and a live manual smoke test
+  (`pr-owner 93 -> mine`) before treating the implementation as complete.
+- Systematic debugging (`superpowers:systematic-debugging`): yes — one bats
+  test failure (`pr_has_cross_repo_task_link`'s fetch-failure case) was
+  root-caused via hypothesis-and-isolation (reproduced in a minimal debug
+  `.bats` file) to a `set -e`/command-substitution interaction, rather than
+  guessed at; fixed by wrapping in `run`, matching the file's existing idiom
+  for exactly this scenario.
+- Receiving code review (`superpowers:receiving-code-review`): yes — four
+  independent review rounds on the design PR; three raised real findings,
+  all steelmanned, verified against the actual code, and fixed (no
+  pushback needed — every finding held up under verification).
