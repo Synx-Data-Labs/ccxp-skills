@@ -139,10 +139,12 @@ longer blocks every PR behind it.
 - [x] Manual: `bash address-pr/scripts/auto-pick.sh` against this repo's real open PRs (none open
       at implementation time) — confirmed exit 0, empty stdout, real `GH_SH`/`TASK_CLAIM_SH`
       default resolution works (not just the stubbed test path).
+- [x] BATS: walks past *two* consecutive bad candidates (`owned:*` then `unknown`) to pick the
+      3rd — added per independent review of PR #101 — `tests/address_pr_auto_pick.bats:93`.
 
 ## Done criteria
 
-- [x] `address-pr/scripts/auto-pick.sh` walks oldest-first and skips `owned:*`/`unknown`, picking the first `mine`/`free`/`new`/`untracked` candidate — `tests/address_pr_auto_pick.bats` (7/7 passing).
+- [x] `address-pr/scripts/auto-pick.sh` walks oldest-first and skips `owned:*`/`unknown`, picking the first `mine`/`free`/`new`/`untracked` candidate — `tests/address_pr_auto_pick.bats` (8/8 passing).
 - [x] `address-pr/SKILL.md` §1's auto-pick bullet calls `auto-pick.sh` instead of the inline `sort_by(.createdAt) | .[0]` jq filter — diff review in the implementation PR.
 - [x] Behavior-parity gate (skill-conventions §9): `tests/address_pr_auto_pick.bats` proves the new script's stopping rule is a strict superset of today's (still defers, exit 0, empty stdout, when nothing is pickable) — see the "defers" and "zero open PRs" cases.
 
@@ -152,7 +154,7 @@ longer blocks every PR behind it.
 |---|---|---|
 | `address-pr/SKILL.md` §1 | auto-pick bullet | The `sort_by(.createdAt) \| .[0]` one-liner this task replaces with a script call |
 | `address-pr/scripts/auto-pick.sh` | new | The walk-and-skip auto-pick script this task adds |
-| `tests/address_pr_auto_pick.bats` | new | Hermetic BATS coverage (7 cases) — stub `GH_SH`/`TASK_CLAIM_SH` |
+| `tests/address_pr_auto_pick.bats` | new | Hermetic BATS coverage (8 cases) — stub `GH_SH`/`TASK_CLAIM_SH` |
 | `_session/task_claim.sh:800` (`_tc_pr_owner`) | 800-845 | The unchanged per-PR ownership resolver the new script calls once per candidate |
 | `todo/scripts/todo-next.sh` | whole file | The worked-example walk-and-skip pattern this task ports (T20260914-359646) |
 | `drive/SKILL.md` Phase 0 | | Calls bare `/address-pr` once per cycle — updated in lockstep (Phase 3.7 doc-freshness) to describe the walk-and-skip behavior instead of the retired `.[0]` one-liner |

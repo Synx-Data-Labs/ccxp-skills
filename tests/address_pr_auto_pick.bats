@@ -90,6 +90,20 @@ run_auto_pick_stdout_only() {
   [[ "$output" != *'"number":1'* ]]
 }
 
+@test "walks past two consecutive bad candidates to pick the 3rd" {
+  # Regression guard for T20260919-266165's own review: proves the walk
+  # doesn't stop after checking only the first two entries.
+  write_gh_stub '[{"number":1,"title":"oldest","createdAt":"2026-06-30T00:00:00Z"},{"number":2,"title":"2nd oldest","createdAt":"2026-07-01T00:00:00Z"},{"number":3,"title":"3rd oldest","createdAt":"2026-07-02T00:00:00Z"}]'
+  write_claim_stub "1:owned:Ed 2:unknown 3:free"
+
+  run_auto_pick
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"number":3'* ]]
+  [[ "$output" == *'"reason":"free"'* ]]
+  [[ "$output" != *'"number":1'* ]]
+  [[ "$output" != *'"number":2'* ]]
+}
+
 @test "skips an unknown-verdict oldest PR the same as owned" {
   write_gh_stub '[{"number":1,"title":"flaky","createdAt":"2026-06-30T00:00:00Z"},{"number":2,"title":"free one","createdAt":"2026-07-01T00:00:00Z"}]'
   write_claim_stub "1:unknown 2:free"
