@@ -18,15 +18,15 @@ claimed_role: interactive
 
 ## Context
 
-- `_ipm/current.sh`'s `_ipm_current()` (`_ipm/current.sh:33-47`) is shared by
+- `_ipm/current.sh`'s `_ipm_current()` (`_ipm/current.sh:34-48`) is shared by
   4+ callers (`/rca` Step 6, `/ccxp` Phase 1.1/2a.1.5/2a.5b — see its own
-  docstring, `_ipm/current.sh:19-26`) that legitimately want "newest
+  docstring, `_ipm/current.sh:16-24`) that legitimately want "newest
   committed IPM, however old" — e.g. Phase 2a.1.5 runs before this week's
   IPM commits, so "newest committed" correctly means last week's file; a
   real IPM-cadence gap (a cron deadlock swallowing a Monday IPM, an
   observed recurring scenario) can also legitimately push this to
   multiple weeks old without it being wrong for those callers.
-- `stamp-scheduled.sh` (`_ipm/stamp-scheduled.sh:35-40`) is the one caller
+- `stamp-scheduled.sh` (`_ipm/stamp-scheduled.sh:38-49`) is the one caller
   where an old result is actually **wrong**, not just old: it's mapping a
   task to a **current/upcoming board iteration**, and a 13-week-stale
   Monday silently produces a `scheduled:` date in the past.
@@ -34,11 +34,18 @@ claimed_role: interactive
 ## Solution
 
 - Add the staleness bound **only in `stamp-scheduled.sh`'s Tier 1 block**
-  (`_ipm/stamp-scheduled.sh:35-40`), right after resolving `BASE` from
+  (`_ipm/stamp-scheduled.sh:38-49`), right after resolving `BASE` from
   `_ipm_current`'s result: if the resolved date is more than 14 days
   behind `$TODAY`, clear `BASE` back to empty — the existing `if [ -z
-  "$BASE" ]` Tier-2 fallthrough (`_ipm/stamp-scheduled.sh:42`) then
+  "$BASE" ]` Tier-2 fallthrough (`_ipm/stamp-scheduled.sh:52`) then
   naturally takes over, no new control-flow needed.
+- Date-diff arithmetic: reuse this repo's established GNU/BSD dual-date
+  fallback idiom (`_session/task_claim.sh:347-349`'s `_tc_iso_to_epoch` —
+  GNU `date -d ... +%s` first, BSD `date -j -f ... +%s` second) to convert
+  both `BASE` and `$TODAY` to epoch seconds, then compare
+  `(today_epoch - base_epoch) / 86400 > 14`. This is already the repo's
+  portable pattern for date math (also used at `ccxp/scripts/epic-status.sh:111`
+  and `ccxp/SKILL.md:568,697`) — not a new idiom to invent.
 - **Alternatives rejected**:
   - *Add the staleness bound inside `_ipm_current()` itself* — rejected:
     that function is shared by 4+ callers whose own docstring explicitly
@@ -65,7 +72,7 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `tests/stamp_scheduled.bats` — new case: a stale (>14 days old) IPM file present, no token override → Tier 1 is skipped and Tier 3 (next-Monday) is used instead (`_ipm/stamp-scheduled.sh:35-42`)
+- [ ] `tests/stamp_scheduled.bats` — new case: a stale (>14 days old) IPM file present, no token override → Tier 1 is skipped and Tier 3 (next-Monday) is used instead (`_ipm/stamp-scheduled.sh:38-52`)
 - [ ] Existing cases (fresh IPM file, Project-API override, no-token fallback) still pass — full `bats tests/stamp_scheduled.bats` suite green
 
 ## Done criteria
