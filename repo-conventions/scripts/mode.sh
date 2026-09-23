@@ -105,6 +105,14 @@ fi
 
 # --- API call FIRST; doc rewrite only after it succeeds ----------------------
 if [ "$MODE" = team ]; then
+  # contexts: [] deliberately names no specific required check (see the
+  # task's design Alternatives rejected) — job names drift across a repo's
+  # CI evolution and a stale contexts list would silently block merges once
+  # a job is renamed. This means the branch-protection API call enforces
+  # "no direct push" but NOT "CI must pass" as a hard GitHub-side gate; the
+  # latter is enforced procedurally by this suite's own /address-pr loop,
+  # not by branch protection. A repo wanting GitHub-side named-check
+  # enforcement can add `contexts` itself via the GitHub UI/API afterward.
   BODY='{
   "required_status_checks": {"strict": true, "contexts": []},
   "enforce_admins": false,
@@ -117,7 +125,7 @@ if [ "$MODE" = team ]; then
   fi
 else
   if ! OUT=$(bash "$GH_SH" api -X DELETE "repos/$REPO/branches/main/protection" 2>&1); then
-    if ! echo "$OUT" | grep -qi "404\|not found\|not protected"; then
+    if ! echo "$OUT" | grep -qiE "404|not found|not protected"; then
       echo "mode.sh: failed to disable branch protection on $REPO: $OUT" >&2
       exit 1
     fi
@@ -126,7 +134,12 @@ else
 fi
 
 # --- rewrite the Branch and Merge Policy section -----------------------------
-DOC="$DOC" MODE="$MODE" python3 - <<'PY'
+# The API call above already succeeded (live GitHub state has been mutated),
+# so a failure HERE must not be silently swallowed — set -uo pipefail alone
+# doesn't catch it (no -e, and the script's last statement is an unconditional
+# echo), which would otherwise exit 0 while leaving $DOC and reality out of
+# sync, exactly the drift state the API-first ordering exists to prevent.
+if ! DOC="$DOC" MODE="$MODE" python3 - <<'PY'
 import os
 
 doc = os.environ["DOC"]
@@ -172,5 +185,9 @@ new_lines = lines[:start] + block.rstrip("\n").split("\n") + [""] + lines[end:]
 with open(doc, "w") as f:
     f.write("\n".join(new_lines))
 PY
+then
+  echo "mode.sh: FATAL — GitHub's branch protection on $REPO was already $([ "$MODE" = team ] && echo enabled || echo disabled), but rewriting $DOC failed. $DOC and live protection are now OUT OF SYNC — fix $DOC by hand or re-run mode.sh." >&2
+  exit 1
+fi
 
 echo "mode.sh: switched $DOC to $MODE mode ($REPO's main protection $([ "$MODE" = team ] && echo enabled || echo disabled))"
