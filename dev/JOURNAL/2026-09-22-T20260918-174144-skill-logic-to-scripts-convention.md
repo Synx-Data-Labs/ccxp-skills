@@ -132,16 +132,23 @@ scheduled: 2026-09-21
   this `git mv` + this section, following the order-of-operations guard
   (move first, then edit at the new path).
 - Also worth recording: this session hit a genuine clone-locality
-  collision mid-task — a concurrent session shared this exact working
-  directory and git identity (`cc1-9a4074da:94a83ff0e786a885`), and its
-  `release-others` (claiming a different task, T20260918-404944) wiped
-  this session's first claim attempt on this task after it merged via
-  PR #93, before this task's own claim PR (#92) could land. Recovered by
-  re-claiming from an isolated `/tmp` clone (a different clone-identity
-  path hash) and driving the rest of this task from there — no data was
-  lost, but the two-live-sessions-in-one-clone condition itself is a
-  process anomaly worth a human look, not something this task's scope
-  covers fixing.
+  collision mid-task. This session's *first* claim attempt on this task
+  (PR #92's original commit, since superseded) ran from the shared
+  primary clone `/home/rocky/ccxp-skills` and so carried that clone's
+  identity, `cc1-9a4074da:94a83ff0e786a885`. A concurrent session was
+  *also* running from that same `/home/rocky/ccxp-skills` directory (same
+  machine, same path — hence the identical identity string; confirmed
+  independently as the real claimant-id on `T20260918-404944`'s own task
+  file), and its `release-others` (while claiming T20260918-404944) wiped
+  this session's claim on this task once its PR #93 merged, before this
+  task's own claim PR (#92) could land. Recovered by cloning to an
+  isolated path, `/tmp/ccxp-skills-t20260918-174144-fix` — a *different*
+  path hash, `69cec4c3ae5bb8b4`, which is why this file's own
+  `claimed_by` history (now cleared) no longer matches the identity
+  that was actually involved in the collision — and driving the rest of
+  this task from there. No data was lost, but the two-live-sessions-in-
+  one-directory condition itself is a process anomaly worth a human
+  look, not something this task's scope covers fixing.
 - No follow-up tasks filed for this task's own scope — it shipped exactly
   what was asked. (The clone-collision anomaly above is flagged for the
   human/orchestrator, not filed as a new `dev/TODO/` task, since it's an
