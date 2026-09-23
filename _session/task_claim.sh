@@ -659,18 +659,24 @@ _tc_resolve_task_location() {
     { [ -n "$repo" ] && [ -n "$path" ]; } && { printf '%s\t%s' "$repo" "$path"; return 0; }
     return 1
   fi
-  # Same-repo: the task file is in this repo under the task dir; find its slug
-  # (same token-boundary id match as the cross-repo path).
+  # Same-repo: the task file is in this repo under the task dir, falling back
+  # to the PARKING dir when TODO has no match — a same-repo PR can revive AND
+  # claim a parked task in one commit (the standard "resume a parked task"
+  # pattern), and until that PR merges the file only exists in dev/PARKING on
+  # `main` (T20260805-345509). Mirrors _tc_find_file_anydir's existing
+  # dual-directory search, same token-boundary id match as the cross-repo path
+  # above.
   repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
   [ -n "$repo" ] || return 1
   local dir name
-  dir="$(_tc_task_dir)"
-  name="$(_session_gh api "/repos/$repo/contents/$dir?ref=main" \
-          --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
-          | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
-          | head -1)"
-  [ -n "$name" ] || return 1
-  printf '%s\t%s/%s' "$repo" "$dir" "$name"
+  for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
+    name="$(_session_gh api "/repos/$repo/contents/$dir?ref=main" \
+            --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
+            | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
+            | head -1)"
+    [ -n "$name" ] && { printf '%s\t%s/%s' "$repo" "$dir" "$name"; return 0; }
+  done
+  return 1
 }
 
 _tc_fetch_fm_field() {

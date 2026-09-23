@@ -808,6 +808,70 @@ CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
   [ "${loc#*$'\t'}" = "dev/TODO/T20260622-404636-real.md" ]
 }
 
+# --- same-repo task-location resolution, dev/PARKING fallback (T20260805-345509) --
+# Guards the "revive + claim a parked task in one same-repo PR" blind spot:
+# _tc_resolve_task_location's same-repo branch used to look ONLY in dev/TODO,
+# so a task still sitting in dev/PARKING on `main` (the standard revive
+# pattern, claimed in the same commit that un-parks it) always failed closed.
+# No `Task:` link in the body -> same-repo branch; _session_gh is stubbed for
+# `repo view` and the `contents/<dir>` API lookup per directory.
+
+# _session_gh is stubbed per-test as a plain global function (matching the
+# BODY-variable style above) rather than via a helper wrapper: a helper's
+# `local` data vars would fall out of scope the moment it returns, and
+# _session_gh (a plain function, not a closure) would then read them as
+# unset/empty on every call.
+
+@test "resolve_task_location: same-repo, task file present ONLY in dev/PARKING -> falls back and resolves" {
+  TODO_NAMES=''
+  PARKING_NAMES='T20260805-345509-pr-owner-parking-location-blind-spot.md'
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)              printf '' ;;                    # no Task: link -> same-repo branch
+      *"repo view"*)            printf 'your-org/hub-repo' ;;
+      *"contents/dev/TODO"*)    printf '%s\n' "$TODO_NAMES" ;;
+      *"contents/dev/PARKING"*) printf '%s\n' "$PARKING_NAMES" ;;
+      *)                        return 1 ;;
+    esac
+  }
+  loc="$(_tc_resolve_task_location 418 T20260805-345509)"
+  [ "${loc%%$'\t'*}" = "your-org/hub-repo" ]
+  [ "${loc#*$'\t'}" = "dev/PARKING/T20260805-345509-pr-owner-parking-location-blind-spot.md" ]
+}
+
+@test "resolve_task_location: same-repo, task file present in dev/TODO -> unchanged (no PARKING fallback needed)" {
+  TODO_NAMES='T20260805-345509-pr-owner-parking-location-blind-spot.md'
+  PARKING_NAMES='UNREACHED-should-not-be-consulted.md'
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)              printf '' ;;
+      *"repo view"*)            printf 'your-org/hub-repo' ;;
+      *"contents/dev/TODO"*)    printf '%s\n' "$TODO_NAMES" ;;
+      *"contents/dev/PARKING"*) printf '%s\n' "$PARKING_NAMES" ;;
+      *)                        return 1 ;;
+    esac
+  }
+  loc="$(_tc_resolve_task_location 418 T20260805-345509)"
+  [ "${loc%%$'\t'*}" = "your-org/hub-repo" ]
+  [ "${loc#*$'\t'}" = "dev/TODO/T20260805-345509-pr-owner-parking-location-blind-spot.md" ]
+}
+
+@test "resolve_task_location: same-repo, task file present in NEITHER dir -> fails closed (unknown)" {
+  TODO_NAMES=''
+  PARKING_NAMES=''
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)              printf '' ;;
+      *"repo view"*)            printf 'your-org/hub-repo' ;;
+      *"contents/dev/TODO"*)    printf '%s\n' "$TODO_NAMES" ;;
+      *"contents/dev/PARKING"*) printf '%s\n' "$PARKING_NAMES" ;;
+      *)                        return 1 ;;
+    esac
+  }
+  run _tc_resolve_task_location 418 T20260805-345509
+  [ "$status" -ne 0 ]
+}
+
 # --- PR-activity picker (pure; the false-reclaim fix) -----------------------
 # Guards the T20260622-404636 verification's HIGH finding: a task-tracked PR
 # carrying its id ONLY in the branch name must still be found (else 99999 ->
