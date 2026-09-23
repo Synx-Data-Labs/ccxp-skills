@@ -37,6 +37,15 @@ while [ $# -gt 0 ]; do
     -h|--help)
       echo "$USAGE"; exit 0 ;;
     T*)
+      # Validate against the canonical task-id shape (lifecycle.md:139)
+      # BEFORE it's allowed anywhere near eta_find_file's glob — an
+      # unvalidated id (e.g. containing `../`) could otherwise resolve
+      # outside dev/TODO/ via pathname expansion (same bug class as
+      # migrate-task/scripts/migrate.sh, fixed there in PR #31).
+      if ! [[ "$1" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then
+        echo "eta: '$1' is not a valid task id (expected T<8 digits>-<6 digits>)" >&2
+        exit 2
+      fi
       eta_task_id="$1"; shift ;;
     *)
       echo "eta: unknown argument '$1'" >&2
@@ -119,12 +128,13 @@ eta_bucket_seconds() {
     1d)  printf '86400' ;;
     2d)  printf '172800' ;;
     1w)  printf '604800' ;;
+    2w)  printf '1209600' ;;
     *) return 1 ;;
   esac
 }
 
 eta_duration_s="$(eta_bucket_seconds "$eta_estimation")" || {
-  echo "eta: unrecognized estimation bucket '$eta_estimation' (expected one of 15m 30m 1h 2h 4h 1d 2d 1w)" >&2
+  echo "eta: unrecognized estimation bucket '$eta_estimation' (expected one of 15m 30m 1h 2h 4h 1d 2d 1w 2w)" >&2
   exit 1
 }
 
@@ -136,7 +146,12 @@ eta_duration_s="$(eta_bucket_seconds "$eta_estimation")" || {
 if [ -n "$eta_tz" ]; then
   eta_tz_ok=0
   for eta_tz_db in /usr/share/zoneinfo /etc/zoneinfo; do
-    [ -e "$eta_tz_db/$eta_tz" ] && { eta_tz_ok=1; break; }
+    # -f (regular file) or -L (symlink, how some real zone entries like
+    # /etc/localtime-style aliases are shaped), NOT -e — a bare zoneinfo
+    # CATEGORY directory like /usr/share/zoneinfo/America also satisfies
+    # -e, which would let a truncated "--tz America" typo pass validation
+    # and then silently fall back to UTC in TZ=America date.
+    { [ -f "$eta_tz_db/$eta_tz" ] || [ -L "$eta_tz_db/$eta_tz" ]; } && { eta_tz_ok=1; break; }
   done
   if [ "$eta_tz_ok" -ne 1 ]; then
     echo "eta: invalid timezone '$eta_tz'" >&2

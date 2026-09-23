@@ -47,7 +47,7 @@ bash ../eta/scripts/eta.sh
      output).
 2. **Read `estimation:`** from the task's frontmatter and map the bucket to a
    **literal wall-clock duration**: `15m/30m/1h/2h/4h` map to themselves,
-   `1d`→24h, `2d`→48h, `1w`→7d.
+   `1d`→24h, `2d`→48h, `1w`→7d, `2w`→14d.
 
    **Assumption, stated plainly**: this is calendar time, not working-hours
    time — no repo convention currently defines the buckets as
