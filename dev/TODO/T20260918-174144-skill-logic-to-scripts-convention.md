@@ -1,9 +1,9 @@
 ---
-status: Design
+status: Open
 estimation: 1h
 source: this conversation, 2026-09-18
 related: T20260914-359646
-claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_by:
 claimed_role: interactive
 scheduled: 2026-09-21
 ---
