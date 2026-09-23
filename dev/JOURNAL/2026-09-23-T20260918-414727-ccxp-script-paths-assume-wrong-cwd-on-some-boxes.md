@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1h
 source: Retro 2026-09-18 (build-pipeline-repo) — Phase 4c skill quality review
 related: none yet — no existing task covers this
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -186,17 +186,20 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] Docs-class change (`*.md` only) — no BATS. Verification is markdown
+- [x] Docs-class change (`*.md` only) — no BATS. Verification is markdown
   parse + link check + frontmatter validity, per the Phase 3.0 classifier.
-- [ ] `bash design-score/scripts/score.sh` on this task file passes the
-  threshold before implementation
-- [ ] `npx markdownlint-cli2` on the edited `ccxp/SKILL.md` — 0 errors
-- [ ] `grep -c '\.\./_gh/\|\.\./_session/\|\.\./_ipm/\|\.\./_docs/\|\.\./_taskid/\|\.\./ccxp/scripts/' ccxp/SKILL.md`
+- [x] `bash design-score/scripts/score.sh` on this task file passes the
+  threshold before implementation (72/100)
+- [x] `npx markdownlint-cli2` on the edited `ccxp/SKILL.md` — 0 errors
+- [x] `grep -c '\.\./_gh/\|\.\./_session/\|\.\./_ipm/\|\.\./_docs/\|\.\./_taskid/\|\.\./ccxp/scripts/' ccxp/SKILL.md`
   is 0 after the rewrite (all 26 cwd-relative references converted —
-  none silently missed)
-- [ ] Manual read-through: every `dev/TODO/*.md`, `dev/JOURNAL/...`,
+  `grep -c '<skills-root>/'` confirms 28 = 26 rewritten + 2 new in the
+  preamble paragraph itself)
+- [x] Manual read-through: every `dev/TODO/*.md`, `dev/JOURNAL/...`,
   `git log`, `$(pwd)/dev` reference elsewhere in the file is confirmed
-  **unedited** (the fix must not touch working-repo-relative commands)
+  **unedited** — diffed each touched line individually (e.g.
+  `ccxp/SKILL.md:396`'s `$(pwd)/dev` argument survives byte-for-byte;
+  only the preceding `../_session/attribution.sh` substring changed)
 - [ ] `bash _docs/doc-impact.sh origin/main` clean
 - [ ] (external, post-merge, left unchecked until performed) confirm
   "Base directory for this skill" is reported identically under the
@@ -206,12 +209,12 @@ scheduled: 2026-09-21
 
 ## Done criteria
 
-- [ ] New top-of-`## Workflow` paragraph explaining the
+- [x] New top-of-`## Workflow` paragraph explaining the
   `<skills-root>/X/Y.sh` placeholder convention and the loud preflight
-  check — `ccxp/SKILL.md:66` (approximate, pre-rewrite line)
-- [ ] All 26 sibling-script examples rewritten from `../X/Y.sh` to
+  check — `ccxp/SKILL.md:68-83`
+- [x] All 26 sibling-script examples rewritten from `../X/Y.sh` to
   `<skills-root>/X/Y.sh` — `grep -c` count in Test plan
-- [ ] Every working-repo-relative command elsewhere in the file
+- [x] Every working-repo-relative command elsewhere in the file
   (`dev/TODO/*.md`, `dev/JOURNAL/...`, `git log`, `$(pwd)/dev`) verified
   unchanged — manual read-through, Test plan item
 - [ ] (left for a human on the `build-pipeline-repo` cron box — this
@@ -223,6 +226,64 @@ scheduled: 2026-09-21
 
 | File | Lines | Purpose |
 |---|---|---|
-| `ccxp/SKILL.md` | `66-68` (new preamble), 26 rewritten sibling-script examples, all other lines unchanged | the fix target |
+| `ccxp/SKILL.md` | `68-83` (new preamble), 26 rewritten sibling-script examples, all other lines unchanged | the fix target |
 | `repo-conventions/templates/task.md` | n/a (prose precedent) | the existing "Base directory for this skill" convention this task extends to `ccxp/SKILL.md` |
 | `dev/daily-ccxp.sh` | n/a | the actual cron invocation shape the Test plan's unverified item needs to be checked against |
+
+## Closed (2026-09-23)
+
+- Shipped in **PR #88** (design) and this implementation PR. Added a
+  new preamble paragraph at `ccxp/SKILL.md:68-83` defining the
+  `<skills-root>/X/Y.sh` placeholder convention plus a loud preflight
+  check, and mechanically rewrote all 26 sibling-script invocation
+  examples from `../X/Y.sh` to `<skills-root>/X/Y.sh`
+  (`grep -c '<skills-root>/' ccxp/SKILL.md` → 28 = 26 rewritten + 2 in
+  the preamble itself; the old pattern's count is confirmed 0).
+- Every working-repo-relative command elsewhere in the file
+  (`dev/TODO/*.md`, `dev/JOURNAL/...`, `git log`, `$(pwd)/dev`) verified
+  byte-for-byte unchanged by diffing each touched line individually —
+  the design's own review-caught flaw (a naive permanent `cd` would
+  have broken these) does not apply to the shipped fix.
+- **The design itself went through one substantive correction before
+  implementation** (documented in the task's `## Solution` /
+  Alternatives rejected): the first-draft "cd once into the skills
+  checkout" direction was replaced with the absolute-path-placeholder
+  rewrite after independent review caught that a permanent `cd` would
+  break the file's own majority use of working-repo-relative commands —
+  see the design PR (#88) review thread for the full finding.
+- Both non-external Done criteria met. The one external Done criterion
+  (verifying "Base directory for this skill" is reported identically
+  under the real cron invocation shape, `claude
+  --dangerously-skip-permissions -p /ccxp` per `dev/daily-ccxp.sh`) is
+  intentionally left unchecked — this session cannot invoke that exact
+  cron shape from here to confirm it; flagged for whoever next runs
+  `/ccxp` on the `build-pipeline-repo` cron box to confirm.
+- **Not done here, left for that same box**: deleting the now-redundant
+  `reference_skills_dir_actual_git_repo_path.md` memory — it lives in a
+  different box's memory pool, inaccessible from this clone.
+- No new follow-up tasks filed — scope stayed within the design's own
+  corrected bounds.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change
+  (`*.md` only), no BATS coverage applies per the Phase 3.0 classifier
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate (73/100 pre-review-fix, 72/100 post-fix — the
+  correction added prose that slightly shifted C5's mapping ratio, still
+  well above the 70 threshold both times), markdownlint clean on both
+  the task file and `ccxp/SKILL.md`, `doc-impact.sh` clean, a line-by-
+  line diff review confirming the rewrite touched exactly the 26
+  intended lines and nothing else
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the design correction was a direct response to a specific,
+  well-localized review finding, not an open-ended debugging session
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d on the design PR (#88), 3 real findings (a
+  permanent `cd` would break the file's own working-repo-relative
+  commands elsewhere; the "Base directory for this skill" fact isn't
+  shell-mechanically usable without the agent substituting it manually;
+  the design's cron-invocation assumption was unverified), 2 fixed via
+  a substantive redesign, 1 flagged honestly as an unverified,
+  post-merge item rather than fixed or dismissed. 0 pushback — all
+  three were correct.
