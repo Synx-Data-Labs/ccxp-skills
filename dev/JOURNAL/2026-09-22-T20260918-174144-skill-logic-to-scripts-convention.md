@@ -110,7 +110,7 @@ scheduled: 2026-09-21
 
 ## Done criteria
 
-- [x] New `§9` convention (rule + prose-stays boundary + validation gate) inserted at `skill-conventions/SKILL.md:67`, before `## Important Notes` — manual re-read test-plan item above.
+- [x] New `§9` convention (rule + prose-stays boundary + validation gate) inserted at `skill-conventions/SKILL.md:68` (heading), before `## Important Notes` — manual re-read test-plan item above.
 - [x] `§9` cites the worked example at `dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md:12` (the task's own H1 title) — grep check in the implementation PR diff.
 - [x] `§1`–`§8` numbering unchanged (`skill-conventions/SKILL.md:18` through `:66` untouched, i.e. §8's heading *and* body bullets) — diff review test-plan item above.
 
