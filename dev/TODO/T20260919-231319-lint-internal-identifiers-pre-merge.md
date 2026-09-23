@@ -57,8 +57,10 @@ scheduled: 2026-09-21
 - Existing generic building blocks to reuse rather than reinvent:
   - `repo-conventions/scripts/lint_refs.py`'s `KNOWN_SIBLING_REPOS`/
     `LINT_REFS_GH` — config supplied only via env var, never committed data
-    (`repo-conventions/scripts/lint_refs.py:95-100`) — the exact pattern
-    this task needs for its own denylist.
+    (`known_sibling_repos()` at `lint_refs.py:86-92`, its
+    `os.environ.get("KNOWN_SIBLING_REPOS", "")` read at line 91; the
+    `LINT_REFS_GH` override read is in `gh_argv()` at line 287) — the exact
+    pattern this task needs for its own denylist.
   - `lint_refs.py`/`lint_tasks.py`'s `--all` (repo-wide, wired into
     `lint.sh`) / `--changed <files>` (wired into CI + `/gcpr`'s doc-lint
     guard) dual-mode convention.
@@ -105,19 +107,36 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
    *committed in the script* (generic wording, not a real identifier —
    safe to publish). A denylist hit reports its suggested placeholder when
    one maps; otherwise reported bare, for a human to disposition.
-5. **Wiring**: fold into the existing `lint-tasks` job in
-   `.github/workflows/tests.yml` (one job, not a new one — satisfies Done
-   criterion #5 directly) running `lint_identifiers.py --all` against all
-   tracked text files (broader than `dev/**` — the leak vector was task/
-   journal files specifically, but the check itself should cover any
-   tracked file the same way `sensitivity-audit` does, since nothing about
-   the leak mechanism is dev/-specific).
-6. **`/migrate-task` integration**: `scripts/migrate.sh` step 6 (already
-   runs `lint_tasks.py --changed` on the copied file) gains one more call —
-   `lint_identifiers.py --changed <file> --fix`: substitute a denylist hit
-   for its mapped placeholder when one exists; **hard-refuse** (non-zero,
-   no commit) when a hit has no mapped placeholder, printing the check's
-   own guidance. This satisfies Done criterion #4 exactly.
+5. **Wiring**: add a `lint_identifiers.py --all` step to the existing
+   `lint-tasks` job in `.github/workflows/tests.yml` (one job, not a new
+   one — satisfies Done criterion #5). Note this job today only runs unit
+   suites (`test_lint_tasks.py -v`, `test_lint_paragraphs.py -v`) — there
+   is no existing `--all`-repo-scan step to mirror in *this* repo's own CI
+   (that mode is otherwise only exercised via local `lint.sh`, or the
+   separate `actions/lint-tasks/action.yml` reusable action for consumer
+   repos); adding one is simple, just not literally copying an existing
+   step's shape. Scope: all tracked text files (broader than `dev/**` —
+   the leak vector was task/journal files specifically, but the check
+   itself should cover any tracked file the same way `sensitivity-audit`
+   does, since nothing about the leak mechanism is dev/-specific).
+6. **`/migrate-task` integration — scoped to the code that actually
+   exists**: `migrate-task/scripts/migrate.sh`'s live (non-`--dry-run`)
+   "land destination" flow is an **unimplemented stub today**
+   (`migrate.sh:276-277`, `return 8`, "not exercised in unit tests") — it
+   is *not* a real step 6 to hook a call into. The part that IS real,
+   unit-tested code is the `--dry-run` path's staged-copy: `cp
+   "$source_file" "$staged"` followed by two `mt-fm-delete` calls
+   (`migrate.sh:241-243`), previewed via `diff -u /dev/null "$staged"`.
+   Hook `lint_identifiers.py --changed "$staged" --fix` in right after
+   those `mt-fm-delete` calls: substitute a denylist hit for its mapped
+   placeholder when one exists; **hard-refuse** (non-zero, no diff shown)
+   when a hit has no mapped placeholder, printing the check's own
+   guidance. This satisfies Done criterion #4 within the code that
+   actually exists and is exercised by `tests/migrate_task.bats`'s
+   existing `--dry-run` test; wiring the same call into the live path is
+   automatically covered once that path is implemented (tracked
+   separately — it's a pre-existing gap, not new scope this task should
+   absorb).
 
 ### Alternatives considered and rejected
 
@@ -146,16 +165,25 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 
 ## Root cause
 
-- Why leaks recur: `/migrate-task` (added T20260827-201400) and normal
-  task-file authoring both cite real repos/PRs as evidence *by design* — a
-  good bug report names what it's about. The go-public flip
+- Why leaks recur: task/journal authoring — whether a manual cross-repo
+  migration or the `/migrate-task` skill that formalized it — cites real
+  repos/PRs/paths as evidence *by design*: a good bug report names what
+  it's about. The go-public flip
   (`dev/JOURNAL/2026-09-14-T20260914-234656-finish-public-release-prep.md`)
-  was a one-time manual scrub with no pre-merge gate behind it, so the very
-  next `/migrate-task` run (`dd991b5`) and two follow-up commits
-  (`6ef5731` 09-15, `5a1e443`/`64d693e` 09-16) reintroduced real
-  identifiers before this task's check existed to catch them. This is
-  process-shape (the normal task flow re-triggers it), not a one-off
-  mistake — hence a CI gate, not another manual sweep.
+  was a one-time manual scrub with no pre-merge gate behind it.
+  **Corrected timeline** (verified via `git log`/`git show`, 2026-09-22 —
+  an earlier draft of this section misattributed one commit): `dd991b5`
+  (2026-09-14 22:13, "migrate 3 tasks in from synxdb-team") is itself a
+  **manual** migration — its own message says "landing here directly" —
+  and it *predates* `6ef5731` (2026-09-15 07:42, "add /migrate-task
+  skill") by hours, so it cannot have gone through that tool. The actual
+  recurrence is simpler and, if anything, a stronger case for a CI gate
+  rather than a weaker one: identifiers leaked back in via ordinary manual
+  task authoring/migration (`dd991b5`) and again via unrelated follow-up
+  commits (`6ef5731`, `5a1e443`, `64d693e`) within 48 hours of the scrub —
+  no special tool was even required for the leak to recur, which is
+  exactly why a manual-scrub-only defense can never hold and a pre-merge
+  gate covering *all* commits is the right fix.
 
 ## Repo file references
 
@@ -165,8 +193,8 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 | `repo-conventions/scripts/test_lint_identifiers.py` | new | unit tests |
 | `repo-conventions/scripts/lint.sh` | ~`96-104` | wire in `--all` mode, read-only report |
 | `.github/workflows/tests.yml` | `51-63` (`lint-tasks` job) | add `lint_identifiers.py --all` step |
-| `migrate-task/scripts/migrate.sh` | step 6 (land destination) | add `--fix`-or-refuse call |
-| `migrate-task/tests/migrate_task.bats` | new case | assert the refuse/fix path fires |
+| `migrate-task/scripts/migrate.sh` | `241-243` (`--dry-run` staged-copy) | add `--fix`-or-refuse call after the `mt-fm-delete` calls |
+| `tests/migrate_task.bats` | new case (after line 247's `--dry-run` test) | assert the refuse/fix path fires |
 
 ## Test plan
 
@@ -184,15 +212,15 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 - [ ] CI: `tests.yml`'s `lint-tasks` job runs `lint_identifiers.py --all`
       and is green on `main` as-is (zero false positives on current
       content)
-- [ ] `migrate-task/tests/migrate_task.bats` gains a case asserting the
-      `--fix`-or-refuse call fires in step 6
+- [ ] `tests/migrate_task.bats` gains a case asserting the `--fix`-or-refuse
+      call fires in the `--dry-run` staged-copy path (`migrate.sh:241-243`)
 
 ## Done criteria
 
 - [ ] A check fails CI when a configurable set of internal identifiers appears in tracked files — `test_lint_identifiers.py::test_ci_fails_on_denylist_hit`, wired via `.github/workflows/tests.yml:60`
 - [ ] The identifier list lives in config, not hardcoded — `test_lint_identifiers.py::test_env_var_config_no_code_change`
 - [ ] `Synx-Data-Labs/ccxp-skills` and the established placeholders never trip it — `test_lint_identifiers.py::test_own_repo_and_placeholders_pass`
-- [ ] `/migrate-task` genericizes on the way in, or refuses and points at the check — `migrate-task/tests/migrate_task.bats::migrate genericizes or refuses on internal identifiers`
+- [ ] `/migrate-task` genericizes on the way in, or refuses and points at the check (scoped to the `--dry-run` staged-copy path — the only "land destination" code that exists today; the live path is an unimplemented stub, `migrate.sh:276-277`) — `tests/migrate_task.bats::migrate --dry-run genericizes or refuses on internal identifiers`
 - [ ] Runs in the same workflow as the existing doc/task lints — folded into `lint-tasks` job, `.github/workflows/tests.yml:60`
 
 ## Notes
