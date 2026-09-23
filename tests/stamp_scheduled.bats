@@ -64,6 +64,33 @@ sched_line() { grep -E '^scheduled:' "$TASK" | head -1; }
   [ "$(sched_line)" = "scheduled: 2026-06-29" ]
 }
 
+@test "tier1 staleness bound: a >14-day-stale IPM file is skipped, falling through to tier3" {
+  mk_ipm 2026-05-11 no
+  mk_task
+  run env IPM_TODAY=2026-08-10 STAMP_ITER_HELPER=true bash "$STAMP" "$TASK" current "$JDIR"
+  [ "$status" -eq 0 ]
+  # Tier 2 (API) also empty here (STAMP_ITER_HELPER=true -> no output), so a
+  # skipped Tier 1 must fall through to Tier 3: the Monday of IPM_TODAY's week
+  # (2026-08-10 is itself a Monday) + 7 days.
+  [ "$output" = "2026-08-17" ]
+}
+
+@test "tier1 staleness bound: an IPM file exactly 14 days stale is still trusted (boundary)" {
+  mk_ipm 2026-07-27 no
+  mk_task
+  run env IPM_TODAY=2026-08-10 STAMP_ITER_HELPER=true bash "$STAMP" "$TASK" current "$JDIR"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-07-27" ]
+}
+
+@test "tier1 staleness bound: an IPM file 15 days stale is skipped" {
+  mk_ipm 2026-07-26 no
+  mk_task
+  run env IPM_TODAY=2026-08-10 STAMP_ITER_HELPER=true bash "$STAMP" "$TASK" current "$JDIR"
+  [ "$status" -eq 0 ]
+  [ "$output" = "2026-08-17" ]
+}
+
 @test "tier1 is staging-aware: the still-staged stub is skipped" {
   mk_ipm 2026-06-15 no
   mk_ipm 2026-06-22 yes
