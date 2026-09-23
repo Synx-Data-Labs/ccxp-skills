@@ -280,7 +280,7 @@ file (see that section for why) — so this case gets its **own** verdict,
 ## Test plan
 
 - [x] Baseline: `bats tests/task_claim.bats` passes on `main` today (before
-      any code change) — 83 cases, all passing prior to this task's changes.
+      any code change) — 85 cases, all passing prior to this task's changes.
 - [x] New unit test: `resolve_task_location_head: task file present on the
       PR's own HEAD ref but absent from main -> resolves via head-ref
       fallback` (`tests/task_claim.bats`, alongside the existing
@@ -300,7 +300,7 @@ file (see that section for why) — so this case gets its **own** verdict,
       rejected-alternative above) — both flow through the *unchanged*
       `mine`/`owned:` paths, only the unclaimed case gets the new verdict.
 - [x] `bats tests/task_claim.bats` — full suite passes locally **after** the
-      change: 98 cases, all passing (15 new). Full repo suite (`bats tests/`):
+      change: 98 cases, all passing (13 new). Full repo suite (`bats tests/`):
       705 cases, all passing — no regressions.
 - [x] Manual smoke: re-run `bash _session/task_claim.sh pr-owner 39` against
       the real PR #39 (already merged) is not repeatable as a live repro since
@@ -440,7 +440,7 @@ file (see that section for why) — so this case gets its **own** verdict,
   fully specified the exact test cases before implementation; tests were
   written alongside the implementation from that spec rather than a
   separate red-green-refactor loop, but every new branch is covered (98
-  `task_claim.bats` cases, 15 new).
+  `task_claim.bats` cases, 13 new).
 - Verification (`superpowers:verification-before-completion`): yes — ran the
   full bats suite (705 cases) and a live manual smoke test
   (`pr-owner 93 -> mine`) before treating the implementation as complete.
