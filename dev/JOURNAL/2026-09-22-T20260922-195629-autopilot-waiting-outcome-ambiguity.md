@@ -1,10 +1,10 @@
 ---
-status: Coding
+status: Done
 estimation: 1h
 source: PR #53 review comments (ccxp-skills), 2026-09-22 — surfaced by independent review during /address-pr's loop on autopilot's dispatch-redesign PR
 related: PR #53 (autopilot dispatch redesign), T20260719-204917 (--dispatch-blockers precedent this PR's dispatch pattern mirrors)
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -71,12 +71,46 @@ scheduled: 2026-09-21
 
 - [x] Read `drive/SKILL.md` (Phase 5, Important Notes), `address-pr/SKILL.md` (§2.e, §3), `autopilot/SKILL.md` (Phase 3 dispatch template, Phase 4 Progress/Stuck bullets), and `repo-conventions/SKILL.md` (`mode.sh` tier semantics) directly from disk to confirm every citation above (not from a cached/recollected copy — see T20260922-201976).
 - [x] Cross-checked against this cycle's own live behavior: PR #107 and PR #108 both cleared CI, got an independent review comment, and merged with `reviewDecision: ""` — confirming this repo runs the auto-merge tier and that `/drive`'s CI-wait (via `Monitor`) never itself ended a turn without a resolved check.
-- [ ] Post-edit: re-read the two corrected `autopilot/SKILL.md` lines and confirm they no longer mention "CI still running" as a `WAITING` example, and do name the wait-for-approval tier explicitly with a citation to `address-pr/SKILL.md` §3.
-- [ ] `bash design-score/scripts/score.sh dev/TODO/T20260922-195629-autopilot-waiting-outcome-ambiguity.md` clears the threshold before Phase 3 implementation.
-- [ ] `bash _docs/lint-docs.sh` clean on the edited file(s).
+- [x] Post-edit: re-read the two corrected `autopilot/SKILL.md` lines and confirm they no longer mention "CI still running" as a `WAITING` example, and do name the wait-for-approval tier explicitly with a citation to `address-pr/SKILL.md` §3.
+- [x] `bash design-score/scripts/score.sh dev/TODO/T20260922-195629-autopilot-waiting-outcome-ambiguity.md --kind docs` cleared the threshold (84/100) before Phase 3 implementation.
+- [x] `bash _docs/lint-docs.sh` clean on the edited file(s) (`autopilot/SKILL.md`, this task file).
 
 ## Done criteria
 
-- [ ] `autopilot/SKILL.md:69` (dispatch-prompt `WAITING:` example) no longer names CI as an example — verified by reading the merged file at that line.
-- [ ] `autopilot/SKILL.md:79` (Phase 4 Progress-bucket parenthetical) names only the wait-for-approval tier, with a citation to `address-pr/SKILL.md:309` (§3) — verified by reading the merged file at that line.
-- [ ] No behavior change to `drive/SKILL.md` or `address-pr/SKILL.md` — this task is documentation-only, confirmed by `git diff main...HEAD --stat` showing only `autopilot/SKILL.md` touched.
+- [x] `autopilot/SKILL.md:69` (dispatch-prompt `WAITING:` example) no longer names CI as an example — verified by reading the merged file at that line.
+- [x] `autopilot/SKILL.md:79` (Phase 4 Progress-bucket parenthetical) names only the wait-for-approval tier, with a citation to `address-pr/SKILL.md` §3 — verified by reading the merged file at that line.
+- [x] No behavior change to `drive/SKILL.md` or `address-pr/SKILL.md` — this task is documentation-only, confirmed by `git diff main...HEAD --stat` showing only `autopilot/SKILL.md` touched (plus this task file's own status bookkeeping).
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #109** (design, design-score 84/100 `--kind docs`, independently
+  re-reviewed clean) and the implementation PR that follows it in this same journal
+  entry's commit history (`t20260922-195629-impl`).
+- All three Done criteria met (checked above): `autopilot/SKILL.md:69` and `:79`
+  corrected, no behavior change to `drive/SKILL.md`/`address-pr/SKILL.md`.
+- Resolution: option (a) from the task's own framing. `WAITING`'s only real,
+  structural referent is `/address-pr`'s wait-for-approval merge tier
+  (`address-pr/SKILL.md` §3) — reached only after the hard gate (CI, review,
+  test plan) already passed, gated on a human's formal GitHub review approval.
+  "CI still running" was never reachable as a `WAITING` example: `drive/SKILL.md`
+  waits out CI unconditionally and internally (`drive/SKILL.md:426,636`), and an
+  unverifiable manual test-plan item is already classified Stuck
+  (`autopilot/SKILL.md:81`), not `WAITING`.
+- Independently re-verified twice (design PR #109's review round, and again
+  during this close) against the live files — no wrong citation or missed case
+  found either time.
+- No follow-up tasks filed — the fix is complete and self-contained.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change (a
+  `SKILL.md` wording fix), no code/tests involved.
+- Verification (`superpowers:verification-before-completion`): yes — design-score
+  gate (84/100) before implementation, `_docs/lint-docs.sh` clean, `git diff
+  main...HEAD --stat` scope check, and a full re-read of both edited lines against
+  their Done-criteria citations before closing.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no stuck-for-
+  2-attempts situation; this was a research/tracing task, not a bug.
+- Receiving code review (`superpowers:receiving-code-review`): no pushback needed
+  — both independent review rounds (design PR #109, claim PR #108) returned a
+  clean bill of health with no findings to steelman or contest.
