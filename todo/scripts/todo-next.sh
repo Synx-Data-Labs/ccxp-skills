@@ -22,13 +22,19 @@ function todo-next-main() {
     return 0
   fi
 
-  local total=0 picked=0
+  local total=0 picked=0 total_entries=0
   local -a lines=()
   while IFS= read -r line; do
     lines+=("$line")
   done < "$QUEUE_FILE"
 
-  local line parsed id relpath title task_file status claim
+  local line
+  for line in "${lines[@]}"; do
+    todo-parse-queue-line "$line" > /dev/null || continue
+    total_entries=$((total_entries+1))
+  done
+
+  local parsed id relpath title task_file status claim
   for line in "${lines[@]}"; do
     parsed="$(todo-parse-queue-line "$line")" || continue
     total=$((total+1))
@@ -49,7 +55,7 @@ function todo-next-main() {
     esac
 
     picked=$((picked+1))
-    printf '#%d of %d: %s — %s\n' "$total" "${#lines[@]}" "$id" "$title"
+    printf '#%d of %d: %s — %s\n' "$total" "$total_entries" "$id" "$title"
     printf '  Status: %s\n' "$status"
 
     local deadline scheduled blocks
