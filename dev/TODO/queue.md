@@ -19,3 +19,4 @@ reprioritize.
 - [T20260923-140360](T20260923-140360-retro-external-skill-scan.md): Add an external-skillset scan to /retro
 - [T20260923-292618](T20260923-292618-retire-superpowers-dependency-survey.md): Survey retiring the `superpowers` plugin dependency
 - [T20260923-986928](T20260923-986928-incept-skill-from-grill-me.md): Rename `/grill-me` to `/incept`, vendor `grilling`'s interview mechanics
+- [T20260923-425414](T20260923-425414-new-task-kiss-estimation-default.md): Give `/new-task` a KISS default estimation instead of always asking
