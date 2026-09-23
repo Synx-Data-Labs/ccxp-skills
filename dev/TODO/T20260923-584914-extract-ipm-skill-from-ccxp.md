@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1d
 source: conversation with @shine, 2026-09-23
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260923-584914: Extract /ccxp's Monday IPM ritual into a standalone /ipm skill
