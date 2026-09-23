@@ -15,10 +15,6 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
 
 - `/drive` — auto-pick using `/todo next` scoring
 - `/drive T254701` — work on a specific task
-- `--immediate` (combinable with either form above) — at close (Phase 4/Phase 7), do the
-  immediate `dev/TODO/` → `dev/JOURNAL/` journal move instead of the default in-place
-  `status: Done` flip. Reserved for a `P0` status suffix (e.g. `status: Done — P0`) or customer-visible tasks that shouldn't
-  wait for the Friday retro's batch journal-sweep (`/retro` Phase 2b, T20260513-189862).
 - `--dispatch-blockers` (combinable with either form above) — at Phase 6 step 3, drive each
   blocker via a fresh dispatched sub-agent instead of inline in this conversation. See Phase 6
   step 3 for the mechanics. **Opt-in only** — omitting this flag keeps the default, fully-inline
@@ -402,8 +398,7 @@ Use the `/gcpr` skill workflow:
 **Same-repo mode:**
 
 1. Group changes into logical commits
-2. If this PR completes the task: **default** — flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ../_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; caught 2026-07-18 on T20260717-329670, where a hand-edit close needed a follow-up release PR), then write the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks (Phase 7.0) into the file as part of the commits. The weekly batch journal-sweep at Friday retro (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later — this collapses N per-task hub PRs into one weekly sweep PR.
-   **Immediate override**: if `/drive` was invoked with `--immediate`, or the task's `status:` carries a `P0` suffix (e.g. `status: Done — P0`) or is otherwise customer-visible, run `task_claim.sh release <id> Done` first (as above), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`) as part of the commits.
+2. If this PR completes the task: flip the task file's frontmatter `status:` to `Done` via `bash ../_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; caught 2026-07-18 on T20260717-329670, where a hand-edit close needed a follow-up release PR), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`, **before** writing the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks — see the order-of-operations guard in Phase 7.0) as part of the commits. Always immediate, every close (T20260914-422854) — retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep (`/retro` Phase 2b), because that default made most of the week's just-closed tasks invisible to `/retro`'s own Phase 2 classification, which runs *before* Phase 2b's sweep in the same invocation.
 3. Push to feature branch
 4. Create PR with summary + test plan
 
@@ -513,9 +508,9 @@ After merge (auto or approved):
 - Receiving code review (`superpowers:receiving-code-review`): {yes — /address-pr §2.d, {N} pushbacks | no — no Copilot comments}
 ```
 
-Fill the bracketed alternatives from what actually happened; the block lands in `dev/TODO/` with the `status: Done` flip by default, and moves to JOURNAL along with the file whenever that happens — immediately (`--immediate` override) or at the next Friday sweep (`/retro` Phase 2b).
+Fill the bracketed alternatives from what actually happened; the block lands directly in the `dev/JOURNAL/` file at close time — every close journal-moves immediately (T20260914-422854), no deferred-to-Friday path anymore.
 
-> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This only bites the **`--immediate` override path** — the default (no-move, batch-swept at Friday retro) never combines an edit with a move in the same commit. Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing**: `git show --stat HEAD` must show real insertions/deletions, not `100% rename` / `0 insertions(+), 0 deletions(-)`.
+> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This bites **every close now** (the journal-move is the only path — T20260914-422854 retired the old deferred-to-Friday default that used to make this a rare case). Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing**: `git show --stat HEAD` must show real insertions/deletions, not `100% rename` / `0 insertions(+), 0 deletions(-)`.
 
 **Status=Done** (run right after Phase 7.0, before the remaining Phase 7 steps):
 
@@ -530,7 +525,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 **Same-repo mode:**
 
 1. `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**)
-2. **Default**: verify the frontmatter `status: Done` in-place flip landed (should be in the PR from Phase 4) — the file stays in `dev/TODO/` until the Friday retro's batch journal-sweep (`/retro` Phase 2b) moves it. **Immediate override** (`--immediate` / a `P0` status suffix / customer-visible): verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed instead.
+2. Verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed in the PR from Phase 4, with `status: Done` set on the moved file — every close journal-moves immediately now (T20260914-422854), there is no in-place-only path left to check instead.
 3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip (T20260717-329670, 2026-07-18 — the close PR flipped status but left `claimed_by` set, needing a follow-up release PR). Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash ../_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
 4. If the task has `Source: GitHub issue #N`, update and close the issue:
 
@@ -546,18 +541,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 
 1. In `$TARGET`: pull latest main, confirm the merge landed.
 2. `cd $HUB` and `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**).
-3. Open a **separate hub-repo PR** that closes the task. **Default**: flip the task file's frontmatter `status:` to `Done` **in-place** (no file move) via `bash ../_session/task_claim.sh release <id> Done` (not a hand-edit — see same-repo step 3 above) — the Friday retro's batch journal-sweep (`/retro` Phase 2b, T20260513-189862) performs the `dev/TODO/` → `dev/JOURNAL/` move later:
-
-   ```bash
-   git checkout -b t<id>-close
-   bash ../_session/task_claim.sh release <id> Done   # sets status: Done AND clears claimed_by atomically
-   # Add "## Closed (YYYY-MM-DD)" pointing at the target PR URL, plus the "Skills invoked" block (Phase 7.0).
-   bash ../_docs/lint-docs.sh --fix "dev/TODO/T<id>-<slug>.md" || true   # doc-lint guard, scoped to just this file (T20260910-919422) — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
-   git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
-   bash ../_gh/gh.sh pr create ...
-   ```
-
-   **Immediate override** (`--immediate` / a `P0` status suffix / customer-visible): do the TODO → JOURNAL move now instead, exactly as before this change:
+3. Open a **separate hub-repo PR** that closes the task — every close journal-moves immediately now (T20260914-422854, retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep):
 
    ```bash
    git checkout -b t<id>-journal-move
@@ -572,7 +556,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    bash ../_gh/gh.sh pr create ...
    ```
 
-   Either PR is docs-only, typically auto-mergeable (pure status-change/status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr` on it as usual.
+   This PR is docs-only, typically auto-mergeable (pure status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr` on it as usual.
 4. Close the source GitHub issue (same as same-repo).
 5. Pop back to parent goal if recursed; otherwise exit (same as same-repo).
 6. **Remove the ephemeral target clone**: `rm -rf "$TARGET"`. The `trap EXIT` from Phase 1.5 also handles this on abort, but doing it explicitly at normal close-up keeps `/tmp/` tidy without waiting for shell exit. Skip this step if Phase 1.5 used the `Target path` override (the path is user-owned).

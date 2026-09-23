@@ -212,7 +212,7 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 
 For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week.
 
-- **Shipped** — PR merged this week and the task moved to `dev/JOURNAL/` as Done. Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
+- **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case since T20260914-422854 — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
 - **In flight** — task started (Status `Coding` or `Review`) but not merged. It will be Tier 1 carry-over next IPM.
 - **Partial** — commits exist on a branch but no PR is open, or PR is open but stalled (no movement in last 3 days).
 - **Dropped** — not started (Status still `Open` or `Design`). It re-enters the candidate pool next IPM.
@@ -256,13 +256,17 @@ Things that are working adequately — not broken, not exceptional. Acknowledgin
 - Adequate test coverage in certain areas
 - Processes that are "good enough" and don't warrant optimization effort
 
-### Phase 2b: Batch journal-move sweep
+### Phase 2b: Batch journal-move sweep (backstop, not the primary mechanism)
 
-**Why**: `/drive` Phase 7 now flips a completed task's frontmatter `status:` to
-`Done` **in-place** (no immediate file move) by default — see `/drive` Phase 4 /
-Phase 7 (T20260513-189862). Left alone, `dev/TODO/` would accumulate `Done`
-tasks all week. This phase is where they get swept to `dev/JOURNAL/` in one
-batch instead of one hub PR per task closure.
+**Why**: since T20260914-422854, `/drive` Phase 4/Phase 7 always journal-moves
+a task immediately on close (retiring the old in-place-only default from
+T20260513-189862) — so this phase is no longer where the *expected* weekly
+volume gets swept. It's a **backstop** for the paths that don't go through
+`/drive`'s close at all: a task closed by hand, one closed by a session that
+predates this change, or `/todo sweep`'s own out-of-band "already shipped
+outside `/drive`" case. Left unswept, a `dev/TODO/` file with `status: Done`
+from one of those paths would linger indefinitely rather than accumulating
+for a week — still worth a sweep, just a rarer one now.
 
 1. Find every task in `dev/TODO/` whose frontmatter `status:` is `Done`:
 
@@ -370,7 +374,7 @@ Grade the skills exercised this week and improve the single worst offender. This
 
 **Step 1 — gather candidate signals (graceful degradation; no signal is a hard dependency):**
 
-- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) for `## Skills invoked`.
+- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-T20260914-422854 task still sitting in `dev/TODO/`.
 - **Authoring (when available):** if a rubric exists in the `superpowers:writing-skills` skill, grade each candidate skill against it and count violations. Until it exists, flag only obvious staleness by inspection — a skill citing a retired path, a renamed helper, or a removed phase.
 - **Compliance (when available):** grep the week's JOURNAL audit blocks for skills that should have fired but were skipped, or fired at the wrong phase. Absent the audit block, skip this signal.
 

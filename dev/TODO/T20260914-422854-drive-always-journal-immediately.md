@@ -1,5 +1,5 @@
 ---
-status: Coding — Design approved in-conversation (maintainer dictated the exact scope with precise file:line targets when filing this task, per source:)
+status: Coding
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to retire the deferred-to-Friday-retro default
 claimed_by: cc1-9a4074da:94a83ff0e786a885
