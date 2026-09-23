@@ -10,6 +10,19 @@ scheduled: 2026-09-21
 
 # T20260919-266165: `/address-pr`'s bare auto-pick silently stalls forever behind a permanently-blocked oldest PR
 
+## TLDR
+
+- **Type**: bug
+- **Problem**: `/address-pr`'s bare auto-pick (`sort_by(.createdAt) | .[0]`) only ever looks at
+  the single oldest open PR — if its task is owned by someone else, auto-pick defers and exits,
+  and never reaches any *other* open PR, forever, as long as that one PR stays open.
+- **Solution**: walk the oldest-first list and pick the first PR whose ownership verdict is
+  `mine`/`free`/`untracked`/`new` (per `task_claim.sh pr-owner`), skipping `owned:*`/`unknown`
+  candidates instead of stopping at position 0 — mirroring `/todo next`'s existing walk-and-skip
+  pattern. Extracted into a bundled, BATS-tested script per the `skill-conventions` §9 convention
+  (deterministic logic → bundled scripts), since the walk itself is a pure read/transform with no
+  judgment call.
+
 ## Problem
 
 `/address-pr`'s auto-pick (§1) is `sort_by(.createdAt) | .[0]` — strictly the single oldest open
@@ -31,24 +44,103 @@ unattended `/ccxp`/`/autopilot` loop would never merge a completed implementatio
 human (or a session that happens to know the PR number) explicitly names it, since nothing in the
 auto-pick path ever looks past position 0.
 
-## Suggested fix
+## Context
 
-`/address-pr`'s auto-pick should walk the oldest-first list and pick the first PR that is **not**
-deferred by the ownership/authorship gates (§1.3/§1.6), rather than stopping at the very first
-entry regardless of its verdict — mirroring how `/todo next`'s walk already skips over
-peer-claimed/frozen tasks instead of returning only the literal #1 queue slot. The auto-pick query
-would need to check ownership for each candidate (in creation order) until it finds one that
-resolves to `mine`/`free`/`untracked`, not just the first one.
+- `/address-pr`'s bare invocation (`/address-pr` with no arg) is the only path affected — an
+  explicit `/address-pr <number>` already bypasses auto-pick entirely (§1: "If `<arg>` is a
+  number, use it directly").
+- The per-PR ownership verdict already exists and is authoritative: `task_claim.sh pr-owner
+  <number>` (`_session/task_claim.sh:800`) returns `mine | free | new | owned:<by> | untracked |
+  unknown`, derived from the implementing task's `claimed_by` on `main` (§1.6). This task does not
+  change that resolution logic at all — it only changes *how many* candidates auto-pick is willing
+  to check before giving up.
+- `/todo next` (`todo/scripts/todo-next.sh`) already solves the analogous problem for the task
+  backlog queue: it walks top-to-bottom and skips peer-claimed entries instead of returning only
+  the literal #1 slot (T20260914-359646). This task ports that same shape to PR auto-pick.
+- `skill-conventions/SKILL.md` §9 (T20260918-174144, merged just before this design) requires
+  deterministic/mechanical skill-workflow logic (a walk + per-item classification, no judgment
+  calls) to live in a bundled, tested script rather than a `jq` one-liner in prose — this is
+  exactly that shape, so the fix is implemented as a new script, not a prose edit to the `jq`
+  filter.
+
+## Solution
+
+Replace the inline `sort_by(.createdAt) | .[0]` one-liner in `address-pr/SKILL.md` §1 with a call
+to a new bundled script, `address-pr/scripts/auto-pick.sh`:
+
+- Lists open PRs authored by `@me` (`gh pr list --author @me --state open --json
+  number,title,createdAt`), sorted oldest-first — same source data as today.
+- Walks the sorted list in order; for each PR calls `task_claim.sh pr-owner <number>` (the
+  existing, unchanged §1.6 resolver).
+- Returns the **first** PR whose verdict is `mine`, `free`, `new`, or `untracked` (the same set
+  §1.6 already treats as "proceed") as a single-line JSON object (`{"number":...,"title":"...",
+  "createdAt":"...","reason":"<verdict>"}`), on stdout.
+- Skips (does not pick) any PR whose verdict is `owned:<other>` or `unknown`, and continues to the
+  next-oldest candidate — diagnostic detail (which PRs were skipped and why) goes to stderr, so
+  stdout stays machine-parseable.
+- If every open PR is deferred (or there are none), prints nothing on stdout and exits 0 — same
+  observable behavior as today's "no open PRs to address" / "defers silently" outcome, just
+  reached only after actually checking every candidate instead of stopping at position 0.
+- `address-pr/SKILL.md` §1's auto-pick bullet is rewritten to call this script and branch on
+  whether it printed a PR object.
+
+**Resolution order is unchanged** (oldest-first) — this only changes the *stopping rule* from
+"stop at the first candidate, always" to "stop at the first *pickable* candidate, else stop at the
+end of the list." A PR that's `owned:<other>` today still never gets auto-picked; it just no
+longer blocks every PR behind it.
+
+**Alternatives considered and rejected:**
+
+- *Leave the fix as a prose-only edit to the `jq` filter in `SKILL.md`* — rejected: the walk needs
+  a per-candidate side-effecting call (`task_claim.sh pr-owner`) that `jq` alone cannot express: a
+  script is unavoidable to make the loop testable, and §9 requires exactly this extraction.
+- *Have auto-pick fall through to interactive escalation ("ask the user which PR") when the oldest
+  is blocked* — rejected: over-engineered for what's fundamentally a mechanical skip; the whole
+  point of `/todo next`'s pattern (and this task's parallel) is that a deferred-but-skippable
+  candidate needs no human judgment at all.
+- *Re-sort by something other than `createdAt` (e.g., "oldest pickable first" computed differently)*
+  — rejected: changes today's well-understood priority order (oldest wins) for no benefit; the bug
+  is the *stopping rule*, not the *order*.
+
+## Root cause
+
+- The `sort_by(.createdAt) | .[0]` auto-pick has existed unchanged since this repo's initial
+  public split (`890c1ce`, "Initial public release") — it predates this repo's own git history, so
+  no finer-grained archaeology is available here.
+- The PR-ownership resolver it now composes with (`task_claim.sh pr-owner`, §1.6) was designed and
+  documented for the *has this specific PR been vetted* question, not *which PR should auto-pick
+  choose* — the two pieces were never revisited together. This reads as an **oversight of
+  composition**, not a deliberate choice: the bug report itself (`## Problem` above) is the first
+  recorded instance of anyone noticing the interaction, and nothing in `address-pr/SKILL.md`'s
+  history suggests the single-candidate limit was intentional once §1.6's ownership gate existed.
 
 ## Test plan
 
-- [ ] BATS/manual: with a fixture list of 3 open PRs where the oldest is `owned:<other>`, auto-pick
-      selects the 2nd-oldest instead of deferring entirely
-- [ ] Confirm the existing single-PR defer behavior is unchanged when *no* other PR is pickable
+- [ ] BATS (`tests/address_pr_auto_pick.bats`, hermetic — `GH_SH`/`TASK_CLAIM_SH` overridden to
+      fixture stub scripts, no network): with a fixture list of 3 open PRs where the oldest is
+      `owned:<other>`, auto-pick selects the 2nd-oldest instead of deferring entirely
+      (`auto-pick.sh` prints the 2nd-oldest PR's JSON object).
+- [ ] BATS: existing single-PR defer behavior is unchanged when *no* other PR is pickable (all
+      candidates `owned:*`/`unknown` → script prints nothing, exit 0).
+- [ ] BATS: an `unknown` verdict candidate is skipped (fail-safe — never picked), same as
+      `owned:*`.
+- [ ] BATS: with zero open PRs, script prints nothing, exit 0 (unchanged from today).
+- [ ] Manual: `bash address-pr/scripts/auto-pick.sh` against this repo's real open PRs after
+      implementation — confirms the real `GH_SH`/`TASK_CLAIM_SH` default resolution works (not
+      just the stubbed test path).
+
+## Done criteria
+
+- [ ] `address-pr/scripts/auto-pick.sh` walks oldest-first and skips `owned:*`/`unknown`, picking the first `mine`/`free`/`new`/`untracked` candidate — `tests/address_pr_auto_pick.bats`.
+- [ ] `address-pr/SKILL.md:27`'s auto-pick bullet calls `auto-pick.sh` instead of the inline `sort_by(.createdAt) | .[0]` jq filter — diff review in the implementation PR.
+- [ ] Behavior-parity gate (skill-conventions §9): `tests/address_pr_auto_pick.bats` proves the new script's stopping rule is a strict superset of today's (still defers, exit 0, empty stdout, when nothing is pickable).
 
 ## Repo file references
 
-| File | Purpose |
-|---|---|
-| `address-pr/SKILL.md` §1 | The `sort_by(.createdAt) \| .[0]` auto-pick this task changes |
-| `drive/SKILL.md` Phase 0 | Calls bare `/address-pr` once per cycle — the caller most affected |
+| File | Lines | Purpose |
+|---|---|---|
+| `address-pr/SKILL.md` §1 | auto-pick bullet | The `sort_by(.createdAt) \| .[0]` one-liner this task replaces with a script call |
+| `address-pr/scripts/auto-pick.sh` | new | The walk-and-skip auto-pick script this task adds |
+| `_session/task_claim.sh:800` (`_tc_pr_owner`) | 800-845 | The unchanged per-PR ownership resolver the new script calls once per candidate |
+| `todo/scripts/todo-next.sh` | whole file | The worked-example walk-and-skip pattern this task ports (T20260914-359646) |
+| `drive/SKILL.md` Phase 0 | | Calls bare `/address-pr` once per cycle — the caller most affected by this fix |
