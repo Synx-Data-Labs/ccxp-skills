@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1h
 source: PR #53 review comments (ccxp-skills), 2026-09-22 — surfaced by independent review during /address-pr's loop on autopilot's dispatch-redesign PR
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260922-195629: Clarify whether `/autopilot`'s `WAITING` outcome is ever reachable from a bare `/drive` dispatch
