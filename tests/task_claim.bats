@@ -872,6 +872,173 @@ CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
   [ "$status" -ne 0 ]
 }
 
+# --- pr-owner head-ref fallback for a task file new in THIS PR (T20260918-404944) --
+# /stage commits queue.md + the new task file in the SAME PR the first time a
+# task is staged, so the file legitimately doesn't exist on `main` yet at the
+# moment `/address-pr` drives that very PR. _tc_resolve_task_location (main-only)
+# must still fail closed for this case; the head-ref fallback is a SEPARATE
+# function so the main-resolved path stays byte-for-byte unchanged. The
+# fallback is gated by _tc_pr_has_cross_repo_task_link so a cross-repo PR
+# whose Task: link is merely unresolvable (not absent) never reaches it.
+
+@test "resolve_task_location_head: task file present on the PR's own HEAD ref but absent from main -> resolves via head-ref fallback" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*"headRefOid"*)         printf 'deadbeef1234567' ;;
+      *"repo view"*)                    printf 'your-org/ccxp-skills' ;;
+      *"contents/dev/TODO?ref=deadbeef1234567"*)    printf '%s\n' 'T20260918-999999-new-task.md' ;;
+      *"contents/dev/PARKING?ref=deadbeef1234567"*) printf '' ;;
+      *)                                 return 1 ;;
+    esac
+  }
+  loc="$(_tc_resolve_task_location_head 418 T20260918-999999)"
+  [ "${loc%%$'\t'*}" = "your-org/ccxp-skills" ]
+  rest="${loc#*$'\t'}"
+  [ "${rest%%$'\t'*}" = "dev/TODO/T20260918-999999-new-task.md" ]
+  [ "${rest#*$'\t'}" = "deadbeef1234567" ]
+}
+
+@test "resolve_task_location_head: head ref unresolvable -> fails closed" {
+  _session_gh() {
+    case "$*" in
+      *"repo view"*)             printf 'your-org/ccxp-skills' ;;
+      *"pr view"*"headRefOid"*)  printf '' ;;   # PR lookup failed
+      *)                          return 1 ;;
+    esac
+  }
+  run _tc_resolve_task_location_head 418 T20260918-999999
+  [ "$status" -ne 0 ]
+}
+
+@test "resolve_task_location_head: file absent from head ref too -> fails closed" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*"headRefOid"*)                     printf 'deadbeef1234567' ;;
+      *"repo view"*)                                printf 'your-org/ccxp-skills' ;;
+      *"contents/dev/TODO?ref=deadbeef1234567"*)    printf '' ;;
+      *"contents/dev/PARKING?ref=deadbeef1234567"*) printf '' ;;
+      *)                                              return 1 ;;
+    esac
+  }
+  run _tc_resolve_task_location_head 418 T20260918-999999
+  [ "$status" -ne 0 ]
+}
+
+# --- pr_has_cross_repo_task_link (pure gate; mirrors _tc_resolve_task_location's
+# OWN 642-644 two-stage test EXACTLY, per T20260918-404944 design review) ----
+
+@test "pr_has_cross_repo_task_link: Task: line WITH a blob link -> true" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*) printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/TODO/T1-x.md' ;;
+      *) return 1 ;;
+    esac
+  }
+  _tc_pr_has_cross_repo_task_link 123
+}
+
+@test "pr_has_cross_repo_task_link: Task:-prefixed line with NO link -> false (must not block the fallback)" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*) printf 'Task: see the parent issue for details, no link here' ;;
+      *) return 1 ;;
+    esac
+  }
+  ! _tc_pr_has_cross_repo_task_link 123
+}
+
+@test "pr_has_cross_repo_task_link: no Task: line at all -> false" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*) printf 'Just an ordinary PR body with no special lines.' ;;
+      *) return 1 ;;
+    esac
+  }
+  ! _tc_pr_has_cross_repo_task_link 123
+}
+
+@test "pr_has_cross_repo_task_link: its own body-fetch failure fails CLOSED (reports link present)" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*) return 1 ;;
+      *)           return 1 ;;
+    esac
+  }
+  # `run` (not a bare call) — the internal body="$(_session_gh ...)" assignment
+  # itself fails, and bats runs test bodies under errexit; wrapping in `run`
+  # is the established idiom this file already uses for exercising a bare
+  # fetch-failure path without the test harness aborting before the
+  # function's own fail-closed `return 0` executes (mirrors the
+  # `resolve_task_location: body-fetch FAILURE fails closed` test above).
+  run _tc_pr_has_cross_repo_task_link 123
+  [ "$status" -eq 0 ]
+}
+
+# --- pr-owner: the new/free/unknown routing this task adds (T20260918-404944) --
+
+@test "pr-owner: cross-repo Task: link present but unresolvable -> unknown, NEVER falls through to the same-repo head-ref search" {
+  session_pr_task_id()               { printf 'T20260622-404636'; }
+  _tc_resolve_task_location()        { return 1; }   # e.g. ambiguous/mismatched link
+  _tc_pr_has_cross_repo_task_link()  { return 0; }    # a real Task: link IS present
+  # If the gate wrongly fell through anyway, this stub resolving successfully
+  # (with an empty claimed_by) would produce "new", not "unknown" — proving
+  # the assertion below actually exercises the gate, not a coincidence.
+  _tc_resolve_task_location_head()   { printf 'O/R\tdev/TODO/T20260622-404636-x.md\tdeadbeef'; }
+  _tc_fetch_fm_field()               { printf ''; }
+  _tc_claimant_id()                  { printf 'cdw:/home/ci/clone'; }
+  [ "$(_tc_pr_owner 123)" = "unknown" ]
+}
+
+@test "pr-owner: body has a Task:-prefixed line with NO blob link -> still falls through to the head-ref search, verdict new" {
+  session_pr_task_id()               { printf 'T20260918-404944'; }
+  _tc_resolve_task_location()        { return 1; }
+  _tc_pr_has_cross_repo_task_link()  { return 1; }   # Task:-worded line exists but has no link
+  _tc_resolve_task_location_head()   { printf 'O/R\tdev/TODO/T20260918-404944-x.md\tdeadbeef'; }
+  _tc_fetch_fm_field()               { [ "$4" = "deadbeef" ] && printf '' || printf 'WRONG-REF-%s' "${4:-}"; }
+  _tc_claimant_id()                  { printf 'cdw:/home/ci/clone'; }
+  [ "$(_tc_pr_owner 123)" = "new" ]
+}
+
+@test "pr-owner: task file new in this PR (absent on main, present on head, no claimed_by) -> new" {
+  session_pr_task_id()               { printf 'T20260918-404944'; }
+  _tc_resolve_task_location()        { return 1; }   # not on main yet
+  _tc_pr_has_cross_repo_task_link()  { return 1; }   # no Task: line at all
+  _tc_resolve_task_location_head()   { printf 'O/R\tdev/TODO/T20260918-404944-x.md\tdeadbeef'; }
+  # Assert we're asked to read the HEAD ref, not `main` (the whole point of
+  # this fix) — a wrong ref would surface as a distinct, obviously-wrong value.
+  _tc_fetch_fm_field() { [ "$4" = "deadbeef" ] && printf '' || printf 'WRONG-REF-%s' "${4:-}"; }
+  _tc_claimant_id()    { printf 'cdw:/home/ci/clone'; }
+  [ "$(_tc_pr_owner 123)" = "new" ]
+}
+
+@test "pr-owner: task file new in this PR but already carries a claimed_by (mine) on head -> mine" {
+  session_pr_task_id()               { printf 'T20260918-404944'; }
+  _tc_resolve_task_location()        { return 1; }
+  _tc_pr_has_cross_repo_task_link()  { return 1; }
+  _tc_resolve_task_location_head()   { printf 'O/R\tdev/TODO/T20260918-404944-x.md\tdeadbeef'; }
+  _tc_claimant_id()                  { printf 'cdw:/home/ci/clone'; }
+  _tc_fetch_fm_field()               { [ "$4" = "deadbeef" ] && printf 'cdw:/home/ci/clone' || printf 'WRONG-REF-%s' "${4:-}"; }
+  [ "$(_tc_pr_owner 123)" = "mine" ]
+}
+
+@test "pr-owner: task file new in this PR but already carries a claimed_by (another agent's) on head -> owned:<by>" {
+  session_pr_task_id()               { printf 'T20260918-404944'; }
+  _tc_resolve_task_location()        { return 1; }
+  _tc_pr_has_cross_repo_task_link()  { return 1; }
+  _tc_resolve_task_location_head()   { printf 'O/R\tdev/TODO/T20260918-404944-x.md\tdeadbeef'; }
+  _tc_claimant_id()                  { printf 'cdw:/home/ci/clone'; }
+  _tc_fetch_fm_field()               { [ "$4" = "deadbeef" ] && printf 'otherbox:/home/other/clone' || printf 'WRONG-REF-%s' "${4:-}"; }
+  [ "$(_tc_pr_owner 123)" = "owned:otherbox:/home/other/clone" ]
+}
+
+@test "pr-owner: not on main AND not on head either -> still unknown (fail-safe unchanged)" {
+  session_pr_task_id()               { printf 'T20260918-404944'; }
+  _tc_resolve_task_location()        { return 1; }
+  _tc_pr_has_cross_repo_task_link()  { return 1; }
+  _tc_resolve_task_location_head()   { return 1; }
+  [ "$(_tc_pr_owner 123)" = "unknown" ]
+}
+
 # --- PR-activity picker (pure; the false-reclaim fix) -----------------------
 # Guards the T20260622-404636 verification's HIGH finding: a task-tracked PR
 # carrying its id ONLY in the branch name must still be found (else 99999 ->
