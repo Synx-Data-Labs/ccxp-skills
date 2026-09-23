@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Open — SUPERVISED (needs a human — renames a live cross-repo state-machine literal `task_claim.sh` case-statements match on; peer sessions in other repos share this exact claim mechanism right now, and a partial/incorrect rename risks silently breaking claim acquisition fleet-wide; also needs a maintainer decision on the replacement term and spans repos not accessible from this clone)
 estimation: 1d
 source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651055, whose
   `task_claim.sh acquire` flow unconditionally flipped its status to `Coding` even though
