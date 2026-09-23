@@ -70,7 +70,16 @@ pes-materialize-env() {
          "op inject -i $dir/.env.tpl -o $dir/.env" >&2
     return 0
   fi
-  op inject -i "$dir/.env.tpl" -o "$dir/.env"
+  local -a account_args=()
+  [ -n "${OP_ACCOUNT:-}" ] && account_args=(--account "$OP_ACCOUNT")
+  local err
+  if ! err="$(op inject -i "$dir/.env.tpl" -o "$dir/.env" "${account_args[@]}" 2>&1)"; then
+    echo "failed: op inject for $dir/.env.tpl -- $err" >&2
+    if [[ "$err" == *"isn't a vault in this account"* ]]; then
+      echo "hint: the signed-in 1Password account doesn't have this vault -- set OP_ACCOUNT (e.g. OP_ACCOUNT=my.1password.com) and retry" >&2
+    fi
+    return 1
+  fi
   echo "materialized: $dir/.env"
 }
 
@@ -94,7 +103,7 @@ pes-direnv-allow() {
 
   pes-check-env-tpl "$dir" || return 1
   pes-write-envrc "$dir"
-  pes-materialize-env "$dir"
+  pes-materialize-env "$dir" || return 1
   pes-direnv-allow "$dir"
 }
 
