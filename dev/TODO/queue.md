@@ -8,7 +8,6 @@ reprioritize.
 
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
-- [T20260915-315552](T20260915-315552-repo-conventions-mode-solo-team-switch.md): Add `/repo-conventions mode {solo|team}` to switch a repo between solo and team branch policy
 - [T20260918-414727](T20260918-414727-ccxp-script-paths-assume-wrong-cwd-on-some-boxes.md): `ccxp/SKILL.md`'s relative script paths don't resolve from a `/ccxp` session's actual cwd on at least one box
 - [T20260918-214522](T20260918-214522-op-inject-exit-code-not-checked.md): `1password-env-setup.sh` reports "materialized" even when `op inject` fails
 - [T20260918-404944](T20260918-404944-pr-owner-unknown-for-stage-prs-new-task-file.md): `task_claim.sh pr-owner` always returns `unknown` for `/stage` PRs that introduce a brand-new task file
