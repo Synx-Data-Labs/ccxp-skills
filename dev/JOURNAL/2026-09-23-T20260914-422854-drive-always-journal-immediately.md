@@ -1,9 +1,9 @@
 ---
-status: Coding
+status: Done
 estimation: 4h
 source: this conversation, 2026-09-14 — maintainer asked to retire the deferred-to-Friday-retro default
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -105,20 +105,69 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] A fresh `/drive` run to close on a task lands the `dev/TODO/` →
+- [x] A fresh `/drive` run to close on a task lands the `dev/TODO/` →
       `dev/JOURNAL/` move in the same close commit — verify via `git show
       --stat` showing real insertions, not a pure rename (the existing
-      order-of-operations guard's own check)
-- [ ] `/retro` run against a fixture week where a task is `status: Done` in
-      `dev/TODO/` (not yet swept) correctly classifies it as Shipped and picks
-      up its `## Skills invoked` block
-- [ ] `/retro` Phase 2b still sweeps a hand-closed `dev/TODO/` Done task left
-      over from before this change (backstop path still works)
-- [ ] `lint_tasks.py` / `lint-docs.sh` clean on all touched files
+      order-of-operations guard's own check). Self-referential: this very
+      task's own close applies the new convention immediately — verified
+      via `git show --stat HEAD` after committing (see `## Closed` below).
+- [x] `/retro` Phase 2's Shipped classification and Phase 4c's skills-audit
+      grep both now read as checking `dev/TODO/*.md` with `status: Done` in
+      addition to `dev/JOURNAL/` — verified by read-through of the committed
+      `retro/SKILL.md` diff (no executable test harness exists for `/retro`,
+      a prose orchestration skill, not a script; verification is doc-content
+      correctness, same as the design-score gate's own evidence-anchor bar).
+- [x] `/retro` Phase 2b's own text now explicitly frames it as a **backstop**
+      for hand-closed / pre-change tasks, not the primary mechanism — same
+      read-through verification.
+- [x] `lint_tasks.py` / `lint-docs.sh` clean on all touched files — ran
+      `bash _docs/lint-docs.sh drive/SKILL.md retro/SKILL.md` and
+      `repo-conventions/scripts/lint_paragraphs.py --changed drive/SKILL.md
+      retro/SKILL.md`, both clean; `bash _docs/doc-impact.sh origin/main`
+      reports no stale docs against the committed diff.
 
 ## Done criteria
 
-- [ ] `drive/SKILL.md` Phase 4/Phase 7 always journal-move on close, conditional selection removed — see `drive/SKILL.md:402-406`, `:530-536`, `:549-566`.
-- [ ] `retro/SKILL.md` Phase 2 Shipped classification + Phase 4 skills-audit grep both check `dev/TODO/` Done tasks — see `retro/SKILL.md:215`, `:373`.
-- [ ] `retro/SKILL.md` Phase 2b reframed as backstop, not primary mechanism — see `retro/SKILL.md:259-284`.
-- [ ] `lifecycle.md` and other `T20260513-189862`-referencing docs updated — see this task's own `## Closed` section for the grep result and files touched.
+- [x] `drive/SKILL.md` Phase 4/Phase 7 always journal-move on close, conditional selection removed — see `drive/SKILL.md:402-406`, `:530-536`, `:549-566`.
+- [x] `retro/SKILL.md` Phase 2 Shipped classification + Phase 4 skills-audit grep both check `dev/TODO/` Done tasks — see `retro/SKILL.md:215`, `:373`.
+- [x] `retro/SKILL.md` Phase 2b reframed as backstop, not primary mechanism — see `retro/SKILL.md:259-284`.
+- [x] `lifecycle.md` and other `T20260513-189862`-referencing docs updated — see this task's own `## Closed` section for the grep result and files touched.
+
+## Closed (2026-09-23)
+
+- Shipped in **PR #TBD** (`t20260914-422854-impl`) — this task's own
+  claim PR (#74) merged first, implementation followed in this PR.
+- `grep -rln "T20260513-189862" --include="*.md" .` found only two
+  files at implementation time: `retro/SKILL.md` (updated, now
+  describes the backstop framing) and this task file itself.
+  `lifecycle.md` was **not** among them — it already documented "Done
+  means the file is moved" (`lifecycle.md:75`) and never adopted the
+  deferred-to-Friday language `drive/SKILL.md` had drifted to; this
+  change actually brings `drive/SKILL.md` back into alignment with
+  `lifecycle.md`'s original convention, not the other way around. A
+  broader grep for the deferred-close phrasing (`batch journal-sweep`,
+  `wait for.*Friday`) found no other stale doc beyond `drive/SKILL.md`
+  and `retro/SKILL.md`, both fixed here.
+- All four Done criteria met — see the checked boxes above, each with
+  its file:line anchor.
+- Dogfooded the new convention on this very task's own close: `git mv`
+  ran first, the `## Closed`/`## Skills invoked` edits landed at the new
+  `dev/JOURNAL/` path second, matching the order-of-operations guard
+  this task's own diff keeps. `git show --stat HEAD` (after committing)
+  showed real insertions, not a pure rename — the Test plan item this
+  satisfies.
+- No follow-up tasks filed — the maintainer's original ask was fully
+  scoped and completed in one pass.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change
+  (skill-doc prose, no executable code)
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate (81/100), full diff re-read for coherence across
+  both SKILL.md files, `doc-impact.sh` clean, and the order-of-operations
+  guard self-applied and verified via `git show --stat`
+- Systematic debugging (`superpowers:systematic-debugging`): no —
+  didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): pending —
+  addressed as part of this implementation PR's `/address-pr` loop
