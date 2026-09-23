@@ -79,21 +79,46 @@ independent review caught that `free`'s existing handling
 file (see that section for why) — so this case gets its **own** verdict,
 `new`, with its own (simpler) handling. What follows is the corrected design.
 
-- **`_tc_resolve_task_location_head`** (new function, `_session/task_claim.sh`
-  near `_tc_resolve_task_location`): same-repo-only directory search (mirrors
-  `_tc_resolve_task_location`'s same-repo branch) against the PR's own head
-  ref (`gh pr view <pr> --json headRefOid`) instead of `main`. Returns a
-  **3-field** `<owner/repo>\t<path>\t<head-sha>` — a distinct shape from
-  `_tc_resolve_task_location`'s existing 2-field `<owner/repo>\t<path>`, so
-  the two are never confused and every existing caller/test of the 2-field
+- **`_tc_resolve_task_location_head`** (new function, `_session/task_claim.sh`,
+  inserted immediately after `_tc_resolve_task_location` — does **not** modify
+  that function or its 2-field return contract): same-repo-only directory
+  search (mirrors `_tc_resolve_task_location`'s same-repo branch) against the
+  PR's own head ref (`gh pr view <pr> --json headRefOid`) instead of `main`.
+  Returns a **3-field** `<owner/repo>\t<path>\t<head-sha>` — a distinct shape
+  from `_tc_resolve_task_location`'s existing 2-field `<owner/repo>\t<path>`,
+  so the two are never confused and every existing caller/test of the 2-field
   function is untouched. Only called by `_tc_pr_owner`, and only as a
   fallback.
-- **`_tc_pr_owner`**: call `_tc_resolve_task_location` first as today; only on
-  its failure, call `_tc_resolve_task_location_head` and record that this
-  resolution came from the head ref (a local flag) plus that ref (for the
-  `claimed_by` fetch below) — never mix the two code paths. Read `claimed_by`
-  via `_tc_fetch_fm_field ... "$ref"` (`main` in the normal case, the head SHA
-  in the fallback case). Then:
+- **`_tc_pr_has_task_link`** (new small helper, pure presence-check): fetches
+  the PR body and reports whether it contains **any** `Task:`-prefixed line
+  (the same `grep -iE '^[[:space:]]*Task:'` test `_tc_resolve_task_location`
+  itself uses at `_session/task_claim.sh:642`), independent of whether that
+  line's link is resolvable. Exists solely to gate the fallback correctly —
+  see the next bullet and the Design review's Finding 1.
+- **`_tc_pr_owner`**: call `_tc_resolve_task_location` first as today. On its
+  failure, **do not** unconditionally fall back to
+  `_tc_resolve_task_location_head` — first check `_tc_pr_has_task_link`:
+  - **A `Task:` line IS present** (the cross-repo branch was taken and failed
+    — fetch error, ambiguous/decoy/mismatched link, wrong-id link): print
+    `unknown` and **stop**, exactly as today. **Never** fall through to the
+    same-repo head-ref search in this case — doing so would resolve a
+    same-repo id-prefix match in *this* repo's `dev/TODO`/`dev/PARKING`
+    without ever having validated the PR's own (failed) cross-repo claim,
+    silently reintroducing the exact fail-closed violation
+    `resolve_task_location: body-fetch FAILURE fails closed (no same-repo
+    fall-through)` (`tests/task_claim.bats:780`) and the ambiguous-link tests
+    (`:773`, `:788`, `:796`) already guard against — one layer up, in the
+    caller instead of the callee. This is the scenario the fallback must
+    **not** cover; only the genuine "`/stage` same-repo, no `Task:` line at
+    all" case may use it.
+  - **No `Task:` line present** (the actual `/stage` same-repo scenario this
+    task fixes — a same-repo PR never carries one): call
+    `_tc_resolve_task_location_head`. If it also fails, print `unknown` (fully
+    unresolvable, same fail-safe as today). If it succeeds, record that this
+    resolution came from the head ref (a local flag) plus that ref (for the
+    `claimed_by` fetch below) — never mix the two code paths.
+  Read `claimed_by` via `_tc_fetch_fm_field ... "$ref"` (`main` in the normal
+  case, the head SHA in the fallback case). Then:
   - If the resulting decision is `mine` or `owned:<by>`: print that verdict
     **unchanged**, exactly as the main-resolved path would — a head-fallback
     resolution that finds an existing claim (this session's own prior claim
@@ -119,8 +144,15 @@ file (see that section for why) — so this case gets its **own** verdict,
      the file on this checked-out branch.
   3. Commit (pure frontmatter change) and push — lands as one more commit on
      the *same* PR, no separate claim-PR/merge round-trip.
-  4. Continue driving this PR through the rest of the `/address-pr` loop as
-     normal (§2 onward) — one PR, one push, done.
+  4. **Push rejected (non-fast-forward) = you lost the race** — mirrors
+     `free`'s own step 3 (`address-pr/SKILL.md:119`): another session saw
+     `new` on this same PR and pushed its own claim commit first. Do **not**
+     force-push. `git fetch && git checkout <branch>` again (picks up their
+     commit) and re-run `task_claim.sh pr-owner <number>` — it re-resolves via
+     the same head-ref fallback against the *new* head SHA, reads their now-
+     stamped `claimed_by`, and reports `owned:<other>`. Defer per that case.
+  5. Otherwise, continue driving this PR through the rest of the `/address-pr`
+     loop as normal (§2 onward) — one PR, one push, done.
 
 **Alternatives considered and rejected**:
 
@@ -168,6 +200,22 @@ file (see that section for why) — so this case gets its **own** verdict,
      (`[x]`) on a design-only PR before any code existed. Reworded below to
      describe what was actually verified pre-code (nothing yet) vs. what
      verifies the eventual change.
+- 2026-09-22 (second pass): a fresh independent review of the revision above
+  confirmed findings 1-3 fixed, but found one more real gap:
+  1. **(Medium-High, addressed above)** the fallback was gated only on
+     "`_tc_resolve_task_location` failed," not on *why* — so a cross-repo PR
+     whose `Task:` link is ambiguous/mismatched/unfetchable (cases
+     `tests/task_claim.bats:773,780,788,796` deliberately guard as fail-closed)
+     would also fall through to the same-repo head-ref search, one layer up
+     from where those tests protect. Fixed by adding `_tc_pr_has_task_link`
+     and gating the fallback on "no `Task:` line at all" specifically.
+  2. **(Low-Medium, addressed above)** the `new` claim procedure had no
+     documented "lost the race" step, unlike `free`'s step 3. Added an
+     equivalent step 4.
+  3. **(Low, cosmetic, addressed above)** the Repo file references table's
+     wording for `_session/task_claim.sh:623-680` read as "modify this
+     function," re-introducing the interface ambiguity Finding 2 (first pass)
+     already fixed in prose. Reworded to say "unchanged."
 
 ## Test plan
 
@@ -179,6 +227,11 @@ file (see that section for why) — so this case gets its **own** verdict,
       fallback` (`tests/task_claim.bats`, alongside the existing
       `resolve_task_location: same-repo, task file present in NEITHER dir ->
       fails closed (unknown)` case).
+- [ ] New unit test: `pr-owner: cross-repo Task: link present but
+      unresolvable (ambiguous/mismatched) -> unknown, NEVER falls through to
+      the same-repo head-ref search` — guards Design review (second pass)
+      Finding 1; must not regress `tests/task_claim.bats:773,780,788,796`'s
+      existing fail-closed guarantees one layer up in `_tc_pr_owner`.
 - [ ] New unit test: `pr-owner: task file new in this PR (absent on main,
       present on head, no claimed_by) -> new` (verdict is `new`, not `free`
       — see the design revision above).
@@ -224,9 +277,15 @@ file (see that section for why) — so this case gets its **own** verdict,
       ref argument, default `main` — existing callers that omit it are
       unaffected (same bats full-suite run as above covers this).
 - [ ] `address-pr/SKILL.md` §1.6 documents the `new` case's own claim
-      procedure (checkout the PR's own branch, not a fresh branch off `main`)
-      — text review at PR time, not bats-testable (it's operator-facing
-      documentation, not code).
+      procedure (checkout the PR's own branch, not a fresh branch off `main`,
+      including the "lost the race" step) — text review at PR time, not
+      bats-testable (it's operator-facing documentation, not code).
+- [ ] A cross-repo PR whose `Task:` link fails to resolve for any of the
+      pre-existing reasons (ambiguous, ID mismatch, fetch failure) still
+      returns `unknown` from `_tc_pr_owner` and never reaches
+      `_tc_resolve_task_location_head` — `tests/task_claim.bats` test
+      `pr-owner: cross-repo Task: link present but unresolvable -> unknown,
+      NEVER falls through to the same-repo head-ref search`.
 
 ## Root cause
 
@@ -254,7 +313,8 @@ file (see that section for why) — so this case gets its **own** verdict,
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_session/task_claim.sh` | 623-680 | `_tc_resolve_task_location` — same-repo `main`-only lookup; add head-ref fallback here |
+| `_session/task_claim.sh` | 623-680 | `_tc_resolve_task_location` — same-repo `main`-only lookup; **unchanged**, cited only as the insertion point for the new function on the next row |
+| `_session/task_claim.sh` | (new, after 680) | `_tc_resolve_task_location_head` + `_tc_pr_has_task_link` — new functions; a 3-field return, never sharing `_tc_resolve_task_location`'s 2-field contract |
 | `_session/task_claim.sh` | 682-693 | `_tc_fetch_fm_field` — hardcoded `?ref=main`; add optional ref arg |
 | `_session/task_claim.sh` | 739-764 | `_tc_pr_owner` — thread the resolved ref through to the `claimed_by` fetch |
 | `tests/task_claim.bats` | 581-880 | Existing `pr-owner`/`resolve_task_location` bats coverage; add new cases alongside |
