@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 estimation: 2h
 source: session 2026-09-19 — internal names reappeared on the now-public repo within 2 days of the visibility flip
 related: T20260914-234656
 description: Add a pre-merge check for company-internal identifiers so genericization stops being a recurring manual scrub
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -264,3 +264,46 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 - `repo-conventions/scripts/lint_refs.py` remains the closest existing
   model (link-aware, `--all`/`--changed`/`--fix` modes, already wired into
   CI) — see `## Context` for the specific mechanisms reused.
+
+## Closed (2026-09-22)
+
+- Shipped across three PRs: #102 (claim), #103 (design), **#104**
+  (implementation, this task's code).
+- All five Done criteria met — see the checkboxes above, each mapped to a
+  passing test or a live command run. Nothing left unverified: the
+  `INTERNAL_IDENTIFIERS_FILE`/`INTERNAL_PRIVATE_REPOS` config knobs are
+  exercised by unit tests only (no real company denylist configured
+  anywhere in this repo, by design — see `## Solution`'s "Key design
+  call"), which is the intended end state for `ccxp-skills` itself.
+- Two real corrections surfaced and fixed during the process, both
+  recorded in `## Solution`/`## Root cause` above with the evidence:
+  a wrong `lint_refs.py` line citation and a commit misattributed to
+  `/migrate-task` before that skill existed (both caught by an
+  independent Claude Code review on the design PR, #103), and a
+  false-positive-driven scope narrowing (`--all` restricted to
+  `dev/TODO`/`dev/JOURNAL`) discovered by running the implementation
+  against this repo's actual content before opening #104.
+- No follow-up tasks filed — the one open gap (the `/migrate-task` live
+  push/PR-opening flow being an unimplemented stub) is pre-existing,
+  already out of this task's scope, and now explicitly documented as
+  such in `migrate-task/SKILL.md` rather than left as a silent surprise.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0 classified
+  this code-class; wrote `test_lint_identifiers.py` first, watched it fail
+  on `ModuleNotFoundError` (RED), then implemented `lint_identifiers.py`
+  to 23/23 green
+- Verification (`superpowers:verification-before-completion`): yes —
+  Phase 3.6, run right after implementation: fresh unit-test run, full
+  736-test bats suite, and a live `--all` scan against real repo content,
+  which is what caught the 32-false-positive scope problem before it ever
+  reached a PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — no
+  stuck point; the false-positive finding was resolved on first
+  investigation (empirical `--all` run → clear root cause → scope fix)
+- Receiving code review (`superpowers:receiving-code-review`): yes — an
+  independent review agent on design PR #103 found 3 real issues (a wrong
+  line citation, a misattributed commit, and a `/migrate-task` integration
+  point that assumed unimplemented code); all three verified independently
+  via `git log`/`git show`/`grep` and fixed, none pushed back on
