@@ -2,7 +2,7 @@
 name: repo-conventions
 description: Use when setting up or checking a repo against these conventions — CLAUDE.md/guidelines.md structure, dev/ TODO lifecycle, or the conventions lint
 disable-model-invocation: false
-argument-hint: "[check|sync|show]"
+argument-hint: "[check|sync|show|mode {solo|team}]"
 ---
 
 The single source of truth for how Your Company repos structure their `CLAUDE.md`, `dev/guidelines.md`, and `dev/{TODO,PARKING,JOURNAL}/` lifecycle. Each repo's `CLAUDE.md` stays repo-specific (purpose, deps), but defers conventions here so we don't re-litigate them per repo.
@@ -12,6 +12,7 @@ The single source of truth for how Your Company repos structure their `CLAUDE.md
 - `/repo-conventions check` — lint the current repo's CLAUDE.md and guidelines.md against the rules below
 - `/repo-conventions sync` — copy missing sections from templates into the current repo (interactive — asks before overwriting)
 - `/repo-conventions show` — print the canonical rules (default if no arg)
+- `/repo-conventions mode {solo|team}` — switch the current repo's Branch and Merge Policy wording and its actual GitHub branch-protection state to match (see `mode` below)
 
 ## Canonical Rules
 
@@ -118,6 +119,31 @@ The `templates/` dir also holds the **per-task scaffolds** — `task.md` (new TO
 ### `show` (default)
 
 Print this skill's "Canonical Rules" section above. Useful when prepping a new repo.
+
+### `mode {solo|team}` (branch-policy switch)
+
+Switches the current repo between **solo** (direct-to-`main`, no CI, no
+feature-branch PRs) and **team** (feature branch + PR + CI required) branch
+policy — both the doc wording `/claim`/`/drive`'s solo-repo detection reads,
+and the actual GitHub branch-protection state on `main`:
+
+```bash
+bash ../repo-conventions/scripts/mode.sh <solo|team> [--repo OWNER/NAME] [--doc PATH] [--skip-ci-check] [--yes]
+```
+
+- Rewrites the target repo's `## Branch and Merge Policy` section
+  (`dev/guidelines.md`, falling back to `CLAUDE.md`) to the canonical
+  wording for the requested mode.
+- **`team`**: refuses to enable protection with no `.github/workflows/*.yml`
+  configured, unless `--skip-ci-check` (for CI hosted elsewhere). Enables
+  branch protection requiring PR-based merges (`required_approving_review_count: 0`
+  by default — matches this suite's auto-merge tier; raise it later via
+  GitHub directly for the wait-for-approval tier).
+- **`solo`**: disables branch protection on `main` (tolerates it already
+  being absent).
+- Already in the requested mode → no-op (no doc rewrite, no API call).
+- Mutates live repo security settings — asks for confirmation unless
+  `--yes` (required for non-interactive/unattended use).
 
 ## Pointing a repo at this skill
 
