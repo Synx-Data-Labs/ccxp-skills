@@ -1,12 +1,19 @@
 ---
-status: Open
+status: Coding
 estimation: 15m
 source: /drive cycle, discovered using todo/scripts/todo-next.sh live after merging T20260914-359646
 related: T20260914-359646
 description: todo-next.sh's "#N of M" denominator counts raw queue.md file lines, not actual task entries
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260922-263110: `todo-next.sh`'s "#N of M" denominator counts raw file lines, not task entries
+
+Design PR skipped 2026-09-23 (autopilot, no maintainer in the loop) —
+self-evident one-line bug fix with reproduction evidence and a specific
+fix already in the task file, per `/drive` Phase 2's skip condition 1.
 
 ## Problem
 
