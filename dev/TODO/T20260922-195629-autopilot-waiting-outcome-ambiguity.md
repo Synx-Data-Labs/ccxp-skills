@@ -2,12 +2,19 @@
 status: Design
 estimation: 1h
 source: PR #53 review comments (ccxp-skills), 2026-09-22 — surfaced by independent review during /address-pr's loop on autopilot's dispatch-redesign PR
+related: PR #53 (autopilot dispatch redesign), T20260719-204917 (--dispatch-blockers precedent this PR's dispatch pattern mirrors)
 claimed_by: cc1-9a4074da:94a83ff0e786a885
 claimed_role: interactive
 scheduled: 2026-09-21
 ---
 
 # T20260922-195629: Clarify whether `/autopilot`'s `WAITING` outcome is ever reachable from a bare `/drive` dispatch
+
+## TLDR
+
+- **Type**: research
+- **Problem**: `autopilot/SKILL.md` describes a `WAITING` outcome with two examples — "CI still running on PR #\<n\>" and "a review genuinely still pending" — but `drive/SKILL.md` explicitly waits out CI *internally* and never returns mid-CI-wait, so one of those two examples cannot actually occur.
+- **Solution**: option (a) — `WAITING`'s only real referent is `/address-pr`'s wait-for-approval merge tier (a formal GitHub review-approval gate that only a human can clear); the "CI still running" example is wrong and gets removed. Tighten `autopilot/SKILL.md`'s wording/examples accordingly; no change needed to `drive/SKILL.md` or `address-pr/SKILL.md` — their behavior is already correct, only `autopilot/SKILL.md`'s description of it was imprecise.
 
 ## Problem
 
@@ -46,3 +53,30 @@ scheduled: 2026-09-21
 - Related: `address-pr/SKILL.md` §3's "Follow the merge policy... tiered
   merge... or notify for wait-for-approval tier" — the likely actual source
   of a legitimate `WAITING` outcome, worth tracing precisely.
+
+## Solution
+
+- **Traced every path that could plausibly end a bare `/drive` dispatch mid-wait** (verified against the live files, not recollection — see file:line citations):
+  - **CI / pipeline wait**: `drive/SKILL.md:426` ("wait in the background... idle until the background signal arrives") and `drive/SKILL.md:636` ("Wait, don't switch... just wait") are both unconditional — `/drive` never returns control while CI/a build is running, dispatched or not. **This path cannot produce a `WAITING` report.** The "CI still running on PR #\<n\>" example in `autopilot/SKILL.md:69` is therefore wrong — it names something `/drive` structurally never does.
+  - **§2.e unverifiable manual test-plan item** (`address-pr/SKILL.md`): this happens *before* the hard gate passes, so `/address-pr` never reaches its own §3 merge/notify step. `autopilot/SKILL.md:81` already classifies this as **Stuck**, not `WAITING` (it's one of the three named `stopped-and-reported without merging` sub-cases, and is explicitly silent — no Slack of its own).
+  - **§3 wait-for-approval merge tier** (`address-pr/SKILL.md:309`): reached only *after* the hard gate has passed (CI green, Claude Code review addressed, test plan verified). For a repo whose `dev/guidelines.md` declares the wait-for-approval tier (`repo-conventions/SKILL.md:163-165` — `mode.sh team` with `required_approving_review_count` raised above 0), `/address-pr` posts a "ready to merge" Slack notification (§3 step 1) and stops without merging — there is no loop in `address-pr/SKILL.md` that waits for the approval and then completes the merge within the same invocation. This is **not** silent (it does Slack, unlike the §2.e case above) and is **not** one of the three named Stuck sub-cases. It resolves *without further `/drive` action* in exactly the sense `autopilot/SKILL.md:79` describes: either the human merges directly on GitHub, or the *next* `/drive` cycle's Phase 0 (`/address-pr` auto-pick, which drains open PRs before picking new work) re-checks and completes the merge once approved — no design decision, fix, or escalation is needed from `/drive` itself. **This is the one real, structural path to a genuine `WAITING` outcome.**
+- **Verified this repo (ccxp-skills) is on the auto-merge tier today** — PR #107 and #108 both merged this cycle with `reviewDecision: ""` and no human approval step, confirming the wait-for-approval tier is a *per-repo policy choice* (via `repo-conventions/SKILL.md`'s `mode.sh`), not something every consumer repo exercises. The ambiguity is about the general skill docs, not this repo's current settings.
+- **Chosen resolution: option (a)** from the task's own framing — confirm `WAITING` maps only to the wait-for-approval case, and correct `autopilot/SKILL.md`'s wording:
+  1. `autopilot/SKILL.md:69` (dispatch-prompt `WAITING:` example line) — drop "CI still running on PR #\<n\>"; keep only the wait-for-approval-shaped example, and make explicit that it means a *formal GitHub review approval*, not the Claude Code review comment (which is already addressed inside the CI/review loop before the hard gate even passes).
+  2. `autopilot/SKILL.md:79` (Progress bucket's wait-state parenthetical) — same fix: replace "(CI still running, a review genuinely still pending)" with a single, precise reference to the wait-for-approval merge tier, citing `address-pr/SKILL.md` §3 so a future reader can trace it instead of re-litigating this ambiguity.
+  3. No change needed to `drive/SKILL.md` or `address-pr/SKILL.md` — both already behave correctly; only `autopilot/SKILL.md`'s *description* of the reachable outcomes was imprecise.
+- **Alternative considered and rejected — option (b)** ("find a real path where a bare `/drive` call does return mid-CI-wait and document that instead"): rejected because `drive/SKILL.md`'s CI-wait instruction is unconditional and appears twice (Phase 5 and Important Notes), with no carve-out for a dispatched context. Inventing a new mid-CI-wait return path would be a behavior *change* to `/drive`, not a documentation fix, and nothing in this task's scope (or the PR #53 review thread that raised it) asked for that — the ambiguity is in the docs, not a missing capability.
+
+## Test plan
+
+- [x] Read `drive/SKILL.md` (Phase 5, Important Notes), `address-pr/SKILL.md` (§2.e, §3), `autopilot/SKILL.md` (Phase 3 dispatch template, Phase 4 Progress/Stuck bullets), and `repo-conventions/SKILL.md` (`mode.sh` tier semantics) directly from disk to confirm every citation above (not from a cached/recollected copy — see T20260922-201976).
+- [x] Cross-checked against this cycle's own live behavior: PR #107 and PR #108 both cleared CI, got an independent review comment, and merged with `reviewDecision: ""` — confirming this repo runs the auto-merge tier and that `/drive`'s CI-wait (via `Monitor`) never itself ended a turn without a resolved check.
+- [ ] Post-edit: re-read the two corrected `autopilot/SKILL.md` lines and confirm they no longer mention "CI still running" as a `WAITING` example, and do name the wait-for-approval tier explicitly with a citation to `address-pr/SKILL.md` §3.
+- [ ] `bash design-score/scripts/score.sh dev/TODO/T20260922-195629-autopilot-waiting-outcome-ambiguity.md` clears the threshold before Phase 3 implementation.
+- [ ] `bash _docs/lint-docs.sh` clean on the edited file(s).
+
+## Done criteria
+
+- [ ] `autopilot/SKILL.md:69` (dispatch-prompt `WAITING:` example) no longer names CI as an example — verified by reading the merged file at that line.
+- [ ] `autopilot/SKILL.md:79` (Phase 4 Progress-bucket parenthetical) names only the wait-for-approval tier, with a citation to `address-pr/SKILL.md:309` (§3) — verified by reading the merged file at that line.
+- [ ] No behavior change to `drive/SKILL.md` or `address-pr/SKILL.md` — this task is documentation-only, confirmed by `git diff main...HEAD --stat` showing only `autopilot/SKILL.md` touched.
