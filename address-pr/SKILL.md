@@ -21,13 +21,20 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 
 - If `<arg>` is a number, use it directly
 - If `<arg>` is a URL, extract the PR number from the path
-- If empty, auto-pick (note `--author @me` — only our own PRs are ever auto-picked):
+- If empty, auto-pick (note `--author @me` — only our own PRs are ever auto-picked). Rather than
+  taking the single oldest open PR regardless of its ownership verdict (a permanently-owned-by-
+  another oldest PR would otherwise block every PR behind it forever — T20260919-266165), walk
+  the oldest-first list and pick the first PR whose ownership (§1.6) resolves to
+  `mine`/`free`/`new`/`untracked`, skipping `owned:<other>`/`unknown` candidates:
 
   ```bash
-  bash ../_gh/gh.sh pr list --author @me --state open --json number,title,createdAt --jq 'sort_by(.createdAt) | .[0]'
+  bash ../address-pr/scripts/auto-pick.sh
   ```
 
-  If no open PRs, report "No open PRs to address" and exit.
+  Prints the picked PR's JSON (`{"number":...,"title":"...","createdAt":"...","reason":"<verdict>"}`)
+  on stdout, or nothing if no open PR is pickable (whether because there are none, or every one is
+  deferred). If it printed nothing, report "No open PRs to address" (or, if every PR was deferred,
+  say so — the script's stderr names which PRs were skipped and why) and exit.
 
 ### 1.3. Authorship gate — only drive our OWN PRs (hard stop on foreign PRs)
 
