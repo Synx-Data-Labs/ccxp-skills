@@ -106,10 +106,64 @@ scheduled: 2026-09-21
       (`skill-conventions/SKILL.md:68-76`).
 - [x] `repo-conventions/scripts/lint_paragraphs.py --changed` — "no long
       paragraphs found".
-- [ ] CI (`Markdown Lint`, `lint-tasks`) green on the implementation PR — post-push item.
+- [x] CI (`Markdown Lint`, `lint-tasks`, `bats`, `sync-tasks`) green on PR #96.
 
 ## Done criteria
 
 - [x] New `§9` convention (rule + prose-stays boundary + validation gate) inserted at `skill-conventions/SKILL.md:67`, before `## Important Notes` — manual re-read test-plan item above.
 - [x] `§9` cites the worked example at `dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md:12` (the task's own H1 title) — grep check in the implementation PR diff.
 - [x] `§1`–`§8` numbering unchanged (`skill-conventions/SKILL.md:18` through `:66` untouched, i.e. §8's heading *and* body bullets) — diff review test-plan item above.
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #96** (`t20260918-174144-impl`) — design PR #95 merged
+  first, this PR carried the `skill-conventions/SKILL.md` §9 addition plus
+  this journal move.
+- All three Done criteria met (see checked boxes above, each with a
+  `file:line` anchor); design-score gate passed at 88/100 (threshold 70)
+  on the merged design (`dev/TODO/` copy, prior to this move).
+- An independent review of PR #96 caught one real gap before merge: the
+  task file had `status: Done` and all criteria ticked but was still
+  sitting in `dev/TODO/` with no journal move — a stale assumption on
+  this session's part, since `/drive`'s "always journal-move immediately"
+  convention (T20260914-422854) superseded the old deferred-to-Friday
+  default sometime during this same session, after this session had
+  already loaded the older skill text at conversation start. Fixed by
+  this `git mv` + this section, following the order-of-operations guard
+  (move first, then edit at the new path).
+- Also worth recording: this session hit a genuine clone-locality
+  collision mid-task — a concurrent session shared this exact working
+  directory and git identity (`cc1-9a4074da:94a83ff0e786a885`), and its
+  `release-others` (claiming a different task, T20260918-404944) wiped
+  this session's first claim attempt on this task after it merged via
+  PR #93, before this task's own claim PR (#92) could land. Recovered by
+  re-claiming from an isolated `/tmp` clone (a different clone-identity
+  path hash) and driving the rest of this task from there — no data was
+  lost, but the two-live-sessions-in-one-clone condition itself is a
+  process anomaly worth a human look, not something this task's scope
+  covers fixing.
+- No follow-up tasks filed for this task's own scope — it shipped exactly
+  what was asked. (The clone-collision anomaly above is flagged for the
+  human/orchestrator, not filed as a new `dev/TODO/` task, since it's an
+  environment/orchestration condition, not a bug in this repo's code.)
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change (a
+  single prose section added to `skill-conventions/SKILL.md`, no
+  executable code).
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate run twice (pre- and post- line-citation fix, 88/100
+  both times), `lint_paragraphs.py --changed` clean, `doc-impact.sh`
+  clean, manual re-read of the merged §9 section against the design's
+  Solution section, and this close's own order-of-operations guard
+  self-verified via `git show --stat` (see Test plan / this section).
+- Systematic debugging (`superpowers:systematic-debugging`): no — no
+  stuck-for-2-attempts test failure; the clone-collision recovery was a
+  git/process issue resolved by isolating into a fresh clone, not a
+  hypothesis-driven debugging case.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  independent review agent dispatched on both the design PR (#95, 2 real
+  line-citation findings, both fixed, 0 pushback) and the implementation
+  PR (#96, 1 real finding — the missing journal-move, fixed as this
+  section — 0 pushback).
