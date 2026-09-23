@@ -3,7 +3,6 @@ status: Design
 estimation: 1d
 source: conversation with @shine, 2026-09-23
 related: T20260923-986928
-priority: P2 — enables ad-hoc mid-week IPM re-runs; no external deadline, but the underlying friction (re-scoping requires the full /ccxp loop) is felt every time a design changes mid-week
 claimed_by: cc1-9a4074da:94a83ff0e786a885
 claimed_role: interactive
 scheduled: 2026-09-21
@@ -188,7 +187,7 @@ scheduled: 2026-09-21
 
 - [ ] `ipm/SKILL.md` contains the full 2a.0–2a.6 logic — mapped to the Test plan's `ccxp/SKILL.md:582-889` byte-for-byte diff check (cron/interactive branching, the 2a.5a hard gate, the 2a.5b cross-repo ROADMAP sync, Slack notification all included).
 - [ ] `ccxp/SKILL.md` Phase 2a shrinks to a trigger check + `Run /ipm` — mapped to the Test plan's `ccxp/SKILL.md:891-914` shape-parity check.
-- [ ] No stray `2a.N` references survive outside `ipm/SKILL.md` — mapped to the Test plan's `ccxp/SKILL.md:30` grep check (first of 9 offenders today, full list in Solution).
+- [ ] No stray `2a.N` references survive outside `ipm/SKILL.md`, and no other section of `ccxp/SKILL.md` changed beyond the moved Phase 2a body and the 9 reference-fix lines — mapped to the Test plan's `ccxp/SKILL.md:30` grep check (first of 9 offenders, full list in Solution) plus the merged PR's diff-scope review.
 - [ ] `ipm/SKILL.md` carries its own `<skills-root>` preamble — mapped to the Test plan's `ccxp/SKILL.md:68-85` preamble-adaptation check.
 
 ## Closed
