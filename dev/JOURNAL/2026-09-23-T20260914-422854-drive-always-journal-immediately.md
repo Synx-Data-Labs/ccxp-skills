@@ -169,5 +169,7 @@ scheduled: 2026-09-21
   guard self-applied and verified via `git show --stat`
 - Systematic debugging (`superpowers:systematic-debugging`): no —
   didn't get stuck
-- Receiving code review (`superpowers:receiving-code-review`): pending —
-  addressed as part of this implementation PR's `/address-pr` loop
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d, 3 review rounds across claim PR #74 + implementation
+  PR #75, 2 real findings total (1 mislabeled cross-repo step citation in
+  #74; 1 stale `--immediate` leftover paragraph in #75) fixed, 0 pushback
