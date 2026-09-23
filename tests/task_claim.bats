@@ -331,6 +331,19 @@ EOF
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-a.md" status)" = "Open" ]
 }
 
+@test "release-others clears claimed_role alongside claimed_by (T20260922-229218)" {
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-a.md"
+  _tc_claimant_id() { printf 'box:/clone'; }
+  _tc_acquire T1 >/dev/null
+  # sanity: acquire actually sets claimed_role, so this test exercises a real clear
+  [ -n "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-a.md" claimed_role)" ]
+  run _tc_release_others
+  [ "$status" -eq 0 ]
+  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-a.md" claimed_by)" ]
+  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-a.md" claimed_role)" ]
+}
+
 @test "release-others [except-id] keeps the about-to-be-acquired task" {
   TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
   _mk_task_file "$TASK_CLAIM_DIR/T1-a.md"
