@@ -125,5 +125,8 @@ claimed_role:
   reported gap
 - Systematic debugging (`superpowers:systematic-debugging`): no —
   didn't get stuck
-- Receiving code review (`superpowers:receiving-code-review`): pending —
-  addressed as part of this implementation PR's `/address-pr` loop
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d, 2 review rounds (design PR #80 + implementation PR
+  #81), 2 real findings total (both in the design PR — stale line
+  citations, missing date-arithmetic mechanics) fixed, implementation
+  PR clean bill on first round, 0 pushback
