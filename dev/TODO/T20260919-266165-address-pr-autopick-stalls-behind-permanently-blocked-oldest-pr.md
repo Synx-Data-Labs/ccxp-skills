@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 2h
 source: Discovered 2026-09-19 during a build-pipeline-repo autopilot run — bare /address-pr auto-pick never reached any of that session's own open PRs
 related: T20260622-404636 (PR ownership derivation — the mechanism this bug interacts with)
@@ -125,24 +125,26 @@ longer blocks every PR behind it.
 
 ## Test plan
 
-- [ ] BATS (`tests/address_pr_auto_pick.bats`, hermetic — `GH_SH`/`TASK_CLAIM_SH` overridden to
-      fixture stub scripts, no network): with a fixture list of 3 open PRs where the oldest is
+- [x] BATS (`tests/address_pr_auto_pick.bats`, hermetic — `GH_SH`/`TASK_CLAIM_SH` overridden to
+      fixture stub scripts, no network): with a fixture list of 2 open PRs where the oldest is
       `owned:<other>`, auto-pick selects the 2nd-oldest instead of deferring entirely
-      (`auto-pick.sh` prints the 2nd-oldest PR's JSON object).
-- [ ] BATS: existing single-PR defer behavior is unchanged when *no* other PR is pickable (all
-      candidates `owned:*`/`unknown` → script prints nothing, exit 0).
-- [ ] BATS: an `unknown` verdict candidate is skipped (fail-safe — never picked), same as
-      `owned:*`.
-- [ ] BATS: with zero open PRs, script prints nothing, exit 0 (unchanged from today).
-- [ ] Manual: `bash address-pr/scripts/auto-pick.sh` against this repo's real open PRs after
-      implementation — confirms the real `GH_SH`/`TASK_CLAIM_SH` default resolution works (not
-      just the stubbed test path).
+      (`auto-pick.sh` prints the 2nd-oldest PR's JSON object) — `tests/address_pr_auto_pick.bats:82`.
+- [x] BATS: existing single-PR defer behavior is unchanged when *no* other PR is pickable (all
+      candidates `owned:*` → script prints nothing on stdout, exit 0) —
+      `tests/address_pr_auto_pick.bats:111`.
+- [x] BATS: an `unknown` verdict candidate is skipped (fail-safe — never picked), same as
+      `owned:*` — `tests/address_pr_auto_pick.bats:93`.
+- [x] BATS: with zero open PRs, script prints nothing, exit 0 (unchanged from today) —
+      `tests/address_pr_auto_pick.bats:120`.
+- [x] Manual: `bash address-pr/scripts/auto-pick.sh` against this repo's real open PRs (none open
+      at implementation time) — confirmed exit 0, empty stdout, real `GH_SH`/`TASK_CLAIM_SH`
+      default resolution works (not just the stubbed test path).
 
 ## Done criteria
 
-- [ ] `address-pr/scripts/auto-pick.sh` walks oldest-first and skips `owned:*`/`unknown`, picking the first `mine`/`free`/`new`/`untracked` candidate — `tests/address_pr_auto_pick.bats`.
-- [ ] `address-pr/SKILL.md:27`'s auto-pick bullet calls `auto-pick.sh` instead of the inline `sort_by(.createdAt) | .[0]` jq filter — diff review in the implementation PR.
-- [ ] Behavior-parity gate (skill-conventions §9): `tests/address_pr_auto_pick.bats` proves the new script's stopping rule is a strict superset of today's (still defers, exit 0, empty stdout, when nothing is pickable).
+- [x] `address-pr/scripts/auto-pick.sh` walks oldest-first and skips `owned:*`/`unknown`, picking the first `mine`/`free`/`new`/`untracked` candidate — `tests/address_pr_auto_pick.bats` (7/7 passing).
+- [x] `address-pr/SKILL.md` §1's auto-pick bullet calls `auto-pick.sh` instead of the inline `sort_by(.createdAt) | .[0]` jq filter — diff review in the implementation PR.
+- [x] Behavior-parity gate (skill-conventions §9): `tests/address_pr_auto_pick.bats` proves the new script's stopping rule is a strict superset of today's (still defers, exit 0, empty stdout, when nothing is pickable) — see the "defers" and "zero open PRs" cases.
 
 ## Repo file references
 
@@ -150,6 +152,7 @@ longer blocks every PR behind it.
 |---|---|---|
 | `address-pr/SKILL.md` §1 | auto-pick bullet | The `sort_by(.createdAt) \| .[0]` one-liner this task replaces with a script call |
 | `address-pr/scripts/auto-pick.sh` | new | The walk-and-skip auto-pick script this task adds |
+| `tests/address_pr_auto_pick.bats` | new | Hermetic BATS coverage (7 cases) — stub `GH_SH`/`TASK_CLAIM_SH` |
 | `_session/task_claim.sh:800` (`_tc_pr_owner`) | 800-845 | The unchanged per-PR ownership resolver the new script calls once per candidate |
 | `todo/scripts/todo-next.sh` | whole file | The worked-example walk-and-skip pattern this task ports (T20260914-359646) |
-| `drive/SKILL.md` Phase 0 | | Calls bare `/address-pr` once per cycle — the caller most affected by this fix |
+| `drive/SKILL.md` Phase 0 | | Calls bare `/address-pr` once per cycle — updated in lockstep (Phase 3.7 doc-freshness) to describe the walk-and-skip behavior instead of the retired `.[0]` one-liner |

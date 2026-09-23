@@ -26,7 +26,7 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
 
 Before picking new work, make one forward move on the PR backlog by handing off to `/address-pr`:
 
-Call `/address-pr` with no args once. It auto-picks the oldest open PR authored by us (`sort_by(.createdAt) | .[0]`), reads the PR's ownership (§1.6 — *derived* from the implementing task's `claimed_by` on `main`; defers silently if a different (machine, clone) agent owns the task, or if ownership is unresolvable), runs the hard merge gate, and then either merges, addresses-and-loops, or exits with a non-actionable status. After it returns, proceed to Phase 1.
+Call `/address-pr` with no args once. It auto-picks the first open PR authored by us that isn't deferred by ownership (§1's `auto-pick.sh`, oldest-first, walking past any `owned:<other>`/`unknown` candidate instead of stopping at the single oldest — T20260919-266165), reads that PR's ownership (§1.6 — *derived* from the implementing task's `claimed_by` on `main`), runs the hard merge gate, and then either merges, addresses-and-loops, or exits with a non-actionable status (nothing pickable at all). After it returns, proceed to Phase 1.
 
 - **0 open PRs** → `/address-pr` reports "No open PRs to address" and exits; proceed to Phase 1 normally.
 - **Multiple actionable PRs** → only the oldest is driven this session; the rest wait for the next session's Phase 0. `/drive` Phase 0's job is to make ONE forward move on the PR backlog before picking new work, not to drain all of it — this matches the single-goal-task principle the rest of the skill follows.
