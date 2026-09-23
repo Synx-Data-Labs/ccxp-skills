@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 4h
 source: maintainer conversation, 2026-09-15
 description: Add `/repo-conventions mode {solo|team}` to toggle a repo's Branch and Merge Policy plus actual GitHub branch protection
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -150,27 +150,35 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] `tests/mode.bats` (new) — `GH_SH` stubbed to a fake script recording
-  its invocation args/stdin to a file instead of calling real GitHub:
-  - [ ] `solo` on a fresh team-mode fixture doc rewrites the Policy section
+- [x] `tests/mode.bats` (new, 14 tests) — `GH_SH` stubbed to a fake script
+  recording its invocation args/stdin to a file instead of calling real
+  GitHub:
+  - [x] `solo` on a fresh team-mode fixture doc rewrites the Policy section
     to the solo wording (heuristic now matches "no ci" + "direct.to.main")
-  - [ ] `team` on a solo-mode fixture rewrites to the exact
-    `dev/guidelines.md:11-20` wording
-  - [ ] `team` calls `$GH_SH api -X PUT .../branches/main/protection` with
+  - [x] `team` on a solo-mode fixture rewrites to the canonical team
+    wording (the generic `repo-conventions/templates/guidelines.md:11-20`
+    form, not this repo's own `_gh/gh.sh`-hardcoded copy — see `## Closed`)
+  - [x] `team` calls `$GH_SH api -X PUT .../branches/main/protection` with
     the expected JSON body (asserted via the recorded stdin)
-  - [ ] `solo` calls `$GH_SH api -X DELETE .../branches/main/protection`
-  - [ ] `team` errors (non-zero, no API call recorded) when no
+  - [x] `solo` calls `$GH_SH api -X DELETE .../branches/main/protection`
+  - [x] `team` errors (non-zero, no API call recorded) when no
     `.github/workflows/*.yml` exists and `--skip-ci-check` is absent
-  - [ ] `team` proceeds (API call recorded) when `--skip-ci-check` is
+  - [x] `team` proceeds (API call recorded) when `--skip-ci-check` is
     passed despite no workflows
-  - [ ] requesting the mode already in effect is a no-op: exit 0, doc
+  - [x] requesting the mode already in effect is a no-op: exit 0, doc
     unchanged, no `$GH_SH` invocation recorded
-  - [ ] prefers `dev/guidelines.md` over `CLAUDE.md` when both exist and
+  - [x] prefers `dev/guidelines.md` over `CLAUDE.md` when both exist and
     only one has the Policy heading
-  - [ ] missing Policy heading in either file → non-zero exit, no API call
-- [ ] `bats tests/mode.bats` green locally
-- [ ] Full repo suite (`tests/*.bats _docs/*.bats`) still green — no
-  regressions in unrelated scripts
+  - [x] missing Policy heading in both files → non-zero exit, no API call
+  - [x] (added during implementation) a 404 on `solo`'s DELETE is tolerated
+    as success; a genuine non-404 API error on either mode hard-fails with
+    the doc left untouched; `--doc` override works independent of cwd;
+    missing/invalid mode argument is a usage error
+- [x] `bats tests/mode.bats` green locally (14/14)
+- [x] Full repo suite (`tests/*.bats _docs/*.bats`) still green — 703/703
+  (one `task_claim.bats` flake reproduced once in the full-suite run,
+  confirmed non-reproducing in isolation and in a full clean rerun; see
+  `## Closed`)
 - [ ] Manual, post-merge (cannot verify pre-merge without mutating a real
   repo's live branch protection): run `/repo-conventions mode team` /
   `mode solo` once against a disposable throwaway GitHub repo and confirm
@@ -179,19 +187,20 @@ scheduled: 2026-09-21
 
 ## Done criteria
 
-- [ ] `mode.sh` implemented and wired into `repo-conventions/SKILL.md`'s
+- [x] `mode.sh` implemented and wired into `repo-conventions/SKILL.md`'s
   `## Argument` + a new workflow section — `repo-conventions/scripts/mode.sh`,
   `repo-conventions/SKILL.md`
-- [ ] `/repo-conventions mode team` on a solo repo rewrites the Policy
+- [x] `/repo-conventions mode team` on a solo repo rewrites the Policy
   section to team wording and issues the `PUT .../protection` call —
   `tests/mode.bats` team-mode cases
-- [ ] `/repo-conventions mode solo` on a team repo reverses both — `tests/mode.bats`
+- [x] `/repo-conventions mode solo` on a team repo reverses both — `tests/mode.bats`
   solo-mode cases
-- [ ] `/claim` and `/drive`'s existing solo-repo detection heuristic
+- [x] `/claim` and `/drive`'s existing solo-repo detection heuristic
   continues to match the rewritten doc text unchanged — `tests/mode.bats`'s
-  heuristic-match assertions (no changes needed to `claim/SKILL.md` /
-  `drive/SKILL.md` themselves)
-- [ ] Team mode refuses to enable protection with no CI configured, absent
+  heuristic-match assertions, plus a direct literal-regex check against the
+  actual rewritten `dev/guidelines.md` during implementation (no changes
+  needed to `claim/SKILL.md` / `drive/SKILL.md` themselves)
+- [x] Team mode refuses to enable protection with no CI configured, absent
   an explicit override — `tests/mode.bats`'s `--skip-ci-check` cases
 - [ ] (external, manual — left unchecked until performed) the real GitHub
   branch-protection API call actually produces the intended protection
@@ -208,6 +217,83 @@ scheduled: 2026-09-21
 | `repo-conventions/SKILL.md` | `## Argument`, `## Workflow` | wire `mode {solo|team}` as a new argument/workflow section |
 | `claim/SKILL.md` | `27-33` | the existing solo-mode detection heuristic this script's output must keep matching |
 | `drive/SKILL.md` | `114` | the parallel solo-mode description, same heuristic |
-| `dev/guidelines.md` | `11-20` | canonical team wording, reused verbatim |
+| `repo-conventions/templates/guidelines.md` | `11-20` | canonical team wording actually stamped (generic, repo-agnostic — not this repo's own `dev/guidelines.md:11-20`, which hardcodes `../_gh/gh.sh`; see `## Closed`) |
 | `address-pr/scripts/pre-merge-check.sh` | `24` | `GH_SH` override seam precedent this script follows |
 | `tests/mode.bats` | new | test coverage (stubbed `GH_SH`, no real GitHub calls) |
+
+## Closed (2026-09-23)
+
+- Shipped in **PR #83** (design) and PR #TBD (implementation, this PR).
+  `repo-conventions/scripts/mode.sh` (new, 14 BATS tests all green) plus
+  `repo-conventions/SKILL.md` wiring (`## Argument` + new `### mode
+  {solo|team}` workflow section). Full repo suite 703/703 green.
+- Both non-external Done criteria met — script implemented, wired, and
+  tested per the design; team-mode CI-check refusal, solo/team doc
+  rewrites, and the PUT/DELETE API calls all covered by
+  `tests/mode.bats`. The one external/manual Done criterion (real GitHub
+  API behavior against a disposable repo) is intentionally left unchecked
+  — nothing in this task's scope required mutating a real repo's live
+  branch protection to ship it, and doing so from an unattended
+  autopilot run isn't a call this session should make unilaterally
+  (there is no disposable throwaway repo available here); flagging for a
+  human to run manually rather than silently marking it done.
+- **Implementation-time correction to the design**: the design's Context
+  section claimed the `claim/SKILL.md:28-29` illustrative solo-mode quote
+  ("direct-to-`` `main` ``") "already satisfies the detection heuristic by
+  construction" — untrue, verified directly: `grep -qi "direct.to.main"`
+  does **not** match that literal string, because the backtick between
+  the second hyphen and `main` breaks the single-any-char `.` in the
+  heuristic regex (confirmed with a live `grep` test before writing the
+  canonical solo block). The solo wording this script actually stamps
+  drops the backtick around the detection-critical phrase
+  (`direct-to-main`, unformatted) specifically so the heuristic matches —
+  verified against the real rewritten `dev/guidelines.md` output, not
+  just the bats fixtures. `claim/SKILL.md`'s own illustrative quote is
+  unaffected (it's prose, never machine-read) but carries the same latent
+  mismatch — not fixed here (out of this task's scope; noted for whoever
+  next touches that file).
+- **Implementation-time correction #2**: the design cited this repo's own
+  `dev/guidelines.md:11-20` as the literal team-mode text to stamp, but
+  `dev/guidelines.md:11-20` hardcodes `../_gh/gh.sh` (a ccxp-skills-repo-
+  specific relative path), which would be wrong when `mode.sh` runs
+  against an arbitrary *other* repo. Used the generic
+  `repo-conventions/templates/guidelines.md:11-20` wording instead
+  (verified identical apart from that one path-specific merge-method
+  line) — a design-time oversight caught during implementation, not a
+  deviation from what the design actually needed.
+- One `tests/task_claim.bats` test (`release-others frees every task held
+  by self...`) failed once (exit 141, a SIGPIPE shape) inside a
+  full-suite run unrelated to this change (that file/script isn't
+  touched by this task); reproduced-clean in isolation, reproduced-clean
+  re-running its whole file, and reproduced-clean on a full fresh
+  703-test suite rerun — a pre-existing flake, not a regression from this
+  PR.
+- No follow-up tasks filed — scope stayed within the task's own bounds;
+  the two implementation-time corrections above were fixed inline rather
+  than deferred.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — `tests/mode.bats`
+  written and run first (14 tests, confirmed failing with "command not
+  found" / vacuous-exit-code RED against the not-yet-existing script),
+  then `mode.sh` implemented to green, then re-verified all 14 pass for
+  the intended reason (not just a coincidental non-zero exit) via direct
+  content assertions and a manual sanity run against a real
+  `dev/guidelines.md` copy
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate (72/100 both pre- and post-merge of the design PR),
+  shellcheck clean, full 703-test repo suite green (after chasing down
+  and ruling out the one-off `task_claim.bats` flake above), doc-impact
+  freshness check clean, quality-probe recorded (shellcheck 0/0/0/0)
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the flaky-test investigation was a direct
+  reproduce-in-isolation check, not a hypothesis-driven debugging session
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d on the design PR (#83), 5 real findings (wrong
+  `dev/guidelines.md:11-17` line-range citation — should be 11-20; a
+  false "same seam" claim about `quality-probe/scripts/probe.sh`'s
+  hardcoded `QP_GH`; no ordering/atomicity guarantee between the doc
+  rewrite and the API call; a Test-plan-vs-Done-criteria gap on the
+  external manual-verification item; an overstated alternatives-rejected
+  argument against any review-count requirement), all fixed, 0 pushback

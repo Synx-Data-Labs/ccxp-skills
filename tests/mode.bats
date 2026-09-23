@@ -84,6 +84,10 @@ EOF
   grep -q "CI must pass" "$WORK/dev/guidelines.md"
   grep -q "PUT" "$CALLS"
   grep -q "branches/main/protection" "$CALLS"
+  # assert the actual JSON body, not just that a PUT happened
+  grep -q '"required_approving_review_count": 0' "$CALLS"
+  grep -q '"enforce_admins": false' "$CALLS"
+  grep -q '"restrictions": null' "$CALLS"
 }
 
 @test "solo on a team-mode doc rewrites to solo wording and calls DELETE" {
