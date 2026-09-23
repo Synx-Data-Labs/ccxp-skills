@@ -476,3 +476,41 @@ EOF
   [ "$(git -C "$src" rev-parse HEAD)" = "$src_head" ]
   [ "$(git -C "$dst" rev-parse HEAD)" = "$dst_head" ]
 }
+
+@test "--dry-run refuses a link to the SOURCE repo's own origin even when it matches INTERNAL_PRIVATE_REPOS" {
+  # Regression for a bug caught in independent review of PR #104: migrate.sh
+  # runs with cwd = the SOURCE repo, so lint_identifiers.py's own-slug
+  # exclusion (meant for a repo not flagging links to itself) would
+  # otherwise silently suppress a hit on exactly the private repo an
+  # operator is migrating a task OUT of -- the one case this check exists
+  # to catch. --no-own-repo-exclusion (wired into migrate.sh) must prevent
+  # that silent suppression.
+  src="$BATS_TEST_TMPDIR/src-repo10"; dst="$BATS_TEST_TMPDIR/dst-repo10"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  git -C "$src" remote add origin "git@github.com:acme/private-source-repo.git"
+  mkdir -p "$src/dev/TODO"
+  cat > "$src/dev/TODO/T20260101-000001-demo.md" <<'EOF'
+---
+estimation: 1h
+status: Open
+---
+
+# T20260101-000001: Demo task
+
+## Problem
+
+See https://github.com/acme/private-source-repo/pull/7 for the original report.
+EOF
+  printf '# TODO Queue\n' > "$src/dev/TODO/queue.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  src_head="$(git -C "$src" rev-parse HEAD)"
+  mkdir -p "$dst/dev/TODO"; printf '# TODO Queue\n' > "$dst/dev/TODO/queue.md"
+  git -C "$dst" add -A && git -C "$dst" commit -qm base
+
+  cd "$src"
+  INTERNAL_PRIVATE_REPOS="acme/private-source-repo" \
+    run migrate-task T20260101-000001 "$dst" --dry-run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"internal-identifier check refused"* ]]
+  [ "$(git -C "$src" rev-parse HEAD)" = "$src_head" ]
+}

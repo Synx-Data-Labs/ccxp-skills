@@ -87,6 +87,15 @@ class DenylistTest(unittest.TestCase):
         )
         self.assertEqual(findings, [])
 
+    def test_internal_whitespace_difference_does_not_match(self):
+        # Documented, current behavior: matching is exact-substring
+        # (case-insensitive), so a denylist entry with different internal
+        # whitespace than the text does NOT match. Not a bug fix -- a
+        # regression guard for this known limitation.
+        denylist = [("acme  corp", None)]  # two spaces
+        findings = li.find_denylist_hits("Filed under Acme Corp's tracker.\n", denylist)
+        self.assertEqual(findings, [])
+
 
 class PrivateRepoLinkTest(unittest.TestCase):
     def test_configured_private_repo_link_flagged(self):
@@ -110,6 +119,13 @@ class PrivateRepoLinkTest(unittest.TestCase):
         )
         self.assertEqual(findings, [])
 
+    def test_mixed_case_link_still_matches_lowercase_private_repos_entry(self):
+        private_repos = {"acme/internal-tools"}
+        findings = li.find_private_repo_links(
+            "See https://GitHub.com/ACME/Internal-Tools/pull/3\n", private_repos,
+        )
+        self.assertTrue(any(f.category == "private-repo-link" for f in findings))
+
 
 class ApplyFixTest(unittest.TestCase):
     def test_mapped_denylist_hit_is_substituted(self):
@@ -125,6 +141,45 @@ class ApplyFixTest(unittest.TestCase):
         new_text, unmapped = li.apply_fix(text, findings)
         self.assertEqual(new_text, text)
         self.assertEqual(len(unmapped), 1)
+
+    def test_suggestion_containing_backslash_is_not_treated_as_backreference(self):
+        # re.sub interprets backslash sequences (e.g. \1) in the REPLACEMENT
+        # string unless the substitution avoids it -- a suggestion pasted
+        # from a Windows-style path or containing a literal backslash must
+        # not raise re.error or get silently mangled.
+        text = "Filed under Acme Corp's tracker.\n"
+        findings = [li.Finding("denylist", "Acme Corp", r"C:\new-path\team")]
+        new_text, unmapped = li.apply_fix(text, findings)
+        self.assertIn(r"C:\new-path\team", new_text)
+        self.assertEqual(unmapped, [])
+
+
+class IterScanFilesTest(unittest.TestCase):
+    def test_scans_only_dev_todo_and_journal_md_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "dev" / "TODO").mkdir(parents=True)
+            (root / "dev" / "JOURNAL").mkdir(parents=True)
+            (root / "dev" / "TODO" / "T1-demo.md").write_text("todo\n", encoding="utf-8")
+            (root / "dev" / "TODO" / "queue.md").write_text("queue\n", encoding="utf-8")
+            (root / "dev" / "JOURNAL" / "2026-01-01-T1-demo.md").write_text("journal\n", encoding="utf-8")
+            (root / "cloudflare").mkdir()
+            (root / "cloudflare" / "notes.md").write_text("unrelated\n", encoding="utf-8")
+
+            files = {f.name for f in li.iter_scan_files(root)}
+            self.assertEqual(files, {"T1-demo.md", "2026-01-01-T1-demo.md"})
+
+    def test_all_mode_does_not_scan_files_outside_dev_todo_journal(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "dev" / "TODO").mkdir(parents=True)
+            (root / "dev" / "TODO" / "T1-demo.md").write_text("clean\n", encoding="utf-8")
+            (root / "cloudflare").mkdir()
+            (root / "cloudflare" / "notes.md").write_text("host 192.168.1.1\n", encoding="utf-8")
+
+            with patch.dict(os.environ, {}, clear=True):
+                rc = li.main(["--all", str(root)])
+            self.assertEqual(rc, 0)  # the private-IP hit lives outside dev/TODO+JOURNAL
 
 
 class MainCliTest(unittest.TestCase):
@@ -163,6 +218,31 @@ class MainCliTest(unittest.TestCase):
                 rc = li.main(["--changed", str(f), "--fix"])
             self.assertEqual(rc, 0)
             self.assertIn("your-org/hub-repo", f.read_text(encoding="utf-8"))
+
+    def test_no_own_repo_exclusion_flag_disables_the_exclusion(self):
+        # Regression for the /migrate-task integration bug found in
+        # independent review of PR #104: main()'s own_slug is computed
+        # from repo_path, which defaults to "." -- when invoked from
+        # migrate.sh's cwd (the SOURCE repo being migrated OUT of), that
+        # source repo's own slug is exactly what an operator would put in
+        # INTERNAL_PRIVATE_REPOS, so without this flag the exclusion
+        # silently defeats the check on the one case it exists to catch.
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "doc.md"
+            f.write_text(
+                "See https://github.com/acme/private-source-repo/pull/1\n",
+                encoding="utf-8",
+            )
+            env = {"INTERNAL_PRIVATE_REPOS": "acme/private-source-repo"}
+            with patch.dict(os.environ, env, clear=True), \
+                 patch.object(li, "repo_slug", return_value="acme/private-source-repo"):
+                # Without the flag: exclusion applies, hit is (wrongly, for
+                # this call site) suppressed.
+                rc_default = li.main(["--changed", str(f)])
+                # With the flag: exclusion is disabled, the hit is caught.
+                rc_disabled = li.main(["--changed", str(f), "--no-own-repo-exclusion"])
+            self.assertEqual(rc_default, 0)
+            self.assertEqual(rc_disabled, 1)
 
 
 if __name__ == "__main__":
