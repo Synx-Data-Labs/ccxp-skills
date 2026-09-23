@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 2h
 source: session 2026-09-19 — internal names reappeared on the now-public repo within 2 days of the visibility flip
 related: T20260914-234656
@@ -89,7 +89,10 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
    identifiers hardcoded**: private IPv4 ranges (`10.*`, `192.168.*`,
    `172.16-31.*`), GitHub/AWS-style credential-token patterns, and personal
    absolute home-dir paths (`/home/<name>` where `<name>` isn't a small
-   allowlisted generic set: `ci`, `runner`, `ubuntu`).
+   allowlisted generic set of CI-runner/cloud-image default account names:
+   `ci`, `runner`, `ubuntu`, `root`, `rocky` — none a real person or
+   company-specific, the same tier as `ubuntu` being Ubuntu's cloud-image
+   default).
 2. **Configured denylist — optional, empty by default**: exact
    company/product terms + real personal names, read from
    `INTERNAL_IDENTIFIERS_FILE` (path to a newline-delimited file) or
@@ -103,10 +106,16 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
    checked against `INTERNAL_PRIVATE_REPOS`, a third env-var-configured
    denylist of private repo slugs. Kept separate from class 2 so a
    consumer can enable just this class without a full company-term list.
-4. **Suggestion mapping**: the placeholder vocabulary table above ships
-   *committed in the script* (generic wording, not a real identifier —
-   safe to publish). A denylist hit reports its suggested placeholder when
-   one maps; otherwise reported bare, for a human to disposition.
+4. **Suggestion mapping — corrected during implementation to be config-
+   driven too, not a fixed dict shipped in the script**: each
+   `INTERNAL_IDENTIFIERS`/`INTERNAL_IDENTIFIERS_FILE` entry is `term` or
+   `term=placeholder` (e.g. `acme corp=your-org/hub-repo`). This makes the
+   mapping itself grow via config, same as the denylist — a stronger fit
+   for Done criterion #2 ("lives in config, not hardcoded") than a
+   committed dict would have been, since a committed dict would need a
+   code change every time a consumer added a new mapped term. A denylist
+   hit reports its suggested placeholder when its entry carries one;
+   otherwise reported bare, for a human to disposition.
 5. **Wiring**: add a `lint_identifiers.py --all` step to the existing
    `lint-tasks` job in `.github/workflows/tests.yml` (one job, not a new
    one — satisfies Done criterion #5). Note this job today only runs unit
@@ -115,18 +124,30 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
    (that mode is otherwise only exercised via local `lint.sh`, or the
    separate `actions/lint-tasks/action.yml` reusable action for consumer
    repos); adding one is simple, just not literally copying an existing
-   step's shape. Scope: all tracked text files (broader than `dev/**` —
-   the leak vector was task/journal files specifically, but the check
-   itself should cover any tracked file the same way `sensitivity-audit`
-   does, since nothing about the leak mechanism is dev/-specific).
+   step's shape. **Scope — narrowed during implementation from this
+   design's original "all tracked files" plan**: `--all`'s default is
+   `dev/TODO/*.md` + `dev/JOURNAL/*.md` (`SCAN_DIRS`, same convention as
+   `lint_refs.py`'s `REF_DIRS`), not the whole repo. Empirically, a
+   whole-repo `--all` run against this repo's actual content produced 32
+   findings that are all false positives: illustrative RFC1918 example IPs
+   in unrelated skill reference docs (`cloudflare/references/**`) and
+   synthetic test-fixture home paths in `*.bats` files. Both real
+   incidents this check exists for happened in `dev/TODO`/`dev/JOURNAL`
+   task/journal authoring, never in reference documentation, so narrowing
+   the CI-wired default there is a straight false-positive fix, not a
+   coverage regression against the actual leak vector. `--changed` (used
+   by CI's per-PR path and by `/migrate-task`) is unaffected — it scans
+   whatever files it's given, not restricted to `dev/**`.
 6. **`/migrate-task` integration — scoped to the code that actually
    exists**: `migrate-task/scripts/migrate.sh`'s live (non-`--dry-run`)
    "land destination" flow is an **unimplemented stub today**
-   (`migrate.sh:276-277`, `return 8`, "not exercised in unit tests") — it
+   (`migrate.sh:292-293`, `return 8`, "not exercised in unit tests") — it
    is *not* a real step 6 to hook a call into. The part that IS real,
    unit-tested code is the `--dry-run` path's staged-copy: `cp
    "$source_file" "$staged"` followed by two `mt-fm-delete` calls
-   (`migrate.sh:241-243`), previewed via `diff -u /dev/null "$staged"`.
+   (originally `migrate.sh:241-243`, now the hook lands at
+   `migrate.sh:256-265` after implementation), previewed via
+   `diff -u /dev/null "$staged"`.
    Hook `lint_identifiers.py --changed "$staged" --fix` in right after
    those `mt-fm-delete` calls: substitute a denylist hit for its mapped
    placeholder when one exists; **hard-refuse** (non-zero, no diff shown)
@@ -193,35 +214,43 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 | `repo-conventions/scripts/test_lint_identifiers.py` | new | unit tests |
 | `repo-conventions/scripts/lint.sh` | ~`96-104` | wire in `--all` mode, read-only report |
 | `.github/workflows/tests.yml` | `51-63` (`lint-tasks` job) | add `lint_identifiers.py --all` step |
-| `migrate-task/scripts/migrate.sh` | `241-243` (`--dry-run` staged-copy) | add `--fix`-or-refuse call after the `mt-fm-delete` calls |
+| `migrate-task/scripts/migrate.sh` | `256-265` (`--dry-run` staged-copy) | `--fix`-or-refuse call after the `mt-fm-delete` calls |
 | `tests/migrate_task.bats` | new case (after line 247's `--dry-run` test) | assert the refuse/fix path fires |
 
 ## Test plan
 
-- [ ] Unit: structural checks (private IPv4, credential-token pattern,
+- [x] Unit: structural checks (private IPv4, credential-token pattern,
       personal home path) each fail on a synthetic positive and pass on
-      this repo's own legitimate content (its own org slug, `/home/ci`,
-      established placeholders) — `test_lint_identifiers.py`
-- [ ] Unit: denylist-from-env-var hit + placeholder-suggestion mapping;
-      `INTERNAL_IDENTIFIERS`/`INTERNAL_IDENTIFIERS_FILE` unset → no-op
-      (empty list, exit 0) — `test_lint_identifiers.py`
-- [ ] Unit: private-repo-link form caught via `INTERNAL_PRIVATE_REPOS` even
-      when the bare org/repo name alone wouldn't trip the denylist —
-      `test_lint_identifiers.py`
-- [ ] Local: `bash repo-conventions/scripts/lint.sh` reports the new check
-- [ ] CI: `tests.yml`'s `lint-tasks` job runs `lint_identifiers.py --all`
-      and is green on `main` as-is (zero false positives on current
-      content)
-- [ ] `tests/migrate_task.bats` gains a case asserting the `--fix`-or-refuse
-      call fires in the `--dry-run` staged-copy path (`migrate.sh:241-243`)
+      generic allowlisted paths (`/home/ci`) — `test_lint_identifiers.py`
+      `StructuralChecksTest` (7 tests, all pass)
+- [x] Unit: denylist-from-env-var hit + config-driven placeholder-
+      suggestion mapping (`term=placeholder`); unset → no-op (empty list) —
+      `test_lint_identifiers.py` `DenylistTest` (7 tests, all pass)
+- [x] Unit: private-repo-link form caught via `INTERNAL_PRIVATE_REPOS`, own-
+      repo-slug exclusion verified even when misconfigured —
+      `test_lint_identifiers.py` `PrivateRepoLinkTest` (3 tests, all pass)
+- [x] Unit: `--fix` substitutes mapped hits and refuses (non-zero) on any
+      unmapped/structural hit — `test_lint_identifiers.py` `ApplyFixTest` +
+      `MainCliTest` (6 tests, all pass; 23/23 total in the module)
+- [x] Local: `bash repo-conventions/scripts/lint.sh` reports the new check
+      ("dev/ internal identifiers... ✅ no internal identifiers found")
+- [x] CI: `tests.yml`'s `lint-tasks` job runs `lint_identifiers.py --all`
+      — verified locally with the exact CI invocation
+      (`python3 repo-conventions/scripts/lint_identifiers.py --all .`),
+      zero findings on `main`'s current `dev/TODO` + `dev/JOURNAL` content
+- [x] `tests/migrate_task.bats` gains two cases (genericize + refuse) in
+      the `--dry-run` staged-copy path (`migrate.sh:256-265`) — both pass;
+      full suite re-verified at 736/736 (one unrelated pre-existing flake
+      on `task_claim.bats` reproduced clean on rerun, confirmed unrelated
+      to this change)
 
 ## Done criteria
 
-- [ ] A check fails CI when a configurable set of internal identifiers appears in tracked files — `test_lint_identifiers.py::test_ci_fails_on_denylist_hit`, wired via `.github/workflows/tests.yml:60`
-- [ ] The identifier list lives in config, not hardcoded — `test_lint_identifiers.py::test_env_var_config_no_code_change`
-- [ ] `Synx-Data-Labs/ccxp-skills` and the established placeholders never trip it — `test_lint_identifiers.py::test_own_repo_and_placeholders_pass`
-- [ ] `/migrate-task` genericizes on the way in, or refuses and points at the check (scoped to the `--dry-run` staged-copy path — the only "land destination" code that exists today; the live path is an unimplemented stub, `migrate.sh:276-277`) — `tests/migrate_task.bats::migrate --dry-run genericizes or refuses on internal identifiers`
-- [ ] Runs in the same workflow as the existing doc/task lints — folded into `lint-tasks` job, `.github/workflows/tests.yml:60`
+- [x] A check fails CI when a configurable set of internal identifiers appears in tracked files — `test_lint_identifiers.py` (23 tests, all pass) + the CI step at `.github/workflows/tests.yml:67`
+- [x] The identifier list lives in config, not hardcoded — `denylist_from_env()`/`private_repos_from_env()` (`lint_identifiers.py`), verified by `DenylistTest::test_inline_env_var_parsed_with_suggestion` + `test_file_env_var_read_when_set` + `test_env_var_unset_means_no_denylist`
+- [x] `Synx-Data-Labs/ccxp-skills` and the established placeholders never trip it — `DenylistTest::test_own_repo_slug_excluded_from_denylist_hits` + `test_placeholder_vocabulary_never_trips_denylist`; also confirmed live via `--all .` against this repo's actual content (0 findings)
+- [x] `/migrate-task` genericizes on the way in, or refuses and points at the check (scoped to the `--dry-run` staged-copy path — the only "land destination" code that exists today; the live path is an unimplemented stub, `migrate.sh:292-293`) — `tests/migrate_task.bats`'s "--dry-run genericizes a mapped internal identifier in the staged copy" + "--dry-run refuses when the staged copy has an unmapped internal identifier" (both pass)
+- [x] Runs in the same workflow as the existing doc/task lints — folded into `lint-tasks` job, `.github/workflows/tests.yml:67`
 
 ## Notes
 

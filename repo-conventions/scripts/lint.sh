@@ -112,6 +112,20 @@ else
   check "python3 available for ref lint" "fail" "python3 not found"
 fi
 
+# 6. no internal identifiers (delegated to lint_identifiers.py, read-only;
+#    T20260919-231319 -- INTERNAL_IDENTIFIERS(_FILE)/INTERNAL_PRIVATE_REPOS
+#    are optional env vars, unset here by design -- see that script's module
+#    docstring)
+echo ""
+echo "dev/ internal identifiers..."
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$(dirname "${BASH_SOURCE[0]}")/lint_identifiers.py" --all "${REPO_DIR}"; then
+    ERRORS=$((ERRORS + 1))
+  fi
+else
+  check "python3 available for identifier lint" "fail" "python3 not found"
+fi
+
 # Summary
 echo ""
 echo "=========================================="

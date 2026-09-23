@@ -411,3 +411,68 @@ EOF
   # together on one line of the printed diff.
   [[ "$output" == *'+- [T20260101-000001](T20260101-000001-demo.md): Fix C:\new-path handling'* ]]
 }
+
+# --- internal-identifier check integration (T20260919-231319) --------------
+
+@test "--dry-run genericizes a mapped internal identifier in the staged copy" {
+  src="$BATS_TEST_TMPDIR/src-repo8"; dst="$BATS_TEST_TMPDIR/dst-repo8"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  mkdir -p "$src/dev/TODO"
+  cat > "$src/dev/TODO/T20260101-000001-demo.md" <<'EOF'
+---
+estimation: 1h
+status: Open
+---
+
+# T20260101-000001: Demo task
+
+## Problem
+
+Filed under Acme Corp's internal tracker.
+EOF
+  printf '# TODO Queue\n' > "$src/dev/TODO/queue.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  mkdir -p "$dst/dev/TODO"; printf '# TODO Queue\n' > "$dst/dev/TODO/queue.md"
+  git -C "$dst" add -A && git -C "$dst" commit -qm base
+
+  cd "$src"
+  INTERNAL_IDENTIFIERS="acme corp=your-org/hub-repo" \
+    run migrate-task T20260101-000001 "$dst" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"your-org/hub-repo"* ]]
+  [[ "$output" != *"Acme Corp"* ]]
+}
+
+@test "--dry-run refuses when the staged copy has an unmapped internal identifier" {
+  src="$BATS_TEST_TMPDIR/src-repo9"; dst="$BATS_TEST_TMPDIR/dst-repo9"
+  _git_init_repo "$src"; _git_init_repo "$dst"
+  mkdir -p "$src/dev/TODO"
+  cat > "$src/dev/TODO/T20260101-000001-demo.md" <<'EOF'
+---
+estimation: 1h
+status: Open
+---
+
+# T20260101-000001: Demo task
+
+## Problem
+
+Reviewed by Jane Doe before filing.
+EOF
+  printf '# TODO Queue\n' > "$src/dev/TODO/queue.md"
+  git -C "$src" add -A && git -C "$src" commit -qm base
+  src_head="$(git -C "$src" rev-parse HEAD)"
+  mkdir -p "$dst/dev/TODO"; printf '# TODO Queue\n' > "$dst/dev/TODO/queue.md"
+  git -C "$dst" add -A && git -C "$dst" commit -qm base
+  dst_head="$(git -C "$dst" rev-parse HEAD)"
+
+  cd "$src"
+  INTERNAL_IDENTIFIERS="jane doe" \
+    run migrate-task T20260101-000001 "$dst" --dry-run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"internal-identifier check refused"* ]]
+
+  # Neither repo was mutated by the refused attempt.
+  [ "$(git -C "$src" rev-parse HEAD)" = "$src_head" ]
+  [ "$(git -C "$dst" rev-parse HEAD)" = "$dst_head" ]
+}

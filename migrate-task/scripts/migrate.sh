@@ -252,6 +252,22 @@ migrate-task() {
     cp "$source_file" "$staged"
     mt-fm-delete "$staged" target-repo
     mt-fm-delete "$staged" target-path
+
+    # T20260919-231319: genericize any known internal identifier in the
+    # staged copy (substituting a mapped placeholder), or refuse outright
+    # when a hit has no safe replacement — never land an unmapped internal
+    # identifier in the target repo silently. This is the only "land
+    # destination" code path that exists today (the live, non-dry-run flow
+    # below is an unimplemented stub) — see the design task's Solution #6.
+    local lint_id_script
+    lint_id_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/repo-conventions/scripts/lint_identifiers.py"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$lint_id_script" ]; then
+      if ! python3 "$lint_id_script" --changed "$staged" --fix; then
+        echo "migrate-task: internal-identifier check refused the staged copy (see output above) — disposition the finding(s), then retry" >&2
+        return 9
+      fi
+    fi
+
     echo "=== would add to ${target_dir}/dev/TODO/${slug} ==="
     diff -u /dev/null "$staged" || true
 
