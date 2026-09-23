@@ -601,6 +601,7 @@ _tc_release_others() {
       status="$(_tc_fm_get "$f" status)"
       case "$status" in Coding|Design) status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
+      _tc_fm_set "$f" claimed_role ""      || return 1   # same clear-on-close contract as _tc_release
       _tc_fm_set "$f" status "$status"     || return 1
       b="$(basename "$f")"
       if [[ "$b" =~ (T[0-9]{8}-[0-9]{6}) ]]; then id="${BASH_REMATCH[1]}"; else id="${b%.md}"; fi

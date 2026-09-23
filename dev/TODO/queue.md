@@ -8,7 +8,6 @@ reprioritize.
 
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
-- [T20260922-229218](T20260922-229218-release-others-orphans-claimed-role.md): `_tc_release_others` clears `claimed_by` but leaves `claimed_role` orphaned
 - [T20260922-453135](T20260922-453135-add-eta-skill.md): Add `/eta` skill — estimate time-to-completion for the current task on hand
 - [T20260922-383156](T20260922-383156-lint-docs-plus-corruption-still-live.md): `markdownlint-cli2 --fix` still flips a bare leading `+` to `-` and drops comma-spacing — scoping contains it, doesn't fix it
 - [T20260922-253015](T20260922-253015-lint-docs-png-mutation-unconfirmed.md): Confirm or rule out `lint-docs.sh --fix` rewriting a PNG asset
