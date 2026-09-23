@@ -192,14 +192,17 @@ scheduled: 2026-09-21
 
 - [x] `ipm/SKILL.md` contains the full 2a.0–2a.6 logic — mapped to the Test plan's `ccxp/SKILL.md:582-889` byte-for-byte diff check (cron/interactive branching, the 2a.5a hard gate, the 2a.5b cross-repo ROADMAP sync, Slack notification all included). `ipm/SKILL.md:36-343`.
 - [x] `ccxp/SKILL.md` Phase 2a shrinks to a trigger check + `Run /ipm` — mapped to the Test plan's `ccxp/SKILL.md:891-914` shape-parity check. `ccxp/SKILL.md:572-590`.
-- [x] No stray `2a.N` references survive outside `ipm/SKILL.md` (one intentional historical annotation kept at `ccxp/SKILL.md:121` — see Test plan item 3), and no other section of `ccxp/SKILL.md` changed beyond the moved Phase 2a body and the 9 reference-fix lines — mapped to `git diff main -- ccxp/SKILL.md` hunk review (8 single-line hunks at the reference-fix sites + one hunk replacing the Phase 2a body — no other hunks).
+- [x] No stray `2a.N` references survive **in `ccxp/SKILL.md`** outside `ipm/SKILL.md` (one intentional historical annotation kept at `ccxp/SKILL.md:121` — see Test plan item 3), and no other section of `ccxp/SKILL.md` changed beyond the moved Phase 2a body and the 9 reference-fix lines — mapped to `git diff main -- ccxp/SKILL.md` hunk review (8 single-line hunks at the reference-fix sites + one hunk replacing the Phase 2a body — no other hunks). **Scope note:** this criterion, like the design's own Solution section, was scoped to `ccxp/SKILL.md` only (the file the moved content came from) — PR #132's independent review found the old numbering also cited as current in several *other* live skill files (`incept/SKILL.md`, `retro/SKILL.md`, `skill-conventions/SKILL.md`, `lifecycle.md`, `README.md`, `_session/README.md`, `glossary.md`), which were never in this task's approved scope. Filed as a separate follow-up rather than scope-creeping this PR — see T20260923-553033 below.
 - [x] `ipm/SKILL.md` carries its own `<skills-root>` preamble — `ipm/SKILL.md:17-34`.
 
 ## Closed (2026-09-23)
 
-Shipped in **PR #TBD** (implementation) — claim landed in PR #127, design in PR #128, design-score gate fix in PR #129. All four Done criteria met and verified above (evidence anchors on each item); no unverified/external items.
+Shipped in **PR #132** (implementation) — claim landed in PR #127, design in PR #128, design-score gate fix in PR #129. All four Done criteria met and verified above (evidence anchors on each item); no unverified/external items.
 
-Follow-up filed: T20260923-433144 (design-score's C1 check rewards a `priority:` frontmatter field that `lifecycle.md`/`todo/SKILL.md` say was retired — discovered while clearing the design-score gate, out of scope to fix here).
+Follow-ups filed:
+
+- T20260923-433144 (design-score's C1 check rewards a `priority:` frontmatter field that `lifecycle.md`/`todo/SKILL.md` say was retired — discovered while clearing the design-score gate, out of scope to fix here).
+- T20260923-553033 (repo-wide `2a.N`/`Phase 2a.N` references left stale in several other live skill files — discovered by PR #132's independent review, out of this task's approved scope, which per the merged design covered only `ccxp/SKILL.md`).
 
 ## Skills invoked
 
