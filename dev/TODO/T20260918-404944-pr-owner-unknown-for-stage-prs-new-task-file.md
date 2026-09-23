@@ -72,80 +72,161 @@ scheduled: 2026-09-21
 
 ## Solution
 
-- **`_tc_resolve_task_location`**: on same-repo failure (file absent from
-  both `dev/TODO` and `dev/PARKING` on `main`), do **not** return 1
-  immediately. Fall back to the same directory search against the PR's own
-  head ref (`gh pr view <pr> --json headRefOid`) instead of `main`. If found
-  there, return the path exactly as before — the caller can't yet tell "found
-  on main" from "found on head-only", so:
-- **`_tc_pr_owner`**: track *which* ref the location resolved against
-  (`main` vs. the PR's head SHA) and pass that ref through to
-  `_tc_fetch_fm_field` when reading `claimed_by`, instead of assuming `main`.
-  A head-only resolution then flows through the *existing* `mine`/`free`/
-  `owned:` decision logic unchanged — a fresh file with empty `claimed_by`
-  naturally decides `free`, matching the "Done looks like" ask, without a
-  bespoke new state.
+**Revision (2026-09-22, after design review — see `## Design review` below):**
+the original draft reused the existing `free` verdict for this case; an
+independent review caught that `free`'s existing handling
+(`address-pr/SKILL.md` §1.6) cannot actually be exercised for a not-yet-merged
+file (see that section for why) — so this case gets its **own** verdict,
+`new`, with its own (simpler) handling. What follows is the corrected design.
+
+- **`_tc_resolve_task_location_head`** (new function, `_session/task_claim.sh`
+  near `_tc_resolve_task_location`): same-repo-only directory search (mirrors
+  `_tc_resolve_task_location`'s same-repo branch) against the PR's own head
+  ref (`gh pr view <pr> --json headRefOid`) instead of `main`. Returns a
+  **3-field** `<owner/repo>\t<path>\t<head-sha>` — a distinct shape from
+  `_tc_resolve_task_location`'s existing 2-field `<owner/repo>\t<path>`, so
+  the two are never confused and every existing caller/test of the 2-field
+  function is untouched. Only called by `_tc_pr_owner`, and only as a
+  fallback.
+- **`_tc_pr_owner`**: call `_tc_resolve_task_location` first as today; only on
+  its failure, call `_tc_resolve_task_location_head` and record that this
+  resolution came from the head ref (a local flag) plus that ref (for the
+  `claimed_by` fetch below) — never mix the two code paths. Read `claimed_by`
+  via `_tc_fetch_fm_field ... "$ref"` (`main` in the normal case, the head SHA
+  in the fallback case). Then:
+  - If the resulting decision is `mine` or `owned:<by>`: print that verdict
+    **unchanged**, exactly as the main-resolved path would — a head-fallback
+    resolution that finds an existing claim (this session's own prior claim
+    commit on the PR's branch, or another agent's) needs no special handling,
+    it flows through `_tc_decide` exactly as today.
+  - If the resulting decision is `none` (unclaimed) **and** the resolution
+    came from the head-ref fallback: print the new verdict **`new`** instead
+    of `free` — this is the one case that needs different caller-side
+    handling (see below), so it needs its own name.
+  - If decision is `none` and resolution came from `main` (the pre-existing
+    case): print `free`, unchanged.
 - **`_tc_fetch_fm_field`**: add an optional 4th arg (ref, default `main`) so
-  the existing `main`-reading call sites are unaffected.
+  existing call sites (which all omit it) are unaffected.
+- **`/address-pr` §1.6 — new `new` case**: unlike `free` (claim on a fresh
+  branch off `main`, then merge that claim PR, then return to the original
+  PR), `new` claims **directly on the PR's own branch**, in one push, because
+  that branch is the only place the file exists:
+  1. `git fetch && git checkout <the PR's headRefName>` (not a new branch —
+     the existing PR branch, so the just-added task file is present in the
+     local working tree).
+  2. `bash task_claim.sh release-others <id>` then `bash task_claim.sh
+     acquire <id>` — now succeeds, because `_tc_find_file`'s local glob finds
+     the file on this checked-out branch.
+  3. Commit (pure frontmatter change) and push — lands as one more commit on
+     the *same* PR, no separate claim-PR/merge round-trip.
+  4. Continue driving this PR through the rest of the `/address-pr` loop as
+     normal (§2 onward) — one PR, one push, done.
 
 **Alternatives considered and rejected**:
 
-- *Return a hardcoded `free` whenever the PR's diff adds a task file matching
-  the id, without reading its `claimed_by`.* Rejected: skips the "confirm no
-  claimed_by" check the manual workaround did on PR #39 — a raced re-stage
-  where the new file already carries a stamped `claimed_by` (unlikely, but
-  possible if two agents raced `/new-task` + `/stage`) would then be silently
-  treated as free instead of correctly deferring via `owned:`.
-- *Add a brand-new `pr-owner` verdict (e.g. `new`) instead of routing through
-  the existing `free`/`mine`/`owned:` decision.* Rejected: `/address-pr` §1.6
-  already has full, tested handling for `free` (claim-then-proceed) — a new
-  verdict would need its own caller-side branch for no behavioral gain over
-  reusing `free`.
+- *Reuse the existing `free` verdict, since `/address-pr` already has tested
+  free-then-claim handling.* **Rejected — this was the original design and an
+  independent review caught why it's wrong**: `free`'s documented handling
+  cuts a **fresh branch off `main`** and runs `task_claim.sh acquire`, which
+  resolves the task file via a **local filesystem glob** (`_tc_find_file`,
+  `_session/task_claim.sh:310-318`) against the checked-out working tree — a
+  branch cut from `main` does not have a file that exists only on the
+  `/stage` PR's own branch, so `_tc_acquire` fails closed (`return 2`, "no
+  task file for $id") the instant it's tried. `free` is only ever safe today
+  because every existing caller of it already found the file **on `main`**
+  before deciding `free` — this change is the first to produce a
+  free-like verdict for a file that ISN'T on `main` yet, so it cannot silently
+  share `free`'s machinery.
+- *Return a hardcoded `free`/`new` whenever the PR's diff adds a task file
+  matching the id, without reading its `claimed_by`.* Rejected: skips the
+  "confirm no claimed_by" check the manual workaround did on PR #39 — a raced
+  re-stage where the new file already carries a stamped `claimed_by` (two
+  agents racing `/new-task` + `/stage`, or one agent's own prior claim commit
+  on this exact branch) would then be silently mis-decided instead of
+  correctly resolving to `mine`/`owned:` via the normal decision path.
 - *Have `/address-pr` special-case "PR adds the task file" instead of fixing
   `task_claim.sh`.* Rejected: `pr-owner` is the single source of truth other
   callers (the reclaim sweep, tests) also rely on; fixing it there fixes every
   caller at once instead of duplicating the diff-vs-main check in each one.
 
+## Design review
+
+- 2026-09-22: an independent review (dispatched per `/address-pr` §2.d)
+  against the first draft of this design found:
+  1. **(High, addressed above)** the `free`-reuse plan is unworkable because
+     `task_claim.sh acquire`'s file lookup is local-filesystem, not
+     API-based — a claim branch cut from `main` can't see a file that only
+     exists on the PR's own branch. Fixed by giving this case its own `new`
+     verdict and handling (see Solution and the new `/address-pr` §1.6
+     section below) instead of reusing `free`.
+  2. **(Medium, addressed above)** the original wording ("return the path
+     exactly as before" vs. "track which ref resolved") was internally
+     inconsistent about the interface. Fixed by making
+     `_tc_resolve_task_location_head` a **separate function with a 3-field
+     return**, never sharing `_tc_resolve_task_location`'s 2-field contract.
+  3. **(Minor, addressed)** the Test plan's first checkbox was pre-checked
+     (`[x]`) on a design-only PR before any code existed. Reworded below to
+     describe what was actually verified pre-code (nothing yet) vs. what
+     verifies the eventual change.
+
 ## Test plan
 
-- [x] `bats tests/task_claim.bats` — full suite passes locally after the change.
-- [ ] New unit test: `resolve_task_location: task file present on the PR's own
-      HEAD ref but absent from main -> resolves via head-ref fallback`
-      (`tests/task_claim.bats`, alongside the existing `resolve_task_location:
-      same-repo, task file present in NEITHER dir -> fails closed (unknown)`
-      case).
+- [ ] Baseline: `bats tests/task_claim.bats` passes on `main` today (before
+      any code change) — establishes there's no pre-existing breakage this
+      task could be blamed for.
+- [ ] New unit test: `resolve_task_location_head: task file present on the
+      PR's own HEAD ref but absent from main -> resolves via head-ref
+      fallback` (`tests/task_claim.bats`, alongside the existing
+      `resolve_task_location: same-repo, task file present in NEITHER dir ->
+      fails closed (unknown)` case).
 - [ ] New unit test: `pr-owner: task file new in this PR (absent on main,
-      present on head, no claimed_by) -> free`.
+      present on head, no claimed_by) -> new` (verdict is `new`, not `free`
+      — see the design revision above).
 - [ ] New unit test: `pr-owner: task file new in this PR but already carries a
-      claimed_by on head -> owned:<by>` (the raced-restage edge case named in
-      Solution's rejected-alternative above).
+      claimed_by (mine) on head -> mine` and `... (another agent's) on head ->
+      owned:<by>` (the raced-restage edge case named in Solution's
+      rejected-alternative above) — both flow through the *unchanged*
+      `mine`/`owned:` paths, only the unclaimed case gets the new verdict.
+- [ ] `bats tests/task_claim.bats` — full suite passes locally **after** the
+      change (all pre-existing cases + the new ones above).
 - [ ] Manual smoke: re-run `bash _session/task_claim.sh pr-owner 39` against
       the real PR #39 (already merged) is not repeatable as a live repro since
       the file is on `main` now — instead verify against **this task's own
       claim PR** while it is still open (a same-repo PR whose diff adds no new
       task file, so it must still resolve exactly as before — regression
       check, not a new-file repro).
+- [ ] Manual/documentation verification: `address-pr/SKILL.md` §1.6's new
+      `new` case is exercised the next time a real `/stage`-introduces-a-new-
+      file PR is addressed (can't be dry-run in bats, since it's a documented
+      *procedure* for the driving session, not a pure function) — post-merge
+      item, tracked via this task's own eventual `/stage` usage or the next
+      one encountered.
 
 ## Done criteria
 
-- [ ] `_tc_pr_owner` returns `free` (not `unknown`) for a same-repo PR whose
-      diff introduces the task file and that file carries no `claimed_by` —
-      `tests/task_claim.bats` test `pr-owner: task file new in this PR
-      (absent on main, present on head, no claimed_by) -> free`.
-- [ ] `_tc_pr_owner` returns `owned:<by>` (not `free`) for the same shape but
-      with a `claimed_by` already stamped on the head-ref copy —
-      `tests/task_claim.bats` test `pr-owner: task file new in this PR but
-      already carries a claimed_by on head -> owned:<by>`.
-- [ ] `_tc_resolve_task_location` falls back to the PR's head ref only after
-      the `main`-ref lookup fails — `tests/task_claim.bats` test
-      `resolve_task_location: task file present on the PR's own HEAD ref but
-      absent from main -> resolves via head-ref fallback`.
+- [ ] `_tc_pr_owner` returns `new` (not `unknown`, not `free`) for a same-repo
+      PR whose diff introduces the task file and that file carries no
+      `claimed_by` — `tests/task_claim.bats` test `pr-owner: task file new in
+      this PR (absent on main, present on head, no claimed_by) -> new`.
+- [ ] `_tc_pr_owner` returns `mine`/`owned:<by>` (not `new`) for the same
+      shape but with a `claimed_by` already stamped on the head-ref copy —
+      `tests/task_claim.bats` tests for both sub-cases.
+- [ ] `_tc_resolve_task_location_head` only runs after
+      `_tc_resolve_task_location` (the `main`-ref lookup) fails, and never
+      changes `_tc_resolve_task_location`'s own 2-field return contract —
+      `tests/task_claim.bats` test `resolve_task_location_head: task file
+      present on the PR's own HEAD ref but absent from main -> resolves via
+      head-ref fallback`.
 - [ ] All pre-existing `_tc_resolve_task_location` / `_tc_pr_owner` bats cases
       at `tests/task_claim.bats:585-880` still pass unchanged — no regression
       to the `main`-resolved path (full-suite run: `bats tests/task_claim.bats`).
 - [ ] `_tc_fetch_fm_field` (`_session/task_claim.sh:682`) accepts an optional
       ref argument, default `main` — existing callers that omit it are
       unaffected (same bats full-suite run as above covers this).
+- [ ] `address-pr/SKILL.md` §1.6 documents the `new` case's own claim
+      procedure (checkout the PR's own branch, not a fresh branch off `main`)
+      — text review at PR time, not bats-testable (it's operator-facing
+      documentation, not code).
 
 ## Root cause
 
@@ -178,7 +259,7 @@ scheduled: 2026-09-21
 | `_session/task_claim.sh` | 739-764 | `_tc_pr_owner` — thread the resolved ref through to the `claimed_by` fetch |
 | `tests/task_claim.bats` | 581-880 | Existing `pr-owner`/`resolve_task_location` bats coverage; add new cases alongside |
 | `stage/SKILL.md` | step 3 | Documents the "commit the new file in the same PR" convention this bug is triggered by (no change needed — cited for context) |
-| `address-pr/SKILL.md` | §1.6 | Caller of `pr-owner`; its `free` handling (claim-then-proceed) already covers the new outcome without change |
+| `address-pr/SKILL.md` | §1.6 | Caller of `pr-owner`; **needs a new `new` case** (checkout-the-PR's-own-branch claim procedure) — `free`'s existing handling does NOT cover this outcome (see Design review) |
 
 ## Dependencies
 
