@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1h
 source: this conversation, 2026-09-18
 related: T20260914-359646
-claimed_by: cc1-9a4074da:69cec4c3ae5bb8b4
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -100,16 +100,16 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] Manual: re-read the new `§9` section standalone — confirm it states
+- [x] Manual: re-read the new `§9` section standalone — confirms it states
       the rule, the prose/script boundary, the validation gate, and the
-      worked-example citation, matching this Solution section exactly.
-- [ ] `repo-conventions/scripts/lint_paragraphs.py --changed` (bullets, not
-      paragraphs, per the design-doc template's Format discipline) — non-blocking
-      nudge, run and address any hit.
-- [ ] CI (`Markdown Lint`, `lint-tasks`) green on the implementation PR.
+      worked-example citation, matching this Solution section exactly
+      (`skill-conventions/SKILL.md:68-76`).
+- [x] `repo-conventions/scripts/lint_paragraphs.py --changed` — "no long
+      paragraphs found".
+- [ ] CI (`Markdown Lint`, `lint-tasks`) green on the implementation PR — post-push item.
 
 ## Done criteria
 
-- [ ] New `§9` convention (rule + prose-stays boundary + validation gate) inserted at `skill-conventions/SKILL.md:67`, before `## Important Notes` — manual re-read test-plan item above.
-- [ ] `§9` cites the worked example at `dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md:12` (the task's own H1 title) — grep check in the implementation PR diff.
-- [ ] `§1`–`§8` numbering unchanged (`skill-conventions/SKILL.md:18` through `:66` untouched, i.e. §8's heading *and* body bullets) — diff review test-plan item above.
+- [x] New `§9` convention (rule + prose-stays boundary + validation gate) inserted at `skill-conventions/SKILL.md:67`, before `## Important Notes` — manual re-read test-plan item above.
+- [x] `§9` cites the worked example at `dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md:12` (the task's own H1 title) — grep check in the implementation PR diff.
+- [x] `§1`–`§8` numbering unchanged (`skill-conventions/SKILL.md:18` through `:66` untouched, i.e. §8's heading *and* body bullets) — diff review test-plan item above.

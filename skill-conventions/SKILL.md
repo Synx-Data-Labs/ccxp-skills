@@ -65,6 +65,16 @@ A task's hub repo (where its `dev/TODO/` file lives) and its implementation's ta
 - `/repo-conventions` — CLAUDE.md / guidelines.md / dev/ layout
 - `superpowers:writing-skills` — generic skill-authoring this skill defers to
 
+### 9. Deterministic logic → bundled scripts
+
+When a SKILL.md workflow step is fully deterministic/mechanical (a parse, a lookup, a formatted report — no judgment calls), port it into a bundled, sourceable script under `<skill>/scripts/` that the workflow invokes, instead of re-deriving the logic in prose an LLM re-executes every run. Reuse §4's shared-library rule when 2+ skills need the same helper.
+
+What stays in prose: logic that makes a real judgment call (a Park recommendation, a blocker-order decision) is not this convention's scope — only a deterministic read/transform is.
+
+**Required validation gate before switchover**: add tests (BATS/unit, per §5) that prove behavior parity — the script's output matches the skill's own prior real invocations (or a hand-verified fixture) — before rewriting the SKILL.md workflow section to invoke the script instead of the prose it replaces. This makes §5's existing test requirement explicit as a *port-safety* gate, not just "has tests."
+
+Worked example: [T20260914-359646](../dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md) ported `/todo list`'s table-rendering and `/todo next`'s queue-walk into `todo/scripts/{_lib,todo-list,todo-next}.sh`, keeping `sweep`'s judgment-call logic (blocker-order enforcement, Park recommendations) in prose since those genuinely decide, not just read.
+
 ## Important Notes
 
 - This skill defers to `superpowers:writing-skills` for everything generic. If the two ever conflict on a *generic* point, superpowers wins; the §1–7 guardrails here are the only intentional local overrides.
