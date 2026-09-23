@@ -2,7 +2,7 @@
 status: Open
 estimation: 1h
 source: this conversation, 2026-09-18
-related: T20260718-160579
+related: T20260718-160579, T20260922-324422
 ---
 
 # T20260918-404944: `task_claim.sh pr-owner` always returns `unknown` for `/stage` PRs that introduce a brand-new task file
