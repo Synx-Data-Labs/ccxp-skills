@@ -2,6 +2,8 @@
 status: Design
 estimation: 1d
 source: conversation with @shine, 2026-09-23
+related: T20260923-986928
+priority: P2 — enables ad-hoc mid-week IPM re-runs; no external deadline, but the underlying friction (re-scoping requires the full /ccxp loop) is felt every time a design changes mid-week
 claimed_by: cc1-9a4074da:94a83ff0e786a885
 claimed_role: interactive
 scheduled: 2026-09-21
@@ -184,16 +186,15 @@ scheduled: 2026-09-21
 
 ## Done criteria
 
-- [ ] `ipm/SKILL.md` exists and contains the full 2a.0–2a.6 logic
-      (cron/interactive branching, the 2a.5a hard gate, the 2a.5b
-      cross-repo ROADMAP sync, Slack notification) — verified by the
-      byte-for-byte diff test-plan item above.
-- [ ] `ccxp/SKILL.md` Phase 2a is reduced to a trigger check + call into
-      `/ipm` — verified by reading the merged `ccxp/SKILL.md` diff.
-- [ ] No other section of `ccxp/SKILL.md` changed beyond the Phase 2a
-      body and the small `2a.N`-reference fixes at lines 30, 34, 55, 78,
-      121, 299, 484, 487, 977 (and, if needed, the `/ipm` skill's own
-      doc-lint fixes) — verified by the merged PR's diff scope and the
-      `grep -n '2a\.[0-9]'` test-plan item above.
-- [ ] `ipm/SKILL.md` has its own `<skills-root>` preamble — verified by
-      the test-plan item above.
+- [ ] `ipm/SKILL.md` contains the full 2a.0–2a.6 logic — mapped to the Test plan's `ccxp/SKILL.md:582-889` byte-for-byte diff check (cron/interactive branching, the 2a.5a hard gate, the 2a.5b cross-repo ROADMAP sync, Slack notification all included).
+- [ ] `ccxp/SKILL.md` Phase 2a shrinks to a trigger check + `Run /ipm` — mapped to the Test plan's `ccxp/SKILL.md:891-914` shape-parity check.
+- [ ] No stray `2a.N` references survive outside `ipm/SKILL.md` — mapped to the Test plan's `ccxp/SKILL.md:30` grep check (first of 9 offenders today, full list in Solution).
+- [ ] `ipm/SKILL.md` carries its own `<skills-root>` preamble — mapped to the Test plan's `ccxp/SKILL.md:68-85` preamble-adaptation check.
+
+## Closed
+
+Pending — filled in at `/drive` Phase 7 once the implementation PR merges.
+
+## Skills invoked
+
+Pending — filled in at `/drive` Phase 7.0 once implementation is complete.
