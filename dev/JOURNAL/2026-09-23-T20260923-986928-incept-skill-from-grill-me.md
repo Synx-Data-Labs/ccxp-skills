@@ -141,7 +141,7 @@ scheduled: 2026-09-21
 - Claim PR [PR #125](https://github.com/Synx-Data-Labs/ccxp-skills/pull/125)
   (merged) landed the task claim (`Open` → `Coding`) since the design
   PR was skipped (already approved in-conversation).
-- Shipped in PR #<pending> — `grill-me/` renamed to `incept/` via
+- Shipped in [PR #126](https://github.com/Synx-Data-Labs/ccxp-skills/pull/126) — `grill-me/` renamed to `incept/` via
   `git mv` (history preserved), `incept/SKILL.md`'s Workflow steps 1-3
   rewritten with vendored `mattpocock-skills:grilling` mechanics (no
   runtime plugin dependency), step 4 + Important Notes carried over
