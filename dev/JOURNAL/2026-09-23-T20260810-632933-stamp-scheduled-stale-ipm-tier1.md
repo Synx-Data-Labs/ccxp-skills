@@ -91,7 +91,7 @@ claimed_role:
 
 ## Closed (2026-09-23)
 
-- Shipped in **PR #TBD** (`t20260810-632933-impl`) — this task's own
+- Shipped in **PR #81** (`t20260810-632933-impl`) — this task's own
   design PR (#80) merged first, implementation followed in this PR.
 - Both Done criteria met: `_ipm/stamp-scheduled.sh:55-70` adds the
   14-day staleness bound to Tier 1's usage, scoped to that one caller
