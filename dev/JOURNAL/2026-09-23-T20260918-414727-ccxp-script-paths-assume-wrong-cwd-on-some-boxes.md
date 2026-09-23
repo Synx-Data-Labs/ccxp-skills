@@ -192,15 +192,26 @@ scheduled: 2026-09-21
   threshold before implementation (72/100)
 - [x] `npx markdownlint-cli2` on the edited `ccxp/SKILL.md` — 0 errors
 - [x] `grep -c '\.\./_gh/\|\.\./_session/\|\.\./_ipm/\|\.\./_docs/\|\.\./_taskid/\|\.\./ccxp/scripts/' ccxp/SKILL.md`
-  is 0 after the rewrite (all 26 cwd-relative references converted —
-  `grep -c '<skills-root>/'` confirms 28 = 26 rewritten + 2 new in the
-  preamble paragraph itself)
+  is 0 after the rewrite — but this exact grep pattern missed a 27th
+  sibling-script reference (`../slack/scripts/slack-send.sh`, not in
+  any of the 6 prefixes it checked); caught by the implementation PR's
+  independent review, not by this check. Fixed alongside; broader
+  `grep -n '\.\./'` re-run afterward found nothing further to convert
+  (the 2 remaining hits, `../todo/SKILL.md` and
+  `../repo-conventions/scripts/lint_tasks.py`, are prose
+  cross-references / another script's own internal default, never
+  executed as commands in this file — correctly left as-is).
+  `grep -c '<skills-root>/'` now reads 29 = 27 converted + 2 in the
+  preamble itself.
 - [x] Manual read-through: every `dev/TODO/*.md`, `dev/JOURNAL/...`,
   `git log`, `$(pwd)/dev` reference elsewhere in the file is confirmed
   **unedited** — diffed each touched line individually (e.g.
   `ccxp/SKILL.md:396`'s `$(pwd)/dev` argument survives byte-for-byte;
   only the preceding `../_session/attribution.sh` substring changed)
-- [ ] `bash _docs/doc-impact.sh origin/main` clean
+- [x] `bash _docs/doc-impact.sh origin/main` — flagged 8 skills
+  referencing `queue.md` (routine noise from removing this task's own
+  closed-task line from `queue.md`, not a schema/convention change);
+  reviewed, no doc change needed
 - [ ] (external, post-merge, left unchecked until performed) confirm
   "Base directory for this skill" is reported identically under the
   actual cron invocation shape (`claude --dangerously-skip-permissions
@@ -226,19 +237,35 @@ scheduled: 2026-09-21
 
 | File | Lines | Purpose |
 |---|---|---|
-| `ccxp/SKILL.md` | `68-83` (new preamble), 26 rewritten sibling-script examples, all other lines unchanged | the fix target |
+| `ccxp/SKILL.md` | `68-84` (new preamble), 27 rewritten sibling-script examples, all other lines unchanged | the fix target |
 | `repo-conventions/templates/task.md` | n/a (prose precedent) | the existing "Base directory for this skill" convention this task extends to `ccxp/SKILL.md` |
 | `dev/daily-ccxp.sh` | n/a | the actual cron invocation shape the Test plan's unverified item needs to be checked against |
 
 ## Closed (2026-09-23)
 
-- Shipped in **PR #88** (design) and this implementation PR. Added a
-  new preamble paragraph at `ccxp/SKILL.md:68-83` defining the
-  `<skills-root>/X/Y.sh` placeholder convention plus a loud preflight
-  check, and mechanically rewrote all 26 sibling-script invocation
+- Shipped in **PR #88** (design) and **PR #89** (implementation, this
+  PR). Added a new preamble paragraph at `ccxp/SKILL.md:68-84` defining
+  the `<skills-root>/X/Y.sh` placeholder convention plus a loud
+  preflight check, and mechanically rewrote sibling-script invocation
   examples from `../X/Y.sh` to `<skills-root>/X/Y.sh`
-  (`grep -c '<skills-root>/' ccxp/SKILL.md` → 28 = 26 rewritten + 2 in
-  the preamble itself; the old pattern's count is confirmed 0).
+  (`grep -c '<skills-root>/' ccxp/SKILL.md` → 29 = 27 rewritten + 2 in
+  the preamble itself).
+- **PR #89 review round (1 real finding, fixed)**: the implementation's
+  own verification grep (the same 6-prefix pattern the design specified)
+  missed a 27th sibling-script reference —
+  `../slack/scripts/slack-send.sh` (`ccxp/SKILL.md:460`), a call to a
+  different top-level skill directory (`slack/`) the original grep
+  pattern never listed. Caught by independent review, not by the check
+  itself — a real gap in the design's own verification method, not just
+  the implementation. Fixed inline; a broader `grep -n '\.\./'` re-run
+  afterward confirmed nothing else was missed (2 remaining hits are
+  prose cross-references / another script's own default, never executed
+  as commands here — correctly left alone). Also softened one overclaim
+  the same review caught: the preamble said cwd stays the working repo
+  "throughout this entire session" — not quite true, since 2a.5b's
+  ephemeral roadmap clone (`ccxp/SKILL.md:850-851`) deliberately `cd`s
+  into its own throwaway directory for that one phase; added an explicit
+  carve-out rather than leave the overclaim standing.
 - Every working-repo-relative command elsewhere in the file
   (`dev/TODO/*.md`, `dev/JOURNAL/...`, `git log`, `$(pwd)/dev`) verified
   byte-for-byte unchanged by diffing each touched line individually —
@@ -273,17 +300,24 @@ scheduled: 2026-09-21
   correction added prose that slightly shifted C5's mapping ratio, still
   well above the 70 threshold both times), markdownlint clean on both
   the task file and `ccxp/SKILL.md`, `doc-impact.sh` clean, a line-by-
-  line diff review confirming the rewrite touched exactly the 26
-  intended lines and nothing else
+  line diff review confirming the rewrite touched exactly the intended
+  lines and nothing else — this self-verification still missed the
+  `../slack/...` gap the independent reviewer caught, a useful reminder
+  that "I checked" and "an independent pass checked" aren't
+  interchangeable
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't
   get stuck; the design correction was a direct response to a specific,
   well-localized review finding, not an open-ended debugging session
 - Receiving code review (`superpowers:receiving-code-review`): yes —
-  `/address-pr` §2.d on the design PR (#88), 3 real findings (a
-  permanent `cd` would break the file's own working-repo-relative
-  commands elsewhere; the "Base directory for this skill" fact isn't
-  shell-mechanically usable without the agent substituting it manually;
-  the design's cron-invocation assumption was unverified), 2 fixed via
-  a substantive redesign, 1 flagged honestly as an unverified,
-  post-merge item rather than fixed or dismissed. 0 pushback — all
-  three were correct.
+  `/address-pr` §2.d on both the design PR (#88) and the implementation
+  PR (#89). Design PR: 3 real findings (a permanent `cd` would break
+  the file's own working-repo-relative commands elsewhere; the "Base
+  directory for this skill" fact isn't shell-mechanically usable
+  without the agent substituting it manually; the design's
+  cron-invocation assumption was unverified), 2 fixed via a substantive
+  redesign, 1 flagged honestly as an unverified, post-merge item.
+  Implementation PR: 2 real findings (a missed 27th sibling-script
+  reference outside the verification grep's 6 prefixes; an overclaim
+  about cwd staying fixed for the "entire session" when 2a.5b
+  deliberately `cd`s elsewhere), both fixed. 0 pushback across both
+  rounds — every finding was correct.
