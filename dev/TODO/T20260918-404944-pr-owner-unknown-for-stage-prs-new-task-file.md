@@ -1,5 +1,5 @@
 ---
-status: Design
+status: Coding
 estimation: 1h
 source: this conversation, 2026-09-18
 related: T20260718-160579, T20260922-324422
