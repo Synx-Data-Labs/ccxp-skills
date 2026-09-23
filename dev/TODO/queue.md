@@ -15,7 +15,6 @@ reprioritize.
 - [T20260922-413132](T20260922-413132-skill-maturity-tiering-scoping.md): Scope a skill-maturity tiering convention (promoted vs misc/in-progress/deprecated) for the ccxp-skills plugin bundle
 - [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md): `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
 - [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md): `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
-- [T20260923-986928](T20260923-986928-incept-skill-from-grill-me.md): Rename `/grill-me` to `/incept`, vendor `grilling`'s interview mechanics
 - [T20260923-584914](T20260923-584914-extract-ipm-skill-from-ccxp.md): Extract /ccxp's Monday IPM ritual into a standalone /ipm skill
 - [T20260923-425414](T20260923-425414-new-task-kiss-estimation-default.md): Give `/new-task` a KISS default estimation instead of always asking
 - [T20260923-292618](T20260923-292618-retire-superpowers-dependency-survey.md): Survey retiring the `superpowers` plugin dependency
