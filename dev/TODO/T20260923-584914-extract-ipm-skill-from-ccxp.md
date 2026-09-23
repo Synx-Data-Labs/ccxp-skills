@@ -95,8 +95,8 @@ scheduled: 2026-09-21
   check, so a human can invoke it ad hoc any day — the task's motivating
   use case.
 - **`ccxp/SKILL.md` Phase 2a shrinks** to the same shape Phase 2b
-  (`ccxp/SKILL.md:891-914`) already has: trigger condition + "Run `/ipm`"
-  + a short bullet list of what it does + a report line.
+  (`ccxp/SKILL.md:891-914`) already has: trigger condition, "Run `/ipm`",
+  a short bullet list of what it does, and a report line.
 - **Unchanged**: the "Cron mode vs. interactive mode" doc section
   (`ccxp/SKILL.md:16-49`), the "Day-of-week behavior" table
   (`ccxp/SKILL.md:968-981`), and Phase 3 — they reference the IPM but
