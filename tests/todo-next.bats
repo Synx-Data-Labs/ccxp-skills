@@ -90,6 +90,32 @@ append_queue_line() {
   [[ "$output" == *"no"* || "$output" == *"No"* ]]
 }
 
+@test "position denominator counts task entries, not raw queue.md lines" {
+  {
+    echo "# TODO Queue"
+    echo ""
+    echo "Ordered priority queue. Top = highest priority. One line per task, kept in"
+    echo "sync with dev/TODO/ by /todo sweep (adds missing, strikes closed/parked)."
+    echo "Reordered by /stage and /top."
+    echo ""
+  } > dev/TODO/queue.md
+  write_task T1 "first" "Open"
+  write_task T2 "second" "Open"
+  write_task T3 "third" "Open"
+  append_queue_line T1 "first"
+  append_queue_line T2 "second"
+  append_queue_line T3 "third"
+
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  # 6 header/blank lines + 3 task lines = 9 raw lines; the denominator must
+  # be 3 (the task-entry count), not 9 (the old bug).
+  [[ "$output" == *"#1 of 3"* ]]
+  [[ "$output" == *"#2 of 3"* ]]
+  [[ "$output" == *"#3 of 3"* ]]
+  [[ "$output" != *"of 9"* ]]
+}
+
 # --- step 5: stale-blocker callout ---------------------------------------
 
 @test "flags a top-3 task still Blocked by an open task, pointing at /todo sweep" {
