@@ -1,11 +1,11 @@
 ---
-status: Design
+status: Done
 scheduled: 2026-08-17
 estimation: 1h
 source: Discovered while filing follow-up tasks from T20260515-128802 (2026-08-10)
 related: T20260515-128802
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260810-632933: `_ipm/stamp-scheduled.sh` Tier 1 silently uses a stale IPM file
@@ -72,13 +72,14 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `tests/stamp_scheduled.bats` — new case: a stale (>14 days old) IPM file present, no token override → Tier 1 is skipped and Tier 3 (next-Monday) is used instead (`_ipm/stamp-scheduled.sh:38-52`)
-- [ ] Existing cases (fresh IPM file, Project-API override, no-token fallback) still pass — full `bats tests/stamp_scheduled.bats` suite green
+- [x] `tests/stamp_scheduled.bats` — new cases: a >14-day-stale IPM file falls through to Tier 3, an exactly-14-day-stale file is still trusted (boundary), a 15-day-stale file falls through — all 3 written test-first (RED verified), now green
+- [x] Existing cases (fresh IPM file, Project-API override, no-token fallback) still pass — full repo BATS suite (689 tests, `tests/*.bats _docs/*.bats`) green, 0 failures
+- [x] Original bug scenario reproduced and verified fixed: `IPM_TODAY=2026-08-10` against a `2026-05-11`-dated IPM file, `next` mode — before the fix: `2026-05-18` (the reported bug); after: `2026-08-24` (Tier 3 correctly takes over; differs from the task's own rough "2026-08-17" note, which didn't account for `next` mode's already-established +7-on-top-of-Tier-3 doubling — see `## Closed` below)
 
 ## Done criteria
 
-- [ ] Fix shipped in `_ipm/stamp-scheduled.sh`'s Tier 1 block, staleness-bound test passing — `tests/stamp_scheduled.bats`
-- [ ] Existing `tests/stamp_scheduled.bats` suite still green — no regressions in fresh-IPM/Project-API/no-token cases
+- [x] Fix shipped in `_ipm/stamp-scheduled.sh`'s Tier 1 block, staleness-bound test passing — `tests/stamp_scheduled.bats`, `_ipm/stamp-scheduled.sh:55-70`
+- [x] Existing `tests/stamp_scheduled.bats` suite still green — no regressions in fresh-IPM/Project-API/no-token cases; full repo suite also green
 
 ## Migrated (2026-09-14)
 
@@ -87,3 +88,42 @@ claimed_role: interactive
   the ccxp-skills split shipped) is stale: `_ipm/` is now ccxp-skills' own
   shared lib, so this is "work about ccxp-skills itself" per that repo's
   CLAUDE.md — landing here directly instead of `private-skills-repo`.
+
+## Closed (2026-09-23)
+
+- Shipped in **PR #TBD** (`t20260810-632933-impl`) — this task's own
+  design PR (#80) merged first, implementation followed in this PR.
+- Both Done criteria met: `_ipm/stamp-scheduled.sh:55-70` adds the
+  14-day staleness bound to Tier 1's usage, scoped to that one caller
+  (not the shared `_ipm_current()` helper); `tests/stamp_scheduled.bats`
+  gained 3 new test-first cases (>14 days stale, exactly-14-day
+  boundary, 15 days stale) plus the full 18-test file and the repo's
+  full 689-test suite both green.
+- The original bug scenario was reproduced (via `git stash`, running the
+  pre-fix code against the exact `IPM_TODAY=2026-08-10` /
+  `2026-05-11`-dated-IPM scenario from this task's own Problem section)
+  and confirmed fixed. One discrepancy from the task's own note: it
+  expected the corrected value to be `2026-08-17`, but the actual
+  corrected value (with the bug fixed, Tier 3 taking over) is
+  `2026-08-24` — the task's rough note didn't account for `next` mode's
+  already-established, separately-tested +7-on-top-of-Tier-3-current
+  doubling (see `tests/stamp_scheduled.bats`'s pre-existing "tier3 next"
+  test, unchanged by this task). Not a discrepancy in the fix; a
+  discrepancy in the original bug report's hand-computed expectation.
+- No follow-up tasks filed — scope stayed within the 1h estimate.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — all 3 new staleness
+  test cases written test-first, RED verified (2 failing for the
+  not-yet-implemented skip, 1 passing at the boundary confirming
+  unchanged behavior) before implementing the fix
+- Verification (`superpowers:verification-before-completion`): yes —
+  design-score gate (79/100), full 689-test repo suite green,
+  shellcheck clean, and the original bug scenario reproduced
+  before/after via `git stash` to confirm the fix actually closes the
+  reported gap
+- Systematic debugging (`superpowers:systematic-debugging`): no —
+  didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): pending —
+  addressed as part of this implementation PR's `/address-pr` loop

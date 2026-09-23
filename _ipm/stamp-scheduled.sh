@@ -8,6 +8,10 @@
 #
 #   1. IPM file   — newest committed `*-ipm-weekly.md` (via _ipm/current.sh),
 #                   staging-aware, no token. Monday == the filename date.
+#                   Staleness-bound: a result more than 14 days behind today
+#                   is discarded and Tier 2/3 is tried instead — this tier
+#                   maps to the *current/upcoming* iteration, so an old
+#                   result would be silently wrong, not just old (T20260810-632933).
 #   2. Project API — $STAMP_ITER_HELPER (default _session/iteration.sh), the
 #                   board's Iteration field. Token-gated; empty without a PAT.
 #   3. next-Monday — computed from today: the Monday that starts next week.
@@ -46,6 +50,23 @@ ipm="$(_ipm_current "$JOURNAL" 2>/dev/null)"
 if [ -n "$ipm" ]; then
   b="$(basename "$ipm")"
   BASE="${b%-ipm-weekly.md}"
+fi
+
+# Staleness bound: _ipm_current() intentionally serves other callers (rca,
+# ccxp Phase 1.1/2a.1.5/2a.5b) "newest committed, however old" — but here BASE
+# maps a task to the *current/upcoming* board iteration, so an old result is
+# wrong, not just old. If BASE is more than 14 days behind TODAY, discard it
+# and let the existing Tier-2 fallthrough below take over. GNU date then BSD
+# date, same idiom as _session/task_claim.sh's _tc_iso_to_epoch.
+if [ -n "$BASE" ]; then
+  base_epoch="$(date -u -d "$BASE" +%s 2>/dev/null)"
+  [ -n "$base_epoch" ] || base_epoch="$(date -u -j -f '%Y-%m-%d' "$BASE" +%s 2>/dev/null)"
+  today_epoch="$(date -u -d "$TODAY" +%s 2>/dev/null)"
+  [ -n "$today_epoch" ] || today_epoch="$(date -u -j -f '%Y-%m-%d' "$TODAY" +%s 2>/dev/null)"
+  if [ -n "$base_epoch" ] && [ -n "$today_epoch" ]; then
+    age_days=$(( (today_epoch - base_epoch) / 86400 ))
+    [ "$age_days" -gt 14 ] && BASE=""
+  fi
 fi
 
 # Tier 2: Project-API fallback (token-gated, best-effort-empty).
