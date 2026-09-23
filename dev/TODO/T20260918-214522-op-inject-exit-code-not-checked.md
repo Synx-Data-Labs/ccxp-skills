@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Coding — design skipped, self-evident fix per its own "Done looks like" (2026-09-23)
 estimation: 30m
 source: this conversation, 2026-09-18
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260918-214522: `1password-env-setup.sh` reports "materialized" even when `op inject` fails
