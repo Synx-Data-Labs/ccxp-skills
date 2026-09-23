@@ -80,6 +80,10 @@ pes-materialize-env() {
     fi
     return 1
   fi
+  # Capturing combined stdout+stderr above (to detect failure and report the
+  # real error) would otherwise silently swallow any warning `op inject`
+  # prints on an OTHERWISE-successful run -- surface it instead of dropping it.
+  [ -n "$err" ] && echo "$err" >&2
   echo "materialized: $dir/.env"
 }
 

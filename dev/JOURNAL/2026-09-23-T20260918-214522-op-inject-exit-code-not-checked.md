@@ -41,8 +41,8 @@ scheduled: 2026-09-21
 ## Test plan
 
 - [x] `tests/1password_env_setup.bats` — new cases, written test-first (RED
-  verified: 4 new/failing before the fix, confirmed failing for the right
-  reason — not a typo — then green after implementing):
+  verified before each fix, confirmed failing for the right reason — not
+  a typo — then green after implementing):
   - [x] `pes-materialize-env` reports failure (not "materialized") and
     returns non-zero when `op inject` fails
   - [x] `pes-materialize-env` gives an actionable `OP_ACCOUNT` hint for the
@@ -51,9 +51,12 @@ scheduled: 2026-09-21
   - [x] `pes-materialize-env` passes `--account` to `op inject` when
     `OP_ACCOUNT` is set; omits it when unset (back-compat, unchanged
     default behavior)
+  - [x] `pes-materialize-env` surfaces `op`'s own stderr warning on an
+    otherwise-successful run (added addressing the PR #91 review)
   - [x] `1password-env-setup` (entry point) propagates a
-    `pes-materialize-env` failure instead of silently succeeding
-- [x] `bats tests/1password_env_setup.bats` green (22/22)
+    `pes-materialize-env` failure instead of silently succeeding, and
+    confirms `pes-direnv-allow` never runs after that failure
+- [x] `bats tests/1password_env_setup.bats` green (23/23)
 - [x] `shellcheck 1password-env-setup/scripts/1password-env-setup.sh` clean
 - [x] Full repo suite (`tests/*.bats _docs/*.bats`) still green
 - [x] `bash _docs/doc-impact.sh origin/main` clean (the `1password-env-setup/SKILL.md`
@@ -71,7 +74,7 @@ scheduled: 2026-09-21
   when the error text matches the exact account-mismatch shape observed —
   `tests/1password_env_setup.bats`'s `OP_ACCOUNT` cases
 - [x] Covered by BATS per the task's own suggestion —
-  `tests/1password_env_setup.bats`, 5 new cases
+  `tests/1password_env_setup.bats`, 7 new cases
 
 ## Repo file references
 
@@ -104,6 +107,20 @@ scheduled: 2026-09-21
   warranted; left as a candidate follow-up if it turns out to matter in
   practice, not filed as a new task since nothing concrete points at it
   being needed yet.
+- **PR #91 review round (1 real finding, fixed)**: capturing `op
+  inject`'s combined stdout+stderr to detect failure and report the
+  real error also silently discarded any warning `op` prints on an
+  *otherwise-successful* run — a genuine behavior regression from the
+  pre-fix version, where such output printed straight to the terminal.
+  Caught by independent review before this PR merged (I'd already found
+  and fixed it myself moments earlier, but the diff under review was
+  the pre-fix snapshot, so the finding still landed and confirmed the
+  fix was both real and correct). Fixed: `$err` is now echoed to stderr
+  on the success path too when non-empty, RED/GREEN-verified via a
+  temporary `git stash` of just the fix. Also strengthened the
+  entry-point propagation test per the reviewer's secondary suggestion
+  (asserts `pes-direnv-allow` never runs after a failure, not just a
+  non-zero exit).
 - No follow-up tasks filed.
 
 ## Skills invoked
@@ -113,7 +130,7 @@ scheduled: 2026-09-21
   the old unconditional "materialized" echo, not a typo), then the
   fix implemented to green
 - Verification (`superpowers:verification-before-completion`): yes —
-  shellcheck clean, full 712-test repo suite green, `doc-impact.sh`
+  shellcheck clean, full 713-test repo suite green, `doc-impact.sh`
   clean (the `SKILL.md` update was made proactively alongside the code
   change, not left for the gate to catch), quality-probe recorded
   (shellcheck 0/0/0/0; one non-blocking `max_fn_lines` warning from the
@@ -121,6 +138,7 @@ scheduled: 2026-09-21
 - Systematic debugging (`superpowers:systematic-debugging`): no —
   didn't get stuck; a small, well-scoped bug fix with the approach
   already spelled out in the task's own "Done looks like"
-- Receiving code review (`superpowers:receiving-code-review`): pending
-  — `/address-pr` §2.d on the implementation PR, to be filled in once
-  that round completes
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d on the implementation PR (#91), 1 real finding
+  (the success-path stderr-swallowing regression above), fixed, 0
+  pushback
