@@ -93,6 +93,8 @@ case "$OWN" in
   mine|untracked) ;;        # our task, or not task-tracked — proceed
   free)                     # the task is unclaimed — claim it FIRST (see below), then proceed
     ;;
+  new)                      # THIS PR itself introduces the (unclaimed) task file — claim
+    ;;                      # differently (see below), then proceed
   owned:*)                  # the PR's task is claimed by ANOTHER (machine, clone) agent
     echo "PR #<number>'s task is owned by ${OWN#owned:} — deferring, not touching."
     # STOP: do not run the loop, do not merge. The reclaim sweep frees it if the
@@ -107,7 +109,8 @@ esac
 ```
 
 - **`mine`** — this clone holds the task claim (the normal `/drive` path: it claimed the task before opening the PR). Proceed.
-- **`free`** — the task exists but is unclaimed. **Claim it before doing anything else** — see below. Don't just "proceed"; a PR can sit open against an unclaimed task for weeks, during which the Project board reads `Open`/unclaimed even while a PR against it exists, and a peer session could pick the same task for duplicate work.
+- **`free`** — the task exists **on `main`** but is unclaimed. **Claim it before doing anything else** — see below. Don't just "proceed"; a PR can sit open against an unclaimed task for weeks, during which the Project board reads `Open`/unclaimed even while a PR against it exists, and a peer session could pick the same task for duplicate work.
+- **`new`** (T20260918-404944) — the task file does **not exist on `main` yet**: this very PR introduces it (the `/stage` pattern — `queue.md` + the new task file committed together) and it's unclaimed. Distinct from `free` because the claim mechanics differ — see its own procedure below.
 - **`untracked`** — the PR maps to no task (`fix/*` branch, no `Task:` link). No cross-session task to coordinate on; proceed.
 - **`owned:<agent>`** — a *different* (machine, clone) agent holds the task. Defer; do not drive or merge.
 - **`unknown`** — the task file couldn't be resolved (network / not found). Fail-safe: defer, never a silent merge. (A stale branch-name-vs-body-Task:-link mismatch can also surface as `unknown` on a rescoped PR — see T20260718-160579; that's a tooling bug to fix separately, not license to bypass the fail-safe. If you've manually confirmed the real current task from the PR body and claimed *that* task, you may proceed — but say so explicitly and file/link the tooling bug if not already tracked.)
@@ -118,6 +121,14 @@ esac
 2. Commit (pure frontmatter change — status + `claimed_by`), push, `gh pr create`, and drive *that* claim PR through this same `/address-pr` loop to merge (it's docs-only, auto-merge-eligible under the status-change tier).
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
 4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, then continue to §2 on the *original* PR you were addressing.
+
+**`new` → claim directly on the PR's own branch** (T20260918-404944) — unlike `free`, there is **no separate claim-branch/merge round-trip**, because `free`'s procedure above can't work here: `task_claim.sh acquire`'s file lookup (`_tc_find_file`) is a **local filesystem glob**, and a fresh branch cut off `main` does not have a file that exists only on this PR's own (not-yet-merged) branch. Instead:
+
+1. `git fetch && git checkout <the PR's headRefName>` — the **existing** PR branch, not a new one, so the just-added task file is present in the local working tree.
+2. `bash ../_session/task_claim.sh release-others <id>` then `bash ../_session/task_claim.sh acquire <id>` — now succeeds, since the file is right there on this checked-out branch.
+3. Commit (pure frontmatter change) and push — lands as one more commit on the **same** PR; no separate claim PR.
+4. **Push rejected (non-fast-forward) = you lost the race** — mirrors `free`'s step 3 above: another session saw `new` on this same PR and pushed its own claim commit first. Do **not** force-push. `git fetch && git checkout <branch>` again (picks up their commit) and re-run `task_claim.sh pr-owner <number>` — it re-resolves via the same head-ref path against the *new* head SHA, reads their now-stamped `claimed_by`, and reports `owned:<other>`. Defer per that case.
+5. Otherwise, continue driving this PR through the rest of this loop (§2 onward) as normal — one PR, one push, done.
 
 **No heartbeat / release for the `mine`/`owned` cases.** Ownership is already established when the task was claimed; `/address-pr` only *reads* it there. There is no TTL marker to heartbeat, and nothing to release at merge — the task claim is released at task close (`/drive` Phase 7 / the journal-move PR, via `task_claim.sh release`).
 

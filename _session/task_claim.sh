@@ -67,9 +67,13 @@
 #                                    backward-compatible alias) to a name that doesn't
 #                                    read as a sibling of `release`.
 #   pr-owner <pr-number>         → derive PR ownership from its task's claimed_by.
-#                                    Prints "mine" | "free" | "owned:<by>" |
-#                                    "untracked" (PR maps to no task) | "unknown"
-#                                    (task file unresolvable — caller defers).
+#                                    Prints "mine" | "free" | "new" (T20260918-404944:
+#                                    a same-repo PR, e.g. /stage, introduces the task
+#                                    file itself — unclaimed, not yet on `main`; claim
+#                                    procedure differs from "free", see address-pr
+#                                    SKILL.md §1.6) | "owned:<by>" | "untracked" (PR
+#                                    maps to no task) | "unknown" (task file
+#                                    unresolvable — caller defers).
 #   reclaimable <task-id> [days] → "reclaimable" | "live". Stale iff the relevant
 #                                    activity signal exceeds the window (default
 #                                    2d): commit date on `main` for a no-PR task,
@@ -680,16 +684,73 @@ _tc_resolve_task_location() {
 }
 
 _tc_fetch_fm_field() {
-  # $1 owner/repo  $2 path  $3 field → echo the frontmatter field from that file
-  # on `main` (the source of truth), or nonzero on any fetch/decode failure.
-  local repo="$1" path="$2" field="$3" b64 tmp val
-  b64="$(_session_gh api "/repos/$repo/contents/$path?ref=main" --jq '.content // ""' 2>/dev/null || true)"
+  # $1 owner/repo  $2 path  $3 field  [$4 ref, default "main"] → echo the
+  # frontmatter field from that file at $4 (`main` is the source of truth for
+  # the common case), or nonzero on any fetch/decode failure. $4 exists so a
+  # caller can read a file that only exists on a PR's own head ref and not yet
+  # on `main` — see _tc_resolve_task_location_head (T20260918-404944).
+  local repo="$1" path="$2" field="$3" ref="${4:-main}" b64 tmp val
+  b64="$(_session_gh api "/repos/$repo/contents/$path?ref=$ref" --jq '.content // ""' 2>/dev/null || true)"
   [ -n "$b64" ] || return 1
   tmp="$(mktemp "${TMPDIR:-/tmp}/tc-fm.XXXXXX")" || return 1
   printf '%s' "$b64" | base64 -d > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
   val="$(_tc_fm_get "$tmp" "$field")"
   rm -f "$tmp"
   printf '%s' "$val"
+}
+
+_tc_resolve_task_location_head() {
+  # $1 pr  $2 task-id → echo "<owner/repo>\t<path>\t<head-sha>" for a task
+  # file that exists on THIS PR's own head ref but is absent from `main` —
+  # the /stage "commit queue.md + the new task file in the same PR" case
+  # (T20260918-404944): the file legitimately doesn't exist on `main` yet at
+  # the moment `/address-pr` is asked to drive the very PR that will put it
+  # there. Same-repo only — a cross-repo PR's `Task:` body link (when it
+  # carries a real blob-link URL) always names a file already ON the hub
+  # repo's `main`, so that case can't hit this gap; see
+  # _tc_pr_has_cross_repo_task_link, which the caller uses to gate this
+  # fallback so it is only ever reached for the genuine same-repo case.
+  # Deliberately a SEPARATE function with a 3-field return — never shares
+  # _tc_resolve_task_location's 2-field contract, so every existing caller
+  # and test of that function is untouched. Nonzero + empty if the head ref
+  # can't be resolved or the file isn't found in either dir.
+  local pr="$1" id="$2" repo head dir name
+  repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
+  [ -n "$repo" ] || return 1
+  head="$(_session_gh pr view "$pr" --json headRefOid --jq '.headRefOid' 2>/dev/null || true)"
+  [ -n "$head" ] || return 1
+  for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
+    name="$(_session_gh api "/repos/$repo/contents/$dir?ref=$head" \
+            --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
+            | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
+            | head -1)"
+    [ -n "$name" ] && { printf '%s\t%s/%s\t%s' "$repo" "$dir" "$name" "$head"; return 0; }
+  done
+  return 1
+}
+
+_tc_pr_has_cross_repo_task_link() {
+  # $1 pr → 0 (the body has a `Task:`-prefixed line naming a github blob-link
+  # URL) | 1 (no such line — either no `Task:` line at all, or one with no
+  # link). Mirrors _tc_resolve_task_location's OWN two-stage gate at
+  # _session/task_claim.sh:642-644 EXACTLY (Task:-prefix grep piped into a
+  # blob-URL grep) so this can never disagree with which branch that function
+  # actually takes — see T20260918-404944 design review findings (a
+  # presence-only check on the `Task:` prefix alone was too broad: it fired
+  # even for a Task:-worded line with no link, which never sends
+  # _tc_resolve_task_location down its cross-repo branch in the first place).
+  #
+  # Fails CLOSED on its own body-fetch failure: prints/returns as if a link
+  # WERE present (blocking the same-repo head-ref fallback) rather than as
+  # "no link" (which would wrongly allow it) — mirrors
+  # _tc_resolve_task_location's own fetch-failure fail-closed behavior
+  # (_session/task_claim.sh:638-639, tests/task_claim.bats:780).
+  local pr="$1" body rc links
+  body="$(_session_gh pr view "$pr" --json body --jq '.body // ""' 2>/dev/null)"; rc=$?
+  [ "$rc" -eq 0 ] || return 0   # fetch failed -> fail closed -> "link present"
+  links="$(printf '%s' "$body" | grep -iE '^[[:space:]]*Task:' \
+           | grep -oE 'github\.com/[^/]+/[^/]+/blob/[^ )]+\.md')"
+  [ -n "$links" ]
 }
 
 _tc_is_own_cross_repo_clone() {
@@ -737,27 +798,47 @@ _tc_is_own_cross_repo_clone() {
 }
 
 _tc_pr_owner() {
-  # $1 pr → "mine" | "free" | "owned:<by>" | "untracked" | "unknown".
+  # $1 pr → "mine" | "free" | "new" | "owned:<by>" | "untracked" | "unknown".
   # Derive PR ownership from the claim on the task the PR implements. The task's
   # claimed_by on `main` (the hub repo) is the single source of truth; fetched
   # over the API so it works cross-repo and reads the AUTHORITATIVE main value
   # (not a possibly-edited branch copy). Fail-safe: an unresolvable task file
   # returns "unknown" so the caller defers, never silently proceeds on a PR it
   # cannot prove is free.
-  local pr="$1" id loc repo path claimed_by mine decision
+  #
+  # "new" (T20260918-404944): a same-repo PR (e.g. `/stage`) that introduces
+  # the task file itself, unclaimed — the file legitimately doesn't exist on
+  # `main` yet. Distinct from "free" because its claim procedure differs (see
+  # address-pr/SKILL.md §1.6) — "free"'s claim-on-a-branch-off-main procedure
+  # can't see a file that only exists on this PR's own branch.
+  local pr="$1" id loc repo path claimed_by mine decision ref="main" via_head=0
   id="$(session_pr_task_id "$pr")"
   [ -n "$id" ] || { printf 'untracked\n'; return 0; }
-  loc="$(_tc_resolve_task_location "$pr" "$id")" || { printf 'unknown\n'; return 0; }
+  if ! loc="$(_tc_resolve_task_location "$pr" "$id")"; then
+    # Not on `main` yet. Only fall back to the same-repo head-ref search when
+    # _tc_resolve_task_location's failure genuinely came from "no cross-repo
+    # Task: link at all" — never when a Task: link WAS present but failed to
+    # resolve (fetch error / ambiguous / mismatched / wrong-id), which must
+    # stay `unknown` exactly as today (see _tc_pr_has_cross_repo_task_link's
+    # own header comment and the T20260918-404944 design review).
+    if _tc_pr_has_cross_repo_task_link "$pr"; then
+      printf 'unknown\n'; return 0
+    fi
+    loc="$(_tc_resolve_task_location_head "$pr" "$id")" || { printf 'unknown\n'; return 0; }
+    ref="${loc##*$'\t'}"
+    loc="${loc%$'\t'*}"
+    via_head=1
+  fi
   [ -n "$loc" ] || { printf 'untracked\n'; return 0; }
   repo="${loc%%$'\t'*}"; path="${loc#*$'\t'}"
-  claimed_by="$(_tc_fetch_fm_field "$repo" "$path" claimed_by)" || { printf 'unknown\n'; return 0; }
+  claimed_by="$(_tc_fetch_fm_field "$repo" "$path" claimed_by "$ref")" || { printf 'unknown\n'; return 0; }
   mine="$(_tc_claimant_id)"
   decision="$(_tc_decide "$claimed_by" "$mine")"
   if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine" "$(claimant_clone_path)"; then
     decision="mine"
   fi
   case "$decision" in
-    none)  printf 'free\n' ;;
+    none)  if [ "$via_head" = 1 ]; then printf 'new\n'; else printf 'free\n'; fi ;;
     mine)  printf 'mine\n' ;;
     other) printf 'owned:%s\n' "$claimed_by" ;;
   esac
