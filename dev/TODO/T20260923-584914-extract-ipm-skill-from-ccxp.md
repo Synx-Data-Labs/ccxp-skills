@@ -15,10 +15,11 @@ scheduled: 2026-09-21
 - **Problem**: the Monday IPM ritual (2a.0–2a.6, ~300 lines) is inlined in
   `ccxp/SKILL.md` and only reachable through the full `/ccxp` orchestrator —
   no way to re-run iteration planning ad hoc mid-week.
-- **Solution**: move 2a.0–2a.6 verbatim into a new no-arg `ipm/SKILL.md`
-  (mirrors `/retro`'s precedent); `/ccxp` Phase 2a shrinks to a Monday
-  trigger check + `Run /ipm` (mirrors how Phase 2b already calls `/retro`).
-  The day-of-week gate stays in `/ccxp`, not `/ipm`, so `/ipm` is callable
+- **Solution**: move 2a.0–2a.6 into a new no-arg `ipm/SKILL.md`, plus a
+  ported `<skills-root>` path preamble and a repo-wide sweep of stale
+  `2a.N` cross-references; `/ccxp` Phase 2a shrinks to a Monday trigger
+  check + `Run /ipm` (mirrors how Phase 2b already calls `/retro`). The
+  day-of-week gate stays in `/ccxp`, not `/ipm`, so `/ipm` is callable
   any day.
 
 ## Problem
@@ -60,16 +61,33 @@ scheduled: 2026-09-21
 - Related to T20260922-201976 only in that this session parked driving
   it mid-`/drive` Phase 1 to make room for this planning conversation —
   the two tasks are otherwise unrelated in content.
-- `retro/SKILL.md` already establishes the target shape: a standalone,
-  no-arg skill (`argument-hint` unset/empty) that `/ccxp` Phase 2b calls
-  with a one-line `Run /retro` plus a bullet list of what it does
-  (`ccxp/SKILL.md:895-905`) — Phase 2a should end up looking the same.
-- Every script path the extracted section references
-  (`<skills-root>/_ipm/*.sh`, `_session/task_claim.sh`,
-  `_session/status.sh`, `_taskid/url.sh`, `ccxp/scripts/update-roadmap.sh`)
-  is resolved relative to the repo root already, not to `ccxp/`'s own
-  directory — moving the prose to `ipm/SKILL.md` changes nothing about
-  those paths.
+- `retro/SKILL.md` already establishes the target *call-site* shape:
+  `/ccxp` Phase 2b calls it with a one-line `Run /retro` plus a bullet
+  list of what it does (`ccxp/SKILL.md:895-905`) — Phase 2a should end
+  up looking the same. **Correction (caught by independent review of the
+  first draft of this design):** `retro/SKILL.md`, `incept/SKILL.md`,
+  and `stage/SKILL.md` all *do* set `argument-hint` (`[weeks-back]`,
+  `[task-id | free-text plan]`, `T<id> [T<id> ...]` respectively) — none
+  of them is actually a no-arg precedent. `/ipm`'s no-arg shape isn't
+  copying a pattern from those three; it's justified on its own: the
+  ritual always operates on "this week," computed from `date`, with
+  nothing analogous to `/retro`'s weeks-back or `/incept`'s task-id to
+  parameterize.
+- **Correction (same review):** the extracted section's script paths
+  (`_ipm/*.sh`, `_session/task_claim.sh`, `_session/status.sh`,
+  `_taskid/url.sh`, `ccxp/scripts/update-roadmap.sh`) are *not*
+  repo-root-relative — they use the `<skills-root>/X/Y.sh` placeholder
+  defined only by the preamble at `ccxp/SKILL.md:68-85` (added by
+  T20260918-414727, landed just before this task), which resolves
+  `<skills-root>` from *this skill's own* "Base directory" and
+  explicitly says to "drop the trailing `/ccxp`." That preamble is
+  outside the moved `582-889` range and hardcodes the `/ccxp` suffix, so
+  it does **not** carry over for free — `/ipm` needs its own copy of
+  that preamble, adapted to drop the trailing `/ipm` instead. Confirmed
+  via `grep -rn skills-root` (repo-wide): the placeholder is used only
+  in `ccxp/SKILL.md`, nowhere else — including not in `retro/SKILL.md`,
+  which uses bare `../X/Y.sh` relative paths instead (a different, older
+  convention `retro` predates T20260918-414727 with).
 - Per Phase 3.0's docs/code classifier, this task is **docs-class**
   (`*.md` changes only) — TDD is skipped; verification is markdown
   lint + a read-through, not BATS.
@@ -77,14 +95,18 @@ scheduled: 2026-09-21
 ## Solution
 
 - **New skill**: `ipm/SKILL.md` at the repo root, alongside `retro/`,
-  `incept/`, `stage/`. Frontmatter: `name: ipm`,
-  `argument-hint` unset (no-arg, like `/retro`), description covering
-  both "user explicitly asks to run/re-run iteration planning" and
-  "`/ccxp` Phase 2a calls into this."
-- **Content moved verbatim**: `ccxp/SKILL.md:582-889` (2a.0 through 2a.6,
+  `incept/`, `stage/`. Frontmatter: `name: ipm`, `argument-hint` unset
+  (no-arg — justified on its own merits, not by false precedent; see
+  Context), description covering both "user explicitly asks to
+  run/re-run iteration planning" and "`/ccxp` Phase 2a calls into this."
+- **Content moved**: `ccxp/SKILL.md:582-889` (2a.0 through 2a.6,
   including the 2a.5a hard gate and 2a.5b cross-repo ROADMAP sync)
-  becomes `/ipm`'s own Workflow section, unedited apart from heading
-  renumbering (`#### 2a.0 …` → `#### 0 …`, etc. — see alternatives below).
+  becomes `/ipm`'s own Workflow section, edited only for: (a) heading
+  renumbering (`#### 2a.0 …` → `#### 0 …`, etc. — see alternatives
+  below), and (b) a `<skills-root>` preamble ported from
+  `ccxp/SKILL.md:68-85` and adapted to drop the trailing `/ipm` instead
+  of `/ccxp` (see Context correction above) — everything else moves
+  verbatim.
 - **Mode branching preserved as-is**: `/ipm` reads `CCXP_CRON_MODE`
   directly from the environment (already inherited by any skill
   invocation in the same session — no plumbing needed), exactly as the
@@ -97,10 +119,20 @@ scheduled: 2026-09-21
 - **`ccxp/SKILL.md` Phase 2a shrinks** to the same shape Phase 2b
   (`ccxp/SKILL.md:891-914`) already has: trigger condition, "Run `/ipm`",
   a short bullet list of what it does, and a report line.
-- **Unchanged**: the "Cron mode vs. interactive mode" doc section
-  (`ccxp/SKILL.md:16-49`), the "Day-of-week behavior" table
-  (`ccxp/SKILL.md:968-981`), and Phase 3 — they reference the IPM but
-  aren't part of the ritual itself, and none of their prose needs to move.
+- **Prose-stable, but needs a reference sweep**: the "Cron mode vs.
+  interactive mode" doc section (`ccxp/SKILL.md:16-49`), the "Day-of-week
+  behavior" table (`ccxp/SKILL.md:968-981`), and Phase 3 stay where they
+  are — none of *their* prose moves — but **correction (same review):**
+  9 lines outside the moved range name the old `2a.N` sub-step numbers
+  directly and go stale once that numbering exists only as plain `0`–`6`
+  inside `ipm/SKILL.md`: `ccxp/SKILL.md:30,34,55,78,121,299,484,487,977`
+  (confirmed via `grep -n '2a\.[0-9]' ccxp/SKILL.md`). Each gets a small
+  in-place edit — replace the dead `Phase 2a.N` / `2a.N` mention with
+  either a bare `/ipm` reference (when the exact sub-step isn't
+  load-bearing to the sentence) or `` /ipm`'s step N `` using `/ipm`'s
+  *new* plain numbering (when it is, e.g. the cron-mode-skip explanations
+  at lines 30/34/977). This is a reference fix, not a logic change — the
+  sentences' meaning is unchanged.
 
 **Alternatives considered and rejected**:
 
@@ -122,10 +154,20 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] `ccxp/SKILL.md:582-889` diffed byte-for-byte against the new
-      `ipm/SKILL.md` Workflow section before deleting it from
-      `ccxp/SKILL.md` (apart from the `2a.N` → plain-number renumbering) —
-      confirms a lossless move, not a rewrite.
+- [ ] `ccxp/SKILL.md:582-889` diffed against the new `ipm/SKILL.md`
+      Workflow section before deleting it from `ccxp/SKILL.md` — the
+      only allowed deltas are the `2a.N` → plain-number renumbering and
+      the ported `<skills-root>` preamble (see next item); everything
+      else is byte-identical.
+- [ ] `ipm/SKILL.md` contains its own `<skills-root>` preamble (ported
+      from `ccxp/SKILL.md:68-85`, adapted to drop the trailing `/ipm`)
+      — every `<skills-root>/X/Y.sh` reference inside the moved content
+      resolves under it exactly as it did under `ccxp/SKILL.md`'s
+      preamble.
+- [ ] `grep -n '2a\.[0-9]' ccxp/SKILL.md` returns **zero** matches after
+      the edit (today: 9, at lines 30, 34, 55, 78, 121, 299, 484, 487,
+      977) — confirms no stale cross-reference to the retired numbering
+      survives outside `ipm/SKILL.md`.
 - [ ] Markdown-lint CI check passes on both `ipm/SKILL.md` and the edited
       `ccxp/SKILL.md`.
 - [ ] Read-through: every cross-reference from the moved section
@@ -135,10 +177,10 @@ scheduled: 2026-09-21
 - [ ] `ccxp/SKILL.md`'s new Phase 2a (trigger + `Run /ipm` + bullets)
       read side-by-side with Phase 2b (`ccxp/SKILL.md:891-914`) for shape
       parity.
-- [ ] `repo-conventions` skill-conventions check (if any) — confirm
-      `ipm/SKILL.md`'s frontmatter matches the `retro`/`incept`/`stage`
-      pattern (`name`, `description`, `disable-model-invocation: false`,
-      no `argument-hint`).
+- [ ] `ipm/SKILL.md`'s frontmatter reviewed against `retro`/`incept`/
+      `stage` for shared fields (`name`, `description`,
+      `disable-model-invocation: false`) — `argument-hint` is
+      *deliberately* absent, unlike those three (see Context).
 
 ## Done criteria
 
@@ -149,5 +191,9 @@ scheduled: 2026-09-21
 - [ ] `ccxp/SKILL.md` Phase 2a is reduced to a trigger check + call into
       `/ipm` — verified by reading the merged `ccxp/SKILL.md` diff.
 - [ ] No other section of `ccxp/SKILL.md` changed beyond the Phase 2a
-      body and (if needed) the `/ipm` skill's own doc-lint fixes —
-      verified by the merged PR's diff scope.
+      body and the small `2a.N`-reference fixes at lines 30, 34, 55, 78,
+      121, 299, 484, 487, 977 (and, if needed, the `/ipm` skill's own
+      doc-lint fixes) — verified by the merged PR's diff scope and the
+      `grep -n '2a\.[0-9]'` test-plan item above.
+- [ ] `ipm/SKILL.md` has its own `<skills-root>` preamble — verified by
+      the test-plan item above.
