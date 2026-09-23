@@ -10,6 +10,21 @@ scheduled: 2026-09-21
 
 # T20260918-414727: `ccxp/SKILL.md`'s relative script paths (`../ccxp/scripts/...`, `../_gh/gh.sh`, etc.) don't resolve from a `/ccxp` session's actual cwd on at least one box
 
+## TLDR
+
+- **Type**: bug
+- **Problem**: `ccxp/SKILL.md`'s 26 inline script-invocation examples all
+  write `../X/Y.sh`, assuming cwd sits inside a sibling directory of
+  `ccxp/` within the ccxp-skills checkout — true for this repo's own
+  interactive sessions, false for a headless cron session whose cwd is
+  the *target* repo instead (observed on the `build-pipeline-repo` cron
+  box).
+- **Solution**: add one preflight step at the very top of Phase 0 that
+  derives the ccxp-skills checkout root from the already-available "Base
+  directory for this skill" fact and `cd`s into it before any script
+  call — zero changes needed to the other 26 existing `../X/Y.sh`
+  examples, since cwd is now guaranteed correct for the whole session.
+
 ## Problem
 
 - `ccxp/SKILL.md` (and every sibling skill it invokes inline — `_gh/gh.sh`,
@@ -45,31 +60,108 @@ scheduled: 2026-09-21
   (`/home/ci/ccxp-skills/<skill>/...`) discovered by trial and error at
   session start, rather than working as documented.
 
-## What "done" looks like
+## Context
 
-- Determine the actual intended convention: is `../ccxp/scripts/...` meant
-  to resolve via a documented symlink or directory-layout convention that
-  should exist on every box (and is simply missing/misconfigured on this
-  one — in which case the fix is a setup/bootstrap doc, not a script-path
-  rewrite)? Or is the doc's relative-path assumption itself wrong for how
-  `/ccxp` sessions actually get their cwd set in practice?
-- This needs a real design decision before editing anything — hence filed
-  as a task, not drafted as a bounded PR (Phase 4c's "when unsure,
-  downgrade" guidance). Candidate directions, not yet chosen between:
-  1. Document (in `ccxp/SKILL.md`'s Prerequisites, or the README) the
-     expected on-disk layout / cwd contract a `/ccxp` session must run
-     under, and add a preflight check that fails loudly (not a silent
-     "No such file or directory") if it doesn't hold.
-  2. Make the scripts self-locating (resolve their own path via
-     `$(dirname "${BASH_SOURCE[0]}")`-style logic, or accept an env var
-     like `CCXP_SKILLS_ROOT` with a documented resolution order) instead
-     of relying on the *caller's* cwd being a sibling directory.
-  3. If this box's layout really is the anomaly (every other box's `/ccxp`
-     session cwd genuinely does sit inside the ccxp-skills checkout),
-     document that setup requirement explicitly so it can be verified/
-     fixed on this box instead of worked around per-session.
-- Whichever direction is chosen, once fixed: delete the now-redundant
-  `reference_skills_dir_actual_git_repo_path.md` memory (Phase 1b's own
-  "a hook/script fully replacing a memory's job means the memory itself
-  is now redundant" rule) — but only after confirming the fix actually
-  covers what that memory was compensating for.
+- **A fact already available for free at every skill load, unrelated to
+  cwd**: when a skill is invoked (via the `Skill` tool, or a slash
+  command), the harness reports "Base directory for this skill:
+  `<abs-path>/<skillname>`" — this appears in this very session's own
+  transcript for every skill invocation this whole conversation. It is
+  an **absolute path**, resolved by the harness from wherever the
+  ccxp-skills checkout/plugin actually lives on THIS box — completely
+  independent of the Bash tool's cwd. For `/ccxp`, that value is always
+  `<ccxp-skills-root>/ccxp`.
+- **This repo already has precedent for leaning on that fact instead of
+  cwd**: `repo-conventions/templates/task.md`'s own scaffold instructs
+  "Generate {ID} with `bash _taskid/new.sh --check ./dev`, resolved
+  relative to wherever the ccxp-skills plugin is installed (a loaded
+  skill's own directory, printed as 'Base directory for this skill' —
+  not a hardcoded path)." This task applies the same fact to `ccxp/SKILL.md`
+  itself, which currently does not.
+- **Scope of the 26 existing relative-path examples**: `grep -c
+  '\.\./_gh/\|\.\./_session/\|\.\./_ipm/\|\.\./_docs/\|\.\./_taskid/\|\.\./ccxp/scripts/'
+  ccxp/SKILL.md` → 26 occurrences across the file (Phase 0 through the
+  roadmap-update step near the end). Each already assumes cwd is *some*
+  sibling directory of `ccxp/`, `_gh/`, etc. — they don't need to change
+  content at all if that assumption is made TRUE once, up front, rather
+  than individually rewritten 26 times.
+
+## Solution
+
+- **Chosen direction: preflight `cd`, not a 26-line rewrite** (a
+  synthesis of candidate 1 "fail loudly" + candidate 2 "self-locating" +
+  candidate 3's implicit assumption that a *consistent* cwd contract is
+  fine, made explicit and derived from a fact the session already has
+  rather than left implicit):
+  1. Insert one new instruction as the very first thing under
+     `## Workflow`, before `### Phase 0: Sync`'s first script call:
+     derive `SKILLS_ROOT` as the parent of the "Base directory for this
+     skill" value reported when `/ccxp` was loaded (i.e. this exact
+     skill's own directory, one level up), then `cd` there before
+     anything else runs.
+  2. Preflight-verify the derivation with a loud, specific failure — not
+     a bare "No such file or directory" from whatever the *first* `../`
+     call happens to be: check `[ -x "$SKILLS_ROOT/_gh/gh.sh" ]` and
+     error out with the exact `SKILLS_ROOT` value tried and a pointer
+     back to the reported Base directory if it doesn't hold.
+  3. **Every other `../X/Y.sh` example in the file stays byte-for-byte
+     unchanged.** Once cwd is `$SKILLS_ROOT/ccxp` (or any of its direct
+     children) for the rest of the session, `../_gh/gh.sh` etc. all
+     resolve exactly as written today — this was true for every
+     interactive session all along; the fix only makes it true for a
+     cron session whose cwd started somewhere else entirely.
+- **Alternatives rejected**:
+  - *Rewrite all 26 `../X/Y.sh` examples to `$SKILLS_ROOT/X/Y.sh`* —
+    rejected: a much larger diff (26 line edits vs. ~10 new lines) for
+    the same outcome, and every *future* script-invocation example added
+    to this 992-line file would need the same `$SKILLS_ROOT/`-prefix
+    discipline remembered and applied by hand — the `cd`-once approach
+    makes future additions automatically correct with zero extra
+    ceremony.
+  - *Document a required on-disk layout/symlink convention instead
+    (candidate 3, literally)* — rejected as the primary fix: it would
+    require every box's cron wrapper to be reconfigured to match a
+    documented contract, whereas deriving `SKILLS_ROOT` from the
+    already-reported Base directory works correctly on **any** box
+    without per-box setup, by construction.
+  - *Env var (`CCXP_SKILLS_ROOT`) as the primary mechanism* — rejected as
+    primary (an env var can be unset/stale, and needs a fallback anyway);
+    kept as a documented **override** only, since the Base-directory
+    derivation already covers the normal case token-free.
+- **The stale memory file** (`reference_skills_dir_actual_git_repo_path.md`)
+  lives in a *different* box's memory pool (the `build-pipeline-repo`
+  cron clone), not accessible from this clone/session — flagged as a
+  Done criterion for whoever runs on that box next, not something this
+  session can delete directly.
+
+## Test plan
+
+- [ ] Docs-class change (`*.md` only) — no BATS. Verification is markdown
+  parse + link check + frontmatter validity, per the Phase 3.0 classifier.
+- [ ] `bash design-score/scripts/score.sh` on this task file passes the
+  threshold before implementation
+- [ ] `npx markdownlint-cli2` on the edited `ccxp/SKILL.md` — 0 errors
+- [ ] Manual read-through: every one of the 26 existing `../X/Y.sh`
+  examples is confirmed to resolve correctly once `cd`'d into
+  `$SKILLS_ROOT/ccxp` (spot-checked against this actual checkout's
+  layout, not just asserted)
+- [ ] `bash _docs/doc-impact.sh origin/main` clean
+
+## Done criteria
+
+- [ ] New preflight `cd` + loud-failure check added at the top of `##
+  Workflow`, before Phase 0's first script call — `ccxp/SKILL.md:66`
+- [ ] All 26 existing relative-path examples (`ccxp/SKILL.md:73`
+  onward) verified unchanged and still correct under the new cwd
+  contract — manual read-through, `test plan` item
+- [ ] (left for a human on the `build-pipeline-repo` cron box — this
+  session has no access to that box's memory pool) delete the
+  now-redundant `reference_skills_dir_actual_git_repo_path.md` memory,
+  once that box confirms this fix covers what it was compensating for
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `ccxp/SKILL.md` | `66-68` (new preamble), 26 scattered examples unchanged | the fix target |
+| `repo-conventions/templates/task.md` | n/a (prose precedent) | the existing "Base directory for this skill" convention this task extends to `ccxp/SKILL.md` |
