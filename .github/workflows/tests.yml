@@ -61,6 +61,11 @@ jobs:
         shell: bash
       - run: python3 repo-conventions/scripts/test_lint_paragraphs.py -v
         shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_identifiers.py -v
+        shell: bash
+      - name: Internal-identifier scan (dev/TODO + dev/JOURNAL)
+        run: python3 repo-conventions/scripts/lint_identifiers.py --all .
+        shell: bash
   bats:
     runs-on: ubuntu-latest
     steps:
