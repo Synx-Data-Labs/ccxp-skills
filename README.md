@@ -104,7 +104,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
 | `eta` | Projected finish time for the current (or an explicit) task — elapsed vs. remaining estimation |
 | `new-task` | File a new task to the `dev/TODO` backlog |
-| `grill-me` | Adversarial frontier-round interview of a task/plan before implementation; the `/ccxp` Phase 2a.3 pre-IPM design pass |
+| `incept` | Adversarial frontier-round interview of a task/plan before implementation; the `/ccxp` Phase 2a.3 pre-IPM design pass |
 | `gcpr` (alias `land`) | Commit & push uncommitted changes, open a PR, hand off to `address-pr` |
 | `address-pr` | Address PR review comments, verify CI + hard gate, merge or notify |
 | `cleanup-branch` | Post-merge branch cleanup — a specific branch, a PR-merge sweep, or a bulk prune |

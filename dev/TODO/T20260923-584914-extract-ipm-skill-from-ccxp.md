@@ -17,7 +17,7 @@ source: conversation with @shine, 2026-09-23
   - `ccxp/SKILL.md:636` — 2a.1.5 Seed carry-over candidates
   - `ccxp/SKILL.md:642` — 2a.2 Pick candidates (Tier 2)
   - `ccxp/SKILL.md:650` — 2a.3 Pre-IPM design pass (interactive only,
-    calls `/grill-me`)
+    calls `/incept`)
   - `ccxp/SKILL.md:682` — 2a.4 Budget cut
   - `ccxp/SKILL.md:696` — 2a.5 Write ipm-weekly.md + tag Scheduled
   - `ccxp/SKILL.md:816` — 2a.5a Drain previous iteration (HARD GATE)
@@ -36,12 +36,12 @@ source: conversation with @shine, 2026-09-23
 
 ## Context
 
-- Companion to the `/grill-me` rename-and-vendor task (not yet filed —
-  tracked in this conversation, 2026-09-23): `/ipm`'s 2a.3 call site
-  should point at whatever shared design-interview skill that task
-  lands on. Not a hard blocker — this task's design work can start
-  independently, but the 2a.3 integration point should be revisited
-  once that task is filed and its final skill name is known.
+- Companion task T20260923-986928 (rename `/grill-me` to `/incept`,
+  vendor `grilling`'s mechanics) landed 2026-09-23: `/ipm`'s 2a.3 call
+  site should reference `/incept`, not `/grill-me` — `ccxp/SKILL.md`
+  Phase 2a.3 (the section this task extracts from) was updated to
+  `/incept` in that same PR, so carry that name forward when writing
+  the standalone `/ipm` skill rather than re-copying `/grill-me`.
 - Related to T20260922-201976 only in that this session parked driving
   it mid-`/drive` Phase 1 to make room for this planning conversation —
   the two tasks are otherwise unrelated in content.

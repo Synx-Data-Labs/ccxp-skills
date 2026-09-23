@@ -1,21 +1,22 @@
 ---
-name: grill-me
+name: incept
 description: Use when the user explicitly asks to grill, interview, or stress-test a plan or task before implementation, or when /ccxp Phase 2a.3 runs a pre-IPM design pass on a Tier 2 candidate
 disable-model-invocation: false
 argument-hint: "[task-id | free-text plan]"
 ---
 
-# Grill Me
+# Incept
 
 Stress-test a plan through structured adversarial questioning before any
 code is written. Model the plan as a **design tree** — every decision
 branches into the decisions that hang off it — and interview the user in
 rounds until every branch is resolved and nothing is silently assumed.
 
-Adapted from the Hermes `grill-me` skill (Rafael Zendron + Matt Pocock's
-`grilling`), re-shaped for this suite: the output lands in a `dev/TODO/`
-task file's Design section so `/ccxp` Phase 2a.3 and `/drive` Phase 2 can
-consume it.
+Vendors the frontier-round interview mechanics from Matt Pocock's
+`grilling` skill (`mattpocock/skills`) directly into this suite's own
+prose — no runtime dependency on that plugin — with the repo-specific
+wiring layered on top: the output lands in a `dev/TODO/` task file's
+Design section so `/ccxp` Phase 2a.3 and `/drive` Phase 2 can consume it.
 
 ## Argument
 
@@ -30,22 +31,26 @@ consume it.
 
 ### 1. Build the initial tree
 
-Read the task (or the idea) and sketch the design tree privately: goal →
-scope boundaries → each architectural choice → its edge cases and failure
-modes. Do not show the tree; it drives which questions come next.
+Read the task (or the idea) and model it as a **design tree**: every
+decision branches into the decisions that hang off it. Do not show the
+tree; it drives which questions come next.
 
-**Facts are your job; decisions are the user's.** Anything answerable from
-the environment — the codebase, `dev/guidelines.md`, an existing pattern in
-a sibling skill, CI config — look up yourself (`grep`, `read`, or a
-subagent for a heavy exploration). Never ask the user for a fact you could
-find. Only questions downstream of an exploration wait on it; ask the rest
-of the frontier now.
+**Finding facts is your job, never the user's.** When a frontier question
+needs a fact from the environment (the codebase, `dev/guidelines.md`, an
+existing pattern in a sibling skill, CI config), look it up yourself
+(`grep`, `read`, or dispatch a sub-agent for a heavy exploration) — never
+ask the user for anything you could find. Don't block on it: a running
+exploration is an unsettled prerequisite, so only the questions downstream
+of it wait for it to report; ask the rest of the frontier now. The
+**decisions** are the user's — put each to them and wait.
 
 ### 2. Frontier rounds
 
-The **frontier** is every decision whose prerequisites are already
-settled. Ask the whole current frontier in one message, numbered, each
-question carrying a recommended answer. Then stop and wait.
+Work the tree in **rounds**. The **frontier** is every decision whose
+prerequisites are already settled — the questions you can ask *now*
+without guessing at answers you haven't heard yet. Ask the whole frontier
+in one round, numbered, each question carrying a recommended answer. Then
+stop and wait.
 
 ```
 ❓ Q1 — <title>: <question, options if relevant>
@@ -55,9 +60,11 @@ question carrying a recommended answer. Then stop and wait.
 ➡️ Recommendation: <...>
 ```
 
-A question whose answer depends on another question still open in this
-round belongs to a **later** round. After each reply, recompute the
-frontier and ask the next round. Stop when the frontier is empty.
+Each round the user answers reshapes the tree: settled decisions push the
+frontier outward and unblock questions that depended on them. Recompute
+the frontier and ask the next round. A question whose answer depends on
+another question still open in this round belongs to a **later** round,
+not this one.
 
 Cover these branches in the tree:
 
@@ -74,7 +81,8 @@ Cover these branches in the tree:
 
 ### 3. Synthesis (frontier empty)
 
-Print:
+The session is done when the frontier is empty: every branch of the
+design tree visited, nothing left silently assumed. Print:
 
 1. **Decisions** — every settled decision as one bullet each
 2. **Open** — anything still undecided, and why it can wait
@@ -83,7 +91,8 @@ Print:
    a one-line reason if it differs from the task's current value
 5. Ask: "Aligned? Should I record this, or adjust anything?"
 
-Do not proceed until the user confirms.
+Do not act on it until the user confirms you have reached a shared
+understanding.
 
 ### 4. Record (task-id mode only)
 

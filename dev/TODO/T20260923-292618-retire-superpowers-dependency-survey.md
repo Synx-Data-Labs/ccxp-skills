@@ -30,8 +30,9 @@ source: conversation with @shine, 2026-09-23
   - `new-task/SKILL.md:33`, `skill-conventions/SKILL.md:10,66,80`,
     `repo-conventions/SKILL.md:107`, `spinup/SKILL.md:12,27,40` — softer
     references (analogy, deferred-to-for-generic-authoring)
-  - `grill-me/SKILL.md:125` — one scope-carve-out mention
-    (`superpowers:requesting-code-review`)
+  - `incept/SKILL.md:134` — one scope-carve-out mention
+    (`superpowers:requesting-code-review`; renamed from `grill-me` by
+    T20260923-986928, 2026-09-23)
 - Maintainer preference (this conversation, 2026-09-23): rely more on
   `ccxp-skills`' own XP-flavored conventions (design-score gate,
   quality-probe, the `/incept` interview skill once it lands) plus
