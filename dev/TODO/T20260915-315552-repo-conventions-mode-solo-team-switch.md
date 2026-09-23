@@ -47,8 +47,8 @@ scheduled: 2026-09-21
   `grep -qi "direct.to.main"` heuristic against `dev/guidelines.md` (falling
   back to `CLAUDE.md`).
 - Canonical **team** wording already exists verbatim as this repo's own
-  `## Branch and Merge Policy` (`dev/guidelines.md:11-17`) and its template
-  (`repo-conventions/templates/guidelines.md:11-17`) — reuse it exactly,
+  `## Branch and Merge Policy` (`dev/guidelines.md:11-20`) and its template
+  (`repo-conventions/templates/guidelines.md:11-20`) — reuse it exactly,
   don't invent new phrasing.
 - No canonical **solo** wording exists yet anywhere in-repo (grepped for
   `"no CI"` outside `SKILL.md` files — zero hits) — `claim/SKILL.md:28-29`'s
@@ -56,12 +56,15 @@ scheduled: 2026-09-21
   `main`, not feature-branch PRs."*) is the closest precedent and is reused
   near-verbatim as the new canonical block, since it already satisfies the
   detection heuristic by construction.
-- Existing scripts that call the GitHub API through the repo's `gh`
-  wrapper follow one seam consistently — an overridable `GH_SH` variable
-  defaulted to the sibling `_gh/gh.sh`, resolved relative to the script's
-  own directory (`address-pr/scripts/pre-merge-check.sh:24`,
-  `quality-probe/scripts/probe.sh:45`) — this task reuses that seam so
-  tests can stub `GH_SH` instead of hitting real GitHub.
+- `address-pr/scripts/pre-merge-check.sh:24` establishes the seam this
+  task reuses: an overridable `GH_SH` variable defaulted to the sibling
+  `_gh/gh.sh`, resolved *relative to the script's own directory* — so
+  tests can stub `GH_SH` instead of hitting real GitHub. **Not** the same
+  as `quality-probe/scripts/probe.sh:45`'s `QP_GH`, which hardcodes
+  `$HOME/.claude/skills/_gh/gh.sh` — exactly the retired symlink-install
+  layout `pre-merge-check.sh:21-22` calls out as deprecated (T20260914-871616).
+  `pre-merge-check.sh` is the pattern to follow; `probe.sh` is the
+  anti-pattern it replaced.
 
 ## Solution
 
@@ -78,27 +81,42 @@ scheduled: 2026-09-21
      "already in <mode> mode" and exit 0 — no doc rewrite, no API call
      (see Alternatives rejected on why this doesn't also reconcile
      protection state).
-  4. Rewrite the section: replace everything from the `## Branch and Merge
-     Policy` heading line up to (not including) the next `^##` heading (or
-     EOF) with the canonical block for the target mode (team = the exact
-     `dev/guidelines.md:11-17` wording; solo = the new canonical block,
-     Context above). Python-based in-place edit (same idiom as
-     `_ipm/stamp-scheduled.sh`'s frontmatter rewrite), so the replacement is
-     line-precise rather than a fragile shell regex.
-  5. **`team`**: verify CI is plausibly configured first — `.github/workflows/*.yml`
-     must exist in the repo root, else error (unless `--skip-ci-check`,
-     for repos whose CI lives outside GitHub Actions). Then:
+  4. **API call FIRST, doc rewrite SECOND** — deliberate ordering, not
+     arbitrary: the live GitHub state is the harder-to-recover-from side
+     (a stuck doc rewrite is just an uncommitted diff; a stuck protection
+     change is the repo's actual security posture), so it goes first and
+     the doc is only rewritten once it succeeds. If the API call fails,
+     exit non-zero **without touching the doc** — the repo is left in
+     whatever state it was already in (doc and reality still agree,
+     just not with what was requested), never in the "doc claims X, API
+     never confirmed it" drift state this task exists to prevent.
+     **`team`**: verify CI is plausibly configured first —
+     `.github/workflows/*.yml` must exist in the repo root, else error
+     (unless `--skip-ci-check`, for repos whose CI lives outside GitHub
+     Actions). Then:
      `bash "$GH_SH" api -X PUT repos/<owner>/<repo>/branches/main/protection --input -`
      with a body requiring PR-based merges but no named status checks or
      mandatory human approval (`required_status_checks.contexts: []`,
      `required_pull_request_reviews.required_approving_review_count: 0`,
      `enforce_admins: false`, `restrictions: null`) — deliberately loose:
-     the goal is "no direct push", not gating on specific check names or
-     blocking this suite's own auto-merge tier on a human reviewer.
-  6. **`solo`**: `bash "$GH_SH" api -X DELETE repos/<owner>/<repo>/branches/main/protection`
+     the goal is "no direct push", not gating on specific check names.
+     The `0`-count default matches this suite's default auto-merge tier
+     (`/address-pr` §3, CI-gated not human-review-gated); a repo that
+     wants the suite's separate wait-for-approval tier instead can raise
+     the count later via GitHub's own UI/API directly — this command
+     doesn't need to special-case that, it only sets the starting point.
+     **`solo`**: `bash "$GH_SH" api -X DELETE repos/<owner>/<repo>/branches/main/protection`
      — tolerate a 404 (no protection existed) as success; anything else
-     non-2xx is a real failure, reported and non-zero exit.
-  7. `--yes` skips a one-line interactive confirmation before the API
+     non-2xx is a real failure, reported and non-zero exit, doc untouched.
+  5. Only after step 4 succeeds: rewrite the section — replace everything
+     from the `## Branch and Merge Policy` heading line up to (not
+     including) the next `^##` heading (or EOF) with the canonical block
+     for the target mode (team = the exact `dev/guidelines.md:11-20`
+     wording; solo = the new canonical block, Context above). Python-based
+     in-place edit (same idiom as `_ipm/stamp-scheduled.sh`'s frontmatter
+     rewrite), so the replacement is line-precise rather than a fragile
+     shell regex.
+  6. `--yes` skips a one-line interactive confirmation before step 4's API
      call (`sync`'s own "always show a diff and ask before overwriting"
      precedent, `repo-conventions/SKILL.md:114`) — default requires it
      since this mutates live repo security settings; unattended callers
@@ -114,13 +132,14 @@ scheduled: 2026-09-21
     no-op path (step 3) already covers "you asked for the mode you're
     already in," and a dedicated drift-check is a separable future task if
     it turns out to matter in practice.
-  - *Require a minimum approving-review count for team mode* — rejected:
-    this suite's whole auto-merge tier (`/address-pr` §3.3,
-    `dev/guidelines.md`'s merge method) merges automatically once CI is
-    green with no human reviewer in the loop; a required human approval
-    would break that tier for every repo that opts into team mode via this
-    command, contradicting what "team mode" means *in this specific
-    toolset* (CI-gated, not human-review-gated).
+  - *Default to a minimum approving-review count > 0 for team mode* —
+    rejected as the **default**, not as a capability: this suite's
+    default auto-merge tier merges once CI is green, no human reviewer in
+    the loop, so a >0 default would fight the common case out of the box.
+    The suite's own wait-for-approval tier already covers repos that want
+    mandatory human review — they get there by raising the count via
+    GitHub's UI/API after this command runs, not by this command guessing
+    which tier a given repo wants.
   - *Auto-populate `required_status_checks.contexts` from the repo's
     actual workflow job names* — rejected for this pass: job names aren't
     stable across a repo's CI evolution, and a wrong/stale context list
@@ -136,7 +155,7 @@ scheduled: 2026-09-21
   - [ ] `solo` on a fresh team-mode fixture doc rewrites the Policy section
     to the solo wording (heuristic now matches "no ci" + "direct.to.main")
   - [ ] `team` on a solo-mode fixture rewrites to the exact
-    `dev/guidelines.md:11-17` wording
+    `dev/guidelines.md:11-20` wording
   - [ ] `team` calls `$GH_SH api -X PUT .../branches/main/protection` with
     the expected JSON body (asserted via the recorded stdin)
   - [ ] `solo` calls `$GH_SH api -X DELETE .../branches/main/protection`
@@ -174,6 +193,12 @@ scheduled: 2026-09-21
   `drive/SKILL.md` themselves)
 - [ ] Team mode refuses to enable protection with no CI configured, absent
   an explicit override — `tests/mode.bats`'s `--skip-ci-check` cases
+- [ ] (external, manual — left unchecked until performed) the real GitHub
+  branch-protection API call actually produces the intended protection
+  state, not just the stubbed call shape `tests/mode.bats` asserts on —
+  Test plan's disposable-repo manual check. Stubbed tests can't verify
+  GitHub's own API accepted the body as intended; this is the one
+  criterion that can only be confirmed against the genuine article.
 
 ## Repo file references
 
@@ -183,6 +208,6 @@ scheduled: 2026-09-21
 | `repo-conventions/SKILL.md` | `## Argument`, `## Workflow` | wire `mode {solo|team}` as a new argument/workflow section |
 | `claim/SKILL.md` | `27-33` | the existing solo-mode detection heuristic this script's output must keep matching |
 | `drive/SKILL.md` | `114` | the parallel solo-mode description, same heuristic |
-| `dev/guidelines.md` | `11-17` | canonical team wording, reused verbatim |
+| `dev/guidelines.md` | `11-20` | canonical team wording, reused verbatim |
 | `address-pr/scripts/pre-merge-check.sh` | `24` | `GH_SH` override seam precedent this script follows |
 | `tests/mode.bats` | new | test coverage (stubbed `GH_SH`, no real GitHub calls) |
