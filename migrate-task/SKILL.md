@@ -55,14 +55,25 @@ soup beyond the one optional preview flag.
    both repos briefly is safe; existing in neither is not): copy the file
    into target's `dev/TODO/`, strip `target-repo:`/`target-path:`, run
    target's `repo-conventions/scripts/lint_tasks.py --changed <file>` if
-   present, insert into target's `queue.md` via `mt-queue-insert` — append,
-   unless a task **already in the target queue** reads `status: Blocked by
-   T<id>` (`mt-target-blocked-by`), in which case insert immediately before
-   it. (The migrated task's own `blocks:` can't trigger this branch — step 4
-   already hard-failed if it were non-empty; this is the *other* direction,
-   where the task becomes someone else's blocker only once it lands in the
-   target queue.) Branch `t<id>-migrate-in`, commit, push, open PR, drive to
-   merge via `/address-pr`.
+   present, run `repo-conventions/scripts/lint_identifiers.py --changed
+   <file> --fix` (T20260919-231319 — genericize a known internal identifier
+   in the staged copy, or refuse outright when a hit has no safe
+   replacement), insert into target's `queue.md` via `mt-queue-insert` —
+   append, unless a task **already in the target queue** reads `status:
+   Blocked by T<id>` (`mt-target-blocked-by`), in which case insert
+   immediately before it. (The migrated task's own `blocks:` can't trigger
+   this branch — step 4 already hard-failed if it were non-empty; this is
+   the *other* direction, where the task becomes someone else's blocker
+   only once it lands in the target queue.) Branch `t<id>-migrate-in`,
+   commit, push, open PR, drive to merge via `/address-pr`.
+
+   **Implementation note**: today, `scripts/migrate.sh` only implements
+   this step's `--dry-run` preview (the staged-copy path, which the
+   internal-identifier check above IS wired into); the live push/PR-opening
+   half of step 6 — and with it, the `lint_tasks.py` call this bullet also
+   describes — remains an unimplemented stub (`migrate.sh`, `return 8`).
+   See `scripts/migrate.sh`'s own header comment and `tests/migrate_task.bats`
+   (repo root) for what's actually exercised.
 7. **Then remove from source**: `git mv` the file to
    `dev/JOURNAL/<today>-T<id>-<slug>.md`, set `status: Done` (matching
    `lifecycle.md`'s Status Flow enum — no `Closed` value exists), stamp
