@@ -17,3 +17,4 @@ reprioritize.
 - [T20260922-263110](T20260922-263110-todo-next-position-denominator-wrong.md): `todo-next.sh`'s "#N of M" denominator counts raw file lines, not task entries
 - [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md): `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
 - [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md): `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
+- [T20260922-270158](T20260922-270158-eta-2w-bucket-and-id-validation.md): `eta.sh` rejects the canonical `2w` estimation bucket and does not validate `T<id>` before globbing
