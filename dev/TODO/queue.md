@@ -8,8 +8,6 @@ reprioritize.
 
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
-- [T20260918-404944](T20260918-404944-pr-owner-unknown-for-stage-prs-new-task-file.md): `task_claim.sh pr-owner` always returns `unknown` for `/stage` PRs that introduce a brand-new task file
-- [T20260919-266165](T20260919-266165-address-pr-autopick-stalls-behind-permanently-blocked-oldest-pr.md): `/address-pr`'s bare auto-pick silently stalls forever behind a permanently-blocked oldest PR
 - [T20260922-195629](T20260922-195629-autopilot-waiting-outcome-ambiguity.md): Clarify whether `/autopilot`'s `WAITING` outcome is ever reachable from a bare `/drive` dispatch
 - [T20260922-229218](T20260922-229218-release-others-orphans-claimed-role.md): `_tc_release_others` clears `claimed_by` but leaves `claimed_role` orphaned
 - [T20260922-453135](T20260922-453135-add-eta-skill.md): Add `/eta` skill — estimate time-to-completion for the current task on hand
