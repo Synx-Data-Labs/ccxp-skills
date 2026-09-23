@@ -163,6 +163,64 @@ EOF
   grep -q "inject -i $REPO/.env.tpl -o $REPO/.env" "$OP_CALLS"
 }
 
+# A fake `op` whose `inject` always fails (T20260918-214522). $1, when set to
+# "vault", emits the exact "isn't a vault in this account" message the real
+# incident produced; otherwise a generic failure.
+_stub_op_failing() {
+  local kind="${1:-generic}"
+  cat >"$STUB_BIN/op" <<EOF
+#!/usr/bin/env bash
+echo "op \$*" >>"$OP_CALLS"
+if [ "\$1" = "inject" ]; then
+  if [ "$kind" = "vault" ]; then
+    echo '[ERROR] 2026/09/18 10:00:00 "Personal" isn'"'"'t a vault in this account' >&2
+  else
+    echo "[ERROR] some other op inject failure" >&2
+  fi
+  exit 1
+fi
+EOF
+  chmod +x "$STUB_BIN/op"
+}
+
+@test "pes-materialize-env reports failure (not materialized) and returns non-zero when op inject fails" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  _stub_op_failing generic
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO' 2>&1"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"materialized: $REPO/.env"* ]]
+  [[ "$output" == *"failed"* ]]
+}
+
+@test "pes-materialize-env gives an actionable hint for an account-mismatch failure" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  _stub_op_failing vault
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO' 2>&1"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"OP_ACCOUNT"* ]]
+}
+
+@test "pes-materialize-env passes --account to op inject when OP_ACCOUNT is set" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  _stub_op
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" OP_ACCOUNT="my.1password.com" \
+    bash -c "source '$SCRIPT'; pes-materialize-env '$REPO'"
+  [ "$status" -eq 0 ]
+  grep -q -- "--account my.1password.com" "$OP_CALLS"
+}
+
+@test "pes-materialize-env omits --account when OP_ACCOUNT is unset" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  _stub_op
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO'"
+  [ "$status" -eq 0 ]
+  ! grep -q -- "--account" "$OP_CALLS"
+}
+
 # ---------------------------------------------------------------------------
 # pes-direnv-allow
 # ---------------------------------------------------------------------------
@@ -211,6 +269,17 @@ EOF
   [ -f "$REPO/.env" ]
   grep -q "inject" "$OP_CALLS"
   grep -q "^direnv allow$" "$DIRENV_CALLS"
+}
+
+@test "1password-env-setup propagates a pes-materialize-env failure instead of silently succeeding" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  _stub_op_failing generic
+  _stub_direnv
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  DIRENV_CALLS="$BATS_TEST_TMPDIR/direnv_calls"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" DIRENV_CALLS="$DIRENV_CALLS" \
+    bash -c "source '$SCRIPT'; 1password-env-setup '$REPO'"
+  [ "$status" -ne 0 ]
 }
 
 @test "1password-env-setup defaults to the current directory when no path is given" {

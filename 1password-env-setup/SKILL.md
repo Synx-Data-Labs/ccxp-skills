@@ -38,7 +38,12 @@ directory.
 4. Materialize `<path>/.env` via `op inject -i .env.tpl -o .env`, unless
    `.env` is already newer than `.env.tpl` (same staleness check as the
    `.envrc` itself performs on every `cd`). If the `op` CLI isn't installed,
-   skip with install guidance rather than failing.
+   skip with install guidance rather than failing. A failed `op inject`
+   (wrong signed-in account, network, etc.) is reported as a failure — not
+   silently printed as "materialized" — and stops the workflow
+   (T20260918-214522). Set `OP_ACCOUNT` (e.g. `OP_ACCOUNT=my.1password.com`)
+   to pass `--account` through to `op inject` when the signed-in account
+   doesn't have the vault `.env.tpl` references.
 5. Run `direnv allow` in `<path>` so the new `.envrc` takes effect
    immediately. If `direnv` isn't installed, skip with install guidance.
 
