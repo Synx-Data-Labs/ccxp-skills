@@ -156,3 +156,38 @@ longer blocks every PR behind it.
 | `_session/task_claim.sh:800` (`_tc_pr_owner`) | 800-845 | The unchanged per-PR ownership resolver the new script calls once per candidate |
 | `todo/scripts/todo-next.sh` | whole file | The worked-example walk-and-skip pattern this task ports (T20260914-359646) |
 | `drive/SKILL.md` Phase 0 | | Calls bare `/address-pr` once per cycle — updated in lockstep (Phase 3.7 doc-freshness) to describe the walk-and-skip behavior instead of the retired `.[0]` one-liner |
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #101** (`t20260919-266165-impl`) — design PR #100 merged first (design-score
+  88/100), this PR carried the implementation.
+- All three Done criteria met (see checked boxes above): the new script + its 7-case BATS suite,
+  the `SKILL.md` §1 rewrite, and the behavior-parity gate. `bats tests/*.bats _docs/*.bats`:
+  733/733 passing. `shellcheck` clean on the new script. Manual run against this repo's real
+  (currently empty) open-PR list confirmed exit 0 / empty stdout.
+- An independent design-review round (on PR #100) flagged a real edge case — a transient
+  `unknown` verdict on an otherwise-`mine` oldest PR now causes the walk to skip to a
+  lower-priority candidate instead of deferring entirely. Verified against the actual resolver
+  (`_session/task_claim.sh:686-700,834`, no retry today) and documented as an accepted,
+  self-healing trade-off in `## Solution` above rather than adding retry logic (out of this
+  task's scope). A follow-up round confirmed the addendum satisfactorily resolved the concern.
+- No follow-up tasks filed — the fix is complete and self-contained; the flagged trade-off is
+  documented, not deferred.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): partial — code-class change; the BATS suite was
+  authored alongside the script (not strict red-first) but caught two real bugs on first run
+  (stderr leaking into a `run`-captured assertion, a grep-pattern mismatch) before any commit
+  landed, so it did its job as a correctness gate even though the sequencing wasn't pure red→green.
+- Verification (`superpowers:verification-before-completion`): yes — full BATS suite (733/733),
+  shellcheck, manual real-PR-list run, and `doc-impact.sh` (no further stale-doc flags beyond the
+  two already updated in this PR).
+- Systematic debugging (`superpowers:systematic-debugging`): no — no stuck-for-2-attempts test
+  failure; the two BATS test failures hit during authoring (stderr leaking into `run`'s captured
+  `$output`, and a grep pattern mismatch) were each root-caused and fixed on the first diagnosis.
+- Receiving code review (`superpowers:receiving-code-review`): yes — independent review dispatched
+  twice on the design PR (#100): round 1 found one real gap (the transient-`unknown` trade-off,
+  addressed via documentation, not code, after steelmanning it against the actual resolver code);
+  round 2 confirmed the addendum resolved it. Implementation PR (#101)'s own review round is
+  addressed via `/address-pr`.
