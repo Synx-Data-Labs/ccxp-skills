@@ -89,34 +89,63 @@ file (see that section for why) — so this case gets its **own** verdict,
   so the two are never confused and every existing caller/test of the 2-field
   function is untouched. Only called by `_tc_pr_owner`, and only as a
   fallback.
-- **`_tc_pr_has_task_link`** (new small helper, pure presence-check): fetches
-  the PR body and reports whether it contains **any** `Task:`-prefixed line
-  (the same `grep -iE '^[[:space:]]*Task:'` test `_tc_resolve_task_location`
-  itself uses at `_session/task_claim.sh:642`), independent of whether that
-  line's link is resolvable. Exists solely to gate the fallback correctly —
-  see the next bullet and the Design review's Finding 1.
+- **`_tc_pr_has_cross_repo_task_link`** (renamed from the first `_tc_pr_has_task_link`
+  draft, per Design review Finding A below — the old name/regex was broader
+  than what it needed to guard): fetches the PR body itself (its own `gh pr
+  view` call) and reports **true** iff the body has a `Task:`-prefixed line
+  containing an actual github blob-link URL — the **exact same two-stage
+  test** `_tc_resolve_task_location` uses to decide whether to take its
+  cross-repo branch at all (`_session/task_claim.sh:642-644`: line 642's
+  `Task:`-prefix grep piped into line 643's blob-URL grep — **both** stages,
+  not line 642 alone). A `Task:`-prefixed line with **no** link (a checklist
+  item, decoy text, unrelated prose) correctly reports **false** here, exactly
+  as it would never have sent `_tc_resolve_task_location` down the cross-repo
+  branch either — so the two functions can never disagree about which branch
+  `_tc_resolve_task_location` actually took. **Fails CLOSED on its own body
+  fetch failure**: report **true** ("assume a link is present, block the
+  fallback") rather than **false** — mirrors `_tc_resolve_task_location`'s own
+  fetch-failure fail-closed behavior (`_session/task_claim.sh:638-639`,
+  guarded by `tests/task_claim.bats:780`) so a transient API error can never
+  be misread as "no link -> safe to fall through."
 - **`_tc_pr_owner`**: call `_tc_resolve_task_location` first as today. On its
   failure, **do not** unconditionally fall back to
-  `_tc_resolve_task_location_head` — first check `_tc_pr_has_task_link`:
-  - **A `Task:` line IS present** (the cross-repo branch was taken and failed
-    — fetch error, ambiguous/decoy/mismatched link, wrong-id link): print
-    `unknown` and **stop**, exactly as today. **Never** fall through to the
-    same-repo head-ref search in this case — doing so would resolve a
+  `_tc_resolve_task_location_head` — first check
+  `_tc_pr_has_cross_repo_task_link`:
+  - **True** (a `Task:` line with a real blob link is present — the
+    cross-repo branch was taken and failed: fetch error, ambiguous/decoy/
+    mismatched link, wrong-id link — **or** this helper's own fetch failed):
+    print `unknown` and **stop**, exactly as today. **Never** fall through to
+    the same-repo head-ref search in this case — doing so would resolve a
     same-repo id-prefix match in *this* repo's `dev/TODO`/`dev/PARKING`
     without ever having validated the PR's own (failed) cross-repo claim,
     silently reintroducing the exact fail-closed violation
     `resolve_task_location: body-fetch FAILURE fails closed (no same-repo
     fall-through)` (`tests/task_claim.bats:780`) and the ambiguous-link tests
     (`:773`, `:788`, `:796`) already guard against — one layer up, in the
-    caller instead of the callee. This is the scenario the fallback must
-    **not** cover; only the genuine "`/stage` same-repo, no `Task:` line at
-    all" case may use it.
-  - **No `Task:` line present** (the actual `/stage` same-repo scenario this
-    task fixes — a same-repo PR never carries one): call
-    `_tc_resolve_task_location_head`. If it also fails, print `unknown` (fully
-    unresolvable, same fail-safe as today). If it succeeds, record that this
-    resolution came from the head ref (a local flag) plus that ref (for the
-    `claimed_by` fetch below) — never mix the two code paths.
+    caller instead of the callee.
+  - **False** (no `Task:` line at all, **or** a `Task:`-prefixed line with no
+    blob link — either way, `_tc_resolve_task_location` itself would have
+    gone straight to its same-repo branch, which is exactly the `/stage`
+    scenario this task fixes): call `_tc_resolve_task_location_head`. If it
+    also fails, print `unknown` (fully unresolvable, same fail-safe as
+    today). If it succeeds, record that this resolution came from the head
+    ref (a local flag) plus that ref (for the `claimed_by` fetch below) —
+    never mix the two code paths.
+
+  **Correction to an earlier draft**: this design previously asserted "a
+  same-repo PR never carries a `Task:` line" — that's false as stated. PR #85
+  (see [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md),
+  a related, separately-tracked bug) is a real same-repo PR whose body *did*
+  carry a `Task:` line with a genuine blob link (pointing at a not-yet-merged
+  JOURNAL path). This design's gate handles that case correctly regardless —
+  it reports `unknown` for it (matching `_tc_resolve_task_location`'s real
+  cross-repo-branch failure on that path), which is the *other* task's
+  problem to fix, not a regression introduced here. The claim this design
+  actually depends on is narrower and still true: `/stage`'s own PR-body
+  template (`stage/SKILL.md`) never itself *writes* a `Task:` line — only
+  `/gcpr`'s cross-repo convention does (`gcpr/SKILL.md:221`) — so the
+  ordinary, unmodified `/stage` PR this task targets has no such line, and
+  correctly falls through.
   Read `claimed_by` via `_tc_fetch_fm_field ... "$ref"` (`main` in the normal
   case, the head SHA in the fallback case). Then:
   - If the resulting decision is `mine` or `owned:<by>`: print that verdict
@@ -207,7 +236,7 @@ file (see that section for why) — so this case gets its **own** verdict,
      whose `Task:` link is ambiguous/mismatched/unfetchable (cases
      `tests/task_claim.bats:773,780,788,796` deliberately guard as fail-closed)
      would also fall through to the same-repo head-ref search, one layer up
-     from where those tests protect. Fixed by adding `_tc_pr_has_task_link`
+     from where those tests protect. Fixed by adding a presence-check helper
      and gating the fallback on "no `Task:` line at all" specifically.
   2. **(Low-Medium, addressed above)** the `new` claim procedure had no
      documented "lost the race" step, unlike `free`'s step 3. Added an
@@ -216,6 +245,37 @@ file (see that section for why) — so this case gets its **own** verdict,
      wording for `_session/task_claim.sh:623-680` read as "modify this
      function," re-introducing the interface ambiguity Finding 2 (first pass)
      already fixed in prose. Reworded to say "unchanged."
+- 2026-09-22 (third pass): a fresh independent review of the second-pass
+  gating fix found it was itself scoped wrong:
+  1. **(High, addressed above)** the presence-check (then `_tc_pr_has_task_link`)
+     matched on the mere presence of a `Task:`-prefixed line
+     (`_session/task_claim.sh:642` alone) — but `_tc_resolve_task_location`
+     only takes its cross-repo branch when that line **also** contains a
+     github blob-link URL (line 642 **and** 643 together, `if [ -n "$links"
+     ]` at 644). A `Task:`-prefixed line with no link (unrelated prose, a
+     checklist item) never sends `_tc_resolve_task_location` down the
+     cross-repo branch — it falls straight to the same-repo branch, which is
+     exactly the genuine `/stage` scenario this task fixes. Under the
+     second-pass gate, that case would have wrongly reported `unknown`,
+     reproducing the original bug. Fixed: renamed to
+     `_tc_pr_has_cross_repo_task_link` and rewritten to check the **same
+     two-stage condition** `_tc_resolve_task_location` itself uses, so the
+     two functions can never disagree about which branch was taken.
+  2. **(Medium, addressed above)** the presence-check's own fetch-failure
+     behavior was unspecified — a naive implementation could report "no
+     link" (and fall through) on a transient API error, silently
+     reintroducing the same fail-closed violation Finding 1 (second pass)
+     fixed, one layer further down. Fixed: the helper now fails CLOSED on its
+     own fetch failure (reports "link present," blocking the fallback),
+     mirroring `_tc_resolve_task_location`'s own fetch-failure behavior.
+  3. **(Low, cosmetic, addressed above)** the Repo file references table row
+     described both new functions as sharing "a 3-field return" — only
+     `_tc_resolve_task_location_head` has that shape;
+     `_tc_pr_has_cross_repo_task_link` is a plain boolean presence-check.
+     Split into two rows.
+  Also corrected a now-known-false categorical claim ("a same-repo PR never
+  carries a `Task:` line") surfaced during this pass — see the Solution
+  section's "Correction to an earlier draft" note.
 
 ## Test plan
 
@@ -280,12 +340,26 @@ file (see that section for why) — so this case gets its **own** verdict,
       procedure (checkout the PR's own branch, not a fresh branch off `main`,
       including the "lost the race" step) — text review at PR time, not
       bats-testable (it's operator-facing documentation, not code).
+- [ ] `_tc_pr_has_cross_repo_task_link` reports true only when the body has a
+      `Task:`-prefixed line **containing a github blob-link URL** (the exact
+      `_tc_resolve_task_location:642-644` condition) — never on bare
+      `Task:`-line presence alone, and never `false` on its own fetch
+      failure — both new unit tests below.
 - [ ] A cross-repo PR whose `Task:` link fails to resolve for any of the
       pre-existing reasons (ambiguous, ID mismatch, fetch failure) still
       returns `unknown` from `_tc_pr_owner` and never reaches
       `_tc_resolve_task_location_head` — `tests/task_claim.bats` test
       `pr-owner: cross-repo Task: link present but unresolvable -> unknown,
       NEVER falls through to the same-repo head-ref search`.
+- [ ] New unit test: `pr-owner: body has a Task:-prefixed line with NO blob
+      link (not a real cross-repo pointer) -> still falls through to the
+      head-ref search, verdict new` — the negative counterpart to the item
+      above; guards Design review (third pass) Finding A — a `Task:`-worded
+      line alone must never block the fallback, only an actual blob link
+      does.
+- [ ] New unit test: `pr_has_cross_repo_task_link: its own body-fetch failure
+      fails CLOSED (reports "link present", blocking the fallback)` — guards
+      Design review (third pass) Finding B.
 
 ## Root cause
 
@@ -314,7 +388,8 @@ file (see that section for why) — so this case gets its **own** verdict,
 | File | Lines | Purpose |
 |---|---|---|
 | `_session/task_claim.sh` | 623-680 | `_tc_resolve_task_location` — same-repo `main`-only lookup; **unchanged**, cited only as the insertion point for the new function on the next row |
-| `_session/task_claim.sh` | (new, after 680) | `_tc_resolve_task_location_head` + `_tc_pr_has_task_link` — new functions; a 3-field return, never sharing `_tc_resolve_task_location`'s 2-field contract |
+| `_session/task_claim.sh` | (new, after 680) | `_tc_resolve_task_location_head` — new function; a 3-field return, never sharing `_tc_resolve_task_location`'s 2-field contract |
+| `_session/task_claim.sh` | (new, near `_tc_resolve_task_location`) | `_tc_pr_has_cross_repo_task_link` — new function; plain boolean presence-check (exit status), no return-shape contract; mirrors `_tc_resolve_task_location`'s own 642-644 two-stage test exactly |
 | `_session/task_claim.sh` | 682-693 | `_tc_fetch_fm_field` — hardcoded `?ref=main`; add optional ref arg |
 | `_session/task_claim.sh` | 739-764 | `_tc_pr_owner` — thread the resolved ref through to the `claimed_by` fetch |
 | `tests/task_claim.bats` | 581-880 | Existing `pr-owner`/`resolve_task_location` bats coverage; add new cases alongside |
