@@ -302,10 +302,12 @@ for a week — still worth a sweep, just a rarer one now.
 5. Record the swept task IDs in the Phase 5 report's `## Journal sweep` section
    (below) so the maintainer sees what moved.
 
-**Immediate-close exception**: a task closed via `/drive`'s `--immediate`
-override (`Priority: P0` or customer-visible — see `/drive` Phase 4) already
-moved straight to `dev/JOURNAL/` at merge time and never appears in this sweep
-— that's by design, not a miss.
+**Why most weeks find nothing to sweep**: since T20260914-422854, every task
+`/drive` closes journal-moves immediately at merge time (see Phase 2b's own
+header above) — so a task that went through `/drive`'s close never appears in
+this sweep, by design, not a miss. What this sweep actually catches is the
+backstop case: a task closed by hand, or by a session that predates that
+change.
 
 ### Phase 3: Metrics snapshot
 
