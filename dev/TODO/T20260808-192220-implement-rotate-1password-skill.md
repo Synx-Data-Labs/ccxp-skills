@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Open — SUPERVISED (needs a human: live 1Password/GitHub-secret rotation against a real vault, and the referenced upstream design doc at your-org/hub-repo is not accessible from this clone)
 estimation: 1d
 related: T20260806-374741, T20260806-240910
 source: 2026-08-08 conversation — follow-on from T20260806-374741's finalized design
