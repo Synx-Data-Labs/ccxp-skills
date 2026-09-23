@@ -79,6 +79,29 @@ Any other top-level key is a violation. `status` must lead with a known value (O
   place and never fails the commit; `lint_refs.py --all` (wired into `lint.sh`, read-only) reports
   and fails on any unlinked-but-linkable ref.
 
+### Internal-identifier check (`lint_identifiers.py`)
+
+`repo-conventions/scripts/lint_identifiers.py` catches company-internal identifiers before they
+reach a public repo (T20260919-231319) — two independent signal classes:
+
+- **Structural checks, zero config** (on by default, no identifiers hardcoded): private IPv4
+  ranges, GitHub/AWS-style credential tokens, personal absolute home-dir paths (`/home/<name>`
+  outside a small generic allowlist of CI-runner/cloud-image default account names).
+- **An optional denylist, injected only via env var/file, never committed** —
+  `INTERNAL_IDENTIFIERS`/`INTERNAL_IDENTIFIERS_FILE` (company/product terms + real personal names,
+  each optionally `term=placeholder` for a suggested replacement) and `INTERNAL_PRIVATE_REPOS`
+  (private repo slugs, checked against `github.com/<org>/<repo>` links). Unset → empty → a no-op,
+  the same env-var-config-not-committed-data posture as `lint_refs.py`'s `KNOWN_SIBLING_REPOS`
+  above — this is what keeps the check itself company-agnostic.
+
+`--all` defaults to `dev/TODO/*.md` + `dev/JOURNAL/*.md` (same `lint_refs.py`-style scope) — a
+whole-repo scan is available but not the CI-wired default; it produced false positives from
+illustrative example IPs and synthetic test-fixture paths elsewhere in this repo, well outside the
+task/journal-authoring channel the two real leak incidents both came through. `--fix` substitutes
+any denylist hit that carries a mapped placeholder; a hit with no mapping (or any structural hit)
+still fails even under `--fix` — nothing safe to substitute — which is what gives `/migrate-task`
+(see that skill) its genericize-or-refuse behavior on its `--dry-run` staged copy.
+
 ### Authoring a skill
 
 To author or edit a SKILL.md, use the `/skill-conventions` skill — it documents this suite's conventions (Use-when descriptions, dual invocation, argument design, `_<prefix>/` shared libs, BATS, structure) and defers generic authoring to `superpowers:writing-skills`.
@@ -102,6 +125,7 @@ Checks (each is a separate exit-code-bearing assertion):
 - `dev/guidelines.md` mentions "TODO Lifecycle"
 - each `dev/TODO/` + `dev/PARKING/` file conforms to the task-frontmatter schema (`lint_tasks.py --all`)
 - every `T<id>` / typed `PR #N`/`issue #N` reference in `dev/TODO/` + `dev/JOURNAL/` is a clickable link (`lint_refs.py --all`)
+- `dev/TODO/` + `dev/JOURNAL/` carry no internal identifier — company/personal denylist hit (config-driven, unset by default), private IPv4, credential token, or personal home path (`lint_identifiers.py --all`)
 
 Report `✅` per check or `❌ <reason>` and exit non-zero on any failure.
 
