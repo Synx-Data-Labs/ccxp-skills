@@ -1,8 +1,10 @@
 ---
-status: Open
-scheduled: 2026-09-28
+status: Coding
+scheduled: 2026-09-21
 estimation: 15m
 source: Claude Code review on an internal consumer-repo claim PR, 2026-09-22
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
 ---
 
 # T20260922-229218: `_tc_release_others` clears `claimed_by` but leaves `claimed_role` orphaned
