@@ -231,7 +231,7 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
       `test_lint_identifiers.py` `PrivateRepoLinkTest` (3 tests, all pass)
 - [x] Unit: `--fix` substitutes mapped hits and refuses (non-zero) on any
       unmapped/structural hit — `test_lint_identifiers.py` `ApplyFixTest` +
-      `MainCliTest` (6 tests, all pass; 23/23 total in the module)
+      `MainCliTest` (6 tests, all pass; 29/29 total in the module after review fixes)
 - [x] Local: `bash repo-conventions/scripts/lint.sh` reports the new check
       ("dev/ internal identifiers... ✅ no internal identifiers found")
 - [x] CI: `tests.yml`'s `lint-tasks` job runs `lint_identifiers.py --all`
@@ -275,14 +275,21 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
   exercised by unit tests only (no real company denylist configured
   anywhere in this repo, by design — see `## Solution`'s "Key design
   call"), which is the intended end state for `ccxp-skills` itself.
-- Two real corrections surfaced and fixed during the process, both
-  recorded in `## Solution`/`## Root cause` above with the evidence:
-  a wrong `lint_refs.py` line citation and a commit misattributed to
-  `/migrate-task` before that skill existed (both caught by an
-  independent Claude Code review on the design PR, #103), and a
-  false-positive-driven scope narrowing (`--all` restricted to
-  `dev/TODO`/`dev/JOURNAL`) discovered by running the implementation
-  against this repo's actual content before opening #104.
+- Several real corrections surfaced and fixed across both review rounds:
+  - Design PR #103 (independent review): a wrong `lint_refs.py` line
+    citation, and a commit misattributed to `/migrate-task` before that
+    skill existed — both caught pre-implementation.
+  - Implementation, pre-PR: a false-positive-driven scope narrowing
+    (`--all` restricted to `dev/TODO`/`dev/JOURNAL`) discovered by
+    running the check against this repo's actual content before opening
+    #104.
+  - Implementation PR #104 (independent review, post-open): two real
+    bugs — an own-repo-slug exclusion that silently defeated the
+    `/migrate-task` integration's private-repo-link check (fixed with a
+    new `--no-own-repo-exclusion` flag), and a `re.sub` replacement-
+    string escaping bug in `apply_fix()` (fixed with a lambda
+    replacement). Both reproduced RED before the fix, confirmed GREEN
+    after, with a dedicated regression test each (unit + bats).
 - No follow-up tasks filed — the one open gap (the `/migrate-task` live
   push/PR-opening flow being an unimplemented stub) is pre-existing,
   already out of this task's scope, and now explicitly documented as
@@ -293,7 +300,7 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 - TDD (`superpowers:test-driven-development`): yes — Phase 3.0 classified
   this code-class; wrote `test_lint_identifiers.py` first, watched it fail
   on `ModuleNotFoundError` (RED), then implemented `lint_identifiers.py`
-  to 23/23 green
+  to 23/23 green (later 29/29 after two review-fix regression tests)
 - Verification (`superpowers:verification-before-completion`): yes —
   Phase 3.6, run right after implementation: fresh unit-test run, full
   736-test bats suite, and a live `--all` scan against real repo content,
@@ -302,8 +309,10 @@ New script `repo-conventions/scripts/lint_identifiers.py`, same shape as
 - Systematic debugging (`superpowers:systematic-debugging`): no — no
   stuck point; the false-positive finding was resolved on first
   investigation (empirical `--all` run → clear root cause → scope fix)
-- Receiving code review (`superpowers:receiving-code-review`): yes — an
-  independent review agent on design PR #103 found 3 real issues (a wrong
-  line citation, a misattributed commit, and a `/migrate-task` integration
-  point that assumed unimplemented code); all three verified independently
-  via `git log`/`git show`/`grep` and fixed, none pushed back on
+- Receiving code review (`superpowers:receiving-code-review`): yes, twice
+  — design PR #103's independent review found 3 real issues (a wrong line
+  citation, a misattributed commit, a `/migrate-task` integration point
+  assuming unimplemented code); implementation PR #104's found 2 more real
+  bugs (own-repo-slug exclusion inversion, a `re.sub` replacement escaping
+  bug). All 5 verified independently (`git log`/`git show`/`grep`, or a
+  reproduced RED/GREEN cycle) and fixed; none pushed back on
