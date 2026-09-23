@@ -25,3 +25,4 @@ reprioritize.
 - [T20260924-366770](T20260924-366770-statusline-last-input-slug.md): Add a last-user-input slug to the statusline
 - [T20260924-144072](T20260924-144072-add-memory-to-skill-standalone-skill.md): Add /memory-to-skill: standalone, single-clone memory review skill
 - [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
+- [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
