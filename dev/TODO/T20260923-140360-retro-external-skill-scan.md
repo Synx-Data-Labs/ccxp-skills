@@ -45,9 +45,7 @@ estimation: 1d
   - Cadence — every retro, or a slower interval (monthly)?
   - How to diff "does something similar" without just re-reading every
     other skill's SKILL.md in full each run (cost/signal tradeoff).
-- Companion to the `/grill-me` rename-and-vendor task (not yet filed —
-  tracked in the 2026-09-23 conversation that produced this task): that
-  task is the first concrete instance of "we learned from another
-  skillset and vendored the useful part" — this task is about making
-  that discovery repeatable instead of one-off/manual.
-</content>
+- Companion task T20260923-986928 (rename `/grill-me` to `/incept`,
+  vendor `grilling`'s mechanics) is the first concrete instance of "we
+  learned from another skillset and vendored the useful part" — this
+  task is about making that discovery repeatable instead of one-off/manual.
