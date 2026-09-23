@@ -78,6 +78,15 @@ to a new bundled script, `address-pr/scripts/auto-pick.sh`:
 - Skips (does not pick) any PR whose verdict is `owned:<other>` or `unknown`, and continues to the
   next-oldest candidate — diagnostic detail (which PRs were skipped and why) goes to stderr, so
   stdout stays machine-parseable.
+- **Accepted trade-off (flagged in independent review of this design):** a transient `unknown`
+  (e.g. a flaky `gh`/fetch call) on an otherwise-`mine` true-oldest PR now causes the walk to skip
+  past it and possibly auto-pick a lower-priority PR instead, whereas today's single-candidate
+  check would defer entirely (safer but fully blocked). This is accepted as-is, not retried: §1.6
+  already treats every `unknown` as fail-safe-skip with no retry today (`_tc_pr_owner`,
+  `_session/task_claim.sh:834`'s `_tc_fetch_fm_field` failure path), so this task's walk inherits
+  an existing, unaddressed characteristic rather than introducing a new one — adding retry logic
+  here would be scope creep beyond the stalling-forever bug this task fixes. The next `/drive`
+  cycle re-resolves ownership fresh, so a transient miss self-heals within one cycle.
 - If every open PR is deferred (or there are none), prints nothing on stdout and exits 0 — same
   observable behavior as today's "no open PRs to address" / "defers silently" outcome, just
   reached only after actually checking every candidate instead of stopping at position 0.
