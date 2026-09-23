@@ -204,7 +204,15 @@ def apply_fix(text, findings):
     unmapped = []
     for f in findings:
         if f.category == "denylist" and f.suggestion:
-            new_text = re.sub(re.escape(f.term), f.suggestion, new_text, flags=re.IGNORECASE)
+            # A lambda replacement is used verbatim (never parsed for
+            # backreferences like \1 or \g<0>) -- re.sub DOES interpret
+            # escape sequences in a plain-string replacement (e.g. a
+            # literal "\n"/"\t" inside a pasted Windows-style path would
+            # silently become a real newline/tab, or raise re.error on an
+            # unrecognized escape), even though re.escape() already made
+            # the PATTERN side safe.
+            suggestion = f.suggestion
+            new_text = re.sub(re.escape(f.term), lambda _m: suggestion, new_text, flags=re.IGNORECASE)
         else:
             unmapped.append(f)
     return new_text, unmapped
@@ -231,12 +239,23 @@ def main(argv=None):
     ap.add_argument("--fix", action="store_true",
                      help="substitute denylist hits that carry a mapped "
                           "placeholder, in place")
+    ap.add_argument("--no-own-repo-exclusion", action="store_true",
+                     help="don't exempt repo_path's own slug from denylist/"
+                          "private-repo-link hits. Use this when repo_path "
+                          "is not the repo being protected -- e.g. "
+                          "/migrate-task invokes this script with its cwd "
+                          "at the SOURCE repo being migrated OUT of, which "
+                          "is exactly the repo an operator would list in "
+                          "INTERNAL_PRIVATE_REPOS; the default own-slug "
+                          "exclusion would then silently suppress the one "
+                          "hit this check exists to catch (found in "
+                          "independent review of T20260919-231319)")
     ap.add_argument("repo_path", nargs="?", default=".")
     args = ap.parse_args(argv)
 
     denylist = denylist_from_env()
     private_repos = private_repos_from_env()
-    own_slug = repo_slug(args.repo_path)
+    own_slug = None if args.no_own_repo_exclusion else repo_slug(args.repo_path)
 
     if args.changed is not None:
         files = [Path(f) for f in args.changed if Path(f).is_file()]

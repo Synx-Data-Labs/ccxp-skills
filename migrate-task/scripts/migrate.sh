@@ -259,10 +259,18 @@ migrate-task() {
     # identifier in the target repo silently. This is the only "land
     # destination" code path that exists today (the live, non-dry-run flow
     # below is an unimplemented stub) — see the design task's Solution #6.
+    #
+    # --no-own-repo-exclusion is REQUIRED here: this script's cwd is the
+    # SOURCE repo being migrated OUT of ($source_repo_root above), so
+    # lint_identifiers.py's default repo_path "." would resolve own_slug to
+    # that SOURCE repo -- exactly the repo an operator would list in
+    # INTERNAL_PRIVATE_REPOS. Without this flag, the own-slug exclusion
+    # would silently suppress the one hit this check exists to catch (a
+    # real bug caught in independent review of PR #104, fixed before merge).
     local lint_id_script
     lint_id_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/repo-conventions/scripts/lint_identifiers.py"
     if command -v python3 >/dev/null 2>&1 && [ -f "$lint_id_script" ]; then
-      if ! python3 "$lint_id_script" --changed "$staged" --fix; then
+      if ! python3 "$lint_id_script" --changed "$staged" --fix --no-own-repo-exclusion; then
         echo "migrate-task: internal-identifier check refused the staged copy (see output above) — disposition the finding(s), then retry" >&2
         return 9
       fi
