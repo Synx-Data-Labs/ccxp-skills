@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Coding — Design approved in-conversation 2026-09-23
 estimation: 4h
 source: conversation with @shine, 2026-09-23
 related: T20260923-584914
+claimed_by: cc1-9a4074da:94a83ff0e786a885
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260923-986928: Rename `/grill-me` to `/incept`, vendor `grilling`'s interview mechanics
