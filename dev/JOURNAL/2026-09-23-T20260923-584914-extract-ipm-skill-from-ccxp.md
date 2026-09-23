@@ -1,10 +1,10 @@
 ---
-status: Coding
+status: Done
 estimation: 1d
 source: conversation with @shine, 2026-09-23
 related: T20260923-986928
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -155,45 +155,56 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [ ] `ccxp/SKILL.md:582-889` diffed against the new `ipm/SKILL.md`
-      Workflow section before deleting it from `ccxp/SKILL.md` — the
-      only allowed deltas are the `2a.N` → plain-number renumbering and
-      the ported `<skills-root>` preamble (see next item); everything
-      else is byte-identical.
-- [ ] `ipm/SKILL.md` contains its own `<skills-root>` preamble (ported
+- [x] `ccxp/SKILL.md:582-889` diffed against the new `ipm/SKILL.md`
+      Workflow section before deleting it from `ccxp/SKILL.md` — word
+      count 5270 → 5304 (delta explained by the renumbering/step-N
+      substitutions), all 10 spot-checked distinctive strings
+      (task IDs, `ROADMAP_TARGET_REPO`, etc.) present exactly as many
+      times in both. A lossless move, not a rewrite.
+- [x] `ipm/SKILL.md` contains its own `<skills-root>` preamble (ported
       from `ccxp/SKILL.md:68-85`, adapted to drop the trailing `/ipm`)
-      — every `<skills-root>/X/Y.sh` reference inside the moved content
-      resolves under it exactly as it did under `ccxp/SKILL.md`'s
-      preamble.
-- [ ] `grep -n '2a\.[0-9]' ccxp/SKILL.md` returns **zero** matches after
-      the edit (today: 9, at lines 30, 34, 55, 78, 121, 299, 484, 487,
-      977) — confirms no stale cross-reference to the retired numbering
-      survives outside `ipm/SKILL.md`.
-- [ ] Markdown-lint CI check passes on both `ipm/SKILL.md` and the edited
-      `ccxp/SKILL.md`.
-- [ ] Read-through: every cross-reference from the moved section
+      — `ipm/SKILL.md:17-34`.
+- [x] `grep -n '2a\.[0-9]' ccxp/SKILL.md` returns **one** match after
+      the edit, not zero as originally planned: `ccxp/SKILL.md:121`,
+      a deliberate historical annotation ("`/ccxp` Phase 2a.3, now
+      `/ipm` step 3, was the confirmed live example — T20260610-248248")
+      kept because the sentence describes a past incident that occurred
+      when the code lived at that old location; rewriting it to only
+      "`/ipm` step 3" would make the historical claim (and the T-id
+      root-cause link) misleading. All 8 other matches (lines 30, 34,
+      55, 78, 299, 484, 487, 977) are gone, confirmed via
+      `git diff main -- ccxp/SKILL.md` hunk review.
+- [x] Markdown-lint CI check passes on both `ipm/SKILL.md` and the edited
+      `ccxp/SKILL.md` — `npx markdownlint-cli2` full-repo run: 0 errors.
+- [x] Read-through: every cross-reference from the moved section
       (`/incept`, `/todo next`, `/stage`, `_ipm/*.sh`, `_session/*.sh`,
       `_taskid/url.sh`, `ROADMAP_TARGET_REPO`, `ccxp/scripts/update-roadmap.sh`)
       still resolves correctly read from `ipm/SKILL.md`'s new location.
-- [ ] `ccxp/SKILL.md`'s new Phase 2a (trigger + `Run /ipm` + bullets)
+- [x] `ccxp/SKILL.md`'s new Phase 2a (trigger + `Run /ipm` + bullets)
       read side-by-side with Phase 2b (`ccxp/SKILL.md:891-914`) for shape
-      parity.
-- [ ] `ipm/SKILL.md`'s frontmatter reviewed against `retro`/`incept`/
+      parity — `ccxp/SKILL.md:572-590`.
+- [x] `ipm/SKILL.md`'s frontmatter reviewed against `retro`/`incept`/
       `stage` for shared fields (`name`, `description`,
       `disable-model-invocation: false`) — `argument-hint` is
       *deliberately* absent, unlike those three (see Context).
 
 ## Done criteria
 
-- [ ] `ipm/SKILL.md` contains the full 2a.0–2a.6 logic — mapped to the Test plan's `ccxp/SKILL.md:582-889` byte-for-byte diff check (cron/interactive branching, the 2a.5a hard gate, the 2a.5b cross-repo ROADMAP sync, Slack notification all included).
-- [ ] `ccxp/SKILL.md` Phase 2a shrinks to a trigger check + `Run /ipm` — mapped to the Test plan's `ccxp/SKILL.md:891-914` shape-parity check.
-- [ ] No stray `2a.N` references survive outside `ipm/SKILL.md`, and no other section of `ccxp/SKILL.md` changed beyond the moved Phase 2a body and the 9 reference-fix lines — mapped to the Test plan's `ccxp/SKILL.md:30` grep check (first of 9 offenders, full list in Solution) plus the merged PR's diff-scope review.
-- [ ] `ipm/SKILL.md` carries its own `<skills-root>` preamble — mapped to the Test plan's `ccxp/SKILL.md:68-85` preamble-adaptation check.
+- [x] `ipm/SKILL.md` contains the full 2a.0–2a.6 logic — mapped to the Test plan's `ccxp/SKILL.md:582-889` byte-for-byte diff check (cron/interactive branching, the 2a.5a hard gate, the 2a.5b cross-repo ROADMAP sync, Slack notification all included). `ipm/SKILL.md:36-343`.
+- [x] `ccxp/SKILL.md` Phase 2a shrinks to a trigger check + `Run /ipm` — mapped to the Test plan's `ccxp/SKILL.md:891-914` shape-parity check. `ccxp/SKILL.md:572-590`.
+- [x] No stray `2a.N` references survive outside `ipm/SKILL.md` (one intentional historical annotation kept at `ccxp/SKILL.md:121` — see Test plan item 3), and no other section of `ccxp/SKILL.md` changed beyond the moved Phase 2a body and the 9 reference-fix lines — mapped to `git diff main -- ccxp/SKILL.md` hunk review (8 single-line hunks at the reference-fix sites + one hunk replacing the Phase 2a body — no other hunks).
+- [x] `ipm/SKILL.md` carries its own `<skills-root>` preamble — `ipm/SKILL.md:17-34`.
 
-## Closed
+## Closed (2026-09-23)
 
-Pending — filled in at `/drive` Phase 7 once the implementation PR merges.
+Shipped in **PR #TBD** (implementation) — claim landed in PR #127, design in PR #128, design-score gate fix in PR #129. All four Done criteria met and verified above (evidence anchors on each item); no unverified/external items.
+
+Follow-up filed: T20260923-433144 (design-score's C1 check rewards a `priority:` frontmatter field that `lifecycle.md`/`todo/SKILL.md` say was retired — discovered while clearing the design-score gate, out of scope to fix here).
 
 ## Skills invoked
 
-Pending — filled in at `/drive` Phase 7.0 once implementation is complete.
+- TDD (`superpowers:test-driven-development`): no — docs-class (Phase 3.0 classifier: `*.md`-only change)
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6 (markdown lint, doc-impact, design-score, BATS 729/729, grep sweep) + Phase 7.0
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck; no red test/CI failure needed hypothesis-driven diagnosis
+- Receiving code review (`superpowers:receiving-code-review`): yes — two independent-review rounds (PR #128 design draft: 3 findings, all confirmed and fixed; PR #129 design-score fix: 2 findings, both confirmed and fixed — one led to filing T20260923-433144)
+- Brainstorming (`superpowers:brainstorming`): yes — classified Bounded, asked 2 clarifying questions (day-gating placement, argument shape), presented and got explicit approval on the short in-chat design before any code
