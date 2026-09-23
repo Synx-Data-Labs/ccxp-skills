@@ -70,12 +70,14 @@ every `<skills-root>/X/Y.sh` reference below means: take the "Base
 directory for this skill" value reported when this skill loaded (e.g.
 `/home/ci/ccxp-skills/ccxp`), drop the trailing `/ccxp`, and substitute
 that literal absolute path — never run these cwd-relative, and never
-`cd` into it. cwd must stay the **working/target repo** throughout this
-entire session, for the `dev/TODO/`, `dev/JOURNAL/`, `git log`, and
-`$(pwd)/dev` commands used elsewhere in this document — a `/ccxp`
-session's cwd is not guaranteed to sit anywhere inside the ccxp-skills
-checkout (a headless cron session's cwd is commonly the target repo
-instead). Before Phase 0's first command below, verify the substituted
+`cd` into it. cwd must stay the **working/target repo** for the
+`dev/TODO/`, `dev/JOURNAL/`, `git log`, and `$(pwd)/dev` commands used
+elsewhere in this document — a `/ccxp` session's cwd is not guaranteed
+to sit anywhere inside the ccxp-skills checkout (a headless cron
+session's cwd is commonly the target repo instead). (The one deliberate
+exception is 2a.5b's ephemeral roadmap clone, which `cd`s into its own
+throwaway directory for that phase only — not a case this preamble
+governs.) Before Phase 0's first command below, verify the substituted
 path is real and fail loudly if not:
 
 ```bash
@@ -457,7 +459,7 @@ for the day-by-day count). Don't let a failed send silently drop the day's stand
    <the *Daily Standup* (YYYY-MM-DD) mrkdwn block composed above>
    EOF
    )"
-   SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_DEV" bash ../slack/scripts/slack-send.sh "$STANDUP_MESSAGE"
+   SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_DEV" bash <skills-root>/slack/scripts/slack-send.sh "$STANDUP_MESSAGE"
    ```
 
    Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s
