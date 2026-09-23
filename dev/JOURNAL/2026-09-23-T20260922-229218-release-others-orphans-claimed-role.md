@@ -158,6 +158,12 @@ claimed_role:
   discussion — cosmetic-only, no data loss.
 - All done criteria met; CI verified green on the implementation PR before
   merge (see PR checks).
+- Quality probe (`dev/quality/metrics.jsonl`): 5 files, shellcheck
+  warning=1/info=3 (both pre-existing findings on `_tc_claimed_role`,
+  `_session/task_claim.sh:503-543` — SC2120/SC2119/SC1091, unrelated to this
+  task's line 603-604 change; first time this file entered a probe diff
+  range, not a regression this task introduced). Record+warn only, no
+  action taken per quality-probe's own never-block policy.
 
 ## Skills invoked
 
