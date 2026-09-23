@@ -1,11 +1,11 @@
 ---
-status: Coding
+status: Done
 scheduled: 2026-09-21
 estimation: 30m
 source: independent code-review agent on PR #115 (T20260922-453135), 2026-09-22
 related: T20260922-453135
-claimed_by: cc1-9a4074da:94a83ff0e786a885
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260922-270158: `eta.sh` rejects the canonical `2w` estimation bucket and doesn't validate `T<id>` before globbing
@@ -63,17 +63,17 @@ PR skipped per `/drive` Phase 2's skip condition.
 
 ## Test plan
 
-- [ ] BATS: `estimation: 2w` resolves to 1209600s (assert on `remaining:`
+- [x] BATS: `estimation: 2w` resolves to 1209600s (assert on `remaining:`
   text for a pinned commit date, per review finding #5's follow-on)
-- [ ] BATS: a malformed `T<id>` (e.g. containing `/` or `..`) is rejected
+- [x] BATS: a malformed `T<id>` (e.g. containing `/` or `..`) is rejected
   with a clear error before any glob runs
-- [ ] `bats tests/eta.bats` green locally and in CI
+- [x] `bats tests/eta.bats` green locally and in CI
 
 ## Done criteria
 
-- [ ] `2w` bucket resolves correctly — `tests/eta.bats`
-- [ ] malformed `T<id>` rejected — `tests/eta.bats`
-- [ ] `bats tests/eta.bats` green in CI (PR checks)
+- [x] `2w` bucket resolves correctly — `tests/eta.bats`
+- [x] malformed `T<id>` rejected — `tests/eta.bats`
+- [x] `bats tests/eta.bats` green in CI (PR checks)
 
 ## Root cause
 
@@ -91,3 +91,45 @@ PR skipped per `/drive` Phase 2's skip condition.
 | `eta/SKILL.md` | bucket list | Needs the `2w` addition too |
 | `tests/eta.bats` | new cases | Regression coverage |
 | `lifecycle.md` | `37`, `139` | Canonical bucket enum + task-id shape this fix conforms to |
+
+## Closed (2026-09-22)
+
+- Shipped in **PR #117** (claim in **PR #116**), fixing what PR #115
+  (T20260922-453135) shipped.
+- Added `2w) printf '1209600' ;;` to `eta_bucket_seconds`
+  (`eta/scripts/eta.sh`); updated the error message and `eta/SKILL.md`'s
+  bucket list.
+- Added a `^T[0-9]{8}-[0-9]{6}$` regex check on the `T<id>` CLI argument
+  immediately after parsing, before it reaches `eta_find_file`'s glob;
+  rejects with exit 2 and a clear message otherwise.
+- Also picked up the review's should-fix #3 (`--tz` validation accepting
+  zoneinfo *directories* via `-e` — changed to `-f`/`-L`) and hardened the
+  `--tz` override test (previously indistinguishable from "override
+  ignored" in a UTC-default sandbox) while in the file — both flagged by
+  the same review pass, cheap to fix alongside the two must-fixes.
+- 2 new BATS regression cases + 1 hardened case; `bats tests/eta.bats`
+  11/11 green locally and in CI (PR #117). shellcheck clean.
+- Not fixed: review nice-to-have #4 (duration-mapping test only checks the
+  `estimation:` echo, not the seconds value) and #5 (`eta_esc_id` escaping
+  narrower than legacy `claimed_by` shapes could need) — both flagged as
+  no-action-required/no live bug by the reviewer; left as-is rather than
+  padding this fix.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — wrote the two
+  regression BATS cases from the review's exact repro before touching
+  `eta.sh`, confirmed both failed (2w: "unrecognized estimation bucket";
+  malformed id: no rejection), then implemented the fixes to green.
+- Verification (`superpowers:verification-before-completion`): yes — ran
+  `bats tests/eta.bats` (11/11), shellcheck, markdownlint, manual checks of
+  all three fixes (2w bucket, malformed id rejection, `--tz America` now
+  correctly rejected) before opening the PR.
+- Systematic debugging (`superpowers:systematic-debugging`): no — both
+  bugs were already root-caused by the independent review; no debugging
+  needed, just implementation.
+- Receiving code review (`superpowers:receiving-code-review`): yes — this
+  entire task exists because of a code-review agent's findings on PR #115;
+  implemented all must-fix and should-fix items, explicitly declined the
+  two nice-to-haves with rationale recorded above rather than silently
+  ignoring them.

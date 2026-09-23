@@ -112,13 +112,20 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 }
 
 @test "--tz override changes the rendered finish time" {
+  # A CI/dev sandbox commonly defaults its own TZ to UTC, so asserting only
+  # "output contains UTC" after --tz UTC wouldn't distinguish "the override
+  # worked" from "the override was silently ignored and the default branch
+  # happened to also print UTC." Force the process TZ to something else so
+  # the override is the ONLY thing that can make America/New_York's
+  # abbreviation (EST/EDT) appear.
   local me; me="$(claimant_id "$WORK")"
   mk_task dev/TODO/T20260101-000001-x.md '1h' "$me"
   commit_dated "2026-01-01T00:00:00+00:00" 'claim task'
 
-  run_script --tz UTC T20260101-000001
+  TZ="Asia/Tokyo" run bash "$SCRIPT" --repo-root "$WORK" --tz America/New_York T20260101-000001
   [ "$status" -eq 0 ]
-  [[ "$output" == *"UTC"* ]]
+  [[ "$output" == *"ES"* || "$output" == *"ED"* ]]   # EST or EDT, never JST
+  [[ "$output" != *"JST"* ]]
 }
 
 @test "--tz with an invalid zone exits 2 with a clear error" {
@@ -139,4 +146,26 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   run_script T20260101-000001
   [ "$status" -eq 0 ]
   [[ "$output" == *"overdue by"* ]]
+}
+
+@test "estimation: 2w is a recognized bucket, not rejected (regression, T20260922-270158)" {
+  # lifecycle.md's canonical estimation enum includes 2w; commit "now" so
+  # elapsed is near-zero and this exercises the "remaining" (not overdue)
+  # branch, confirming eta_bucket_seconds actually mapped 2w to a real
+  # duration rather than failing "unrecognized estimation bucket".
+  local me; me="$(claimant_id "$WORK")"
+  mk_task dev/TODO/T20260101-000001-x.md '2w' "$me"
+  commit_dated "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" 'claim 2w task'
+
+  run_script T20260101-000001
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unrecognized estimation bucket"* ]]
+  [[ "$output" == *"estimation: 2w"* ]]
+  [[ "$output" == *"remaining:"* ]]
+}
+
+@test "a malformed T<id> argument is rejected before any file lookup (regression, T20260922-270158)" {
+  run_script 'T../../PARKING/x'
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"not a valid task id"* ]]
 }
