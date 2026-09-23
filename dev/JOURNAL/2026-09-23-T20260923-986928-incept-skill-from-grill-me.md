@@ -106,11 +106,17 @@ scheduled: 2026-09-21
       conflict). `git log --follow` verified after commit, below.
 - [x] `grep -rln "grill-me" --include="*.md" .` (repo root) returns
       `dev/JOURNAL/**` (historical, untouched) plus only self-descriptive
-      mentions describing the rename itself — this task's own filename,
-      `queue.md`'s title text for this task, and 3 companion tasks'
-      historical/forward-pointer prose (all updated to name `/incept`
-      going forward, per the cleanup this task's `## Context` flagged).
-      Zero *functional* cross-references to the old name remain.
+      mentions describing the rename itself — this task's own filename
+      and 3 companion tasks' historical/forward-pointer prose (updated
+      to name `/incept` going forward). One real issue caught by
+      independent PR review: `queue.md`'s entry for this task was an
+      actual functional link, and it broke when the journal-move
+      relocated the file — not a self-descriptive mention as first
+      assumed. Fixed by removing the line entirely (per `todo/SKILL.md`
+      Phase 1's own convention: a closed task's queue line is removed,
+      not struck through — that's for stale in-file blocker references,
+      a different case). Zero *functional* cross-references to the old
+      name remain, now actually verified rather than asserted.
 - [x] `python3 repo-conventions/scripts/lint_tasks.py`,
       `bash _docs/lint-docs.sh --fix`, `lint_paragraphs.py`, and
       `lint_refs.py --fix` all pass on every touched file.
