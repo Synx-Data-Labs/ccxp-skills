@@ -65,7 +65,8 @@ scheduled: 2026-09-21
 - **`/drive`**: make the immediate journal-move (currently the `--immediate`
   override path, `drive/SKILL.md:406`, `:560`) the **only** behavior — same-repo
   Phase 4 (`drive/SKILL.md:402-406`) and Phase 7 (`drive/SKILL.md:530-536`),
-  and cross-repo Phase 4 step 5 / Phase 7 (`drive/SKILL.md:549-566`). Retire the
+  and cross-repo Phase 4 step 2 (`drive/SKILL.md:413` — "Do NOT move the
+  task file to JOURNAL in this PR") / Phase 7 (`drive/SKILL.md:549-566`). Retire the
   in-place-only default and the `--immediate`/`P0`-suffix/customer-visible
   triggers that select between the two paths — there's only one path now.
   Keep the **order-of-operations guard** (`drive/SKILL.md:518`, `git mv` first,
