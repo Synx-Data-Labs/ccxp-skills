@@ -65,12 +65,29 @@ skill/argument surface.
 
 ## Workflow
 
+**`<skills-root>` placeholder, used throughout this document (T20260918-414727):**
+every `<skills-root>/X/Y.sh` reference below means: take the "Base
+directory for this skill" value reported when this skill loaded (e.g.
+`/home/ci/ccxp-skills/ccxp`), drop the trailing `/ccxp`, and substitute
+that literal absolute path — never run these cwd-relative, and never
+`cd` into it. cwd must stay the **working/target repo** throughout this
+entire session, for the `dev/TODO/`, `dev/JOURNAL/`, `git log`, and
+`$(pwd)/dev` commands used elsewhere in this document — a `/ccxp`
+session's cwd is not guaranteed to sit anywhere inside the ccxp-skills
+checkout (a headless cron session's cwd is commonly the target repo
+instead). Before Phase 0's first command below, verify the substituted
+path is real and fail loudly if not:
+
+```bash
+[ -x "<skills-root>/_gh/gh.sh" ] || { echo "ccxp: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
+```
+
 ### Phase 0: Sync
 
 Pull the latest code and skills, prune stale refs, and clean up local branches whose remote is gone. This ensures the TODO backlog, guidelines, and skill definitions are current — and `git branch` doesn't accumulate stale `t<id>-…` branches from merged PRs.
 
 ```bash
-bash ../ccxp/scripts/sync-and-prune-branches.sh
+bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh
 ```
 
 Fast-forwards the working repo and the shared skills repo, then deletes local branches whose remote tracking ref is gone (PRs already merged + remote branch auto-deleted by `gh pr merge --delete-branch`) — inlining the `/cleanup-branches` skill workflow so the cron-driven ccxp run stays self-contained, no nested skill dispatch needed. The `--prune` in its fetch step is the prerequisite for the branch cleanup — without it, `[gone]` markers don't appear, and the cleanup is a no-op. See `ccxp/scripts/sync-and-prune-branches.sh` for the full recipe.
@@ -84,7 +101,7 @@ One cheap, idempotent prune keeps session-coordination state lean.
 **1. Resolved drive-thread escalations.** `/drive` records Slack escalations in `.claude/state/drive-threads.json` (gitignored — local session state, never committed) and `/slack-check-reply` flips them to `resolved: true` once a reply lands. Resolved entries are dead weight: nothing reads them, but every `/drive` Phase 0.5 re-reads the whole file. Prune resolved entries older than 7 days (the grace window keeps recently-resolved threads scrollable):
 
 ```bash
-bash ../ccxp/scripts/prune-drive-threads.sh
+bash <skills-root>/ccxp/scripts/prune-drive-threads.sh
 ```
 
 Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the original untouched if `jq` errors (e.g. a malformed file). Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#claude-notification`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
@@ -92,7 +109,7 @@ Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the origina
 **3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released. The task stays `status: Coding`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations). On-demand reclaim covers the pick path; this sweep is the proactive backstop. Run it once per tick (active by default with peer mode; no-op only on the `CCXP_PEER_MODE=0` opt-out — symmetric with the lock):
 
 ```bash
-bash ../ccxp/scripts/reclaim-sweep-pr.sh
+bash <skills-root>/ccxp/scripts/reclaim-sweep-pr.sh
 ```
 
 No-op (prints nothing, exits 0) when `CCXP_PEER_MODE=0` or when the read-only detect pass finds nothing to reclaim — nothing branched, nothing committed. Otherwise it branches off main, applies the sweep, runs the doc-lint guard, commits, pushes, opens a PR, and returns to main (never leaves the cron working tree on a branch), printing the reclaimed-lines summary and the PR URL on stdout. Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to `#claude-notification` — a reclaimed task may have had real WIP, so a reclaim is never silent.
@@ -102,7 +119,7 @@ Detect-on-`main` → branch-only-if-work keeps the cron working tree clean. The 
 **4. Claim-gap detection.** The opposite failure mode from #3: a task whose status is `Coding` but whose `claimed_by` was never set — the gap left by any path that flips status via `_session/status.sh` (board visualization only, no lock) without also calling `task_claim.sh acquire` (`/ccxp` Phase 2a.3 was the confirmed live example — T20260610-248248, fixed above). Detector only, never mutates:
 
 ```bash
-bash ../_session/claim_gap.sh
+bash <skills-root>/_session/claim_gap.sh
 ```
 
 **Only `Coding` is flagged — `Design`/`Review` + empty `claimed_by` is NOT a gap** (corrected T20260809-310724, 2026-08-09, after this detector re-Slacked the same 7-task list every tick for a day, half of them genuinely misclassified): an abandoned-but-real design/review is the normal resting state of an unclaimed backlog item — `/todo next`'s peer-claim filter only skips a task when `claimed_by` is *non-empty*, so nothing is actually invisible to claim-based coordination there. Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one. `Coding` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
@@ -116,13 +133,13 @@ Generate a daily progress summary by reviewing yesterday's work.
 #### 1.1 Gather yesterday's data (parallel reads)
 
 1. **Git log**: `git log --since="yesterday 00:00" --until="today 00:00" --oneline --stat`
-2. **PRs merged yesterday**: `bash ../_gh/gh.sh pr list --state merged --search "merged:>=YYYY-MM-DD merged:<YYYY-MM-DD" --json number,title,mergedAt` (use yesterday's date then today's date)
-3. **PRs opened/updated**: `bash ../_gh/gh.sh pr list --state open --json number,title,updatedAt`
+2. **PRs merged yesterday**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>=YYYY-MM-DD merged:<YYYY-MM-DD" --json number,title,mergedAt` (use yesterday's date then today's date)
+3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
 4. **Journal entries**: Check `dev/JOURNAL/` for files dated yesterday
 5. **Current drive-threads**: Read `.claude/state/drive-threads.json` for unresolved escalations
 5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`. This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads. **The MCP slack user CAN read `#claude-notification` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts. **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
 6. **Previous ccxp summary**: Read the most recent `dev/JOURNAL/*-daily-summary.md` for continuity (for continuity only — never let a prior note about Slack-unreadability suppress step 5b)
-7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash ../_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes — see T20260604-194697). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit — first IPM happens this Monday" and skip the progress block in 1.2.
+7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash <skills-root>/_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes — see T20260604-194697). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit — first IPM happens this Monday" and skip the progress block in 1.2.
 
 #### 1.1a Cheap-hold short-circuit (Option C — T20260614-261293)
 
@@ -193,7 +210,7 @@ Determine the lookback window based on today:
 List **all** runs on main in the window (not just failures — we need the total count for the health summary):
 
 ```bash
-bash ../_gh/gh.sh run list --branch main --created ">=SINCE" --limit 100 \
+bash <skills-root>/_gh/gh.sh run list --branch main --created ">=SINCE" --limit 100 \
   --json databaseId,name,conclusion,createdAt \
   --jq '.[] | "\(.databaseId) \(.name) \(.conclusion) \(.createdAt)"'
 ```
@@ -263,7 +280,7 @@ Not every open PR needs a human — most are either actionable (Phase 0 will dra
 Fetch open PRs with body + mergeability (extends 1.1 step 3's PR list):
 
 ```bash
-bash ../_gh/gh.sh pr list --state open --json number,title,body,mergeable,updatedAt
+bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,body,mergeable,updatedAt
 ```
 
 Flag a PR as needing attention when **any** of:
@@ -271,7 +288,7 @@ Flag a PR as needing attention when **any** of:
 - Its body has an unchecked `- [ ]` pre-merge item whose text names a human decision (grep case-insensitive for `maintainer`, `your call`, `decision`, `approve`, `escalation`) — this is exactly the shape of a real incident: weeks open on a "maintainer release-strategy call ... no reply yet" item.
 - `mergeable` is `CONFLICTING`.
 - CI has been `failure` for 2+ consecutive checks (not a transient one-off that's likely to clear on retry).
-- Its task (resolve via `bash ../_session/pr_task_id.sh <number>`) has an unresolved entry in `.claude/state/drive-threads.json`.
+- Its task (resolve via `bash <skills-root>/_session/pr_task_id.sh <number>`) has an unresolved entry in `.claude/state/drive-threads.json`.
 
 For each flagged PR, record: PR number, title, and the one-line reason it's flagged (which condition above matched). Anything not flagged is left to Phase 0's normal drain — don't list it.
 
@@ -333,7 +350,7 @@ prints a one-line note instead of the heading's body when `ROADMAP_TARGET_REPO`
 is unset, `dev/EPICS.md` is unreadable, or no epics are defined yet — so this
 section, like Resolved/Nightly/Attention/Top-5, is never simply omitted.)
 
-{verbatim output of `bash ../ccxp/scripts/epic-status.sh render`}
+{verbatim output of `bash <skills-root>/ccxp/scripts/epic-status.sh render`}
 
 ## Weekly focus progress
 
@@ -376,7 +393,7 @@ shipped from the autonomous cron loop vs interactive sessions:
 
 ```bash
 # Default window = yesterday (matches the standup "Yesterday" frame).
-bash ../_session/attribution.sh table "$(pwd)/dev"
+bash <skills-root>/_session/attribution.sh table "$(pwd)/dev"
 ```
 
 - **Prints nothing on a no-data day** → omit the whole section (the standup
@@ -400,7 +417,7 @@ lands. Before committing/pushing the daily-summary (and any journal docs written
 shared doc-lint guard:
 
 ```bash
-bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+bash <skills-root>/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
 ```
 
 It auto-fixes the blanks-around-lists class and folds the correction into the commit; an unfixable
@@ -411,7 +428,7 @@ the ad-hoc standup-commit path that bypasses `/gcpr`.
 #### 1.3c Generate the epic-progress section
 
 ```bash
-bash ../ccxp/scripts/epic-status.sh render
+bash <skills-root>/ccxp/scripts/epic-status.sh render
 ```
 
 Paste the output verbatim under the `## Epic progress` heading in the daily
@@ -474,7 +491,7 @@ follow-up, not done here to keep this change scoped to the tracked failure.
 the sidecar helper so the maintainer can jump straight to the task file on GitHub:
 
 ```bash
-source ../_taskid/url.sh
+source <skills-root>/_taskid/url.sh
 taskid-slacklink T20260427-298901          # -> <https://github.com/…/blob/main/dev/TODO/T…-….md|T20260427-298901>
 taskid-slacklink T20260427-298901 --issue  # -> link to the stable issue instead of the file
 ```
@@ -491,7 +508,7 @@ straight into the message; never paste a bare `T…` ID.
 section, in `--slack` mode:
 
 ```bash
-bash ../ccxp/scripts/epic-status.sh render --slack
+bash <skills-root>/ccxp/scripts/epic-status.sh render --slack
 ```
 
 ```
@@ -606,7 +623,7 @@ Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **aut
 
 **Claimed tasks carry too, regardless of Status.** A task with a non-empty `claimed_by:` is in-flight by virtue of the claim (a live session — this box or a peer `@…` — committed to it), even when its Status is still `Design` or `Open`. Include every claimed task in the carry-over set here, not just `Coding`/`Review`. Otherwise a `Design`+claimed task is invisible to *both* this step *and* 2a.1.5 (it was never in a `## Considered but cut` table), its `scheduled:` never advances, and it silently strands on a stale iteration on the board — the recurring leak that left T20260611-324774 and T20260610-028036 pinned to Iteration 10. **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in 2a.5). What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
 
-**Bump-2x reassessment — force a decision before the third commit.** A Tier-1 carry-over carried forward unconditionally becomes a "we'll get to it" comfort blanket: it absorbs IPM accountability week after week without shipping. `/retro`'s bump-3x detector catches this, but only *retrospectively* — after the third wasted week. Catch it here, up front, one step earlier. **Detection (same file-date join key `/retro` uses — no Project-side iteration mapping):** read the **last 2 committed** `*-ipm-weekly.md` files (`PREV_IPM=$(bash ../_ipm/current.sh)` gives the newest committed IPM; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date), and for each task in *this* week's Tier-1 carry-over set check whether it appears in the **Tier-1 table of both** prior IPMs. If it does, committing it now would be its **3rd consecutive** Tier-1 commit → flag it **"Bumped 2x — reassess"**. For each flagged task, force an explicit disposition — never a silent re-carry:
+**Bump-2x reassessment — force a decision before the third commit.** A Tier-1 carry-over carried forward unconditionally becomes a "we'll get to it" comfort blanket: it absorbs IPM accountability week after week without shipping. `/retro`'s bump-3x detector catches this, but only *retrospectively* — after the third wasted week. Catch it here, up front, one step earlier. **Detection (same file-date join key `/retro` uses — no Project-side iteration mapping):** read the **last 2 committed** `*-ipm-weekly.md` files (`PREV_IPM=$(bash <skills-root>/_ipm/current.sh)` gives the newest committed IPM; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date), and for each task in *this* week's Tier-1 carry-over set check whether it appears in the **Tier-1 table of both** prior IPMs. If it does, committing it now would be its **3rd consecutive** Tier-1 commit → flag it **"Bumped 2x — reassess"**. For each flagged task, force an explicit disposition — never a silent re-carry:
 
 - **Re-commit** — keep it in Tier 1, but record a one-line "still the right call" reason in the IPM `## Notes` (e.g. "blocker cleared this week, finishing now").
 - **Won't fix** — close it (journal-move stub), exactly as a task was after its third bump in a real observed case.
@@ -616,7 +633,7 @@ Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **aut
 
 #### 2a.1.5 Seed carry-over candidates (from last IPM's cuts)
 
-Cuts must not vanish. Read the previous IPM file — `PREV_IPM=$(bash ../_ipm/current.sh)`. This resolves to last week's IPM because 2a.1.5 runs **before** 2a.5: this week's file still exists only as the pre-IPM staging stub, which the helper excludes (header-sniff), so the newest *committed* IPM is last week's (see T20260604-194697 — a naive `ls -t … | head -1` instead grabbed the future-dated staging stub). Collect the task IDs from its **`## Considered but cut`** table. Drop any whose task file is no longer in `dev/TODO/` (closed/parked since) and any already captured as Tier 1 in 2a.1 (dedupe — in-flight auto-carry wins).
+Cuts must not vanish. Read the previous IPM file — `PREV_IPM=$(bash <skills-root>/_ipm/current.sh)`. This resolves to last week's IPM because 2a.1.5 runs **before** 2a.5: this week's file still exists only as the pre-IPM staging stub, which the helper excludes (header-sniff), so the newest *committed* IPM is last week's (see T20260604-194697 — a naive `ls -t … | head -1` instead grabbed the future-dated staging stub). Collect the task IDs from its **`## Considered but cut`** table. Drop any whose task file is no longer in `dev/TODO/` (closed/parked since) and any already captured as Tier 1 in 2a.1 (dedupe — in-flight auto-carry wins).
 
 The survivors are **carry-over candidates**: tasks a prior IPM deliberately deferred. They enter this IPM's Tier 2 candidate pool *alongside* `/todo next` (2a.2) — but they are **not** auto-committed, and their `scheduled:` is **not** advanced by being a candidate. The IPM still decides per task in 2a.4: **accept** (place in a Tier → gets `scheduled` in 2a.5) or **re-cut** (re-list under this IPM's `## Considered but cut` with a reason). No silent drops — a perpetually-deferred task then recurs across consecutive IPM files, which is exactly the chronic-deferral signal `/retro`'s bump-counter surfaces.
 
@@ -642,8 +659,8 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/grill-m
    and pickable by a peer session's `/todo next`):
 
    ```bash
-   bash ../_session/task_claim.sh release-others <task-id>
-   bash ../_session/task_claim.sh acquire <task-id>
+   bash <skills-root>/_session/task_claim.sh release-others <task-id>
+   bash <skills-root>/_session/task_claim.sh acquire <task-id>
    ```
 
    `acquire` sets `claimed_by` **and** `status: Coding` as a side effect. A
@@ -652,7 +669,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/grill-m
    PR will still run":
 
    ```bash
-   bash ../_session/status.sh <task-id> Design
+   bash <skills-root>/_session/status.sh <task-id> Design
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
@@ -681,7 +698,7 @@ Write `dev/JOURNAL/YYYY-MM-DD-ipm-weekly.md`. **Revise-in-place if a `/stage` st
 **Render every task reference as a clickable markdown link (T20260608-353422).** In every table below (Carry-over, Carry-over candidates, New picks, Infrastructure/tooling, Tier 3, Considered but cut, Recommended execution order), the `Task` column is a link, not bare text — `[T<id>](<issue-url>)`, built via the same map-free resolver the daily standup uses (Phase 1.4):
 
 ```bash
-source ../_taskid/url.sh
+source <skills-root>/_taskid/url.sh
 taskid-mdlink T20260427-298901      # -> [T20260427-298901](https://github.com/…/issues/…)
 ```
 
@@ -798,7 +815,7 @@ Sequenced by **dependency unblock + business priority + parallelism (labrun asyn
 
 2a.5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut. The 2a.1 carry covers in-flight (`Coding`/`Review`) + `claimed_by` tasks; 2a.5's cut-advance covers what this IPM explicitly cuts; an unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board (the recurring leak — T20260320-000029 sat on Iteration 10 while the prose "carried" it; T20260622-147834 filed the gate for exactly this).
 
-The maintainer rule: **at IPM end, every previous-iteration board item that is not terminal (`Done`/`Parked`) must be migrated out.** Enforce it with the hard gate `../_ipm/ipm-iteration-drain-check.sh` (shipped by T20260622-147834; T20260623-811944 wires it here; moved out of build-pipeline's own scripts/ and generalized by T20260719-111051). Run **after** 2a.5 (so the picks' `scheduled:` are already advanced) and **before** the IPM is considered committed:
+The maintainer rule: **at IPM end, every previous-iteration board item that is not terminal (`Done`/`Parked`) must be migrated out.** Enforce it with the hard gate `<skills-root>/_ipm/ipm-iteration-drain-check.sh` (shipped by T20260622-147834; T20260623-811944 wires it here; moved out of build-pipeline's own scripts/ and generalized by T20260719-111051). Run **after** 2a.5 (so the picks' `scheduled:` are already advanced) and **before** the IPM is considered committed:
 
 1. **List the strand-class offenders.** Query the board for items still on the previous iteration whose status is non-terminal — the gate does this for you (run it; on a non-zero exit it *prints* each offender). The previous iteration is resolved by the board's iteration **start-date window** (the current iteration is the latest `startDate` ≤ today; the previous is the next-earlier distinct `startDate`) — **never** a client-side counter (`ls | wc -l` desyncs the instant a Monday IPM is skipped or backfilled). Same date-window discipline as `_ipm/current.sh`. The gate **partitions** offenders by repo (Option C — T20260628-592642): **same-repo** offenders (the `--home-repo`, auto-detected from this clone's `git remote get-url origin`) are **blocking** (exit 1 — the IPM can drain them by editing their task files); **cross-repo** offenders (e.g. `hub-repo` items the build-pipeline clone cannot edit) are printed as **non-blocking `⚠` warnings** so the unattended commit is never deadlocked on items it has no way to drain. (Forward-compatible with end-state options A/B in T20260628-592642 — Option C is the deadlock-safety valve, not the final design.) **Lint-frozen sub-partition (T20260628-951477):** a same-repo offender whose task file fails the changed-mode `Lint task frontmatter` check — pre-existing non-allowlisted fields, the unresolved T20260626-353630 schema-fork class — **cannot** have its `scheduled:` advanced without an unrelated lint red. The gate probes each same-repo offender (`lint_tasks.py --changed`) and downgrades the **lint-frozen** ones to the same non-blocking `⚠` warning; only **clean** (editable) same-repo offenders block (fail-safe: anything the probe can't classify stays **blocking** — no silent exemption). So an IPM whose only remaining same-repo offenders are lint-frozen reaches **exit 0** instead of deadlocking — the real fix is resolving T20260626-353630.
 2. **Drain each offender** — this applies to the **clean** same-repo (blocking) offenders; cross-repo and lint-frozen warnings are surfaced for the maintainer, not drained here (a lint-frozen file can't be edited until T20260626-353630 lands). For every listed same-repo task, decide and act exactly like 2a.5's per-task disposition: **carry** it (advance its task-file `scheduled:` to this IPM's `${SCHEDULED}` and place it in a Tier) or **defer** it (advance `scheduled:` to a future Monday and pre-append it to that Monday's `## Candidates` stub, per 2a.5's "Cut candidates — advance, never clear"). Either way `scheduled:` moves **forward** — never deleted. The board's Iteration field is *derived* from `scheduled:` via the per-repo `sync-tasks-to-issues.py`, so bumping `scheduled:` is what actually re-tracks the item off the closed iteration.
@@ -809,7 +826,7 @@ The maintainer rule: **at IPM end, every previous-iteration board item that is n
    # Default terminal set is "Done|Parked"; --home-repo/--owner auto-detected
    # from this clone's git remote `origin` (T20260719-111051) — no repo/org
    # hardcoded in the script itself.
-   bash ../_ipm/ipm-iteration-drain-check.sh
+   bash <skills-root>/_ipm/ipm-iteration-drain-check.sh
    #   exit 0 → previous iteration clean of CLEAN (drainable) SAME-REPO offenders (cross-repo AND lint-frozen offenders, if any, were printed as ⚠ warnings and do NOT block) — proceed to 2a.5b
    #   exit 1 → it printed CLEAN (editable) same-repo offenders still pinned to the previous iteration — drain them (step 2) and re-run
    #   exit 2 → usage error (bad flag/arg, or --home-repo/--owner could not be auto-detected and none was given)
@@ -830,7 +847,7 @@ The maintainer rule: **at IPM end, every previous-iteration board item that is n
 The multi-IPM ROADMAP doc lives at `dev/ROADMAP.md` in a separate hub repo (filed by T20260510-836314) — the hub is **required config, not a hardcoded repo name** (`ROADMAP_TARGET_REPO="<owner>/<repo>"`, resolved the same way as every other `~/.claude/.env`-backed var in this suite: already-exported wins, else `~/.claude/.env`; T20260827-280088). After writing this week's IPM file, propagate the commit forward into the ROADMAP via an ephemeral clone of that hub repo (same pattern as `/drive` Phase 1.5 cross-repo dispatch — T20260513-403409). The ccxp run never touches the maintainer's working clone of the hub repo.
 
 ```bash
-TARGET=$(bash ../ccxp/scripts/update-roadmap.sh clone)
+TARGET=$(bash <skills-root>/ccxp/scripts/update-roadmap.sh clone)
 cd "$TARGET"
 ```
 
@@ -846,7 +863,7 @@ If `dev/ROADMAP.md` doesn't yet exist (first run before T20260510-836314 Phase 1
 After edits, once this IPM's build-pipeline commit PR is up and its URL known:
 
 ```bash
-bash ../ccxp/scripts/update-roadmap.sh commit-pr --target "$TARGET" --bp-pr-url "<build-pipeline IPM PR URL>"
+bash <skills-root>/ccxp/scripts/update-roadmap.sh commit-pr --target "$TARGET" --bp-pr-url "<build-pipeline IPM PR URL>"
 ```
 
 Runs the doc-lint guard (shared script, runs for real here too now — T20260719-111051), commits, pushes, opens the PR against the configured `ROADMAP_TARGET_REPO`, and removes the ephemeral clone.
