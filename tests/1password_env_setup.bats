@@ -212,6 +212,24 @@ EOF
   grep -q -- "--account my.1password.com" "$OP_CALLS"
 }
 
+@test "pes-materialize-env surfaces op's own stderr warning on an otherwise-successful run" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  cat >"$STUB_BIN/op" <<EOF
+#!/usr/bin/env bash
+echo "op \$*" >>"$OP_CALLS"
+if [ "\$1" = "inject" ]; then
+  echo "[WARNING] some benign op warning" >&2
+  echo "materialized" >"$REPO/.env"
+fi
+EOF
+  chmod +x "$STUB_BIN/op"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO' 2>&1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"some benign op warning"* ]]
+  [[ "$output" == *"materialized: $REPO/.env"* ]]
+}
+
 @test "pes-materialize-env omits --account when OP_ACCOUNT is unset" {
   echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
   _stub_op
@@ -280,6 +298,8 @@ EOF
   run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" DIRENV_CALLS="$DIRENV_CALLS" \
     bash -c "source '$SCRIPT'; 1password-env-setup '$REPO'"
   [ "$status" -ne 0 ]
+  # the failure short-circuits before pes-direnv-allow -- direnv never runs
+  [ ! -f "$DIRENV_CALLS" ]
 }
 
 @test "1password-env-setup defaults to the current directory when no path is given" {
