@@ -79,7 +79,7 @@ scheduled: 2026-09-21
      (see Alternatives rejected on why this doesn't also reconcile
      protection state).
   4. Rewrite the section: replace everything from the `## Branch and Merge
-     Policy` heading line up to (not including) the next `^## ` heading (or
+     Policy` heading line up to (not including) the next `^##` heading (or
      EOF) with the canonical block for the target mode (team = the exact
      `dev/guidelines.md:11-17` wording; solo = the new canonical block,
      Context above). Python-based in-place edit (same idiom as
