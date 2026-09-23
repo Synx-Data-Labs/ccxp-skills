@@ -233,6 +233,21 @@ STUB
   grep -qi "no ci" "$WORK/other/policy.md"
 }
 
+@test "a doc-rewrite failure AFTER a successful API call is a hard error, not silent success" {
+  mk_gh_stub
+  mk_solo_doc
+  mkdir -p "$WORK/.github/workflows"
+  touch "$WORK/.github/workflows/ci.yml"
+  chmod 444 "$WORK/dev/guidelines.md"
+  run env GH_SH="$GH_STUB" bash "$MODE_SH" team --repo test-org/test-repo --yes
+  chmod 644 "$WORK/dev/guidelines.md"
+  [ "$status" -ne 0 ]
+  # the API call still happened (protection state and doc are now out of
+  # sync, by construction of this test) — the failure must be reported,
+  # never swallowed into a false success
+  grep -q "PUT" "$CALLS"
+}
+
 @test "missing mode argument is a usage error" {
   run bash "$MODE_SH"
   [ "$status" -ne 0 ]

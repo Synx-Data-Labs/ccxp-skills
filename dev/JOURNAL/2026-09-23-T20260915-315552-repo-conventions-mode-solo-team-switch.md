@@ -150,7 +150,7 @@ scheduled: 2026-09-21
 
 ## Test plan
 
-- [x] `tests/mode.bats` (new, 14 tests) — `GH_SH` stubbed to a fake script
+- [x] `tests/mode.bats` (new, 15 tests) — `GH_SH` stubbed to a fake script
   recording its invocation args/stdin to a file instead of calling real
   GitHub:
   - [x] `solo` on a fresh team-mode fixture doc rewrites the Policy section
@@ -174,10 +174,14 @@ scheduled: 2026-09-21
     as success; a genuine non-404 API error on either mode hard-fails with
     the doc left untouched; `--doc` override works independent of cwd;
     missing/invalid mode argument is a usage error
-- [x] `bats tests/mode.bats` green locally (14/14)
-- [x] Full repo suite (`tests/*.bats _docs/*.bats`) still green — 703/703
-  (one `task_claim.bats` flake reproduced once in the full-suite run,
-  confirmed non-reproducing in isolation and in a full clean rerun; see
+  - [x] (added addressing PR #85's review) a doc-rewrite failure AFTER a
+    successful API call is a hard error, not a silently-swallowed success
+    — RED/GREEN verified by temporarily reverting the guard via `git
+    stash` and confirming the test fails without it
+- [x] `bats tests/mode.bats` green locally (15/15)
+- [x] Full repo suite (`tests/*.bats _docs/*.bats`) still green — 704/704
+  (one `task_claim.bats` flake reproduced once in an earlier full-suite
+  run, confirmed non-reproducing in isolation and in a full clean rerun; see
   `## Closed`)
 - [ ] Manual, post-merge (cannot verify pre-merge without mutating a real
   repo's live branch protection): run `/repo-conventions mode team` /
@@ -223,10 +227,19 @@ scheduled: 2026-09-21
 
 ## Closed (2026-09-23)
 
-- Shipped in **PR #83** (design) and PR #TBD (implementation, this PR).
-  `repo-conventions/scripts/mode.sh` (new, 14 BATS tests all green) plus
+- Shipped in **PR #83** (design) and **PR #85** (implementation, this PR).
+  `repo-conventions/scripts/mode.sh` (new, 15 BATS tests all green) plus
   `repo-conventions/SKILL.md` wiring (`## Argument` + new `### mode
-  {solo|team}` workflow section). Full repo suite 703/703 green.
+  {solo|team}` workflow section). Full repo suite 704/704 green.
+- A distinct follow-up bug discovered while `/address-pr`-ing PR #85 —
+  `_tc_pr_owner` misread `unknown` for this exact PR's ownership, because
+  its own body's `Task:` link pointed at the file's post-move JOURNAL
+  path (absent from `main` until merge) — was filed and shipped
+  separately as **T20260922-324422** (PR #86), not folded into this PR's
+  scope. Ownership was manually re-verified (`claimed_by` on `main`
+  matched this session's own `claimant-id` exactly) before proceeding,
+  per `/address-pr` §1.6's documented escape hatch for an `unknown`
+  verdict.
 - Both non-external Done criteria met — script implemented, wired, and
   tested per the design; team-mode CI-check refusal, solo/team doc
   rewrites, and the PUT/DELETE API calls all covered by
@@ -268,9 +281,22 @@ scheduled: 2026-09-21
   re-running its whole file, and reproduced-clean on a full fresh
   703-test suite rerun — a pre-existing flake, not a regression from this
   PR.
-- No follow-up tasks filed — scope stayed within the task's own bounds;
-  the two implementation-time corrections above were fixed inline rather
-  than deferred.
+- **PR #85 review round (2 real findings, both fixed)**: an independent
+  review agent caught (1) the doc-rewrite `python3` heredoc had no
+  exit-status check — a failure there (after the GitHub API call had
+  already succeeded) would silently exit 0, recreating the exact
+  doc/reality drift the API-first ordering exists to prevent; fixed with
+  an explicit `if ! ...; then ... exit 1; fi` guard, RED/GREEN-verified
+  via `git stash` (confirmed the new bats case fails without the guard,
+  passes with it); and (2) the 404-tolerance `grep` used a bare `\|`
+  BRE alternation, not portable to a strict POSIX grep — fixed to `-E`.
+  Pushed back (not fixed) on a third finding — `contexts: []` not
+  actually enforcing named CI checks — since that's the design's own
+  already-documented, deliberate Alternatives-rejected choice; added a
+  code comment instead of changing behavior.
+- Follow-up task filed for a genuinely separate issue: **T20260922-324422**
+  (see above) — a `pr-owner` tooling gap, not a defect in this task's own
+  deliverable.
 
 ## Skills invoked
 
@@ -280,20 +306,31 @@ scheduled: 2026-09-21
   then `mode.sh` implemented to green, then re-verified all 14 pass for
   the intended reason (not just a coincidental non-zero exit) via direct
   content assertions and a manual sanity run against a real
-  `dev/guidelines.md` copy
+  `dev/guidelines.md` copy. A 15th test (the doc-rewrite-failure guard,
+  added addressing the PR #85 review) was RED/GREEN-verified the same way
+  via a temporary `git stash` of just the fix.
 - Verification (`superpowers:verification-before-completion`): yes —
   design-score gate (72/100 both pre- and post-merge of the design PR),
-  shellcheck clean, full 703-test repo suite green (after chasing down
-  and ruling out the one-off `task_claim.bats` flake above), doc-impact
-  freshness check clean, quality-probe recorded (shellcheck 0/0/0/0)
+  shellcheck clean (caught and fixed a real SC1073/SC1050 parse error
+  introduced while re-applying the review fix after a `git stash`
+  round-trip dropped part of an edit — caught before push, not by CI),
+  full repo suite green (703/703, then 704/704 after the review-round
+  fixes), doc-impact freshness check clean, quality-probe recorded
+  (shellcheck 0/0/0/0)
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't
   get stuck; the flaky-test investigation was a direct
   reproduce-in-isolation check, not a hypothesis-driven debugging session
 - Receiving code review (`superpowers:receiving-code-review`): yes —
-  `/address-pr` §2.d on the design PR (#83), 5 real findings (wrong
+  `/address-pr` §2.d on both the design PR (#83) and the implementation
+  PR (#85). Design PR: 5 real findings (wrong
   `dev/guidelines.md:11-17` line-range citation — should be 11-20; a
   false "same seam" claim about `quality-probe/scripts/probe.sh`'s
   hardcoded `QP_GH`; no ordering/atomicity guarantee between the doc
   rewrite and the API call; a Test-plan-vs-Done-criteria gap on the
   external manual-verification item; an overstated alternatives-rejected
-  argument against any review-count requirement), all fixed, 0 pushback
+  argument against any review-count requirement), all fixed, 0 pushback.
+  Implementation PR: 2 real findings (swallowed doc-rewrite failure;
+  grep BRE portability) fixed, 1 pushback (the `contexts: []` finding —
+  already-documented deliberate scope, addressed with a code comment
+  instead of a behavior change, per the skill's "wrong because I have
+  context the reviewer lacked" guidance).
