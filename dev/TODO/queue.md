@@ -8,7 +8,6 @@ reprioritize.
 
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
-- [T20260922-453135](T20260922-453135-add-eta-skill.md): Add `/eta` skill — estimate time-to-completion for the current task on hand
 - [T20260922-383156](T20260922-383156-lint-docs-plus-corruption-still-live.md): `markdownlint-cli2 --fix` still flips a bare leading `+` to `-` and drops comma-spacing — scoping contains it, doesn't fix it
 - [T20260922-253015](T20260922-253015-lint-docs-png-mutation-unconfirmed.md): Confirm or rule out `lint-docs.sh --fix` rewriting a PNG asset
 - [T20260922-155006](T20260922-155006-gcpr-changed-md-awk-rename-unsafe.md): `gcpr/SKILL.md`'s `CHANGED_TASKS`/`CHANGED_REFS` extraction is rename/delete-unsafe, same bug as the fixed `CHANGED_MD` one
@@ -17,4 +16,3 @@ reprioritize.
 - [T20260922-263110](T20260922-263110-todo-next-position-denominator-wrong.md): `todo-next.sh`'s "#N of M" denominator counts raw file lines, not task entries
 - [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md): `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
 - [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md): `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
-- [T20260922-270158](T20260922-270158-eta-2w-bucket-and-id-validation.md): `eta.sh` rejects the canonical `2w` estimation bucket and does not validate `T<id>` before globbing
