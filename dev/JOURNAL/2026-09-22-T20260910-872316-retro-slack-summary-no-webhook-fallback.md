@@ -61,7 +61,7 @@ scheduled: 2026-09-21
 - Port the `ccxp/SKILL.md` Phase 1.4 retry-then-webhook-fallback block
   (`ccxp/SKILL.md:426-463`) into `retro/SKILL.md` Phase 6, adapted to the
   retro summary text and `RETRO_SLACK_CHANNEL` instead of
-  `#claude-notification`:
+  `#acme-dev-notifications`:
   1. Attempt `slack_send_message` once, then one retry on error (same
      2-attempts policy as T20260717-433409 — no unbounded retry loop).
   2. On a second failure, fall back to
@@ -117,7 +117,7 @@ scheduled: 2026-09-21
 
 ## Closed (2026-09-22)
 
-- Shipped in **PR #66** (`t20260910-872316-slack-webhook-fallback`).
+- Shipped in **[PR #66](https://github.com/Synx-Data-Labs/ccxp-skills/pull/66)** (`t20260910-872316-slack-webhook-fallback`).
 - Both Done criteria met — `retro/SKILL.md` Phase 6 now carries the same
   1-retry-then-webhook-fallback pattern as `ccxp/SKILL.md` Phase 1.4/2a.6,
   and the Phase 5 report template gained a `## Housekeeping` line recording

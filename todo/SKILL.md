@@ -149,7 +149,7 @@ implements; it stays documented here for a human reading this skill.
 
 ### P0 escape hatch
 
-A true P0 — production down, customer-blocked, security incident — preempts the queue entirely and doesn't wait for `/top`/IPM ceremony. P0s come through the Slack escalation protocol (`#claude-notification` with explicit human ack), not the normal task flow. Anything less than P0 — including newly-noticed deadline pressure — should go through `/top` (immediate) or `/stage` + the next IPM (routine). If the escape hatch is invoked more than once a week, that's a signal something structural is off; surface it in the Friday retro.
+A true P0 — production down, customer-blocked, security incident — preempts the queue entirely and doesn't wait for `/top`/IPM ceremony. P0s come through the Slack escalation protocol (`#acme-dev-notifications` with explicit human ack), not the normal task flow. Anything less than P0 — including newly-noticed deadline pressure — should go through `/top` (immediate) or `/stage` + the next IPM (routine). If the escape hatch is invoked more than once a week, that's a signal something structural is off; surface it in the Friday retro.
 
 ## Workflow: `sweep`
 

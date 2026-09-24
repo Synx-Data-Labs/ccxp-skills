@@ -106,7 +106,7 @@ One cheap, idempotent prune keeps session-coordination state lean.
 bash <skills-root>/ccxp/scripts/prune-drive-threads.sh
 ```
 
-Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the original untouched if `jq` errors (e.g. a malformed file). Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#claude-notification`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
+Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the original untouched if `jq` errors (e.g. a malformed file). Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#acme-dev-notifications`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
 
 **3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released. The task stays `status: Coding`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations). On-demand reclaim covers the pick path; this sweep is the proactive backstop. Run it once per tick (active by default with peer mode; no-op only on the `CCXP_PEER_MODE=0` opt-out — symmetric with the lock):
 
@@ -114,7 +114,7 @@ Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the origina
 bash <skills-root>/ccxp/scripts/reclaim-sweep-pr.sh
 ```
 
-No-op (prints nothing, exits 0) when `CCXP_PEER_MODE=0` or when the read-only detect pass finds nothing to reclaim — nothing branched, nothing committed. Otherwise it branches off main, applies the sweep, runs the doc-lint guard, commits, pushes, opens a PR, and returns to main (never leaves the cron working tree on a branch), printing the reclaimed-lines summary and the PR URL on stdout. Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to `#claude-notification` — a reclaimed task may have had real WIP, so a reclaim is never silent.
+No-op (prints nothing, exits 0) when `CCXP_PEER_MODE=0` or when the read-only detect pass finds nothing to reclaim — nothing branched, nothing committed. Otherwise it branches off main, applies the sweep, runs the doc-lint guard, commits, pushes, opens a PR, and returns to main (never leaves the cron working tree on a branch), printing the reclaimed-lines summary and the PR URL on stdout. Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to `#acme-dev-notifications` — a reclaimed task may have had real WIP, so a reclaim is never silent.
 
 Detect-on-`main` → branch-only-if-work keeps the cron working tree clean. The reclaim decision reuses the unit-tested `task_claim.sh reclaimable` primitive: a claim is freed only when status is `Coding`/`Review`, `claimed_by` is session-shaped (either the current `cc1-` form or the legacy `<sid>@<machine>` form — a non-session value like a bare human name is never auto-reclaimable, T20260724-312324), there is no caller-observed in-progress GH Actions run on the claim's open PR branch, AND **both** activity signals exceed `TASK_CLAIM_STALE_DAYS` (default 2) — the last commit mentioning it on `main` (the relevant signal for a no-PR task) **and** the open PR's last activity (`updatedAt`: push/comment/review — the relevant signal for an open-PR task). Open PRs are **no longer** auto-excluded (T20260622-404636 — the old "any open PR ⇒ live" rule leaked dead-owner open-PR tasks forever; PR ownership is now *derived* from this same claim, so reclaiming the claim reclaims the PR). Self-reclaim-guarded (never frees this session's own claim) and idempotent (a clean board emits nothing, branches nothing). See `_session/reclaim_sweep.sh` + `tests/reclaim_sweep.bats`. (The prior soft-claim TTL layer this sweep supersedes — `_session/claim.sh`/`heartbeat.sh`/`prune.sh`/`release.sh` + the 4 Project fields `machine`/`clone_path`/`cc_session_id`/`last_heartbeat` — was fully retired in T20260616-308030; `prune.sh` no longer exists.)
 
@@ -126,7 +126,7 @@ bash <skills-root>/_session/claim_gap.sh
 
 **Only `Coding` is flagged — `Design`/`Review` + empty `claimed_by` is NOT a gap** (corrected T20260809-310724, 2026-08-09, after this detector re-Slacked the same 7-task list every tick for a day, half of them genuinely misclassified): an abandoned-but-real design/review is the normal resting state of an unclaimed backlog item — `/todo next`'s peer-claim filter only skips a task when `claimed_by` is *non-empty*, so nothing is actually invisible to claim-based coordination there. Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one. `Coding` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
 
-No-op (prints nothing) when every `Coding` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup, same T20260809-310724 fix — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat). Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#claude-notification` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into. See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
+No-op (prints nothing) when every `Coding` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup, same T20260809-310724 fix — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat). Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into. See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
 
 ### Phase 1: Daily standup
 
@@ -139,7 +139,7 @@ Generate a daily progress summary by reviewing yesterday's work.
 3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
 4. **Journal entries**: Check `dev/JOURNAL/` for files dated yesterday
 5. **Current drive-threads**: Read `.claude/state/drive-threads.json` for unresolved escalations
-5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`. This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads. **The MCP slack user CAN read `#claude-notification` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts. **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
+5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`. This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads. **The MCP slack user CAN read `#acme-dev-notifications` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts. **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
 6. **Previous ccxp summary**: Read the most recent `dev/JOURNAL/*-daily-summary.md` for continuity (for continuity only — never let a prior note about Slack-unreadability suppress step 5b)
 7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash <skills-root>/_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes — see T20260604-194697). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit — first IPM happens this Monday" and skip the progress block in 1.2.
 
@@ -157,7 +157,7 @@ On the hourly cadence (`3 * * * *`), the pre-flight gate (`dev/daily-ccxp.sh`) s
 
 **When the gate holds — cheap-hold action:**
 
-1. Post a **compact, bulleted** hold note to `#claude-notification`, **threaded under the day's
+1. Post a **compact, bulleted** hold note to `#acme-dev-notifications`, **threaded under the day's
    standup parent** (discover it live, exactly as `/slack-check-reply` does —
    `slack_search_public_and_private` for the latest `"Daily Standup"`, reply with `thread_ts`).
    Same scannability principle as the full standup's Weekly focus/Attribution/Blockers sections
@@ -187,7 +187,7 @@ a `## Standup addendum (HH:MMZ)` section to the day's existing `dev/JOURNAL/YYYY
 via its own small PR, recording just what changed this tick (new failure classified, PR merged,
 etc.), rather than regenerating the whole doc. That's a reasonable, established pattern — but an
 addendum that classifies a **new nightly failure** is still doing Phase 1.2's job for that
-failure, so it must still run **1.2.2a** (search for the original `#slack-automation-alerts`
+failure, so it must still run **1.2.2a** (search for the original `#acme-automation-alerts`
 post, reply with the RCA) before the tick is done — recording the reply outcome in the addendum
 the same way 1.2.4 does. Skipping straight from "classified in the addendum" to "done" reproduces
 the exact gap 1.2.2a exists to close (confirmed live: a recurring known-flaky-check failure was
@@ -236,12 +236,12 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 ##### 1.2.2a Reply RCA in the original alert thread
 
-`.github/workflows/slack-notify.yml` fires an immediate, unclassified alert to `#slack-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note). Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in `#claude-notification`, a different channel. **Design rationale (T20260726-296410)**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2, check whether it has a matching alert and reply on it:
+`.github/workflows/slack-notify.yml` fires an immediate, unclassified alert to `#acme-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note). Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in `#acme-dev-notifications`, a different channel. **Design rationale (T20260726-296410)**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2, check whether it has a matching alert and reply on it:
 
 1. **Find the alert message.** `slack-notify.yml` posts via a bare webhook, whose response carries no usable `ts` — nothing stashes the alert's `channel_id`/`message_ts` for a later tick to look up directly, so this is a **search**, not a lookup (same shape as `/slack-check-reply` Step 4's fallback):
 
    ```
-   slack_search_public_and_private: "actions/runs/<run-id>" in:#slack-automation-alerts
+   slack_search_public_and_private: "actions/runs/<run-id>" in:#acme-automation-alerts
    ```
 
    Sort by `timestamp` descending, take the first match. If nothing comes back — no alert posted for this workflow, the run predates the webhook, or the channel/format changed — skip to step 4 and note the miss.
@@ -440,7 +440,7 @@ try/catch here.
 
 #### 1.4 Slack the standup
 
-Send daily summary to `#claude-notification` via MCP `slack_send_message`.
+Send daily summary to `#acme-dev-notifications` via MCP `slack_send_message`.
 
 **Webhook fallback on MCP send failure (T20260717-433409).** `slack_send_message` has shown
 chronic intermittent `MCP error -32603: Internal Server Error` failures — a 7-consecutive-day
@@ -452,7 +452,7 @@ for the day-by-day count). Don't let a failed send silently drop the day's stand
    a policy documented elsewhere in this file. Looping past that second attempt is not warranted.
 2. If both attempts error, capture the standup message text into a variable and fall back
    immediately to the same underlying script the `/slack` skill's `dev` channel uses (routes to
-   the same `#claude-notification`):
+   the same `#acme-dev-notifications`):
 
    ```bash
    STANDUP_MESSAGE="$(cat <<'EOF'
@@ -631,7 +631,7 @@ Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **aut
 - **Won't fix** — close it (journal-move stub), exactly as a task was after its third bump in a real observed case.
 - **Defer** — move it out of this iteration: advance its `scheduled:` to a future Monday and pre-append it to that Monday's stub, identical to the 2a.5 "Cut candidates — advance, never clear" mechanics.
 
-**Unattended (the cron default): auto-defer + a Slack note.** Do not silently re-commit, and do not hard-block the IPM waiting on a human (a blocking wait would stall the whole unattended commit). Auto-defer the flagged task per the bullet above and post one line to `#claude-notification`: `*IPM bump-2x*: T<id> deferred — carried 3 IPMs without shipping; reassess (re-commit / Won't fix / defer) by reply.` This keeps the IPM moving while taking the zombie off auto-pilot. `/retro`'s bump-3x detection is unchanged — it remains the safety net for anything that still slips through.
+**Unattended (the cron default): auto-defer + a Slack note.** Do not silently re-commit, and do not hard-block the IPM waiting on a human (a blocking wait would stall the whole unattended commit). Auto-defer the flagged task per the bullet above and post one line to `#acme-dev-notifications`: `*IPM bump-2x*: T<id> deferred — carried 3 IPMs without shipping; reassess (re-commit / Won't fix / defer) by reply.` This keeps the IPM moving while taking the zombie off auto-pilot. `/retro`'s bump-3x detection is unchanged — it remains the safety net for anything that still slips through.
 
 #### 2a.1.5 Seed carry-over candidates (from last IPM's cuts)
 
@@ -654,7 +654,7 @@ Run `/todo next` to get the top 5 ranked Tier 2 tasks (`Design` or `Open`). The 
 For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`** — run `/incept T<id>` (see `incept/SKILL.md`), which interviews the human in frontier rounds and, on confirmation, writes the Design section + Test Plan and any estimation revision into the task file. This phase wraps that call with the lifecycle bookkeeping `/incept` deliberately does not touch:
 
 1. **Grill it.** `/incept T<id>`. It reads the task's Problem (and any existing Design section — a refresh re-validates the assumptions rather than starting cold), asks the frontier rounds, and stops at its synthesis for a go/no-go. Do not run the rounds yourself or summarize on the user's behalf — the whole point is the human answering.
-2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#claude-notification`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
+2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#acme-dev-notifications`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
 3. **Confirm the estimate landed.** `/incept` step 4 already rewrote `estimation:` and appended `Estimation revised from {old} to {new}: {reason}` to the Design section when the estimate moved; check the frontmatter before the 2a.4 budget cut consumes it. If the pass was a free-text grill (no task file), it wrote nothing — file the task via `/new-task` first, then re-run.
 4. **Claim the task before touching its status** (T20260610-248248 — this step
    previously only mirrored to the board, leaving the task unclaimed mid-pass
@@ -876,7 +876,7 @@ If any step fails (clone, edit, commit, push, PR-create): slack the maintainer `
 
 #### 2a.6 Slack the focus
 
-Send to `#claude-notification` via MCP `slack_send_message`. On send failure, apply the same
+Send to `#acme-dev-notifications` via MCP `slack_send_message`. On send failure, apply the same
 webhook fallback as Phase 1.4 (T20260717-433409) — this is a weekly, guaranteed-to-fire send in
 the same failure-prone path:
 
@@ -1008,4 +1008,4 @@ The hourly cadence is governed by the wrapper, not by the schedule: a fresh `/cc
 - **Cron does rituals, not engineering.** In cron mode the loop's job is standup + nightly health/reclaim housekeeping + the Monday IPM budget-cut + the Friday retro — never the pre-IPM design pass and never Phase 3. Focused implementation work happens in interactive pairing sessions, where a human's judgment on business priority and design readiness is available.
 - **Retro is honest.** See the `/retro` skill notes — the retro exists to improve the process, not to report status.
 - **Read guidelines first.** Always read `dev/guidelines.md` before making changes — this rule cascades from `/drive`.
-- **Escalation protocol.** Inherited from `/drive` — all Slack escalations go to `#claude-notification` via MCP `slack_send_message`.
+- **Escalation protocol.** Inherited from `/drive` — all Slack escalations go to `#acme-dev-notifications` via MCP `slack_send_message`.

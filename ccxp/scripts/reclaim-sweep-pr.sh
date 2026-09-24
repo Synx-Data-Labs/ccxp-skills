@@ -18,7 +18,7 @@
 # CCXP_PEER_MODE=0 (the old one-session-per-clone global-hold opt-out).
 #
 # On stdout when it did work: the reclaimed-lines summary (for the caller to
-# forward to #claude-notification — a reclaim is never silent) followed by
+# forward to #acme-dev-notifications — a reclaim is never silent) followed by
 # the PR URL. Prints nothing when there was nothing to reclaim.
 set -euo pipefail
 

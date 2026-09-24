@@ -49,7 +49,7 @@ Create the directory and file if they don't exist (`mkdir -p .claude/state`).
 ## Prerequisites
 
 `SLACK_STANDUP_CHANNEL` — the channel the daily standup summary (and
-escalation threads) are posted to, e.g. `claude-notification` (no leading
+escalation threads) are posted to, e.g. `acme-dev-notifications` (no leading
 `#`; the queries below add it). Required for the standup-thread check
 (step 1a) and its search fallback (step 4); there is **no baked-in
 default**. The search follows this order, first hit wins:
@@ -60,7 +60,7 @@ default**. The search follows this order, first hit wins:
    `load_vpn_env`, `_session/_lib.sh`'s `_session_load_env`)
 
 ```
-SLACK_STANDUP_CHANNEL=claude-notification
+SLACK_STANDUP_CHANNEL=acme-dev-notifications
 ```
 
 If unset, the standup-thread search (step 1a) is skipped with a one-line
