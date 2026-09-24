@@ -253,8 +253,34 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 
    This both preserves the audit trail a human skimming the PR used to get from Copilot's comments (visible on the PR itself, not just in this session's transcript) and re-derives cleanly next time this section runs — no local state to lose or hand off between sessions.
 
-- If the report is a clean bill (no real findings): review is complete — continue to step e.
+- If the report is a clean bill (no real findings): review is complete — dispatch the approval gate below, then continue to step e.
 - If the report describes real issues: **before responding**, invoke `superpowers:receiving-code-review`. It enforces: steelman the finding before deciding to push back; distinguish "wrong because I have context the reviewer lacked" from "wrong because I want to be done"; and when pushing back (not making a code change), post a follow-up PR comment with the specific design constraint or test that makes the finding incorrect — not "stylistic preference". Then address each per the skill's output: fix code (commit + push — the head SHA changes, so the check above no longer matches `$LAST_REVIEWED_SHA` and a fresh review re-triggers next iteration), or post the pushback comment and move on. **Never silently drop a finding without a comment explaining why.** This targets the same "argue with the reviewer to feel productive" anti-pattern the Copilot-era wording warned about — the skill is still the brake, just aimed at a different reviewer.
+
+**Dispatch the approval gate (only after a clean bill, only when the repo has one — T20260922-603756).** A repo with a `synx-merge-bot` App-auth `pr-approve.yml` workflow (`.github/workflows/pr-approve.yml` on its default branch — check once per run, not once per repo forever, since a repo can gain this later) uses that workflow to submit a real GitHub `APPROVE` review, pinned to the exact commit this step's review just covered — this is what makes `required_approving_review_count: 1` on such a repo satisfiable by automation without weakening what the review means (see `pr-approve.yml`'s own design comment: it is deliberately mechanical and never decides *whether* to approve — that judgment is entirely this step, right here). Repos without the workflow skip this block entirely; nothing else in `/address-pr` depends on it.
+
+```bash
+if bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
+  bash ../_gh/gh.sh workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"
+  # Poll the PR's own reviews, not the workflow run — this is what we actually
+  # care about (a genuine APPROVED review pinned to HEAD_SHA), and sidesteps
+  # matching a dispatched workflow_dispatch run back to its triggering call
+  # (the API doesn't hand back a run id from `gh workflow run` directly).
+  # Bounded, not indefinite: a slow/failed dispatch must never hang this loop
+  # — the eventual mergeability check in step a (§2.a) is the real backstop.
+  APPROVED=""
+  for i in $(seq 1 12); do
+    APPROVED="$(bash ../_gh/gh.sh pr view <NUMBER> --json reviews --jq \
+      ".reviews[] | select(.state==\"APPROVED\" and .commit.oid==\"${HEAD_SHA}\")" 2>/dev/null)"
+    [ -n "$APPROVED" ] && break
+    sleep 10
+  done
+  if [ -n "$APPROVED" ]; then
+    echo "pr-approve.yml approval landed for PR #<NUMBER> at ${HEAD_SHA}."
+  else
+    echo "::warning::pr-approve.yml dispatch did not produce a landed approval at ${HEAD_SHA} within the poll window — the mergeability check in step a will surface whether this blocks merge."
+  fi
+fi
+```
 
 #### e. Verify test plan
 
