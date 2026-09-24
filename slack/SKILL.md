@@ -19,9 +19,9 @@ Example usage (illustrative, not the only options):
 
 | Name | Channel | Env var | Purpose |
 |------|---------|---------|---------|
-| *(none — default)* | `#slack-automation-alerts` | `SLACK_WEBHOOK_URL` | Automation alerts, build notifications, testing |
+| *(none — default)* | `#acme-automation-alerts` | `SLACK_WEBHOOK_URL` | Automation alerts, build notifications, testing |
 | `cloud` | `#acme-cloud` | `SLACK_WEBHOOK_URL_CLOUD` | Release announcements only — use sparingly |
-| `dev` | `#claude-notification` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* the stop-summary this channel intentionally routes (see `autopilot/SKILL.md` Phase 5) — MCP is still the default path for every other use of this channel |
+| `dev` | `#acme-dev-notifications` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* the stop-summary this channel intentionally routes (see `autopilot/SKILL.md` Phase 5) — MCP is still the default path for every other use of this channel |
 
 ## Argument
 
@@ -43,9 +43,9 @@ hit wins:
 3. `$(pwd)/.env` (consumer repo's env, back-compat)
 
 ```
-SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...        # default, e.g. #slack-automation-alerts
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...        # default, e.g. #acme-automation-alerts
 SLACK_WEBHOOK_URL_CLOUD=https://hooks.slack.com/services/...  # --channel cloud, e.g. #acme-cloud
-SLACK_WEBHOOK_URL_DEV=https://hooks.slack.com/services/...    # --channel dev, e.g. #claude-notification
+SLACK_WEBHOOK_URL_DEV=https://hooks.slack.com/services/...    # --channel dev, e.g. #acme-dev-notifications
 ```
 
 ## Workflow
@@ -75,9 +75,9 @@ Send a Slack notification whenever a long-running operation (CI run, build, pipe
 ## Examples
 
 ```
-/slack hello world                                          # → default (SLACK_WEBHOOK_URL), e.g. #slack-automation-alerts
+/slack hello world                                          # → default (SLACK_WEBHOOK_URL), e.g. #acme-automation-alerts
 /slack --channel cloud --product "AcmeDB Cloud" --version "0.5.0" --status success  # → SLACK_WEBHOOK_URL_CLOUD, e.g. #acme-cloud
-/slack --channel dev MCP send failed, this is the webhook fallback  # → SLACK_WEBHOOK_URL_DEV, e.g. #claude-notification
+/slack --channel dev MCP send failed, this is the webhook fallback  # → SLACK_WEBHOOK_URL_DEV, e.g. #acme-dev-notifications
 /slack --channel foo Deploy finished                        # → SLACK_WEBHOOK_URL_FOO (any name works, not just the examples above)
 /slack --product "AcmeWidget4" --version "4.4.0" --status failure --details "Phase 3.3 timeout"
 ```
