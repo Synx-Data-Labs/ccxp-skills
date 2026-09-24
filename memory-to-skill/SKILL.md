@@ -50,12 +50,18 @@ context), `reference` (pointers to external systems).
 
 ### 3. Assess each memory
 
+**`dry-run` gate applies to every action step below (3, 4, 5): decide and
+record what you WOULD do; only actually delete a file, edit a doc, or run
+`/new-task`/`_taskid/new.sh` when NOT in `dry-run` mode.** This gate is
+checked at the point of each action, not deferred to step 6's report.
+
 For each entry, decide:
 
 - **Still current?** Check whether the underlying fact is still true (a
   bug may be fixed, a convention may have changed, a project may have
-  shipped). If stale, delete the memory file and remove its `MEMORY.md`
-  entry — do this immediately, don't defer to step 4.
+  shipped). If stale: in `dry-run`, record it as "would remove" and move
+  on; otherwise delete the memory file and remove its `MEMORY.md` entry
+  now — don't defer to step 4.
 - **Worth codifying?** A `feedback` or `project` memory that's proven
   useful across sessions should be promoted to a permanent home instead
   of living only in auto-memory:
@@ -81,7 +87,8 @@ If a memory describes a recurring need — the same workaround, the same
 manual step, the same judgment call — and none of step 3's targets
 actually fit it (it isn't a tweak to an existing skill's behavior, a
 process rule, or a diagnostic pattern; it's a capability that doesn't
-exist yet), file a task to **design a new skill** for it:
+exist yet): in `dry-run`, record it as a "would file" new-skill candidate
+and move on. Otherwise, file a task to **design a new skill** for it:
 
 ```bash
 /new-task "Design /<candidate-name>: <one-line gloss of the recurring need, sourced from the memory>"
@@ -96,13 +103,15 @@ would duplicate it).
 
 ### 5. File consolidation tasks
 
-For each codify-able item from step 3 that isn't a trivial one-line edit
-you're making directly: file a task (`bash ../_taskid/new.sh --check
-./dev` + the task template), tagged `Category: process` and `Source:
-memory-to-skill YYYY-MM-DD`. For a small, obvious edit (e.g. one bullet
-added to `dev/guidelines.md`), just make the edit directly instead of
-filing a task to describe making it — use judgment the way `/retro` Phase
-1b does.
+In `dry-run`, record each codify-able item as a "would consolidate"
+candidate (with its target file) and stop — do not file a task or edit
+any file. Otherwise: for each codify-able item from step 3 that isn't a
+trivial one-line edit you're making directly, file a task (`bash
+../_taskid/new.sh --check ./dev` + the task template), tagged `Category:
+process` and `Source: memory-to-skill YYYY-MM-DD`. For a small, obvious
+edit (e.g. one bullet added to `dev/guidelines.md`), just make the edit
+directly instead of filing a task to describe making it — use judgment
+the way `/retro` Phase 1b does.
 
 ### 6. Report
 
