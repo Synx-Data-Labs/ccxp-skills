@@ -1,10 +1,16 @@
 ---
-status: Open
+status: Coding
 estimation: 2h
 source: this conversation, 2026-09-24
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260924-144072: Add /memory-to-skill: standalone, single-clone memory review skill
+
+Design approved in-conversation 2026-09-24 — see Solution direction below;
+claimed and driven directly, no separate design PR.
 
 ## Problem
 
