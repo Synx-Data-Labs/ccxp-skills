@@ -23,3 +23,4 @@ reprioritize.
 - [T20260923-343482](T20260923-343482-app-auth-merge-workflow-synx-merge-bot.md): Build App-auth merge workflow using synx-merge-bot, so required-review branch protection needs no bypass list
 - [T20260924-159109](T20260924-159109-skill-to-app.md): Design /skill-to-app — compile a matured skill's deterministic steps into a program
 - [T20260924-366770](T20260924-366770-statusline-last-input-slug.md): Add a last-user-input slug to the statusline
+- [T20260924-144072](T20260924-144072-add-memory-to-skill-standalone-skill.md): Add /memory-to-skill: standalone, single-clone memory review skill
