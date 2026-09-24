@@ -109,6 +109,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `address-pr` | Address PR review comments, verify CI + hard gate, merge or notify |
 | `cleanup-branch` | Post-merge branch cleanup — a specific branch, a PR-merge sweep, or a bulk prune |
 | `retro` | Weekly retrospective — metrics, analysis, action items |
+| `memory-to-skill` | Review the current clone's auto-memory, prune stale entries, codify recurring ones into a skill/doc/hook |
 | `rca` | Diagnose/classify/track root cause for a failed GitHub Actions run |
 | `labrun-rca` | RCA a failed run announced via Slack permalink, reply in the thread |
 | `design-score` | Deterministic 0–100 structural score gating a design doc's Phase 2 → Phase 3 |
