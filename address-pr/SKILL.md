@@ -259,6 +259,11 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 **Dispatch the approval gate (only after a clean bill, only when the repo has one — T20260922-603756).** A repo with a `synx-merge-bot` App-auth `pr-approve.yml` workflow (`.github/workflows/pr-approve.yml` on its default branch — check once per run, not once per repo forever, since a repo can gain this later) uses that workflow to submit a real GitHub `APPROVE` review, pinned to the exact commit this step's review just covered — this is what makes `required_approving_review_count: 1` on such a repo satisfiable by automation without weakening what the review means (see `pr-approve.yml`'s own design comment: it is deliberately mechanical and never decides *whether* to approve — that judgment is entirely this step, right here). Repos without the workflow skip this block entirely; nothing else in `/address-pr` depends on it.
 
 ```bash
+# The existence check below can't distinguish "no pr-approve.yml" from a
+# transient/auth failure on `gh workflow view` — deliberately fail-safe, not
+# fail-unsafe: worst case this silently skips a repo that should get
+# auto-approval (merge stalls, gets investigated), never approves something
+# it shouldn't.
 if bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
   bash ../_gh/gh.sh workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"
   # Poll the PR's own reviews, not the workflow run — this is what we actually
