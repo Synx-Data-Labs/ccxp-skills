@@ -50,3 +50,33 @@ setup() {
   [ "$status" -eq 0 ]
   [ "$output" = "$real_home/.claude/projects/-tmp-somewhere/memory" ]
 }
+
+@test "rejects --cwd with a missing value with exit 2 (not an unbound-variable crash)" {
+  run memory-to-skill-find-dir --cwd
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--cwd requires a value"* ]]
+}
+
+@test "rejects --claude-home with a missing value with exit 2" {
+  run memory-to-skill-find-dir --cwd "/tmp/x" --claude-home
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--claude-home requires a value"* ]]
+}
+
+@test "-h/--help prints usage and exits 0" {
+  run memory-to-skill-find-dir --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Usage:"* ]]
+}
+
+@test "rejects an unknown argument with exit 2" {
+  run memory-to-skill-find-dir --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"unknown argument"* ]]
+}
+
+@test "sourcing the script does not leak set -e/-u/pipefail into the caller's shell" {
+  run bash -c "source '$REPO_ROOT/memory-to-skill/scripts/find-memory-dir.sh'; unset_but_ok=\$UNSET_VAR; echo ok"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ok" ]
+}

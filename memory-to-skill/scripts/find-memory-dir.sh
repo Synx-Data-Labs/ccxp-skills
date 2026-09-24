@@ -16,10 +16,12 @@
 # Exit: 0 if the directory exists, 1 if it does not (message on stderr), 2 on
 # a usage error.
 #
-# Sourceable: defines functions only; the CLI entrypoint runs solely under
-# the direct-execution guard at the bottom (repo guidelines).
-
-set -euo pipefail
+# Sourceable: defines functions only, with no shell-option side effects on
+# the sourcing shell — `set -euo pipefail` is scoped to the direct-execution
+# guard at the bottom, not set unconditionally at source time (a caller that
+# sources this file and calls memory-to-skill-find-dir directly, without
+# forking a subshell the way bats' `run` does, must not inherit -e/-u/
+# pipefail as a side effect of sourcing).
 
 memory-to-skill-find-dir-usage() {
   cat <<'EOF'
@@ -42,8 +44,14 @@ memory-to-skill-find-dir() {
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --cwd) target_cwd="$2"; shift 2 ;;
-      --claude-home) claude_home="$2"; shift 2 ;;
+      --cwd|--claude-home)
+        if [ "$#" -lt 2 ]; then
+          echo "find-memory-dir.sh: $1 requires a value" >&2
+          return 2
+        fi
+        [ "$1" = "--cwd" ] && target_cwd="$2" || claude_home="$2"
+        shift 2
+        ;;
       -h|--help) memory-to-skill-find-dir-usage; return 0 ;;
       *) echo "find-memory-dir.sh: unknown argument: $1" >&2; return 2 ;;
     esac
@@ -70,5 +78,6 @@ memory-to-skill-find-dir() {
 }
 
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
+  set -euo pipefail
   memory-to-skill-find-dir "$@"
 fi
