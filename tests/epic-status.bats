@@ -316,6 +316,14 @@ EOF
   [ "$output" = "$expected" ]
 }
 
+@test "_epic_status_bucket + _epic_status_rank: \"In Progress\" maps identically to the legacy Coding alias (T20260809-355059)" {
+  run bash -c "source '$SCRIPT'; _epic_status_bucket 'In Progress'; _epic_status_rank 'In Progress'"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'Coding4' ]
+  run bash -c "source '$SCRIPT'; _epic_status_bucket 'Coding'; _epic_status_rank 'Coding'"
+  [ "$output" = $'Coding4' ]
+}
+
 @test "_epic_status_bucket: empty or garbage status maps to unknown, never silently into Open" {
   run bash -c "source '$SCRIPT'; _epic_status_bucket ''; echo; _epic_status_bucket 'Garbage'"
   [ "$status" -eq 0 ]
