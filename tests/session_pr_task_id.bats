@@ -55,16 +55,47 @@ setup() {
   [ "$(session_pr_task_id 42)" = "T20260515-171645" ]
 }
 
-@test "falls back to commit messageHeadline scan when neither body nor branch match" {
+@test "falls back to commit messageHeadline scan when neither body nor branch match (parens form)" {
+  # Realistic repo convention: "this commit closes/implements task X" is
+  # marked with a trailing `(T<id>)`, not a bare substring anywhere in the
+  # message (T20260925-332662).
   _session_gh() {
     case "$*" in
       *"--json body"*) printf 'no task link here' ;;
       *"--json headRefName"*) printf 'fix/unrelated-branch' ;;
-      *"--json commits"*) printf 'T20260101-000001 fix: something\nunrelated commit' ;;
+      *"--json commits"*) printf 'fix(pr_task_id): narrow signal-3 regex (T20260101-000001)\nunrelated commit' ;;
       *) printf '' ;;
     esac
   }
   [ "$(session_pr_task_id 7)" = "T20260101-000001" ]
+}
+
+@test "commit messageHeadline scan also accepts a leading 'T<id>:' subject prefix" {
+  _session_gh() {
+    case "$*" in
+      *"--json body"*) printf 'no task link here' ;;
+      *"--json headRefName"*) printf 'fix/unrelated-branch' ;;
+      *"--json commits"*) printf 'T20260101-000003: fix something\nunrelated commit' ;;
+      *) printf '' ;;
+    esac
+  }
+  [ "$(session_pr_task_id 7)" = "T20260101-000003" ]
+}
+
+@test "a bare T<id> mentioned as DATA in a commit subject does not false-positive via signal 3 (T20260925-332662)" {
+  # The exact shape that caused the false positive: /top's own commit message
+  # names the task being reordered as data, not "this PR implements that
+  # task" — e.g. "docs(queue): move T<id> to the top". A bare substring must
+  # NOT resolve via signal 3.
+  _session_gh() {
+    case "$*" in
+      *"--json body"*) printf 'no task link here' ;;
+      *"--json headRefName"*) printf 'fix/unrelated-branch' ;;
+      *"--json commits"*) printf 'docs(queue): move T20260806-147372 to the top\nunrelated commit' ;;
+      *) printf '' ;;
+    esac
+  }
+  [ -z "$(session_pr_task_id 7)" ]
 }
 
 @test "no PR number -> empty output, exit 0" {

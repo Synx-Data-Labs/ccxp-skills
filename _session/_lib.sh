@@ -279,7 +279,12 @@ session_pr_task_id() {
   #      correct current task while the stale branch name still matched a
   #      closed/superseded one).
   #   2. Branch name pattern `t<8-digit-date>-<id>` (tracked-task convention)
-  #   3. PR commit messageHeadline scan for `T<id>` mentions
+  #   3. PR commit messageHeadline scan for a `(T<id>)`-parenthesized or
+  #      leading `T<id>:` mention — NOT any bare `T<id>` substring. A bare
+  #      substring also matches a task ID mentioned as *data* (e.g. /top's
+  #      own `docs(queue): move T<id> to the top` reorder commit), which is
+  #      not the same as "this commit implements/closes that task"
+  #      (T20260925-332662).
   # Echoes the task ID (e.g. T20260515-171645) or empty string. Quiet on
   # miss — callers decide what to do when correlation fails.
   local pr="$1" tid
@@ -298,6 +303,7 @@ session_pr_task_id() {
   fi
   if [ -z "$tid" ]; then
     tid="$(_session_gh pr view "$pr" --json commits --jq '.commits[].messageHeadline' 2>/dev/null \
+      | grep -oE '\(T[0-9]{8}-[0-9]+\)|^T[0-9]{8}-[0-9]+:' \
       | grep -oE 'T[0-9]{8}-[0-9]+' | head -1)"
   fi
   printf '%s' "$tid"
