@@ -94,6 +94,15 @@ EOF
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T20260101-111111-demo.md" status)" = "Open" ]
 }
 
+@test "--apply reclaims an \"In Progress\" task identically to the legacy Coding alias (T20260809-355059)" {
+  _mk_claimed_task T20260101-444444 "In Progress" deadbeef@cdw
+  run reclaim_sweep --apply
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reclaimed T20260101-444444"* ]]
+  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T20260101-444444-demo.md" claimed_by)" ]
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T20260101-444444-demo.md" status)" = "Open" ]
+}
+
 @test "dry-run (no --apply) detects but does NOT edit the file" {
   _mk_claimed_task T20260101-222222 Review deadbeef@cdw
   run reclaim_sweep

@@ -55,6 +55,12 @@ EOF
   [[ "$output" == *"unclaimed T20260101-222222"* ]]
 }
 
+@test "flags an \"In Progress\" task with no claimed_by identically to the legacy Coding alias (T20260809-355059)" {
+  _mk_task T20260101-234567 "In Progress" ""
+  run claim_gap
+  [[ "$output" == *"unclaimed T20260101-234567"* ]]
+}
+
 @test "does NOT flag a Review task with no claimed_by (same reasoning as Design)" {
   _mk_task T20260101-333333 Review ""
   run claim_gap
