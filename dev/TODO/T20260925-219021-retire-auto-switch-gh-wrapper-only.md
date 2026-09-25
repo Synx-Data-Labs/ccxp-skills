@@ -24,6 +24,10 @@ source: lsc-pa conversation, 2026-09-25
   - `ccxp/scripts/epic-status.sh:144,217,261,276,337`: `GH_TOKEN="$tok" gh ...`
   - `_session/_lib.sh:74-91`: token fallback chain ending in `GH_TOKEN`,
     with a raw-`gh` branch
+  - `_taskid/url.sh:43` looks for the wrapper at the dead
+    `~/.claude/skills/_gh/gh.sh` path, so it silently falls back to bare
+    `gh` under plugin installs; resolve via `CLAUDE_PLUGIN_ROOT` or the
+    plugin cache instead (lsc-pa's `dev/scripts/lint_refs.py` hit the same)
   - README.md:59 and README.md:275-282 plus `gcpr/SKILL.md:182` document
     the old pattern
 - Done looks like:
