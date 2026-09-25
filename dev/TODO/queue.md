@@ -26,3 +26,4 @@ reprioritize.
 - [T20260924-144072](T20260924-144072-add-memory-to-skill-standalone-skill.md): Add /memory-to-skill: standalone, single-clone memory review skill
 - [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
 - [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
+- [T20260925-219021](T20260925-219021-retire-auto-switch-gh-wrapper-only.md): Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
