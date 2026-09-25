@@ -68,8 +68,8 @@ See `todo/SKILL.md` "Task metadata" section for the full field semantics.
 
 ```
 Open → Design → In Progress → Review → Done
-         ↕                          ↕
-    Blocked by T{id}             Parked
+         ↕                               ↕
+    Blocked by T{id}                  Parked
 ```
 
 `Coding` is a still-recognized legacy alias of `In Progress` for scripts and existing task files (T20260809-355059) — a domain-generic rename, since many tasks this system tracks aren't code at all (legal filings, marketing audits, research write-ups). New task files should be written with `In Progress`.
