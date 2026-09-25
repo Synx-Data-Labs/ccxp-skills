@@ -58,7 +58,7 @@ This gate is about **whose PR it is** (human-authorship); §1.6 is about **which
 `/address-pr` may be invoked independently of `/drive` (e.g., reviewing an already-open PR). To make the Project board show the PR is in human-reviewable state, do two things up front:
 
 1. **Correlate the PR back to its task** via `_session/pr_task_id.sh` (branch name → PR body `Task:` link → commit-message scan).
-2. **Set Project Status = Review** so the board flips out of `Coding` for the duration of the PR loop.
+2. **Set Project Status = Review** so the board flips out of `In Progress` for the duration of the PR loop.
 3. **Append the PR ref to the task's Project item title** (`set-pr-ref.sh`) so the board shows the task→PR mapping at a glance. Idempotent — a no-op if `/gcpr` already stamped it, or on re-entry.
 
 ```bash

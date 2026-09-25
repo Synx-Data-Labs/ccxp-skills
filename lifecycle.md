@@ -35,7 +35,7 @@ Task metadata uses **YAML frontmatter** (`---` … `---` at the top of the file)
 ```markdown
 ---
 estimation: {30m|1h|2h|4h|1d|2d|1w|2w}
-status: {Open|Design|Coding|Review|Blocked by T{id}}
+status: {Open|Design|In Progress|Review|Blocked by T{id}}
 source: {GitHub issue, upstream link, or process note}
 description: {One-line summary of what's wrong and what "done" looks like}
 ---
@@ -67,10 +67,12 @@ See `todo/SKILL.md` "Task metadata" section for the full field semantics.
 ## Status Flow
 
 ```
-Open → Design → Coding → Review → Done
+Open → Design → In Progress → Review → Done
          ↕                          ↕
     Blocked by T{id}             Parked
 ```
+
+`Coding` is a still-recognized legacy alias of `In Progress` for scripts and existing task files (T20260809-355059) — a domain-generic rename, since many tasks this system tracks aren't code at all (legal filings, marketing audits, research write-ups). New task files should be written with `In Progress`.
 
 > **Done** means the file is **moved** from `dev/TODO/` to `dev/JOURNAL/`.
 > **Parked** means the file is **moved** from `dev/TODO/` to `dev/PARKING/` — not actionable now, reviewed periodically by `/drive`.
@@ -79,13 +81,13 @@ Open → Design → Coding → Review → Done
 |--------|---------|
 | Open | Not yet started — queued for future work |
 | **Design** | Research, planning, writing the design journal entry |
-| **Coding** | Implementation — writing code, scripts, tests |
+| **In Progress** | Implementation is underway — code, a design doc, a filing, whatever "doing the work" means for this task (`Coding` is a still-recognized legacy alias) |
 | **Review** | PR open or awaiting verification/sign-off |
 | Blocked by T{id} | Cannot proceed until dependency is resolved (list all blockers) |
 | Parked | Moved to `dev/PARKING/` — valid but not actionable now. Use `/todo sweep` to park tasks. |
 | Done | Move to `dev/JOURNAL/` — the journal entry is the permanent record |
 
-The active states `Design`, `Coding`, `Review`, `Blocked` live in the task file's frontmatter `status:` field. The file is the single source of truth — no external mirror. (Previously: claims were mirrored to `your-org/projects/1` via `_claims/`; removed in T20260513-422869 alongside the one-session-per-clone convention.)
+The active states `Design`, `In Progress`, `Review`, `Blocked` live in the task file's frontmatter `status:` field. The file is the single source of truth — no external mirror. (Previously: claims were mirrored to `your-org/projects/1` via `_claims/`; removed in T20260513-422869 alongside the one-session-per-clone convention.)
 
 **Session visibility** (separate from lifecycle status): `/drive` and `/address-pr` write a thin "which session is on this task right now" annotation to the Project item — see `_session/README.md`. Soft visualization, not coordination: failures don't block, and this layer alone never refuses work. The actual race protection is the on-main `task_claim.sh` lock (`claimed_by:` frontmatter, arbitrated atomically by the merge to `main`) — peer mode by default (`_session/README.md`'s "Task-claim lock" section), not the older one-session-per-clone-only model. Any path that flips a task's status out of `Open` should take this claim first (T20260610-248248) — `/drive` Phase 1 and `/ccxp` Phase 2a.3 both do.
 
@@ -145,8 +147,8 @@ Tasks carry a free-text time-based estimate (e.g. `1h`, `0.5d`, `2w`). For a sma
 ## Working a Task
 
 - **Open → Design**: Start researching and planning; add journal notes to the task file. **Always include a Test Plan section** when entering Design — define how the change will be verified (unit tests, integration dry-runs, regression checks) before writing any code.
-- **Design → Coding**: Design is settled; begin implementation
-- **Coding → Review**: Code is written and tested; PR is open or ready for verification
+- **Design → In Progress**: Design is settled; begin implementation
+- **In Progress → Review**: Work is done and tested; PR is open or ready for verification
 - If blocked at any stage, note what's blocking it (e.g., "Blocked by T20260320-000063")
 - Keep the task file current — update it as understanding evolves
 - **Refresh context on every switch.** When resuming a task after working on something else (park/resume, multi-task sessions), always re-verify `git branch --show-current` matches the task's branch and re-read the task file before making any change — jumping between branches for different tasks is a real source of stale-context mistakes.

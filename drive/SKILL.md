@@ -60,7 +60,7 @@ If task ID given:
 
 1. Read the task file
 2. Verify it's not Blocked or Done
-3. Flip the task file's Status to the appropriate next state (Open → Design, Design → Coding, etc.) in-place
+3. Flip the task file's Status to the appropriate next state (Open → Design, Design → In Progress, etc.) in-place
 
 **Clone-locality guard (run right after the id is resolved, before any status/claim write — T20260626-298293):**
 
@@ -82,7 +82,7 @@ After picking the task and updating its frontmatter `status:`, mirror that stage
 
 ```bash
 # Frontmatter status → Project Status single-select (e.g. Open → Design)
-bash ../_session/status.sh <task-id> <Design|Coding>
+bash ../_session/status.sh <task-id> <Design|In Progress>
 ```
 
 This call is pure visualization — nothing depends on the write succeeding, and other sessions won't be blocked from picking the same task. See `_session/README.md` for the design. If it fails (missing PAT, network, etc.), it logs to stderr and exits 0 — continue with the task. The frontmatter `status:` field in the task file remains the source of truth; the Project Status field just mirrors it for the board view.
@@ -94,7 +94,7 @@ The in-place status flip above and the `status.sh` board mirror are **not durabl
 Close that gap by landing a tiny **claim PR as the very first thing**, before any design or implementation work:
 
 1. Branch `t<id>-claim` off `main`.
-2. Edit **only** the task file's `status:` frontmatter line: `Open` → `Coding` (or `Open` → `Design` when a design PR will follow in Phase 2). A short prose note is fine (`claimed YYYY-MM-DD`). Change nothing else — keep it a **pure status-change** so it auto-merges under the carve-out in `dev/branch-merge-policy.md`.
+2. Edit **only** the task file's `status:` frontmatter line: `Open` → `In Progress` (or `Open` → `Design` when a design PR will follow in Phase 2). A short prose note is fine (`claimed YYYY-MM-DD`). Change nothing else — keep it a **pure status-change** so it auto-merges under the carve-out in `dev/branch-merge-policy.md`.
 3. Commit, push, `gh pr create`, then run `/address-pr` on it. It auto-merges on the pure-status-change tier once CI is green (no manual approval needed). (No doc-lint guard here — the claim PR is a pure frontmatter `status:`/`claimed_by:` change and cannot trip MD032, a body-list rule; the guard runs on the body-doc paths — Phase 4 via `/gcpr` Step 1.5 and the Phase 7 journal-move. T20260627-192311.)
 4. After it merges, `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), then continue to Phase 2/3 on a fresh implementation branch.
 
@@ -105,7 +105,7 @@ This makes "somebody is working on T<id>" true **on `main`** at claim time — d
 1. **Before picking, confirm the task is free:** `bash ../_session/task_claim.sh read <id>` → if `claimed_by` is non-empty and is **not** this session's id (`task_claim.sh claimant-id`), the task is held by another session — **do not pick it**. Check `task_claim.sh reclaimable <id>` (a stale claim — no open PR, no commits in N days — may be reclaimed); otherwise go back to `/todo next` for a different task.
 
    **Also confirm it is not lint-frozen (T20260629-185057):** `bash ../_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation` (the [T20260626-353630] schema-fork class). If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason. `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
-2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash ../_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash ../_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: Coding`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`Coding`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
+2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash ../_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash ../_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: In Progress`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`In Progress`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
 3. **Claim-PR conflict = you lost the race.** If the claim PR cannot merge because of a conflict on the `claimed_by:` line, another session acquired the same task in the same window. Do **not** force it — `git checkout main && git pull && git remote prune origin`, then re-pick via `/todo next`. **The merge conflict IS the lock rejecting your acquire.**
 4. **Release on close.** In Phase 7 (task done/parked), `bash ../_session/task_claim.sh release <id> <final-status>` clears `claimed_by` as part of the journal-move/close PR.
 
@@ -116,7 +116,7 @@ With **`CCXP_PEER_MODE=0`** (the opt-out), the claim PR flips only `status:` exa
 Interaction with the Phase 2 design PR:
 
 - **Design PR will run** → claim PR flips `Open` → `Design` first (design-writing can take a while; don't leave the board Open meanwhile), then Phase 2 carries the design *content*.
-- **Design PR is skipped** (self-evident fix / in-conversation-approved — see Phase 2 "When to skip") → the claim PR is the **only** thing that lands the status before the implementation PR, so it is **required** in that path; flip `Open` → `Coding`.
+- **Design PR is skipped** (self-evident fix / in-conversation-approved — see Phase 2 "When to skip") → the claim PR is the **only** thing that lands the status before the implementation PR, so it is **required** in that path; flip `Open` → `In Progress`.
 
 ### Phase 1.5: Cross-repo dispatch (optional)
 
@@ -188,7 +188,7 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 3. Update task status: `Open` → `Design`.
 4. **Create the design PR** — branch `t<id>-design`, commit ONLY the task-file changes, push, open PR. PR body: 1-paragraph summary of the design + "Design-only PR — implementation lands in a follow-up after this merges." Run `/address-pr` on it (CI will be green for docs-only; Copilot reviews the design itself; maintainer reviews and approves).
 5. **Wait for the design PR to merge.** This is a checkpoint — do NOT proceed to Phase 3 until the design PR is on `main`.
-6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `Coding` (in a follow-up commit on the implementation branch — see Phase 3).
+6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `In Progress` (in a follow-up commit on the implementation branch — see Phase 3).
 7. **Design-score gate (hard gate — Phase 2 → Phase 3, per T20260609-204303 D3).** Before any code, score the merged design deterministically:
 
    ```bash
@@ -416,7 +416,7 @@ Use the `/gcpr` skill workflow:
 4. Push and create PR in the target repo
 5. **Record the cross-repo pointer + flip the hub status (T20260629-332546)** — so the next tick's Phase-1.5.0 guard finds this PR by pointer instead of re-searching, and the board reads past-`Design`. The pointer recording closes the duplication window the moment the PR exists (don't defer it to Phase 7). On a short `t<id>-xrepo-pointer` branch **in `$HUB`** (a tiny docs PR — auto-merges as status-change tier):
    - Append a `## Cross-repo work` line to the hub task **body** (not frontmatter — a `target_pr:` frontmatter key would need a `lint_tasks.py` allowlist entry, coupling to the T20260626-353630 schema fork): `` - Implementation: <target-repo>#<pr-number> (`<headRefName>`) — opened <YYYY-MM-DD>. ``
-   - Flip the hub task `status:` → `Review` (it was `Coding` from the claim PR), and mirror it: `bash ../_session/status.sh <id> Review`.
+   - Flip the hub task `status:` → `Review` (it was `In Progress` from the claim PR), and mirror it: `bash ../_session/status.sh <id> Review`.
    - **Lint-frozen fallback (T20260626-353630 class):** if the hub task file's pre-existing frontmatter trips the changed-mode `Lint task frontmatter` check (so even a body edit's whole-file lint fails), **skip the pointer edit** — the Phase-1.5.0 `gh pr list --search` guard already finds the PR with zero recorded state, so the safety net holds without an unmergeable edit.
 
 ### Phase 5: Address PR
@@ -439,8 +439,8 @@ When the current task (G, the goal) can't progress because it depends on another
    Best-effort; the local `Blocked by` line in the task file is the source of truth.
 
    **Checkpoint discipline (applies to ANY mid-task park, blocker or session-budget checkpoint):**
-   - The task-file update recording the park (status + **the exact branch name** + what's done/what remains) must land **on main** (small docs PR — auto-merges as status-change tier). A progress note committed only to the work branch is invisible to every future session: main's task file still reads as un-started "Coding", and the resuming session re-does the work on a fresh branch (observed incident: a feature was implemented twice on two branches because a park/resume didn't record which branch had the in-progress work).
-   - **On resuming any `Coding` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash ../_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing (T20260629-332546).
+   - The task-file update recording the park (status + **the exact branch name** + what's done/what remains) must land **on main** (small docs PR — auto-merges as status-change tier). A progress note committed only to the work branch is invisible to every future session: main's task file still reads as un-started "In Progress", and the resuming session re-does the work on a fresh branch (observed incident: a feature was implemented twice on two branches because a park/resume didn't record which branch had the in-progress work).
+   - **On resuming any `In Progress` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash ../_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing (T20260629-332546).
    - Before exiting the session, return the clone to `main` (the cron wrapper executes from this working tree; a parked branch makes the wrapper itself go stale — see T20260605-862341 JOURNAL).
 3. **Recurse into B.** Default (no flag) — invoke the `/drive` workflow on B **inline, in this
    same conversation**:
@@ -627,7 +627,7 @@ Follow `dev/guidelines.md`:
   The stamper resolves the Monday token-free (committed IPM file → Project API → next-Monday fallback) and writes it **update-forward-only**, printing the effective date. Token-free means it still stages correctly in the ccxp cron (no PAT) — unlike the old `_session/iteration.sh` inline call, which returned empty without a token and silently left the task unscheduled (T20260626-190842). It only no-ops on a non-YAML/legacy task file. `scheduled` is a lint-allowlisted key. (Closed tasks get their iteration automatically from the close-date via `sync-tasks` — see that action; this rule is only for *live* tasks at creation.)
 
 - **Keep the task file current.** Update the task file in `dev/TODO/` after every phase transition, checklist item completion, pipeline result (pass or fail), or new issue discovered. The task file is the single source of truth for progress — if it's stale, the user can't tell what happened. Specifically:
-  - Phase transition (Open → Design, Coding → Review, etc.): update status line
+  - Phase transition (Open → Design, In Progress → Review, etc.): update status line
   - Checklist item done: check it off with `[x]`
   - Pipeline/build finished: record run ID, result, and any errors
   - New blocker or issue found: add it as a new checklist item

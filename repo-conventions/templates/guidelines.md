@@ -52,7 +52,7 @@ Task metadata uses **YAML frontmatter** (`---` … `---` at the top of the file)
 ```markdown
 ---
 estimation: {30m|1h|2h|4h|1d|2d|1w|2w}
-status: {Open|Design|Coding|Review|Blocked by T{id}}
+status: {Open|Design|In Progress|Review|Blocked by T{id}}
 source: {GitHub issue, upstream link, or process note}
 description: {One-line summary}
 ---
@@ -63,7 +63,7 @@ description: {One-line summary}
 ### Status Flow
 
 ```
-Open → Design → Coding → Review → Done
+Open → Design → In Progress → Review → Done
          ↕                          ↕
     Blocked by T{id}             Parked
 ```

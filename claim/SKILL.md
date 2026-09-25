@@ -118,8 +118,8 @@ mode note there is kept in sync with this one.
    `release-others` frees every task this `cc1-<machine-id>:<path-hash>` identity
    currently holds except `T<id>` (release-on-pickup — keeps the claim count
    at ≤1 per clone); `acquire` sets `T<id>`'s `claimed_by` and flips
-   `status: Coding` (or `Design`, matching `/drive` Phase 1's own-judgment
-   call on whether design work is still needed — default to `Coding` if
+   `status: In Progress` (or `Design`, matching `/drive` Phase 1's own-judgment
+   call on whether design work is still needed — default to `In Progress` if
    unsure).
 4. **Commit and PR** — pure frontmatter change, docs-only, no other edits:
 
