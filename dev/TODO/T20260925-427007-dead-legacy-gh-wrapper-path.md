@@ -47,5 +47,9 @@ related: T20260925-219021
   #159's `find_gh_wrapper()`).
 - bats/pytest cases cover wrapper resolution with a fake plugin layout and
   with no wrapper at all.
-- `git grep '\.claude/skills/_gh'` finds nothing outside `dev/JOURNAL/` and
-  tests that deliberately fake the legacy path.
+- None of the four call sites above references the legacy path any more,
+  in either spelling: the literal `~/.claude/skills/_gh` (shell) or the
+  `".claude" / "skills" / "_gh"` pieces (`lint_refs.py`). Check with
+  `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py' ':!tests/'`,
+  which should come back empty (task/journal prose and test comments that
+  describe the old path are expected hits outside that scope).
