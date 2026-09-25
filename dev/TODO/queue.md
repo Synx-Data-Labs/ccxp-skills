@@ -8,7 +8,6 @@ reprioritize.
 
 - [T20260808-192220](T20260808-192220-implement-rotate-1password-skill.md): Implement the `/rotate-1password <secret>` skill
 - [T20260809-355059](T20260809-355059-rename-status-coding-generic.md): Rename the `Coding` lifecycle status to something domain-generic
-- [T20260922-383156](T20260922-383156-lint-docs-plus-corruption-still-live.md): `markdownlint-cli2 --fix` still flips a bare leading `+` to `-` and drops comma-spacing — scoping contains it, doesn't fix it
 - [T20260922-253015](T20260922-253015-lint-docs-png-mutation-unconfirmed.md): Confirm or rule out `lint-docs.sh --fix` rewriting a PNG asset
 - [T20260922-155006](T20260922-155006-gcpr-changed-md-awk-rename-unsafe.md): `gcpr/SKILL.md`'s `CHANGED_TASKS`/`CHANGED_REFS` extraction is rename/delete-unsafe, same bug as the fixed `CHANGED_MD` one
 - [T20260922-409644](T20260922-409644-disable-model-invocation-never-used.md): `disable-model-invocation` is never set to `true` anywhere in ccxp-skills
@@ -23,7 +22,9 @@ reprioritize.
 - [T20260923-343482](T20260923-343482-app-auth-merge-workflow-synx-merge-bot.md): Build App-auth merge workflow using synx-merge-bot, so required-review branch protection needs no bypass list
 - [T20260924-159109](T20260924-159109-skill-to-app.md): Design /skill-to-app — compile a matured skill's deterministic steps into a program
 - [T20260924-366770](T20260924-366770-statusline-last-input-slug.md): Add a last-user-input slug to the statusline
-- [T20260924-144072](T20260924-144072-add-memory-to-skill-standalone-skill.md): Add /memory-to-skill: standalone, single-clone memory review skill
 - [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
 - [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
 - [T20260925-219021](T20260925-219021-retire-auto-switch-gh-wrapper-only.md): Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
+- [T20260924-232855](T20260924-232855-estimation-to-story-points.md): Replace `estimation:` duration buckets with XP story points
+- [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
+- [T20260925-332662](T20260925-332662-pr-task-id-false-positive-top-commit-mentions.md): `pr_task_id.sh` signal 3 (commit-message scan) false-positives on `/top`'s own commit message
