@@ -1,5 +1,5 @@
 ---
-status: Coding
+status: Blocked by T20260923-584914 — PR #132 still open, unmerged
 scheduled: 2026-09-21
 estimation: 1h
 source: discovered driving T20260923-584914, 2026-09-23
@@ -13,17 +13,20 @@ claimed_role: interactive
 ## Problem
 
 - **Type**: bug (doc drift)
-- T20260923-584914 extracted `/ccxp`'s inlined Monday IPM ritual
-  (`2a.0`–`2a.6`) into a standalone `ipm/SKILL.md`, renumbering the
+- T20260923-584914 (design merged; **implementation [PR #132](https://github.com/Synx-Data-Labs/ccxp-skills/pull/132) still open,
+  unmerged as of 2026-09-24**) extracts `/ccxp`'s inlined Monday IPM
+  ritual (`2a.0`–`2a.6`) into a standalone `ipm/SKILL.md`, renumbering the
   sub-phases to plain `0`–`6` (`5a`/`5b`). That task's own reference
-  sweep was scoped — by its merged design's Solution section — to
+  sweep is scoped — by its design's Solution section — to
   `` grep -n '2a\.[0-9]' ccxp/SKILL.md `` only: 9 lines inside that one
-  file, all fixed.
-- An independent review of the implementation PR (#132) ran the same
-  grep **repo-wide** and found the old `Phase 2a.N` numbering still
+  file, to be fixed when #132 merges.
+- An independent review of the (still-open) implementation [PR #132](https://github.com/Synx-Data-Labs/ccxp-skills/pull/132) ran
+  the same grep **repo-wide** and found the old `Phase 2a.N` numbering
   cited, as if current, in several *other* live skill files (not just
   historical `dev/JOURNAL/` records, which are correctly frozen and out
-  of scope):
+  of scope) — **this task cannot execute until #132 merges** (its own
+  `ccxp/SKILL.md` fix would otherwise conflict with, or be overwritten
+  by, #132's landing):
   - `incept/SKILL.md` — frontmatter `description`, plus lines 19, 106,
     109, 119, 127 (`` /ccxp Phase 2a.3 ``, `` /ccxp 2a.3 step 3/4 ``)
   - `retro/SKILL.md:53` — `` set by ccxp Phase 2a.5 ``
