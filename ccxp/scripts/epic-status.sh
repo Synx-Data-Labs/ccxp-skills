@@ -296,7 +296,9 @@ _epic_status_bucket() {
   case "$status" in
     Done)      printf 'Done' ;;
     Review)    printf 'Review' ;;
-    Coding)    printf 'Coding' ;;
+    # "In Progress" is the T20260809-355059 rename of Coding — dual-accept:
+    # bucketed under the same "Coding" key (display-text rename is Phase B).
+    Coding|"In Progress") printf 'Coding' ;;
     Design)    printf 'Design' ;;
     Blocked*)  printf 'Blocked' ;;
     Parked)    printf 'Parked' ;;
@@ -312,7 +314,7 @@ _epic_status_rank() {
   case "$status" in
     Done)      printf '6' ;;
     Review)    printf '5' ;;
-    Coding)    printf '4' ;;
+    Coding|"In Progress") printf '4' ;;
     Design)    printf '3' ;;
     Blocked*)  printf '2' ;;
     Parked)    printf '2' ;;
