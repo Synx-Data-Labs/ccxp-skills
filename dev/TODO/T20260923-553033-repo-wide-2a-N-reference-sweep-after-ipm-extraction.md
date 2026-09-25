@@ -4,8 +4,8 @@ scheduled: 2026-09-21
 estimation: 1h
 source: discovered driving T20260923-584914, 2026-09-23
 related: T20260923-584914
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260923-553033: Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction

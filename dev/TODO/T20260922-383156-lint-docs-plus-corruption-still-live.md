@@ -1,9 +1,11 @@
 ---
-status: Open
-scheduled: 2026-10-05
+status: Design
+scheduled: 2026-09-21
 estimation: 1h
 source: T20260910-919422's Closed section, 2026-09-22 — the +/- and comma-spacing corruption itself is not fixed by that task's scoping fix
 related: T20260910-919422
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
 ---
 
 # T20260922-383156: `markdownlint-cli2 --fix` still flips a bare leading `+` to `-` and drops comma-spacing — scoping contains it, doesn't fix it
