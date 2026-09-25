@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Coding
 estimation: 1h
 source: discovered while /address-pr-ing synxdb-team PR #666 (a /top queue reorder)
 related: T20260718-160579, T20260922-324422, T20260918-404944
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260925-332662: `pr_task_id.sh` signal 3 (commit-message scan) false-positives on `/top`'s own commit message
