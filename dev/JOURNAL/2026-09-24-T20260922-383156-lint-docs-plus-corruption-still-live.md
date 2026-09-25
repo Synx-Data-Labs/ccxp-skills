@@ -206,8 +206,6 @@ claimed_role:
       (`lint_docs_run`'s existing parameters), plus the two pre-existing
       `--no-globs` tests (unchanged, still passing) cover the bare-call
       case directly.
-- [x] Regression: full `bats tests/*.bats` suite green — 743/743, 0
-      failures (fresh run, `/tmp/full-bats-run.log`).
 - [x] Manual: re-ran the Root-cause repro against the shipped script
       directly (not a throwaway copy) — same before/after result,
       confirmed during implementation debugging (which also surfaced and
@@ -215,6 +213,20 @@ claimed_role:
       `.markdownlint-cli2.jsonc` silently defeated it via
       markdownlint-cli2's own auto-discovery, even under explicit
       `--config` — fixed by using a non-colliding filename).
+- [x] Unit (post-review): "a caller that guards `lint_docs_run` with `||`
+      survives under set -e" — a contract/sanity test, not a regression
+      test (empirically passes on both the buggy and fixed code, since
+      bash suspends errexit through the whole nested call graph once the
+      top-level call is under a `||`/`if` test).
+- [x] Unit (post-review): "an unrelated per-file write failure doesn't
+      fall back to re-processing an already-fixed file" — a genuine
+      regression test for a real bug the independent review found:
+      once the tool has actually run, an unexpected exit code (e.g. one
+      file's unrelated permission failure) used to still return 3 and
+      trigger the unsafe plain-path fallback over ALL files, silently
+      re-corrupting ones the safe-fix pass had already fixed.
+- [x] Regression: full `bats tests/*.bats` suite green — 746/746, 0
+      failures (3 net new tests; fresh run after all review fixes).
 
 ## Done criteria
 
@@ -227,16 +239,19 @@ claimed_role:
 - [x] Repo-wide/CI full-tree lint still enforces `MD004`/`MD037` at full
       strength — `.markdownlint-cli2.jsonc` itself untouched (verified:
       `git diff` shows zero changes to that file).
-- [x] Full `bats tests/*.bats` suite green (regression check) — 743/743.
+- [x] A partial multi-file failure (one file's write fails for an
+      unrelated reason) never triggers the unsafe fallback over files
+      already safely fixed in the same invocation — `tests/lint-docs.bats`.
+- [x] Full `bats tests/*.bats` suite green (regression check) — 746/746.
 - [x] All Test plan items above pass.
 
 ## Repo file references
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_docs/lint-docs.sh` | 195-252 (`_lint_docs_safe_fix`, new), 268-295 (`_lint_docs_run_tool`, modified) | The isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` |
+| `_docs/lint-docs.sh` | 195-270 (`_lint_docs_safe_fix`, new/revised post-review), 286-312 (`_lint_docs_run_tool`, modified) | The isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` |
 | `.markdownlint-cli2.jsonc` | 1-23 | Source config cloned/derived from for the temp override (not modified itself) |
-| `tests/lint-docs.bats` | whole file | 3 new test cases (safe-fix preservation, accepted-trade-off, isolation/argv), 1 existing case updated to a non-triggering fixture |
+| `tests/lint-docs.bats` | whole file | 6 new test cases total (3 from initial implementation, 3 more from independent review), 1 existing case updated to a non-triggering fixture |
 | `tests/fixtures/lint-docs/fake-markdownlint-cli2.sh` | +1 line | Added `PWD:` logging to the shared fixture (additive, other tests unaffected) |
 | `dev/JOURNAL/2026-09-22-T20260910-919422-lint-docs-fix-corrupts-content.md` | 124-131 | Prior task's explicit "out of scope, follow-up filed" note this task closes |
 
@@ -248,8 +263,8 @@ claimed_role:
   single-file `--fix` callers `T20260910-919422` already narrowed via
   `--no-globs`). Repo-wide/CI full-tree lint enforcement of `MD004`/`MD037`
   is unchanged.
-- All Done criteria met; full `bats tests/*.bats` suite green (743/743, 0
-  failures, fresh run).
+- All Done criteria met; full `bats tests/*.bats` suite green (746/746, 0
+  failures, fresh run after all review fixes).
 - Implementation surfaced and fixed one real bug beyond the design: naming
   the derived override config exactly `.markdownlint-cli2.jsonc` silently
   defeated it, since `markdownlint-cli2` does its own auto-discovery walk
@@ -257,9 +272,28 @@ claimed_role:
   supplied via `--config` — even the identical content, under that reserved
   name, failed to suppress `MD037`. Fixed by using a non-colliding filename
   (`lint-docs-safe-fix-override.jsonc`).
-- Quality probe recorded (`dev/quality/metrics.jsonl`): `shellcheck` clean,
-  `max_fn_lines`/`file_loc` regressed (+27/+286) — expected given the new
-  function and test cases added, not a quality concern.
+- **Independent review ([PR #145](https://github.com/Synx-Data-Labs/ccxp-skills/pull/145)) found one real, confirmed bug**: once the
+  safe-fix tool invocation had run at all, an unexpected exit code (e.g.
+  one file in a multi-file call failing to write for an unrelated
+  permission reason) still returned 3 — the "fall back to the plain
+  unsafe path" signal — which re-ran the corrupting `MD004`/`MD037` rules
+  over ALL originally-requested files, silently re-corrupting ones the
+  safe-fix pass had already fixed. Fixed: the function now does a
+  best-effort copy-back and never signals "safe to retry unsafely" once
+  the tool has actually been invoked. A second, related finding (a bare
+  unguarded internal function call under `set -e`) was investigated
+  empirically and found to have no observable impact on any of this
+  script's real call paths (all go through `lint_docs_run`'s own
+  pre-existing guard) — fixed anyway for consistency with the file's
+  established idiom, but not counted as an active bug.
+- A minor jq robustness gap (a flat/legacy-shape config would have
+  silently discarded all rule customization) was also closed defensively
+  (`.config // .`), though not confirmed to affect this repo's own config.
+- Quality probe recorded twice (`dev/quality/metrics.jsonl`) — once after
+  initial implementation, once after the review-driven fixes (existing
+  convention for this scoreboard, e.g. `T20260910-919422`,
+  `T20260919-231319`). Final: `shellcheck` clean, `max_fn_lines`/`file_loc`
+  deltas expected given the added function/tests, not a quality concern.
 - No follow-up tasks filed — this closes T20260910-919422's own
   explicitly-deferred follow-up cleanly, no further open threads.
 
@@ -269,16 +303,30 @@ claimed_role:
   wrote 3 new `tests/lint-docs.bats` cases first, watched all 3 fail for
   the expected reason (feature missing), implemented to green, then found
   and fixed the `.markdownlint-cli2.jsonc`-filename bug through the same
-  red→green cycle on the failing assertions.
+  red→green cycle on the failing assertions. Repeated for the 3 more
+  cases added post-review: for each, stashed the fix to confirm RED
+  against the pre-fix code, restored it, confirmed GREEN — including
+  catching and fixing a flawed first draft of one test (masked the very
+  bug it was meant to catch via a misplaced `|| true`).
 - Verification (`superpowers:verification-before-completion`): yes — fresh
-  full-suite re-run (743/743) and shellcheck check before opening the PR,
-  not relying on the earlier truncated background-run output.
-- Systematic debugging (`superpowers:systematic-debugging`): implicitly
-  applied (hypothesis-driven isolation of the `.markdownlint-cli2.jsonc`
-  auto-discovery bug via a sequence of controlled variable-elimination
-  repros) though not formally invoked as a separate skill call — the
-  debugging matched its spirit closely enough that a separate invocation
-  would have been redundant.
+  full-suite re-run (746/746) and shellcheck check before merging, not
+  relying on earlier truncated background-run output; also independently
+  re-verified (not just trusted) the reviewer's claims by reproducing each
+  one from scratch before accepting or pushing back.
+- Systematic debugging (`superpowers:systematic-debugging`): yes —
+  hypothesis-driven isolation of (a) the `.markdownlint-cli2.jsonc`
+  auto-discovery bug during initial implementation, and (b) the actual
+  scope of the reviewer's `set -e` finding (constructed a sequence of
+  controlled variable-elimination repros — guarded vs. unguarded caller,
+  fixed vs. pre-existing baseline code — to determine the finding didn't
+  apply to any real call path before accepting the narrower, real bug it
+  also surfaced).
 - Receiving code review (`superpowers:receiving-code-review`): yes — used
-  at the design-PR stage ([PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144), 3 review rounds, all findings fixed,
-  none pushed back on).
+  at both the design-PR stage ([PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144), 3 rounds, all findings fixed) and
+  the implementation-PR stage ([PR #145](https://github.com/Synx-Data-Labs/ccxp-skills/pull/145)): steelmanned and independently
+  re-verified each of the review's 2 findings before acting — one
+  (copy-back/fallback re-corruption) confirmed and fixed as a real bug;
+  the other (bare `set -e` call) confirmed as a real code-hygiene issue
+  worth fixing, but pushed back (in the PR comment, with empirical
+  evidence) on the claim that it was an active, exploitable bug for any
+  of this script's actual callers.

@@ -174,3 +174,82 @@ EOF
   run grep -c -- '--no-globs' "$CALLLOG"
   [ "$output" -ge 1 ]
 }
+
+@test "safe-fix (T20260922-383156): a caller that guards lint_docs_run with || survives under set -e" {
+  # Sanity/contract test, not a regression test: an internal bare
+  # statement was found during independent review (a bare call to
+  # _lint_docs_safe_fix inside _lint_docs_run_tool, not guarded by ||)
+  # and fixed for consistency with this file's own established idiom
+  # (see the || rc=$? pattern used elsewhere). Verified empirically
+  # (both against the fixed code AND the pre-existing T20260910-919422
+  # baseline, before this task touched the file) that a *properly
+  # guarded* caller — i.e. one that checks lint_docs_run's own
+  # documented return value, as any caller of a function whose whole
+  # contract is "returns non-zero to signal findings" should — was
+  # never actually at risk either way: bash suspends errexit through
+  # the entire nested call graph once the top-level call is under a
+  # ||/if test, regardless of whether inner calls are separately
+  # guarded. This test documents and locks in that guarantee; it isn't
+  # expected to distinguish buggy-vs-fixed code (it passes on both).
+  cat > .markdownlint-cli2.jsonc <<'EOF'
+{ "config": { "default": true, "MD004": { "style": "dash" } }, "globs": [ "**/*.md" ] }
+EOF
+  printf '# target\nThis line is deliberately made way too long on purpose so that MD013 line length keeps firing as a real remaining violation after the fix pass runs.\n' > dev/TODO/target.md
+
+  marker="$BATS_TEST_TMPDIR/reached-after-call"
+  rm -f "$marker"
+  bash -c "
+    set -euo pipefail
+    source '$REPO_ROOT/_docs/lint-docs.sh'
+    rc=0
+    lint_docs_run --fix dev/TODO/target.md || rc=\$?
+    touch '$marker'
+  "
+  [ -f "$marker" ]
+}
+
+@test "safe-fix (T20260922-383156): an unrelated per-file write failure doesn't fall back to re-processing an already-fixed file" {
+  # Regression test for a real bug found in independent review: when
+  # the underlying tool exits with an unexpected code because ONE file
+  # in a multi-file call failed to write (e.g. a permission error) —
+  # not because the config/preflight was unavailable — the original
+  # implementation still returned 3 (the caller's "fall back to the
+  # plain unsafe path" signal). That fallback re-ran the corrupting
+  # MD004/MD037 rules over ALL originally-requested files, including
+  # ones the safe-fix pass had ALREADY safely fixed in this same
+  # invocation — silently re-corrupting them.
+  cat > .markdownlint-cli2.jsonc <<'EOF'
+{ "config": { "default": true, "MD004": { "style": "dash" } }, "globs": [ "**/*.md" ] }
+EOF
+  printf '# a\n+ ambiguous continuation for file a\n' > dev/TODO/a.md
+  printf '# b\n+ ambiguous continuation for file b\n' > dev/TODO/b.md
+  # b.md read-only: cp preserves permissions into the tmpdir copy, so
+  # markdownlint-cli2's own attempt to write its fix there fails with
+  # EACCES for b.md specifically, while a.md (in the same invocation)
+  # still gets fixed successfully.
+  chmod 444 dev/TODO/b.md
+
+  # shellcheck source=../_docs/lint-docs.sh
+  source "$REPO_ROOT/_docs/lint-docs.sh"
+
+  run lint_docs_run --fix dev/TODO/a.md dev/TODO/b.md
+  chmod 644 dev/TODO/b.md
+
+  # a.md's ambiguous "+" must still be preserved — not re-corrupted by a
+  # fallback re-run triggered by b.md's unrelated write failure.
+  run grep -c '^+ ambiguous continuation for file a$' dev/TODO/a.md
+  [ "$output" = "1" ]
+}
+
+@test "safe-fix (T20260922-383156): falls back to the plain path when no .markdownlint-cli2.jsonc is discoverable" {
+  # No config file at all in cwd — the safe-fix preflight check should
+  # signal rc=3 (nothing touched yet) and the caller falls through to
+  # the pre-existing plain invocation, still succeeding overall.
+  printf '# target\nsome plain content\n' > dev/TODO/target.md
+
+  # shellcheck source=../_docs/lint-docs.sh
+  source "$REPO_ROOT/_docs/lint-docs.sh"
+
+  run lint_docs_run --fix dev/TODO/target.md
+  [ "$status" -eq 0 ]
+}
