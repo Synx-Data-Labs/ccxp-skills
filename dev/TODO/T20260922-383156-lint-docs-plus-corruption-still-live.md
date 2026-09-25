@@ -20,9 +20,11 @@ claimed_role: interactive
 - **Solution**: both symptoms are confirmed as two distinct, precise rules
   (`MD004`/ul-style, `MD037`/no-space-in-emphasis); disable only those two,
   only for the scoped single-file `--fix` invocation, via an isolated
-  temp-directory config override (a naive `--config` override alone is
-  silently ignored while the real `.markdownlint-cli2.jsonc` is
-  discoverable) — repo-wide/CI enforcement of both rules is untouched.
+  temp-directory config override (a naive `--config` override can't
+  suppress `MD004` while the real `.markdownlint-cli2.jsonc` is
+  discoverable — it explicitly sets that rule, and an explicit setting
+  wins over `--config` per-rule) — repo-wide/CI enforcement of both rules
+  is untouched.
 
 ## Problem
 
