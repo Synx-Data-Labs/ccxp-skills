@@ -111,8 +111,9 @@ scheduled: 2026-09-21
 | `_session/_lib.sh` | 5, 144, 243 | Shared status-categorization comments | A |
 | `_session/claim_gap.sh` | 2, 6, 20, 54 | Claim-gap detector | A |
 | `_ipm/ipm-iteration-drain-check.sh` | 11, 28 | IPM carry-over detection | A |
-| `ccxp/scripts/epic-status.sh` | 299, 315 | `_epic_status_bucket`/`_epic_status_rank` — epic summary/Slack-line bucketing. **Missed in the initial pass** — caught by `/address-pr`'s independent review on PR #156 (its own bats file was listed below all along, but the script under test wasn't; the review found the case-statement gap directly) | A |
-| `tests/task_claim.bats`, `claim_gap.bats`, `reclaim_sweep.bats`, `attribution.bats`, `epic-status.bats`, `todo-next.bats`, `ipm_iteration_drain_check.bats`, `eta.bats`, `task-state.bats` | — | Bats coverage tracking the above | A |
+| `ccxp/scripts/epic-status.sh` | 299, 315 | `_epic_status_bucket`/`_epic_status_rank` — epic summary/Slack-line bucketing. **Missed in the initial pass** — caught by `/address-pr`'s independent review on PR #156, round 1 (its own bats file was listed below all along, but the script under test wasn't; the review found the case-statement gap directly) | A |
+| `repo-conventions/scripts/lint_tasks.py` | 26, 67-76 | `STATUS_TOKENS` allowlist + `status_head()` — the CI `lint-tasks` gate that hard-rejects (exit 1) any task file whose status isn't a known token. **Also missed in the initial pass** — caught by round 2 of the same PR's independent review: `status_head("In Progress")` returned `"in"` (splits on the first whitespace), which isn't in `STATUS_TOKENS`, so every task claimed after this merged would fail CI lint on its next touch. Fixed by matching the two-word `"in progress"` phrase as a unit ahead of the general single-token split | A |
+| `tests/task_claim.bats`, `claim_gap.bats`, `reclaim_sweep.bats`, `attribution.bats`, `epic-status.bats`, `todo-next.bats`, `ipm_iteration_drain_check.bats`, `eta.bats`, `task-state.bats`, `repo-conventions/scripts/test_lint_tasks.py` | — | Test coverage tracking the above | A |
 | `lifecycle.md` | 38, 70, 82, 88, 148-149 | Canonical status-flow definition | B |
 | `glossary.md` | 19, 25 | Term definitions | B |
 | `_session/README.md` | 17, 25, 109, 122, 125 | Shared-lib doc | B |

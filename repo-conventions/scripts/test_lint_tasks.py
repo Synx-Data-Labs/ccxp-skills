@@ -58,6 +58,21 @@ class LintTasksTest(unittest.TestCase):
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("not a known status" in m for m in out), out)
 
+    def test_in_progress_status_passes(self):
+        # T20260809-355059: "In Progress" is the one two-word status name —
+        # task_claim.sh acquire writes it, so lint must accept it (a
+        # one-word lookalike typo like "Inprogress" above must still fail).
+        f = write_task(self.root, frontmatter=(
+            "status: In Progress\nestimation: 2h\nscheduled: 2026-06-09"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
+    def test_prose_suffixed_in_progress_status_passes(self):
+        f = write_task(self.root, frontmatter=(
+            "status: In Progress — SUPERVISED (needs a human)\n"
+            "estimation: 2h\n"
+            "scheduled: 2026-06-09"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
     def test_bad_estimation_fails(self):
         f = write_task(self.root, frontmatter="status: Open\nestimation: soon")
         out = lint_tasks.lint_file(f)
