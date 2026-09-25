@@ -14,7 +14,7 @@ scheduled: 2026-09-21
 
 - **Type**: bug
 - **Problem**: `session_pr_task_id`'s signal 3 (commit `messageHeadline` scan,
-  `_session/_lib.sh:299-302`) matched *any* bare `T<id>` substring, so a
+  `_session/_lib.sh:304-308`) matched *any* bare `T<id>` substring, so a
   commit that names another task as **data** (e.g. `/top`'s own
   `docs(queue): move T<id> to the top`) got misattributed as "this PR
   implements/closes `T<id>`".
@@ -29,7 +29,7 @@ scheduled: 2026-09-21
   synxdb-team PR #666 to task `T20260806-147372`, even though the PR **does
   not implement that task** — it's a pure `dev/TODO/queue.md` reorder
   produced by `/top 147372`.
-- Root cause: signal 3 (`_session/_lib.sh:299-302`, `grep -oE
+- Root cause: signal 3 (`_session/_lib.sh:304-308`, `grep -oE
   'T[0-9]{8}-[0-9]+'`) matched the literal string `T20260806-147372` inside
   the commit's own subject line — `docs(queue): move T20260806-147372 to the
   top` (exactly the commit message `top/SKILL.md:137` prescribes). The task
@@ -74,7 +74,7 @@ scheduled: 2026-09-21
 
 ## Solution
 
-- Narrow signal 3's extraction in `_session/_lib.sh:299-302` to only match:
+- Narrow signal 3's extraction in `_session/_lib.sh:304-308` to only match:
   - a trailing `(T<id>)` — the repo's actual, evidenced convention, or
   - a leading `T<id>:` at the very start of the subject line
   — via `grep -oE '\(T[0-9]{8}-[0-9]+\)|^T[0-9]{8}-[0-9]+:'`, then extract
@@ -119,12 +119,14 @@ scheduled: 2026-09-21
       "closes/implements" convention — mapped to
       `tests/session_pr_task_id.bats::falls back to commit messageHeadline
       scan when neither body nor branch match (parens form)`.
-- [x] Fix lands in `_session/_lib.sh:299-303` (the `session_pr_task_id`
+- [x] Fix lands in `_session/_lib.sh:304-308` (the `session_pr_task_id`
       signal-3 block), not duplicated per-skill.
 
 ## Root cause
 
-- `_session/_lib.sh:299-302` (pre-fix): `grep -oE 'T[0-9]{8}-[0-9]+'` over
+- `_session/_lib.sh:299-302` (pre-fix location; the block is now at
+  `304-308` after the added signal-3 doc comment): `grep -oE
+  'T[0-9]{8}-[0-9]+'` over
   every commit's `messageHeadline`, unconditionally taking the first
   substring match. No positional/structural anchor distinguishes "this
   commit's own task" from "a task mentioned as data."
