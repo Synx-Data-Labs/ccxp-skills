@@ -30,3 +30,4 @@ reprioritize.
 - [T20260925-332662](T20260925-332662-pr-task-id-false-positive-top-commit-mentions.md): `pr_task_id.sh` signal 3 (commit-message scan) false-positives on `/top`'s own commit message
 - [T20260925-407025](T20260925-407025-todo-scripts-bash4-only.md): `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
 - [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
+- [T20260925-427007](T20260925-427007-dead-legacy-gh-wrapper-path.md): Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
