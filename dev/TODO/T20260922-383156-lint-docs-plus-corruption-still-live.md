@@ -100,16 +100,24 @@ claimed_role: interactive
       **Root-caused as a distinct rule/mechanism from the `+`/`-` flip**,
       resolving this task's own "not yet confirmed to share a root cause"
       open question.
-- **A naive per-invocation `--config <override>` does NOT work when the
-  real `.markdownlint-cli2.jsonc` is discoverable** — verified empirically:
-  an override file (bare rules object, `MD004: false`, `MD037: false`)
-  passed via `--config` is silently ignored whenever a
-  `.markdownlint-cli2.jsonc` exists in the linted directory tree (confirmed
-  by removing the real config file: the override then took effect
-  immediately, `0 errors`, both lines preserved byte-for-byte). This is
-  `markdownlint-cli2`'s documented directory-local-config-cascades-over-
-  `--config`-base behavior — an implementation detail worth recording since
-  it's the reason a naive fix attempt would appear to silently no-op.
+- **A naive per-invocation `--config <override>` does NOT reliably work
+  when the real `.markdownlint-cli2.jsonc` is discoverable** — verified
+  empirically, and the mechanism is more precise than "ignored wholesale":
+  it's a **per-rule cascade**. An override file (bare rules object,
+  `MD004: false`, `MD037: false`) passed via `--config`, with the real
+  config still discoverable, left `MD037` successfully overridden (comma-
+  spacing preserved) but **`MD004` still fired and flipped `+`→`-`
+  regardless** — because the real config *explicitly* sets `MD004: {style:
+  dash}`, and an explicit directory-local setting wins over `--config`'s
+  base for that specific rule; `MD037` isn't explicitly mentioned in the
+  real config (only implicitly on via `default: true`), so `--config`
+  could override it. **Net effect: since `MD004` — the rule that causes
+  the higher-severity meaning-changing corruption — is exactly the one
+  rule the real config pins explicitly, a naive `--config` override can
+  never suppress it while the real config is discoverable.** Full
+  directory isolation (below) is therefore necessary, not just a
+  preference. Confirmed by removing the real config file entirely: the
+  same override then took full effect, `0 errors`, both lines preserved.
 - **Confirmed fix mechanism** (same repro, real config temporarily moved
   aside, override config applied from an isolated directory): disabling
   only `MD004` and `MD037` — leaving every other rule (including `MD032`,
@@ -220,7 +228,7 @@ claimed_role: interactive
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_docs/lint-docs.sh` | 166-219 (`_lint_docs_run_tool`) | Add the isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` |
+| `_docs/lint-docs.sh` | 179-198 (`_lint_docs_run_tool`) | Add the isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` — both already threaded as separate parameters (`lint_docs_run`, 201-216), a natural extension point |
 | `.markdownlint-cli2.jsonc` | 1-23 | Source config to clone/derive the temp override from (not modified itself) |
 | `tests/lint-docs.bats` | whole file | New cases for the safe-fix path; existing `--no-globs` cases (T20260910-919422) unchanged |
 | `dev/JOURNAL/2026-09-22-T20260910-919422-lint-docs-fix-corrupts-content.md` | 124-131 | Prior task's explicit "out of scope, follow-up filed" note this task closes |
