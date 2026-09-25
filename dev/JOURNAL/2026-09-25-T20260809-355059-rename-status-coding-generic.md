@@ -273,5 +273,3 @@ Progress** chosen for matching the industry convention this task already cites.
   practice across all 6 review rounds (4 on PR #156, 2 on PR #157): every
   finding was independently verified/reproduced before being accepted and
   fixed, never applied blindly on the reviewer's say-so.
-
-_(filled at Phase 7 close)_
