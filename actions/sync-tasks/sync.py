@@ -521,8 +521,16 @@ def status_to_option_id(status_text, options):
     # Prose-suffixed status (e.g. "Coding — UNBLOCKED 2026-06-06: picked B"):
     # match the leading word against a known option, the same tolerance the
     # "blocked"/"closed" prefixes already get. Split on the first separator
-    # (whitespace, em-dash, hyphen, colon, paren).
-    head = re.split(r"[\s—:()-]", s, 1)[0]
+    # (whitespace, em-dash, hyphen, colon, paren). "In Progress"
+    # (T20260809-355059) is the one two-word status name, so its own
+    # two-word phrase is matched as a unit — ahead of the general
+    # single-token split — when followed by a delimiter or end-of-string.
+    # Mirrors repo-conventions/scripts/lint_tasks.py's status_head(), which
+    # this function's own tolerance is documented (above) to mirror.
+    if re.match(r"^in progress(?=[\s—:()-]|$)", s):
+        head = "in progress"
+    else:
+        head = re.split(r"[\s—:()-]", s, 1)[0]
     if head and head in lower_opts:
         return lower_opts[head]
     return None
