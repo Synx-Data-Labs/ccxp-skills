@@ -1,12 +1,50 @@
 ---
-status: Open — SUPERVISED (needs a human — renames a live cross-repo state-machine literal `task_claim.sh` case-statements match on; peer sessions in other repos share this exact claim mechanism right now, and a partial/incorrect rename risks silently breaking claim acquisition fleet-wide; also needs a maintainer decision on the replacement term and spans repos not accessible from this clone)
+status: Coding
 estimation: 1d
 source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651055, whose
   `task_claim.sh acquire` flow unconditionally flipped its status to `Coding` even though
   the task is IRS paperwork, not code
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-21
 ---
 
 # T20260809-355059: Rename the `Coding` lifecycle status to something domain-generic
+
+## Decisions (2026-09-25 conversation — design approved in-conversation)
+
+- **Replacement term: `In Progress`.** Evaluated and rejected during this conversation, each for a
+  concrete collision found by grep: `Active` (~20 existing "active claim"/"active iteration"/
+  "active backlog" prose uses), `Build` (collides with the literal `build-pipeline-repo` name and
+  `/drive`'s "Build/CI failure" escalation trigger — same code-flavored flaw the task already
+  rules "Implementing" out for), `Action` (collides with `/drive`'s own "Trigger | Action" table
+  column and "GitHub Actions" workflow terminology), `Current` (collides with the literal
+  `_ipm/current.sh` file and the "current status"/"current iteration" phrasing used throughout),
+  `Focus` (collides with `/ccxp`'s own "focused-work loops" terminology in `glossary.md`).
+  `In Progress` and `Working` were the only two candidates with zero collisions; `In Progress`
+  chosen for matching the Jira/Linear/GitHub Projects/Trello convention this task already cites.
+- **Scope for this pass: `ccxp-skills` only.** `private-skills-repo`, `hub-repo`,
+  `build-pipeline-repo`, `example-website.com` are not accessible from this clone. Per the
+  2026-09-14 migration note below, the shared script logic, `lifecycle.md`, `glossary.md`, the
+  templates, and all listed `SKILL.md` files now live in `ccxp-skills` itself — so this pass
+  covers effectively all of "What to do" steps 1-3 and the script-logic/doc half of the "Done
+  when" criteria. The remaining external piece (migrating the 10 known active TODO task files
+  already at literal `status: Coding` in hub-repo/build-pipeline-repo) is out of reach from this
+  clone and handled via the rollout-safety decision below instead of a direct edit.
+- **Rollout safety: dual-accept, then deprecate — not a hard cutover.** `ccxp-skills` is a shared
+  sibling repo other repos invoke directly via `../_session/*.sh`, so this merge changes behavior
+  for every repo that shares these scripts immediately, not after their own PRs land. A hard
+  cutover (case-statements only recognizing `In Progress`) would make every task file anywhere
+  still sitting at the literal `Coding` — including the 10 known ones — silently invisible to
+  `reclaim_sweep.sh`'s "actively-claimed" check, risking a claim being released out from under a
+  live session and the same task being re-claimed and re-driven concurrently by a peer (duplicate
+  work, the same failure class as the cross-repo duplicate-PR incident T20260629-332546
+  describes). Instead: `task_claim.sh`, `status.sh`, `attribution.sh`, `reclaim_sweep.sh`,
+  `_lib.sh`, and `ipm-iteration-drain-check.sh` all **match `Coding` as a legacy-equivalent alias
+  of `In Progress`** in every case-statement/pattern-match currently keyed on the literal, while
+  **writing** `In Progress` going forward (`acquire`, etc.). A follow-up task (filed at close,
+  staged into the next iteration) tracks removing the alias once the known external task files
+  are confirmed migrated.
 
 ## Problem
 
