@@ -2,8 +2,9 @@
 # _session/_lib.sh — shared helpers for the Project board mirror + PR correlation.
 #
 # Provides, for a given task ID:
-#   - the Project **Status** single-select mirror (Open/Design/Coding/Review/
-#     Blocked/Parked/Done) — best-effort reflection of the task file's `status:`;
+#   - the Project **Status** single-select mirror (Open/Design/In Progress
+#     [or the legacy Coding alias, T20260809-355059]/Review/Blocked/Parked/
+#     Done) — best-effort reflection of the task file's `status:`;
 #   - **PR→task correlation** (resolve a PR number back to its task ID);
 #   - **PR-ref issue-title** annotation (append "(<repo>#<num>)" to the board's
 #     issue title so the task→PR mapping shows at a glance);
@@ -141,7 +142,8 @@ _session_resolve_project() {
 # --- Status field (single-select) resolution ----------------------------
 #
 # Status is a single-select field with its own options (Open / Design /
-# Coding / Review / Blocked / Parked / Done). Cached once per process.
+# In Progress [or the legacy Coding alias] / Review / Blocked / Parked /
+# Done). Cached once per process.
 
 _SESSION_STATUS_FIELD_ID=""
 _SESSION_STATUS_OPTION_IDS=""  # space-separated "name=id" pairs
@@ -240,7 +242,8 @@ session_set_status() {
   #
   # Sets the Project Status single-select field for the given task. Value
   # is case-insensitive; resolves to the matching Project option (Open,
-  # Design, Coding, Review, Blocked, Parked, Done).
+  # Design, In Progress [or the legacy Coding alias], Review, Blocked,
+  # Parked, Done).
   #
   # Best-effort: failures log and return non-zero, but never abort the
   # caller. The frontmatter `status:` field in the task file remains the

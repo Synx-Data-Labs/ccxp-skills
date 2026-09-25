@@ -206,8 +206,8 @@ _attribution_default_window() {
 attribution_collect() {
   # $1 dev-dir  $2 since  $3 until → raw "<location>\t<bucket>" rows, where bucket
   # is "shipped" (JOURNAL task journal dated in [since,until)) or "in-flight"
-  # (TODO task currently claimed or status Coding/Review). Location may be empty
-  # (→ unattributed downstream).
+  # (TODO task currently claimed or status In Progress/Coding [legacy alias,
+  # T20260809-355059]/Review). Location may be empty (→ unattributed downstream).
   local dev_dir="${1:-dev}" since="${2:-}" until="${3:-}"
   local f base status claimed date_prefix loc
 
@@ -217,7 +217,7 @@ attribution_collect() {
       status="$(attribution_fm_get "$f" status 2>/dev/null)"
       claimed="$(attribution_fm_get "$f" claimed_by 2>/dev/null)"
       case "$status" in
-        Coding*|Review*) : ;;                       # in-flight by status
+        "In Progress"*|Coding*|Review*) : ;;        # in-flight by status
         *) [ -n "$claimed" ] || continue ;;         # else only if actively claimed
       esac
       printf '%s\tin-flight\n' "$(_attribution_norm_loc "$claimed")"
