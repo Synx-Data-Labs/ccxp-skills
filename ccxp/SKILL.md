@@ -363,7 +363,7 @@ References: `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md`.
 | # | Task | Picked status | Today's status | Note |
 |---|------|---------------|----------------|------|
 | 1 | T... | In Progress | In Progress | PR #... awaiting CI |
-| 2 | T... | Open   | In Progress | Started yesterday |
+| 2 | T... | Open        | In Progress | Started yesterday |
 | 3 | T... | Open   | Open   | Not yet started |
 
 **Summary**: {X}/{N} shipped, {Y} in flight, {Z} not started. **Trend**: {On-track / Slipping / At-risk — based on remaining days vs remaining cumulative estimate}.
@@ -675,7 +675,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
-5. Tier 1 carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If being In Progress has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+5. Tier 1 carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If the in-progress work has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
 
 The grilled task files (Design sections, estimation revisions, claims) are left uncommitted by `/incept`; they land together with the IPM file in 2a.5's commit PR, not one PR per candidate.
 

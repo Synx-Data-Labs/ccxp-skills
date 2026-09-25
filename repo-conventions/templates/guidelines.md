@@ -64,8 +64,8 @@ description: {One-line summary}
 
 ```
 Open → Design → In Progress → Review → Done
-         ↕                          ↕
-    Blocked by T{id}             Parked
+         ↕                               ↕
+    Blocked by T{id}                  Parked
 ```
 
 - **Done** = `git mv` from `dev/TODO/` to `dev/JOURNAL/yyyy-mm-dd-{id}-slug.md`. Include this move in the implementing PR.
