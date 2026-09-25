@@ -11,7 +11,7 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
 ## TLDR
 
 - **Type**: feature
-- **Problem**: `estimation:` is a duration-bucket guess (`15m`…`1w`) filed
+- **Problem**: `estimation:` is a duration-bucket guess (`15m`…`2w`) filed
   before any real analysis, then silently re-guessed by `/incept` — it never
   captures real XP velocity, and `/eta` has no principled way to turn a
   bucket into a trustworthy wall-clock projection.
@@ -28,7 +28,7 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
   design work — `repo-conventions/templates/task.md:3` defaults new tasks to
   `estimation: 2h` with no grounding.
 - The defined forward-looking consumer of the *duration* semantics is
-  `eta/scripts/eta.sh:114-115` — `eta_bucket_seconds()` maps the bucket
+  `eta/scripts/eta.sh:121-134` — `eta_bucket_seconds()` maps the bucket
   string straight to a fixed duration for elapsed/remaining math, never
   informed by how long tasks actually took.
 - `ccxp/SKILL.md:691-692`'s Phase 2a.4 also sums bucket-durations against a
@@ -82,9 +82,11 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
   estimation" mechanism unchanged — it now assigns real point values
   (`2`/`3`/`5`/`8`) instead of a real duration, based on what grilling
   surfaces.
-- `design-score/scripts/score.sh:145,150` and `repo-conventions/SKILL.md:54,58`
-  switch their frontmatter regex from the duration pattern to `^estimation:
-  (1|2|3|5|8)$` (bare enum).
+- `repo-conventions/SKILL.md:54,58`'s prose ("`estimation` with a duration
+  (`30m`/`2h`/`1d`/`1w`)") switches to the points enum.
+  `design-score/scripts/score.sh:150`'s C1 check
+  (`^estimation:[[:space:]]*\S`) only tests for a non-empty value — it
+  already passes unchanged under points, no code change needed there.
 - `lifecycle.md:37,129-141`, `dev/guidelines.md:36`,
   `repo-conventions/templates/task.md:3,37`,
   `repo-conventions/templates/guidelines.md:54`, and
@@ -144,12 +146,11 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
 
 ### 3. Consumers read `dev/velocity.json`
 
-- `eta/scripts/eta.sh`'s `eta_bucket_seconds()` (`eta/scripts/eta.sh:111,
-  114-115`) is replaced by `projected_hours = task.points *
-  hours_per_point`, read from `dev/velocity.json`; elapsed/remaining/
-  projected-finish math (`eta/scripts/eta.sh:136-137,181-182,208`) is
-  otherwise unchanged, just fed a computed duration instead of a table
-  lookup.
+- `eta/scripts/eta.sh`'s `eta_bucket_seconds()` (`eta/scripts/eta.sh:121-
+  134`) is replaced by `projected_hours = task.points * hours_per_point`,
+  read from `dev/velocity.json`; elapsed/remaining/projected-finish math
+  (`eta/scripts/eta.sh:136-137,181-182,208`) is otherwise unchanged, just
+  fed a computed duration instead of a table lookup.
 - **`/ccxp` is explicitly not a consumer in this task.** Its Phase 2a.4
   budget cut keeps reading `estimation:` exactly as it does today (as a
   number now instead of a duration string, which changes its arithmetic
@@ -165,7 +166,12 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
 - Ship a standalone, idempotent migration script (e.g.
   `repo-conventions/scripts/migrate-estimation-to-points.sh`) implementing
   the one-time lossy mapping table: `15m/30m/1h → 1`, `2h/4h → 2`, `1d → 3`,
-  `2d → 5`, `1w → 8`. It rewrites `estimation:` in every `dev/TODO/*.md` and
+  `2d → 5`, `1w/2w → 8`. `2w` saturates at the same top bucket as `1w` since
+  the 5-value Fibonacci scale has no slot above `8` — an earlier draft of
+  this table omitted `2w` entirely (the same omission class as
+  `dev/JOURNAL/2026-09-23-T20260922-270158-eta-2w-bucket-and-id-validation.md`,
+  caught during PR review here instead). It rewrites `estimation:` in every
+  `dev/TODO/*.md` and
   `dev/JOURNAL/*.md` file under a given repo root; only the `estimation:`
   value changes, the actual-hours data JOURNAL entries already carry (used
   to compute `hours_per_point`) is untouched.
@@ -192,7 +198,10 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
       (`hours_per_point: 1`, `points_per_week: 10`, `bootstrap: true`).
 - [ ] Unit: migration mapping script against fixture `dev/TODO/` +
       `dev/JOURNAL/` dirs — assert every `estimation:` lands in
-      `{1,2,3,5,8}` and no other field/content changes.
+      `{1,2,3,5,8}` and no other field/content changes. **Include a `2w`
+      fixture** (a recurring omission class — see
+      `dev/JOURNAL/2026-09-23-T20260922-270158-eta-2w-bucket-and-id-validation.md`)
+      and assert it maps to `8`, same as `1w`.
 - [ ] Integration: `design-score` and `repo-conventions` lint both accept
       the new enum and reject a leftover duration string.
 - [ ] Manual/dry-run: `/eta` runs cleanly against a missing
@@ -202,9 +211,11 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
 
 ## Done criteria
 
-- [ ] `estimation:` schema, docs, and lint enforce `{1,2,3,5,8}` — no
-      duration-bucket string accepted (`design-score/scripts/score.sh:145,
-      150`, `repo-conventions/SKILL.md:54,58`).
+- [ ] `estimation:` schema and docs describe `{1,2,3,5,8}` — no
+      duration-bucket string in any doc/template
+      (`repo-conventions/SKILL.md:54,58` and the templates listed below).
+      `design-score/scripts/score.sh:150`'s non-empty check needs no code
+      change — verify it still passes against an integer value.
 - [ ] `/new-task` files new tasks with `estimation: 1`
       (`new-task/SKILL.md:45,54,67`).
 - [ ] `/retro` writes `dev/velocity.json` every run with the shape above,
@@ -237,11 +248,12 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
 | `incept/SKILL.md` | 90, 104–105 | Synthesis "Estimate" step + Record rewrite — unchanged mechanism, new scale |
 | `ccxp/SKILL.md` | 648, 691–692 | Reads `estimation:` as a bare number now instead of a duration string — no logic change; Phase 2a.4's own redesign is out of scope (T20260924-252293) |
 | `eta/SKILL.md` | 3, 8, 48, 54, 69, 82 | Narrative flow description — update to describe points/hours_per_point |
-| `eta/scripts/eta.sh` | 7, 111, 114–115, 136–137, 181–182, 208 | `eta_bucket_seconds()` table → `points * hours_per_point` read from `dev/velocity.json` |
-| `retro/SKILL.md` | 220–227, 247, 351, 461, 463 | Existing estimation-accuracy grading; add new velocity-computation step |
+| `eta/scripts/eta.sh` | 7, 121–134, 136–137, 181–182, 208 | `eta_bucket_seconds()` table → `points * hours_per_point` read from `dev/velocity.json` |
+| `retro/SKILL.md` | 220–227, 247, 461, 463 | Existing estimation-accuracy grading; add new velocity-computation step |
+| `retro/SKILL.md` | 351 | Phase 4 action-item guidance ("use standard buckets (30m, 1h, 2h...)") hardcodes durations — separate site, also needs the points enum |
 | `retro/scripts/estimation-revisions.sh` | 2–18, 84–88 | Reused as the source of filed→revised→actual data feeding velocity calc |
-| `design-score/SKILL.md` | 50 | C1 frontmatter scoring — still worth 4/20 pts, new regex |
-| `design-score/scripts/score.sh` | 145, 150 | Regex check — swap duration pattern for points enum |
+| `design-score/SKILL.md` | 50 | C1 frontmatter scoring — still worth 4/20 pts, unchanged (non-empty check only) |
+| `design-score/scripts/score.sh` | 150 | Non-empty check (`^estimation:[[:space:]]*\S`) — already point-compatible, no code change |
 | `todo/scripts/todo-list.sh` | 52 | Displays `estimation` — no logic change, just now shows a point value |
 | `todo/SKILL.md` | 39, 43, 58, 91, 135 | Field-semantics doc — replace "Required for IPM budget arithmetic" (that ritual is dead) with "Required for `/eta` projections" |
 | `actions/lint-tasks/README.md` | 7 | CI schema-check description — update to points enum |
@@ -282,3 +294,11 @@ related: T20260808-192220, T20260809-355059, T20260924-252293
      could collapse to a single flat-queue pull now that estimation is in
      points. Moot for this task since Phase 2a.4 isn't being touched here
      — folded into T20260924-252293's scope instead.
+  9. **[PR #142](https://github.com/Synx-Data-Labs/ccxp-skills/pull/142) independent review (2026-09-24)** caught and fixed four
+     citation/factual errors before merge: wrong `eta_bucket_seconds()`
+     line numbers (was `111,114-115`, actually `121-134`); a
+     mischaracterized `design-score/scripts/score.sh:150` check (it's a
+     non-empty test, not duration-specific — no code change needed there);
+     a missing `2w` bucket in the migration mapping table (now `1w/2w → 8`,
+     both saturating the scale's top bucket); and an uncited
+     `retro/SKILL.md:351` site that also hardcodes duration buckets.
