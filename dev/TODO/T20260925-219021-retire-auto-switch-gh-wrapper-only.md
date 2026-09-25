@@ -4,7 +4,7 @@ estimation: 4h
 source: lsc-pa conversation, 2026-09-25
 ---
 
-# T20260925-219021: Retire auto-switch.sh and caller-side GH_TOKEN; route all gh through _gh/gh.sh
+# T20260925-219021: Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
 
 ## Problem
 
