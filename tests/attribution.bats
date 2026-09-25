@@ -172,6 +172,14 @@ _mk_git_dev() {
   [ "$(printf '%s\n' "$output" | grep -c 'shipped')" -eq 0 ]
 }
 
+@test "collect: \"In Progress\" status counts as in-flight identically to the legacy Coding alias (T20260809-355059)" {
+  d="$BATS_TEST_TMPDIR/dev"; mkdir -p "$d/TODO"
+  _mk_task "$d/TODO/T1.md" "In Progress" ""          # in-flight by status (loc empty)
+  run attribution_collect "$d" "2026-01-01" "2026-12-31"
+  [ "$status" -eq 0 ]
+  [ "$(printf '%s\n' "$output" | grep -c 'in-flight')" -eq 1 ]
+}
+
 @test "collect: shipped JOURNAL only when the filename date is in [since,until); non-task docs skipped" {
   d="$BATS_TEST_TMPDIR/dev"; mkdir -p "$d/JOURNAL"
   _mk_task "$d/JOURNAL/2026-06-28-T20260601-111111-in.md"  Done "cdw:/x"
