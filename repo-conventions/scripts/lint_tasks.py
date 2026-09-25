@@ -23,7 +23,7 @@ ALLOWED = REQUIRED | {
     # runtime (tooling-written: /stage, IPM, /focus)
     "scheduled", "claimed_by", "claimed_role", "iteration",
 }
-STATUS_TOKENS = {"open", "design", "coding", "review",
+STATUS_TOKENS = {"open", "design", "coding", "in progress", "review",
                  "blocked", "parked", "done", "closed"}
 FILENAME_RE = re.compile(r"^T\d{8}-\d{6}-.+\.md$")
 # Known non-task index files that legitimately live under dev/TODO/ — not
@@ -66,8 +66,16 @@ def parse_keys(block):
 
 def status_head(value):
     """Leading token of a status value, lowercased — mirrors sync.py's
-    status_to_option_id tolerance (split on space/em-dash/hyphen/colon/paren)."""
-    return re.split(r"[\s—:()-]", str(value).strip().lower(), 1)[0]
+    status_to_option_id tolerance (split on space/em-dash/hyphen/colon/paren).
+
+    "In Progress" (T20260809-355059) is the one two-word status name, so its
+    own two-word phrase is matched as a unit — ahead of the general
+    single-token split below — when followed by a delimiter or end-of-string
+    (never for a longer word like "Progressive" or a typo)."""
+    v = str(value).strip().lower()
+    if re.match(r"^in progress(?=[\s—:()-]|$)", v):
+        return "in progress"
+    return re.split(r"[\s—:()-]", v, 1)[0]
 
 
 class Ctx:
