@@ -166,6 +166,91 @@ _lint_docs_vendored() {
   return 0
 }
 
+# Rules disabled in the isolated safe-fix path (T20260922-383156): both
+# recognize ambiguous prose as list/emphasis markup and silently rewrite it,
+# changing meaning rather than just formatting —
+#   MD004 (ul-style)          a hard-wrapped line starting with a bare "+"
+#                              gets flipped to "-" (dash-style enforcement).
+#   MD037 (no-space-in-emphasis)  a literal "*.ext" glob-pattern asterisk
+#                              gets misread as an emphasis marker, and its
+#                              adjacent comma-spacing gets stripped.
+# Repo-wide/CI full-tree lint is untouched — this only applies to the
+# isolated single-file copy the safe-fix path operates on.
+_LINT_DOCS_SAFE_FIX_DISABLE_RULES=(MD004 MD037)
+
+# Build an isolated temp-directory copy of the given path(s), with a config
+# derived from the real discovered .markdownlint-cli2.jsonc (rules above
+# forced off, everything else untouched), and run markdownlint-cli2 --fix
+# there — so an ambiguous "+"/glob-asterisk prose line in the ONE file being
+# fixed doesn't get silently corrupted (T20260922-383156). A naive --config
+# override alone does NOT achieve this while the real config is discoverable
+# in cwd: it's a per-rule cascade where a rule the real config explicitly
+# sets (MD004) wins over --config regardless — hence the temp-directory
+# isolation, not just a config flag.
+#
+# Returns 0 (clean) / 1 (violations, now fixed) on success, or 3 when the
+# safe path can't be applied (no jq, or no .markdownlint-cli2.jsonc in cwd)
+# — the caller falls back to the plain (pre-existing, non-isolated)
+# invocation unchanged, never a hard failure.
+_lint_docs_safe_fix() {
+  local runner="$1" mdl_version="$2"
+  shift 2
+  local paths=("$@")
+
+  if ! command -v jq >/dev/null 2>&1 || [ ! -f .markdownlint-cli2.jsonc ]; then
+    return 3
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d)" || return 3
+  # shellcheck disable=SC2064  # intentional immediate expansion of $tmpdir
+  trap "rm -rf '$tmpdir'" RETURN
+
+  # Deliberately NOT named .markdownlint-cli2.jsonc: markdownlint-cli2 does
+  # its own auto-discovery walk for that exact filename independent of
+  # --config, and parses a discovery-found file under different structural
+  # expectations than one supplied via --config — even the identical bare
+  # rules content, under that reserved name, silently failed to suppress a
+  # rule (MD037) that the same content DID suppress under any other name.
+  # Empirically confirmed during this task's implementation; a name outside
+  # markdownlint-cli2's own recognized-config-filename list sidesteps it.
+  local override_config="$tmpdir/lint-docs-safe-fix-override.jsonc"
+  local disable_filter='.config'
+  local rule
+  for rule in "${_LINT_DOCS_SAFE_FIX_DISABLE_RULES[@]}"; do
+    disable_filter+=" | .${rule} = false"
+  done
+  jq "$disable_filter" .markdownlint-cli2.jsonc > "$override_config" 2>/dev/null \
+    || return 3
+
+  local p
+  for p in "${paths[@]}"; do
+    mkdir -p "$tmpdir/$(dirname "$p")" || return 3
+    cp "$p" "$tmpdir/$p" || return 3
+  done
+
+  local cmd=()
+  case "$runner" in
+    markdownlint-cli2) cmd=(markdownlint-cli2) ;;
+    npx)               cmd=(npx --yes "markdownlint-cli2@${mdl_version}") ;;
+    *)                 return 3 ;;
+  esac
+  cmd+=(--config "$override_config" --fix --no-globs)
+
+  local out rc
+  out="$(cd "$tmpdir" && "${cmd[@]}" "${paths[@]}" 2>&1)" && rc=0 || rc=$?
+  printf '%s\n' "$out"
+
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+    return 3
+  fi
+
+  for p in "${paths[@]}"; do
+    cp "$tmpdir/$p" "$p" || return 3
+  done
+  return "$rc"
+}
+
 # Run the real markdownlint-cli2 via the resolved runner. Echoes its output and
 # returns 0 (clean) / 1 (violations) when it actually ran, or 3 when it could
 # not run (e.g. npx offline) — the caller treats 3 as "fall back to vendored".
@@ -176,9 +261,21 @@ _lint_docs_vendored() {
 # never narrowed by CLI args — and a globs-stripped temp-config override does
 # NOT work either, since markdownlint-cli2 falls back to its own hardcoded
 # **/*.md default with no top-level globs present at all).
+#
+# A scoped --fix call (fix=1 && explicit=1) tries the isolated safe-fix path
+# first (T20260922-383156); a rc of 3 from that (no jq / no discoverable
+# config) falls through to the plain invocation below, unchanged.
 _lint_docs_run_tool() {
   local runner="$1" fix="$2" explicit="$3"
   shift 3
+
+  if [ "$fix" -eq 1 ] && [ "$explicit" -eq 1 ]; then
+    local safe_rc
+    _lint_docs_safe_fix "$runner" "$_LINT_DOCS_MDL_VERSION" "$@"
+    safe_rc=$?
+    [ "$safe_rc" -ne 3 ] && return "$safe_rc"
+  fi
+
   local cmd=()
   case "$runner" in
     markdownlint-cli2) cmd=(markdownlint-cli2) ;;

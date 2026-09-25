@@ -19,6 +19,7 @@ set -uo pipefail
 
 if [ -n "${FAKE_MDL_CALLLOG:-}" ]; then
   printf 'ARGV: %s\n' "$*" >> "$FAKE_MDL_CALLLOG"
+  printf 'PWD: %s\n' "$PWD" >> "$FAKE_MDL_CALLLOG"
 fi
 
 printf 'markdownlint-cli2 v0.22.1 (fake)\nSummary: 0 error(s)\n'
