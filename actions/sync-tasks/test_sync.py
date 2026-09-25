@@ -467,6 +467,30 @@ class StatusToOptionIdTests(unittest.TestCase):
             "opt_design",
         )
 
+    def test_in_progress_two_word_status_matches(self):
+        # T20260809-355059: "In Progress" is the one two-word status name —
+        # the leading-token split must treat it as a single unit ("in
+        # progress"), not split on its own internal space and try to match
+        # the bare word "in" (which the fix below prevents).
+        options = {"In Progress": "opt_in_progress"}
+        self.assertEqual(
+            sync.status_to_option_id("In Progress", options), "opt_in_progress"
+        )
+
+    def test_prose_suffixed_in_progress_status_matches_leading_option(self):
+        options = {"In Progress": "opt_in_progress"}
+        self.assertEqual(
+            sync.status_to_option_id(
+                "In Progress — SUPERVISED (needs a human)", options
+            ),
+            "opt_in_progress",
+        )
+
+    def test_in_progress_lookalike_typo_does_not_match(self):
+        # "Inprogress" (one word) must NOT be treated as the two-word phrase.
+        options = {"In Progress": "opt_in_progress"}
+        self.assertIsNone(sync.status_to_option_id("Inprogress", options))
+
     def test_no_match_returns_none(self):
         options = {"Open": "opt_open"}
         self.assertIsNone(sync.status_to_option_id("Unknown", options))
