@@ -105,6 +105,12 @@ Output a structured report:
 - [ ] <specific action item>
 ```
 
+### 5.5 Post to Slack
+
+Immediately post the report to Slack via `slack_send_message` — don't ask "want me to post this?" first; that just adds friction and stalls the loop. The RCA is meant to feed back to the team, so posting is the default, not an opt-in. Post to `#claude-notification` (or whatever the repo's configured standup/alert channel is — see `SLACK_STANDUP_CHANNEL`) if a more specific build-alerts channel isn't reachable.
+
+**Plain text, not a markdown table** — even though the report template in step 5 above reads naturally as a set of labeled fields, render it as bold key-value lines / bullets, not a table, when posting to Slack. Slack does not render markdown tables; a table posted there shows up as a garbled pipe-delimited mess instead of the structured report it's meant to be.
+
 ### 6. Create task if needed
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
