@@ -5,9 +5,10 @@
 # T20260611-104067) is HEARTBEAT-FREE by design: a claim is a durable
 # `claimed_by: <machine>:<working-dir>` line on `main`, which is what lets it
 # survive restarts. The flip side — a claim whose owning CC session has *died*
-# (crash / kill / reboot) is never released. The task stays `status: Coding`,
-# `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from
-# every OTHER session, so it silently leaks out of the backlog.
+# (crash / kill / reboot) is never released. The task stays `status: In
+# Progress` (or the legacy `Coding` alias), `claimed_by: <dead session>`, and
+# peer-mode `/todo next` excludes it from every OTHER session, so it silently
+# leaks out of the backlog.
 #
 # NOTE (T20260615-169917): claimant id is now clone-stable (<machine>:<dir>), so
 # a claim left by a crashed prior invocation IN THE SAME CLONE reads as the new
@@ -76,8 +77,9 @@ reclaim_sweep() {
   for f in "$dir"/*.md; do
     [ -e "$f" ] || continue
     status="$(_tc_fm_get "$f" status)"
-    # Only actively-claimed tasks can have a leaked claim.
-    case "$status" in Coding|Review) : ;; *) continue ;; esac
+    # Only actively-claimed tasks can have a leaked claim. Coding is a legacy
+    # alias of "In Progress" — see T20260809-355059.
+    case "$status" in Coding|"In Progress"|Review) : ;; *) continue ;; esac
     claimed_by="$(_tc_fm_get "$f" claimed_by)"
     { [ -n "$claimed_by" ] && [ "$claimed_by" != "none" ]; } || continue
     # Self-reclaim guard — our own claim is not dead. Short-circuit BEFORE the

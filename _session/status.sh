@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # status.sh <task-id> <status-value> — set the Project Status single-select
-# field for the given task. Value is one of: Open, Design, Coding, Review,
-# Blocked, Parked, Done (case-insensitive).
+# field for the given task. Value is one of: Open, Design, In Progress
+# (or the legacy Coding alias, T20260809-355059), Review, Blocked, Parked,
+# Done (case-insensitive).
 #
 # Best-effort: failures log to stderr but exit 0 so callers don't fail.
 # The frontmatter `status:` field in the task file remains the source of

@@ -8,7 +8,8 @@ fi
 # At the end of every Monday IPM, every GH Project item still assigned to the
 # previous iteration that is NOT `Done` must be migrated out (its task-file
 # `scheduled:` advanced to the current or a future Monday). The carry logic
-# covers in-flight (`Coding`/`Review`) and `claimed_by` tasks, but `Open`/`Design`
+# covers in-flight (`In Progress` [or the legacy `Coding` alias,
+# T20260809-355059]/`Review`) and `claimed_by` tasks, but `Open`/`Design`
 # tasks with an empty claim are caught by neither path and silently strand on the
 # closed iteration. This gate fails the IPM until they are drained.
 #
@@ -25,7 +26,8 @@ fi
 #
 # A `Parked` task is deliberately set aside (moved to dev/PARKING/), not stranded
 # work, so the default terminal set is "Done|Parked" — only genuinely-active
-# statuses (Open/Design/Coding/Review/Blocked) count as offenders. (On today's
+# statuses (Open/Design/In Progress [or legacy Coding]/Review/Blocked) count
+# as offenders. (On today's
 # board, Parked items also carry a null iteration, so this is belt-and-braces.)
 #
 # Scope (T20260628-592642): the GH Project can span MULTIPLE repos (e.g.

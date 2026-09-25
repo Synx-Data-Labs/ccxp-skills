@@ -11,7 +11,11 @@
 # The claim is two fields in the task file's leading `---` frontmatter block:
 #   claimed_by:      <machine>:<working-dir>  (empty when unclaimed; the lock —
 #                                              already carries the working-dir)
-#   status:          Coding                   (board projection; secondary)
+#   status:          In Progress              (board projection; secondary — the
+#                                              legacy `Coding` value is still
+#                                              recognized as an equivalent alias
+#                                              everywhere this file matches on
+#                                              status, T20260809-355059)
 #
 # The claimant id is the (machine, clone-path) pair, NOT a per-invocation session
 # id — so a new /drive or ccxp run in the SAME clone is the SAME claimant and
@@ -232,8 +236,9 @@ _tc_reclaim_decide() {
   #    GH Actions run or a live local PID for this claim, else empty/"0".
   #   → "reclaimable" | "live"
   #
-  # A claim is reclaimable only when actively-claimed (Coding/Review with a
-  # claimant) AND BOTH activity signals exceed the window:
+  # A claim is reclaimable only when actively-claimed (In Progress — or the
+  # legacy Coding alias — /Review with a claimant) AND BOTH activity signals
+  # exceed the window:
   #   - commit_days: days since the last commit mentioning the id on `main`
   #     (large when none — incl. an open-PR task whose work sits on an unmerged
   #     branch, invisible to `git log` on main);
@@ -265,7 +270,7 @@ _tc_reclaim_decide() {
   #      the verdict in as $6, keeping this function pure/unit-testable.
   local status="$1" claimed_by="$2" commit_days="$3" pr_days="$4" stale="$5" live_signal="${6:-}"
   case "$status" in
-    Coding|Review) : ;;
+    Coding|"In Progress"|Review) : ;;
     *) printf 'live'; return 0 ;;
   esac
   if [ -z "$claimed_by" ] || [ "$claimed_by" = "none" ]; then printf 'live'; return 0; fi
@@ -541,7 +546,7 @@ _tc_acquire() {
     none)
       _tc_fm_set "$file" claimed_by "$mine" || return 1
       _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
-      _tc_fm_set "$file" status Coding || return 1
+      _tc_fm_set "$file" status "In Progress" || return 1
       _tc_stamp_scheduled_if_needed "$file" || return 1
       printf 'acquired\n'; return 0 ;;
   esac
@@ -581,8 +586,9 @@ _tc_release_others() {
   # FILE across TODO **and PARKING** (_tc_find_file_anydir) so a parked task being
   # resumed is protected, and so the short task-ids used in tests work too.
   #
-  # Status handling: only an actively-claimed-but-now-abandoned task (Coding /
-  # Design) is returned to the pickable pool (→ Open). Every other status is
+  # Status handling: only an actively-claimed-but-now-abandoned task (In
+  # Progress — or the legacy Coding alias — / Design) is returned to the
+  # pickable pool (→ Open). Every other status is
   # PRESERVED, just shorn of its claim — critically `Blocked by T<id>` (the
   # compound blocked status: resetting it to Open would re-inject a still-blocked
   # task and destroy the blocker linkage /todo + the lint board-pass rely on),
@@ -599,7 +605,7 @@ _tc_release_others() {
       if [ -n "$except_file" ] && [ "$f" -ef "$except_file" ]; then continue; fi
       [ "$(_tc_fm_get "$f" claimed_by)" = "$mine" ] || continue
       status="$(_tc_fm_get "$f" status)"
-      case "$status" in Coding|Design) status="Open" ;; *) : ;; esac
+      case "$status" in Coding|"In Progress"|Design) status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
       _tc_fm_set "$f" claimed_role ""      || return 1   # same clear-on-close contract as _tc_release
       _tc_fm_set "$f" status "$status"     || return 1

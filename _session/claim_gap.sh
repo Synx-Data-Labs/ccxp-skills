@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# claim_gap.sh — detect Coding-status tasks that were never claimed.
+# claim_gap.sh — detect In-Progress-status tasks that were never claimed.
 #
 # Complementary to reclaim_sweep.sh, which finds the OPPOSITE problem: a claim
 # that was taken and then went stale (owner died). This script finds tasks
-# actively being IMPLEMENTED (status: Coding) whose `claimed_by:` was never
-# set in the first place — the gap left by any path that flips status via
+# actively being IMPLEMENTED (status: In Progress, or the legacy Coding alias
+# — T20260809-355059) whose `claimed_by:` was never set in the first place —
+# the gap left by any path that flips status via
 # _session/status.sh (board visualization only, no lock) without also calling
 # task_claim.sh acquire. `/ccxp` Phase 2a.3 (the pre-IPM design pass) is the
 # confirmed live example (T20260610-248248).
@@ -17,8 +18,9 @@
 # those statuses. Verified live: 3 of 4 previously-flagged Design tasks had
 # simply never been claimed (claimed_by empty since their seed-migration
 # commit, untouched since) -- flagging them was the actual bug, not a symptom
-# of one. `Coding` is different: a task mid-implementation with no claimant
-# IS a real gap (someone flipped status without acquiring the lock).
+# of one. `In Progress` (or the legacy `Coding` alias) is different: a task
+# mid-implementation with no claimant IS a real gap (someone flipped status
+# without acquiring the lock).
 #
 # Detector only — never mutates a file, unlike reclaim_sweep.sh's --apply
 # mode. A false negative here just means a task looks fine when it's actually
@@ -51,7 +53,7 @@ claim_gap() {
   for f in "$dir"/*.md; do
     [ -e "$f" ] || continue
     status="$(_tc_fm_get "$f" status)"
-    case "$status" in Coding) : ;; *) continue ;; esac
+    case "$status" in Coding|"In Progress") : ;; *) continue ;; esac
     claimed_by="$(_tc_fm_get "$f" claimed_by)"
     { [ -z "$claimed_by" ] || [ "$claimed_by" = "none" ]; } || continue
     id="$(_cg_task_id_from_file "$f")"

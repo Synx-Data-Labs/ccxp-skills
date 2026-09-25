@@ -128,6 +128,12 @@ EOF
   [ "$(_tc_reclaim_decide Review h:/p 2 99999 2)" = "reclaimable" ]
 }
 
+@test "_tc_reclaim_decide: \"In Progress\" status is recognized exactly like the legacy Coding alias (T20260809-355059)" {
+  [ "$(_tc_reclaim_decide "In Progress" '' 99 99 2)" = "live" ]                 # unclaimed -> live
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 0 99999 2)" = "live" ]             # fresh commit -> live
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 3 99999 2)" = "reclaimable" ]      # stale commit -> reclaimable
+}
+
 @test "_tc_reclaim_decide: open-PR task, RECENT PR activity -> live (no longer auto-blocked, but live work protected)" {
   # commit_days large (work sits on the unmerged PR branch, invisible on main);
   # the PR was touched recently (push/comment/review) -> live, NOT reclaimed.
@@ -418,6 +424,21 @@ EOF
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T4-done.md" status)"    = "Done" ]
 }
 
+@test "release-others returns a legacy Coding-status claim to Open too (dual-accept, T20260809-355059)" {
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-legacy.md"
+  _tc_claimant_id() { printf 'box:/clone'; }
+  # simulate a pre-migration claim written before acquire started writing
+  # "In Progress" — the legacy literal must still be recognized as equivalent.
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-legacy.md" claimed_by "box:/clone"
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-legacy.md" status "Coding"
+  run _tc_release_others
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q '^released:T1-legacy$'
+  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-legacy.md" claimed_by)" ]
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-legacy.md" status)" = "Open" ]
+}
+
 @test "release-others scans PARKING: frees a self-held parked task (status preserved)" {
   TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
   PARKING="$BATS_TEST_TMPDIR/dev/PARKING"; mkdir -p "$PARKING"   # sibling of TODO
@@ -490,7 +511,8 @@ EOF
   run _tc_acquire T1
   [ "$status" -eq 0 ]; [ "$output" = "acquired" ]
   run _tc_read T1
-  [ "$output" = "$(printf 'Coding\tsidA@h')" ]
+  # T20260809-355059: acquire now writes "In Progress", not the legacy "Coding"
+  [ "$output" = "$(printf 'In Progress\tsidA@h')" ]
   # human owner: is preserved across acquire
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" owner)" = "Alex" ]
 
