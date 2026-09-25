@@ -28,3 +28,5 @@ reprioritize.
 - [T20260924-232855](T20260924-232855-estimation-to-story-points.md): Replace `estimation:` duration buckets with XP story points
 - [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
 - [T20260925-332662](T20260925-332662-pr-task-id-false-positive-top-commit-mentions.md): `pr_task_id.sh` signal 3 (commit-message scan) false-positives on `/top`'s own commit message
+- [T20260925-407025](T20260925-407025-todo-scripts-bash4-only.md): `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
+- [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
