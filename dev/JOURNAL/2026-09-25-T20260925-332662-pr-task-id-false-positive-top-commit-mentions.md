@@ -1,10 +1,10 @@
 ---
-status: Coding
+status: Done
 estimation: 1h
 source: discovered while /address-pr-ing synxdb-team PR #666 (a /top queue reorder)
 related: T20260718-160579, T20260922-324422, T20260918-404944
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -146,10 +146,36 @@ scheduled: 2026-09-21
 | `tests/session_pr_task_id.bats` | `1-101` | unit tests for the correlator; updated true-positive fixture + new false-positive/leading-colon cases |
 | `top/SKILL.md` | `137` | source of the `docs(queue): move T<id> ... to the top` commit convention that triggers the false positive |
 
-## Closed
+## Closed (2026-09-25)
 
-Pending — filled in at `/drive` Phase 7 once the implementation PR merges.
+- Shipped in **PR #150** (rebase-merged to `main` at `1204564`):
+  https://github.com/Synx-Data-Labs/ccxp-skills/pull/150
+- All done criteria met: signal 3 no longer matches a bare `T<id>`
+  substring, still resolves the real `(T<id>)` convention, and the fix
+  landed as a single narrow change in `_session/_lib.sh:304-308` (no
+  per-skill duplication).
+- CI green (bats, Markdown Lint, lint-tasks, sync-tasks), independent
+  Claude Code review gave a clean bill (one non-blocking doc nit — a
+  stale line reference in this file — fixed in a follow-up commit before
+  merge), full repo `bats tests/*.bats` suite green, no regressions.
+- No follow-up tasks filed — the fix is self-contained to the shared
+  correlator; `top`/`bottom`/`stage --before`'s commit-message convention
+  needed no changes since the fix is at the consuming regex, not the
+  producing skills.
 
 ## Skills invoked
 
-Pending — filled in at `/drive` Phase 7.0 once implementation is complete.
+- TDD (`superpowers:test-driven-development`): yes — wrote the
+  false-positive/true-positive bats cases first, confirmed red (only the
+  new false-positive case failing), then made the regex narrowing green.
+- Verification (`superpowers:verification-before-completion`): yes —
+  pre-PR (full bats suite, shellcheck, scope/doc-impact review) and
+  pre-merge (mergeability, doc-impact re-check, caller survey for
+  `session_pr_task_id`/`pr_task_id.sh` before relying on the green gate).
+- Systematic debugging (`superpowers:systematic-debugging`): no — root
+  cause was already diagnosed at filing time; no unexpected failures
+  during implementation.
+- Receiving code review (`superpowers:receiving-code-review`): yes — one
+  independent-review finding (stale line reference in the task doc),
+  accepted and fixed in a follow-up commit before merge; no pushback
+  needed, the finding was correct.
