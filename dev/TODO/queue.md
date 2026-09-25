@@ -31,3 +31,4 @@ reprioritize.
 - [T20260925-407025](T20260925-407025-todo-scripts-bash4-only.md): `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
 - [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
 - [T20260925-427007](T20260925-427007-dead-legacy-gh-wrapper-path.md): Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
+- [T20260925-383305](T20260925-383305-fm-set-orphans-multiline-yaml-continuation.md): `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
