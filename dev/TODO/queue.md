@@ -32,3 +32,4 @@ reprioritize.
 - [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
 - [T20260925-427007](T20260925-427007-dead-legacy-gh-wrapper-path.md): Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
 - [T20260925-383305](T20260925-383305-fm-set-orphans-multiline-yaml-continuation.md): `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
+- [T20260925-244717](T20260925-244717-reclaim-decide-status-exact-match-bug.md): `_tc_reclaim_decide` exact-matches `status` against `Coding`/`Review`, so any narrated status always reads `live`
