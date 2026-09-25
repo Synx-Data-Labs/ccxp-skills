@@ -24,3 +24,4 @@ reprioritize.
 - [T20260924-159109](T20260924-159109-skill-to-app.md): Design /skill-to-app — compile a matured skill's deterministic steps into a program
 - [T20260924-366770](T20260924-366770-statusline-last-input-slug.md): Add a last-user-input slug to the statusline
 - [T20260924-144072](T20260924-144072-add-memory-to-skill-standalone-skill.md): Add /memory-to-skill: standalone, single-clone memory review skill
+- [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
