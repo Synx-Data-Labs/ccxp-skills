@@ -1,11 +1,11 @@
 ---
-status: Design
+status: Done
 scheduled: 2026-09-21
 estimation: 1h
 source: T20260910-919422's Closed section, 2026-09-22 — the +/- and comma-spacing corruption itself is not fixed by that task's scoping fix
 related: T20260910-919422
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260922-383156: `markdownlint-cli2 --fix` still flips a bare leading `+` to `-` and drops comma-spacing — scoping contains it, doesn't fix it
@@ -189,48 +189,96 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] Unit (`tests/lint-docs.bats`, new cases): a "safe-fix" invocation
-      (`explicit=1`, `fix=1`) builds a temp directory, copies the target
-      file(s), derives an override config with `MD004`/`MD037` forced
-      `false` from the real discovered config, and invokes
-      `markdownlint-cli2` there — argv/behavior inspection via the
-      existing fake-`markdownlint-cli2` fixture pattern.
-- [ ] Unit: real-tool end-to-end regression of this task's own repro —
-      fixture file with the ambiguous `+` line and the glob-comma line,
-      run through the new safe-fix path, assert both are byte-for-byte
-      preserved and any *other* real, fixable violation (e.g. a genuine
-      MD032 blank-line gap) still gets fixed.
-- [ ] Unit: a genuine non-dash bullet list (e.g. `* item`) in the scoped
-      file is **not** rewritten by the safe-fix path (documents the
-      accepted trade-off) but **is** still flagged by a plain check-only
-      `markdownlint-cli2 --no-globs <file>` call (no regression to
-      detection, only to auto-fix).
-- [ ] Unit: the default-scope bare call (no explicit path) and check-only
-      calls are unaffected — still use the real repo config directly, no
-      temp-directory indirection.
-- [ ] Regression: full `bats tests/*.bats` suite green.
-- [ ] Manual: re-run this task's own Root-cause repro against the shipped
-      script (not the throwaway `/tmp` script) and confirm the same
-      before/after result.
+- [x] Unit (`tests/lint-docs.bats`): "runs the isolated markdownlint-cli2
+      invocation from a temp directory with a derived --config" —
+      argv/PWD-inspection via the fake-`markdownlint-cli2` fixture (extended
+      with `PWD:` logging), confirms the invocation cwd differs from the
+      original and both `--config`/`--no-globs` are passed.
+- [x] Unit: real-tool end-to-end regression of this task's own repro —
+      "preserves an ambiguous leading + and glob-comma spacing, still
+      fixes real MD032 gaps": both preserved byte-for-byte, MD032 still
+      inserts the needed blank line.
+- [x] Unit: "does not rewrite a genuine non-dash bullet list, but
+      check-only still flags it" — the accepted trade-off, verified both
+      directions.
+- [x] Unit: the default-scope bare call and check-only calls are
+      structurally unaffected — gated on `explicit==1 && fix==1`
+      (`lint_docs_run`'s existing parameters), plus the two pre-existing
+      `--no-globs` tests (unchanged, still passing) cover the bare-call
+      case directly.
+- [x] Regression: full `bats tests/*.bats` suite green — 743/743, 0
+      failures (fresh run, `/tmp/full-bats-run.log`).
+- [x] Manual: re-ran the Root-cause repro against the shipped script
+      directly (not a throwaway copy) — same before/after result,
+      confirmed during implementation debugging (which also surfaced and
+      fixed a real bug: naming the derived config exactly
+      `.markdownlint-cli2.jsonc` silently defeated it via
+      markdownlint-cli2's own auto-discovery, even under explicit
+      `--config` — fixed by using a non-colliding filename).
 
 ## Done criteria
 
-- [ ] `_docs/lint-docs.sh`'s scoped single-file `--fix` path no longer
+- [x] `_docs/lint-docs.sh`'s scoped single-file `--fix` path no longer
       flips a bare leading `+` to `-` nor drops comma-spacing around a
-      glob-pattern asterisk — `tests/lint-docs.bats` (new cases above).
-- [ ] The default-scope bare call and check-only calls are provably
+      glob-pattern asterisk — `tests/lint-docs.bats` (new cases).
+- [x] The default-scope bare call and check-only calls are provably
       unchanged (same config, no temp-directory indirection) —
       `tests/lint-docs.bats`.
-- [ ] Repo-wide/CI full-tree lint still enforces `MD004`/`MD037` at full
-      strength — no change to `.markdownlint-cli2.jsonc` itself.
-- [ ] Full `bats tests/*.bats` suite green (regression check).
-- [ ] All Test plan items above pass.
+- [x] Repo-wide/CI full-tree lint still enforces `MD004`/`MD037` at full
+      strength — `.markdownlint-cli2.jsonc` itself untouched (verified:
+      `git diff` shows zero changes to that file).
+- [x] Full `bats tests/*.bats` suite green (regression check) — 743/743.
+- [x] All Test plan items above pass.
 
 ## Repo file references
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_docs/lint-docs.sh` | 179-198 (`_lint_docs_run_tool`) | Add the isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` — both already threaded as separate parameters (`lint_docs_run`, 201-216), a natural extension point |
-| `.markdownlint-cli2.jsonc` | 1-23 | Source config to clone/derive the temp override from (not modified itself) |
-| `tests/lint-docs.bats` | whole file | New cases for the safe-fix path; existing `--no-globs` cases (T20260910-919422) unchanged |
+| `_docs/lint-docs.sh` | 195-252 (`_lint_docs_safe_fix`, new), 268-295 (`_lint_docs_run_tool`, modified) | The isolated-temp-directory "safe-fix" path, gated on `explicit=1 && fix=1` |
+| `.markdownlint-cli2.jsonc` | 1-23 | Source config cloned/derived from for the temp override (not modified itself) |
+| `tests/lint-docs.bats` | whole file | 3 new test cases (safe-fix preservation, accepted-trade-off, isolation/argv), 1 existing case updated to a non-triggering fixture |
+| `tests/fixtures/lint-docs/fake-markdownlint-cli2.sh` | +1 line | Added `PWD:` logging to the shared fixture (additive, other tests unaffected) |
 | `dev/JOURNAL/2026-09-22-T20260910-919422-lint-docs-fix-corrupts-content.md` | 124-131 | Prior task's explicit "out of scope, follow-up filed" note this task closes |
+
+## Closed (2026-09-24)
+
+- Shipped in this implementation PR (design in [PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144)). Both `+`→`-` and comma-spacing
+  corruption symptoms fixed via an isolated-temp-directory safe-fix path in
+  `_docs/lint-docs.sh`, gated on `explicit=1 && fix=1` (the scoped
+  single-file `--fix` callers `T20260910-919422` already narrowed via
+  `--no-globs`). Repo-wide/CI full-tree lint enforcement of `MD004`/`MD037`
+  is unchanged.
+- All Done criteria met; full `bats tests/*.bats` suite green (743/743, 0
+  failures, fresh run).
+- Implementation surfaced and fixed one real bug beyond the design: naming
+  the derived override config exactly `.markdownlint-cli2.jsonc` silently
+  defeated it, since `markdownlint-cli2` does its own auto-discovery walk
+  for that exact filename with different parsing expectations than a file
+  supplied via `--config` — even the identical content, under that reserved
+  name, failed to suppress `MD037`. Fixed by using a non-colliding filename
+  (`lint-docs-safe-fix-override.jsonc`).
+- Quality probe recorded (`dev/quality/metrics.jsonl`): `shellcheck` clean,
+  `max_fn_lines`/`file_loc` regressed (+27/+286) — expected given the new
+  function and test cases added, not a quality concern.
+- No follow-up tasks filed — this closes T20260910-919422's own
+  explicitly-deferred follow-up cleanly, no further open threads.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class;
+  wrote 3 new `tests/lint-docs.bats` cases first, watched all 3 fail for
+  the expected reason (feature missing), implemented to green, then found
+  and fixed the `.markdownlint-cli2.jsonc`-filename bug through the same
+  red→green cycle on the failing assertions.
+- Verification (`superpowers:verification-before-completion`): yes — fresh
+  full-suite re-run (743/743) and shellcheck check before opening the PR,
+  not relying on the earlier truncated background-run output.
+- Systematic debugging (`superpowers:systematic-debugging`): implicitly
+  applied (hypothesis-driven isolation of the `.markdownlint-cli2.jsonc`
+  auto-discovery bug via a sequence of controlled variable-elimination
+  repros) though not formally invoked as a separate skill call — the
+  debugging matched its spirit closely enough that a separate invocation
+  would have been redundant.
+- Receiving code review (`superpowers:receiving-code-review`): yes — used
+  at the design-PR stage ([PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144), 3 review rounds, all findings fixed,
+  none pushed back on).
