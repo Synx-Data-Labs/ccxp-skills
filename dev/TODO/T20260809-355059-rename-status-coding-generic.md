@@ -162,25 +162,30 @@ Progress** chosen for matching the industry convention this task already cites.
 
 ## Test plan
 
-- [ ] `bats tests/task_claim.bats` — legacy `Coding` still accepted everywhere it was before;
-  `acquire` now writes `In Progress`
-- [ ] `bats tests/reclaim_sweep.bats` — a task at either `Coding` or `In Progress` with a stale
-  claim is still correctly identified as reclaimable
-- [ ] `bats tests/attribution.bats`, `tests/claim_gap.bats`, `tests/ipm_iteration_drain_check.bats`,
+- [x] `bats tests/task_claim.bats` — legacy `Coding` still accepted everywhere it was before;
+  `acquire` now writes `In Progress` (101 tests, 0 failures)
+- [x] `bats tests/reclaim_sweep.bats` — a task at either `Coding` or `In Progress` with a stale
+  claim is still correctly identified as reclaimable (10 tests, 0 failures)
+- [x] `bats tests/attribution.bats`, `tests/claim_gap.bats`, `tests/ipm_iteration_drain_check.bats`,
   `tests/epic-status.bats`, `tests/todo-next.bats`, `tests/eta.bats`, `tests/task-state.bats` —
-  full suite green after the dual-accept change
-- [ ] Manual: `bash _session/task_claim.sh acquire <fresh-task-id>` on a scratch task file writes
-  `status: In Progress`
-- [ ] Manual: a scratch task file hand-set to `status: Coding` is still recognized as
-  actively-claimed by `bash _session/reclaim_sweep.sh` (dual-accept proof)
-- [ ] `grep -rn "Coding" _session _ipm` after Phase A returns only comment/doc-string mentions of
-  the legacy alias itself, not a script that fails to recognize it
+  full suite green after the dual-accept change (verified individually + full `bats tests/`:
+  750 tests, 0 failures)
+- [x] Manual: `bash _session/task_claim.sh acquire <fresh-task-id>` on a scratch task file writes
+  `status: In Progress` (verified against a scratch `T99999999-999999` file)
+- [x] Manual: a scratch task file hand-set to `status: Coding` is still recognized as
+  actively-claimed by `bash _session/reclaim_sweep.sh` (dual-accept proof — verified: freed a
+  scratch `T99999999-888888` file with a dead `deadbeef@cdw` claimant, `was Coding`)
+- [x] `grep -rn "Coding" _session _ipm` after Phase A returns only comment/doc-string mentions of
+  the legacy alias itself (plus the case-statement pattern in `attribution.sh:220`), not a script
+  that fails to recognize it — `_session/README.md` is the one remaining non-alias hit, and it's
+  explicitly Phase B (deferred, not in scope for this PR)
 
 ## Done criteria
 
-- [ ] Phase A: all script logic in the Repo file references table (A rows) writes `In Progress`
+- [x] Phase A: all script logic in the Repo file references table (A rows) writes `In Progress`
   and dual-accepts legacy `Coding` — verified by the bats suites listed in Test plan
-- [ ] Phase A: `bats tests/` full suite green (all 9 touched suites + no regressions elsewhere)
+- [x] Phase A: `bats tests/` full suite green (all 9 touched suites + no regressions elsewhere;
+  750 tests, 0 failures)
 - [ ] Phase B: canonical name documented in `lifecycle.md:70,82,88,148-149` + the 3 templates
 - [ ] Phase B: all 8 listed `SKILL.md` files updated (`repo-conventions/SKILL.md`,
   `todo/SKILL.md`, `retro/SKILL.md`, `ccxp/SKILL.md`, `address-pr/SKILL.md`, `drive/SKILL.md`,
