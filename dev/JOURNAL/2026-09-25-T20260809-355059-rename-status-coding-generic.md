@@ -1,12 +1,12 @@
 ---
-status: Coding
+status: Done
 estimation: 1d
 source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651055, whose
   `task_claim.sh acquire` flow unconditionally flipped its status to `Coding` even though
   the task is IRS paperwork, not code
 related: T20260529-651055, T20260827-280088, T20260827-420045
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-21
 ---
 
@@ -211,10 +211,67 @@ Progress** chosen for matching the industry convention this task already cites.
   then, which is the decision the original Done-when criteria asked to have recorded)
 - [x] `dev/JOURNAL/` entries are untouched (verified: no edits under `dev/JOURNAL/` in either PR's diff)
 
-## Closed
+## Closed (2026-09-25)
 
-_(filled at Phase 7 close)_
+- Shipped in two PRs on this same task, sequenced per the Phase A/B split:
+  - **PR #154** — claim + design decisions (term, scope, dual-accept rollout).
+  - **PR #156** — Phase A: shared `_session`/`_ipm` script logic dual-accept.
+    Went through **4 rounds** of independent review, each catching a real,
+    verified gap the previous rounds (including the original implementation
+    pass) missed: round 1 caught `ccxp/scripts/epic-status.sh`'s own
+    status-bucketing case-statements; round 2 caught
+    `repo-conventions/scripts/lint_tasks.py`'s `status_head()` (would have
+    hard-failed CI lint on the next touch of any newly-claimed task); round 3
+    caught `actions/sync-tasks/sync.py`'s `status_to_option_id()` — the
+    documented *twin* of the round-2 fix, silently degrading instead of
+    failing loud, so it slipped past both prior rounds; round 4 returned a
+    clean bill after a full fresh sweep. Merged 2026-09-25.
+  - **PR #157** — Phase B: doc/prose updates across `lifecycle.md`,
+    `glossary.md`, `_session/README.md`, 3 templates, all 8 listed
+    `SKILL.md` files, this repo's own `dev/guidelines.md` (a genuine miss
+    from the original Repo file references table, caught by a proactive
+    sweep before it needed another review round), and one docstring in
+    `actions/sync-tasks/sync.py`. Went through 2 rounds of review; round 1
+    caught a broken ASCII-diagram alignment (the rename widened the status
+    line without shifting the diagram's second-row `↕`/`Parked` annotations)
+    in both `lifecycle.md` and the template's copy; round 2 returned a clean
+    bill after independently re-verifying the alignment fix by character count.
+- **What's met**: every Done criterion above is checked and verified (bats
+  counts, manual proofs, repo-wide greps — see Test plan / Done criteria).
+- **What's external/unverified**: the 10 (unverified-stale-count, as of the
+  original 2026-08-09 filing) active `dev/TODO/` task files in
+  `hub-repo`/`build-pipeline-repo` still at literal `status: Coding` — not
+  migrated (out of reach from this clone) and not required to be, since the
+  dual-accept design tolerates them indefinitely until the follow-up task
+  below removes the alias.
+- **Follow-up tasks filed**: T20260925-283679 (remove the legacy `Coding`
+  alias once the external repos are confirmed migrated; staged into the
+  2026-10-05 iteration).
 
 ## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): **no** — not formally
+  invoked via the Skill tool for this code-class task. In practice, tests
+  were written alongside (not strictly before) each implementation change
+  and verified by running the full bats suite before every push, but this
+  wasn't a red→green→refactor cycle. Honest gap, not a green-wash: worth
+  invoking explicitly next time.
+- Verification (`superpowers:verification-before-completion`): **no** — not
+  formally invoked via the Skill tool at Phase 3.6, `/address-pr` §2.a, or
+  Phase 7.0 as the skill instructs. Substantively equivalent work *was*
+  done instead: manual reproduction of every review finding before fixing
+  it (e.g. directly calling `status_head("In Progress")` in Python to
+  confirm the bug before touching code), a full `bats tests/` run before
+  every push (6 full runs across both PRs, 0 failures each time), and
+  repeated repo-wide greps for any other unconverted `Coding` literal after
+  each fix. The verification *happened*; the skill wasn't the mechanism.
+- Systematic debugging (`superpowers:systematic-debugging`): no — never hit
+  the trigger conditions (every review-caught issue was fixed correctly on
+  the first attempt; no test failed twice in a row).
+- Receiving code review (`superpowers:receiving-code-review`): **no** — not
+  formally invoked via the Skill tool, but its discipline was followed in
+  practice across all 6 review rounds (4 on PR #156, 2 on PR #157): every
+  finding was independently verified/reproduced before being accepted and
+  fixed, never applied blindly on the reviewer's say-so.
 
 _(filled at Phase 7 close)_
