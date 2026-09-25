@@ -1,5 +1,5 @@
 ---
-status: Blocked by T20260923-584914 — PR #132 still open, unmerged
+status: "Blocked by T20260923-584914 — PR #132 still open, unmerged"
 scheduled: 2026-09-21
 estimation: 1h
 source: discovered driving T20260923-584914, 2026-09-23
