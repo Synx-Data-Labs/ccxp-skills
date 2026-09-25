@@ -242,7 +242,7 @@ claimed_role:
 
 ## Closed (2026-09-24)
 
-- Shipped in this implementation PR (design in [PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144)). Both `+`→`-` and comma-spacing
+- Shipped in [PR #145](https://github.com/Synx-Data-Labs/ccxp-skills/pull/145) (design in [PR #144](https://github.com/Synx-Data-Labs/ccxp-skills/pull/144)). Both `+`→`-` and comma-spacing
   corruption symptoms fixed via an isolated-temp-directory safe-fix path in
   `_docs/lint-docs.sh`, gated on `explicit=1 && fix=1` (the scoped
   single-file `--fix` callers `T20260910-919422` already narrowed via
