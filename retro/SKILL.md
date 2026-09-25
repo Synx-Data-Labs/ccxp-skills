@@ -213,7 +213,7 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week.
 
 - **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case since T20260914-422854 — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
-- **In flight** — task started (Status `Coding` or `Review`) but not merged. It will be Tier 1 carry-over next IPM.
+- **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will be Tier 1 carry-over next IPM.
 - **Partial** — commits exist on a branch but no PR is open, or PR is open but stalled (no movement in last 3 days).
 - **Dropped** — not started (Status still `Open` or `Design`). It re-enters the candidate pool next IPM.
 

@@ -33,3 +33,4 @@ reprioritize.
 - [T20260925-427007](T20260925-427007-dead-legacy-gh-wrapper-path.md): Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
 - [T20260925-383305](T20260925-383305-fm-set-orphans-multiline-yaml-continuation.md): `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
 - [T20260925-244717](T20260925-244717-reclaim-decide-status-exact-match-bug.md): `_tc_reclaim_decide` exact-matches `status` against `Coding`/`Review`, so any narrated status always reads `live`
+- [T20260925-283679](T20260925-283679-remove-legacy-coding-status-alias.md): Remove the legacy `Coding` status alias once external repos migrate

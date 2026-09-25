@@ -108,7 +108,7 @@ bash <skills-root>/ccxp/scripts/prune-drive-threads.sh
 
 Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the original untouched if `jq` errors (e.g. a malformed file). Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#acme-dev-notifications`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
 
-**3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released. The task stays `status: Coding`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations). On-demand reclaim covers the pick path; this sweep is the proactive backstop. Run it once per tick (active by default with peer mode; no-op only on the `CCXP_PEER_MODE=0` opt-out — symmetric with the lock):
+**3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released. The task stays `status: In Progress`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations). On-demand reclaim covers the pick path; this sweep is the proactive backstop. Run it once per tick (active by default with peer mode; no-op only on the `CCXP_PEER_MODE=0` opt-out — symmetric with the lock):
 
 ```bash
 bash <skills-root>/ccxp/scripts/reclaim-sweep-pr.sh
@@ -116,17 +116,17 @@ bash <skills-root>/ccxp/scripts/reclaim-sweep-pr.sh
 
 No-op (prints nothing, exits 0) when `CCXP_PEER_MODE=0` or when the read-only detect pass finds nothing to reclaim — nothing branched, nothing committed. Otherwise it branches off main, applies the sweep, runs the doc-lint guard, commits, pushes, opens a PR, and returns to main (never leaves the cron working tree on a branch), printing the reclaimed-lines summary and the PR URL on stdout. Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to `#acme-dev-notifications` — a reclaimed task may have had real WIP, so a reclaim is never silent.
 
-Detect-on-`main` → branch-only-if-work keeps the cron working tree clean. The reclaim decision reuses the unit-tested `task_claim.sh reclaimable` primitive: a claim is freed only when status is `Coding`/`Review`, `claimed_by` is session-shaped (either the current `cc1-` form or the legacy `<sid>@<machine>` form — a non-session value like a bare human name is never auto-reclaimable, T20260724-312324), there is no caller-observed in-progress GH Actions run on the claim's open PR branch, AND **both** activity signals exceed `TASK_CLAIM_STALE_DAYS` (default 2) — the last commit mentioning it on `main` (the relevant signal for a no-PR task) **and** the open PR's last activity (`updatedAt`: push/comment/review — the relevant signal for an open-PR task). Open PRs are **no longer** auto-excluded (T20260622-404636 — the old "any open PR ⇒ live" rule leaked dead-owner open-PR tasks forever; PR ownership is now *derived* from this same claim, so reclaiming the claim reclaims the PR). Self-reclaim-guarded (never frees this session's own claim) and idempotent (a clean board emits nothing, branches nothing). See `_session/reclaim_sweep.sh` + `tests/reclaim_sweep.bats`. (The prior soft-claim TTL layer this sweep supersedes — `_session/claim.sh`/`heartbeat.sh`/`prune.sh`/`release.sh` + the 4 Project fields `machine`/`clone_path`/`cc_session_id`/`last_heartbeat` — was fully retired in T20260616-308030; `prune.sh` no longer exists.)
+Detect-on-`main` → branch-only-if-work keeps the cron working tree clean. The reclaim decision reuses the unit-tested `task_claim.sh reclaimable` primitive: a claim is freed only when status is `In Progress`/`Review`, `claimed_by` is session-shaped (either the current `cc1-` form or the legacy `<sid>@<machine>` form — a non-session value like a bare human name is never auto-reclaimable, T20260724-312324), there is no caller-observed in-progress GH Actions run on the claim's open PR branch, AND **both** activity signals exceed `TASK_CLAIM_STALE_DAYS` (default 2) — the last commit mentioning it on `main` (the relevant signal for a no-PR task) **and** the open PR's last activity (`updatedAt`: push/comment/review — the relevant signal for an open-PR task). Open PRs are **no longer** auto-excluded (T20260622-404636 — the old "any open PR ⇒ live" rule leaked dead-owner open-PR tasks forever; PR ownership is now *derived* from this same claim, so reclaiming the claim reclaims the PR). Self-reclaim-guarded (never frees this session's own claim) and idempotent (a clean board emits nothing, branches nothing). See `_session/reclaim_sweep.sh` + `tests/reclaim_sweep.bats`. (The prior soft-claim TTL layer this sweep supersedes — `_session/claim.sh`/`heartbeat.sh`/`prune.sh`/`release.sh` + the 4 Project fields `machine`/`clone_path`/`cc_session_id`/`last_heartbeat` — was fully retired in T20260616-308030; `prune.sh` no longer exists.)
 
-**4. Claim-gap detection.** The opposite failure mode from #3: a task whose status is `Coding` but whose `claimed_by` was never set — the gap left by any path that flips status via `_session/status.sh` (board visualization only, no lock) without also calling `task_claim.sh acquire` (`/ccxp` Phase 2a.3 was the confirmed live example — T20260610-248248, fixed above). Detector only, never mutates:
+**4. Claim-gap detection.** The opposite failure mode from #3: a task whose status is `In Progress` but whose `claimed_by` was never set — the gap left by any path that flips status via `_session/status.sh` (board visualization only, no lock) without also calling `task_claim.sh acquire` (`/ccxp` Phase 2a.3 was the confirmed live example — T20260610-248248, fixed above). Detector only, never mutates:
 
 ```bash
 bash <skills-root>/_session/claim_gap.sh
 ```
 
-**Only `Coding` is flagged — `Design`/`Review` + empty `claimed_by` is NOT a gap** (corrected T20260809-310724, 2026-08-09, after this detector re-Slacked the same 7-task list every tick for a day, half of them genuinely misclassified): an abandoned-but-real design/review is the normal resting state of an unclaimed backlog item — `/todo next`'s peer-claim filter only skips a task when `claimed_by` is *non-empty*, so nothing is actually invisible to claim-based coordination there. Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one. `Coding` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
+**Only `In Progress` is flagged — `Design`/`Review` + empty `claimed_by` is NOT a gap** (corrected T20260809-310724, 2026-08-09, after this detector re-Slacked the same 7-task list every tick for a day, half of them genuinely misclassified): an abandoned-but-real design/review is the normal resting state of an unclaimed backlog item — `/todo next`'s peer-claim filter only skips a task when `claimed_by` is *non-empty*, so nothing is actually invisible to claim-based coordination there. Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one. `In Progress` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
 
-No-op (prints nothing) when every `Coding` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup, same T20260809-310724 fix — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat). Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into. See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
+No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup, same T20260809-310724 fix — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat). Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into. See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
 
 ### Phase 1: Daily standup
 
@@ -362,8 +362,8 @@ References: `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md`.
 
 | # | Task | Picked status | Today's status | Note |
 |---|------|---------------|----------------|------|
-| 1 | T... | Coding | Coding | PR #... awaiting CI |
-| 2 | T... | Open   | Coding | Started yesterday |
+| 1 | T... | In Progress | In Progress | PR #... awaiting CI |
+| 2 | T... | Open   | In Progress | Started yesterday |
 | 3 | T... | Open   | Open   | Not yet started |
 
 **Summary**: {X}/{N} shipped, {Y} in flight, {Z} not started. **Trend**: {On-track / Slipping / At-risk — based on remaining days vs remaining cumulative estimate}.
@@ -621,9 +621,9 @@ Append the sweep summary (counts of struck-blockers, auto-closed, parked) to the
 
 #### 2a.1 Carry over WIP (Tier 1)
 
-Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **automatic carry-overs** — they are already in flight and the WIP discipline keeps them in this week's commit until they ship. List them and sum their (revised, if previously estimated) Estimations.
+Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are **automatic carry-overs** — they are already in flight and the WIP discipline keeps them in this week's commit until they ship. List them and sum their (revised, if previously estimated) Estimations.
 
-**Claimed tasks carry too, regardless of Status.** A task with a non-empty `claimed_by:` is in-flight by virtue of the claim (a live session — this box or a peer `@…` — committed to it), even when its Status is still `Design` or `Open`. Include every claimed task in the carry-over set here, not just `Coding`/`Review`. Otherwise a `Design`+claimed task is invisible to *both* this step *and* 2a.1.5 (it was never in a `## Considered but cut` table), its `scheduled:` never advances, and it silently strands on a stale iteration on the board — the recurring leak that left T20260611-324774 and T20260610-028036 pinned to Iteration 10. **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in 2a.5). What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
+**Claimed tasks carry too, regardless of Status.** A task with a non-empty `claimed_by:` is in-flight by virtue of the claim (a live session — this box or a peer `@…` — committed to it), even when its Status is still `Design` or `Open`. Include every claimed task in the carry-over set here, not just `In Progress`/`Review`. Otherwise a `Design`+claimed task is invisible to *both* this step *and* 2a.1.5 (it was never in a `## Considered but cut` table), its `scheduled:` never advances, and it silently strands on a stale iteration on the board — the recurring leak that left T20260611-324774 and T20260610-028036 pinned to Iteration 10. **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in 2a.5). What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
 
 **Bump-2x reassessment — force a decision before the third commit.** A Tier-1 carry-over carried forward unconditionally becomes a "we'll get to it" comfort blanket: it absorbs IPM accountability week after week without shipping. `/retro`'s bump-3x detector catches this, but only *retrospectively* — after the third wasted week. Catch it here, up front, one step earlier. **Detection (same file-date join key `/retro` uses — no Project-side iteration mapping):** read the **last 2 committed** `*-ipm-weekly.md` files (`PREV_IPM=$(bash <skills-root>/_ipm/current.sh)` gives the newest committed IPM; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date), and for each task in *this* week's Tier-1 carry-over set check whether it appears in the **Tier-1 table of both** prior IPMs. If it does, committing it now would be its **3rd consecutive** Tier-1 commit → flag it **"Bumped 2x — reassess"**. For each flagged task, force an explicit disposition — never a silent re-carry:
 
@@ -665,7 +665,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    bash <skills-root>/_session/task_claim.sh acquire <task-id>
    ```
 
-   `acquire` sets `claimed_by` **and** `status: Coding` as a side effect. A
+   `acquire` sets `claimed_by` **and** `status: In Progress` as a side effect. A
    grilled-but-not-yet-implemented task belongs in `Design`, so correct the
    status back — same two-step pattern `/drive` Phase 1 uses for "a design
    PR will still run":
@@ -675,7 +675,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
-5. Tier 1 carry-overs do **not** get a re-grill — once a task is in Coding, the design is presumed adequate. If Coding has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+5. Tier 1 carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If being In Progress has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
 
 The grilled task files (Design sections, estimation revisions, claims) are left uncommitted by `/incept`; they land together with the IPM file in 2a.5's commit PR, not one PR per candidate.
 
@@ -729,7 +729,7 @@ Then **pre-append** each cut task to next-Monday's pre-IPM stub `dev/JOURNAL/${N
 
 | # | Task | Status | Est | Cumulative | Deadline |
 |---|------|--------|-----|------------|----------|
-| 1 | T... | Coding | 2h  | 2h         | 2026-04-30 |
+| 1 | T... | In Progress | 2h  | 2h         | 2026-04-30 |
 
 ## Carry-over candidates (deferred at {prev IPM date})
 
@@ -815,7 +815,7 @@ Sequenced by **dependency unblock + business priority + parallelism (labrun asyn
 
 #### 2a.5a Drain the previous iteration (HARD GATE — the IPM commit is not final until this is green)
 
-2a.5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut. The 2a.1 carry covers in-flight (`Coding`/`Review`) + `claimed_by` tasks; 2a.5's cut-advance covers what this IPM explicitly cuts; an unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board (the recurring leak — T20260320-000029 sat on Iteration 10 while the prose "carried" it; T20260622-147834 filed the gate for exactly this).
+2a.5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut. The 2a.1 carry covers in-flight (`In Progress`/`Review`) + `claimed_by` tasks; 2a.5's cut-advance covers what this IPM explicitly cuts; an unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board (the recurring leak — T20260320-000029 sat on Iteration 10 while the prose "carried" it; T20260622-147834 filed the gate for exactly this).
 
 The maintainer rule: **at IPM end, every previous-iteration board item that is not terminal (`Done`/`Parked`) must be migrated out.** Enforce it with the hard gate `<skills-root>/_ipm/ipm-iteration-drain-check.sh` (shipped by T20260622-147834; T20260623-811944 wires it here; moved out of build-pipeline's own scripts/ and generalized by T20260719-111051). Run **after** 2a.5 (so the picks' `scheduled:` are already advanced) and **before** the IPM is considered committed:
 

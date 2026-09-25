@@ -32,7 +32,7 @@ The single source of truth for how Your Company repos structure their `CLAUDE.md
 
 1. **Stay focused.** Hard cap: 200 lines / 8 KB. If it grows past that, split into topic files (`dev/guidelines/branching.md`, `dev/guidelines/scripts.md`, etc.).
 2. **Required sections:** Core Principles (KISS/DRY), Branch and Merge Policy, TODO Lifecycle, Script Standards, Documentation.
-3. **TODO Lifecycle** must define: task ID format (`TYYYYMMDD-NNNNNN`), status flow (Open → Design → Coding → Review → Done), the move-to-JOURNAL completion step, and the "no CLAUDE.md journaling" rule.
+3. **TODO Lifecycle** must define: task ID format (`TYYYYMMDD-NNNNNN`), status flow (Open → Design → In Progress → Review → Done), the move-to-JOURNAL completion step, and the "no CLAUDE.md journaling" rule.
 4. **Documentation must instruct bullet-first writing.** Markdown docs (README, guidelines, task files, JOURNAL entries) should chunk information into bullet points, short lists, and tables rather than long prose paragraphs — write for scanning, not top-to-bottom reading. This is the "Information Mapping" / scannable-content principle: a reader should be able to find the one fact they need without parsing a paragraph to extract it. Reserve prose paragraphs for narrative that genuinely doesn't decompose (e.g. a root-cause story, a rationale). See `templates/guidelines.md`'s Documentation section for the canonical wording.
 
 ### dev/ folder layout
@@ -55,7 +55,7 @@ Every `dev/TODO/` and `dev/PARKING/` file is linted against a strict allowlist (
 - **Authored-optional:** `priority`, `deadline`, `blocks`, `blocked-by`, `source`, `target-repo`, `target-path`, `related`, `owner`, `description`.
 - **Runtime (tooling-written):** `scheduled`, `claimed_by`, `iteration`.
 
-Any other top-level key is a violation. `status` must lead with a known value (Open/Design/Coding/Review/Blocked/Parked/Done; prose suffix allowed) and `estimation` with a duration (`30m`/`2h`/`1d`/`1w`). `dev/JOURNAL/` is exempt (archival).
+Any other top-level key is a violation. `status` must lead with a known value (Open/Design/In Progress [or legacy Coding]/Review/Blocked/Parked/Done; prose suffix allowed) and `estimation` with a duration (`30m`/`2h`/`1d`/`1w`). `dev/JOURNAL/` is exempt (archival).
 
 ### Reference linking (`lint_refs.py`)
 

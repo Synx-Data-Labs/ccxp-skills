@@ -189,19 +189,27 @@ Progress** chosen for matching the industry convention this task already cites.
   and dual-accepts legacy `Coding` — verified by the bats suites listed in Test plan
 - [x] Phase A: `bats tests/` full suite green (all 9 touched suites + no regressions elsewhere;
   750 tests, 0 failures)
-- [ ] Phase B: canonical name documented in `lifecycle.md:70,82,88,148-149` + the 3 templates
-- [ ] Phase B: all 8 listed `SKILL.md` files updated (`repo-conventions/SKILL.md`,
-  `todo/SKILL.md`, `retro/SKILL.md`, `ccxp/SKILL.md`, `address-pr/SKILL.md`, `drive/SKILL.md`,
-  `gcpr/SKILL.md`, `claim/SKILL.md`)
-- [ ] A repo-wide grep for the literal `Coding` (scripts, `SKILL.md`s, `lifecycle.md`,
-  `glossary.md`) after Phase A+B returns only Copilot Coding Agent / Cloudflare hits and the
-  intentional legacy-alias mentions, not a stray unconverted status-enum use
-- [ ] Follow-up task filed (staged into next iteration) to remove the legacy `Coding` alias once
-  hub-repo/build-pipeline-repo's active `dev/TODO/` tasks are confirmed migrated — external migration of
-  those 10 (unverified-stale-count) task files is explicitly **left to flip naturally** /
-  out of reach from this clone, per the dual-accept design; this is the "left to flip naturally"
-  decision the original Done-when criteria asked to have recorded
-- [ ] `dev/JOURNAL/` entries are untouched (verified: no edits under `dev/JOURNAL/` in the diff)
+- [x] Phase B: canonical name documented in `lifecycle.md:38,70-77,84,150-151` + the 3 templates
+  (`repo-conventions/templates/{guidelines,task,design-doc}.md`) — plus this repo's own
+  `dev/guidelines.md:37`, missed from the original Repo file references table (same class of
+  gap the independent review kept catching in Phase A — caught by a proactive repo-wide sweep
+  this time, not by another review round)
+- [x] Phase B: all 8 listed `SKILL.md` files updated (`repo-conventions/SKILL.md`,
+  `todo/SKILL.md`, `retro/SKILL.md`, `ccxp/SKILL.md` [13 hits], `address-pr/SKILL.md`,
+  `drive/SKILL.md` [10 hits], `gcpr/SKILL.md`, `claim/SKILL.md`)
+- [x] `_session/README.md` and `glossary.md` updated (Repo file references B rows)
+- [x] A repo-wide grep for the literal `Coding` across the whole tree (not just the originally
+  enumerated files) after Phase A+B returns only: Copilot Coding Agent / Cloudflare false
+  positives, dual-accept case-statement code (intentional), `ccxp/scripts/epic-status.sh`'s
+  bucket-key/display-text (`Coding` as the bucket key — deliberately deferred further than
+  Phase B, see its own code comment), and prose mentioning the legacy alias by name. No stray
+  unconverted status-enum use found.
+- [x] Follow-up task filed and staged into the next iteration (2026-10-05):
+  [T20260925-283679](T20260925-283679-remove-legacy-coding-status-alias.md) — removes the legacy
+  `Coding` alias once hub-repo/build-pipeline-repo's active `dev/TODO/` tasks are confirmed
+  migrated (external, out of reach from this clone; explicitly **left to flip naturally** until
+  then, which is the decision the original Done-when criteria asked to have recorded)
+- [x] `dev/JOURNAL/` entries are untouched (verified: no edits under `dev/JOURNAL/` in either PR's diff)
 
 ## Closed
 

@@ -16,13 +16,13 @@ source skill / phase / doc.
 
 - **Candidates staging** — appending tasks to the upcoming Monday's `## Candidates` section throughout the week via `/stage`, accumulating rationale before the IPM decides (`/stage`, `/ccxp` Phase 2a).
 - **ccxp** — Claude Code Extreme Programming: the orchestrator skill that runs the daily standup, Monday IPM, focused-work loops, and Friday retro (`/ccxp`).
-- **claim PR** — a pure-status-change PR that flips a task `Open → Coding`/`Design` and lands the ownership marker on `main` *before* design or implementation, so "someone is working on this" is durable and board-visible (`/drive` Phase 1).
+- **claim PR** — a pure-status-change PR that flips a task `Open → In Progress`/`Design` and lands the ownership marker on `main` *before* design or implementation, so "someone is working on this" is durable and board-visible (`/drive` Phase 1).
 - **IPM** — Iteration Planning Meeting: the Monday commit that picks the week's work from candidates and cuts, revises estimates, and budgets focused-work hours (`/ccxp` Phase 2a).
 - **IPM commit** — the moment the Monday IPM writes `dev/JOURNAL/<Mon>-ipm-weekly.md` with the Tier 1/2 picks, cuts, and order, and stamps `scheduled:` on every picked task (`/ccxp` Phase 2a.5).
 - **kind-scaled** — documentation whose required depth and sections scale to the change kind: docs-class tasks omit the code-only sections, code-class tasks include them (`/drive` Phase 3.0).
 - **peer mode** — the default mode (disable with `CCXP_PEER_MODE=0`) where parallel sessions (cron + interactive) coordinate via a durable `claimed_by:` lock on `main`, replacing the older one-session-per-clone assumption (`/drive` Phase 1).
 - **scheduled** — a task-frontmatter date (always a Monday) recording when the task was last scheduled; set softly by `/stage` (next Monday) and firmly at IPM commit (this Monday); update-forward-only, never removed (`lifecycle.md`).
-- **Tier 1 / Tier 2 / Tier 3** — IPM work bands: Tier 1 is in-flight carry-over (Coding/Review) finished first, Tier 2 is the newly-committed picks, Tier 3 is mid-week additions appended after the IPM commit (`/todo`, `/ccxp`).
+- **Tier 1 / Tier 2 / Tier 3** — IPM work bands: Tier 1 is in-flight carry-over (In Progress/Review) finished first, Tier 2 is the newly-committed picks, Tier 3 is mid-week additions appended after the IPM commit (`/todo`, `/ccxp`).
 
 ## Quality & process
 

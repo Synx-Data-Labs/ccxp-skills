@@ -539,7 +539,8 @@ def status_to_option_id(status_text, options):
 def status_for_location(file_path, frontmatter_status):
     """Derive the Project Status from file location, falling back to
     frontmatter status. PARKING and JOURNAL override frontmatter; TODO
-    respects frontmatter (Open/Design/Coding/Review/Blocked)."""
+    respects frontmatter (Open/Design/In Progress [or legacy Coding]/Review/
+    Blocked)."""
     kind = file_dir_kind(file_path)
     if kind == "PARKING":
         return "Parked"

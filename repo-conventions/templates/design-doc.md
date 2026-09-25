@@ -48,7 +48,7 @@ automatically (non-blocking — a nudge, not a gate; `/gcpr`'s doc-lint guard al
 ```yaml
 ---
 estimation: <Nh (S|M|L)>
-status: <Open|Design|Coding|Review|Done>
+status: <Open|Design|In Progress|Review|Done>
 scheduled: <YYYY-MM-DD>            # set by the IPM, not by hand
 source: <where this came from — conversation date, parent RCA, issue #N>
 related: <T-ids / journal paths this depends on, pairs with, or follows>

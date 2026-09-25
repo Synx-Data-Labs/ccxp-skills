@@ -14,7 +14,7 @@ This lib provides four things, with deliberately different semantics:
 
 Lets `/drive` and `/address-pr` reflect a task's **stage** (Status) and its **task→PR mapping** (issue-title suffix) onto the Project board, for human-visible coordination. Pure visualization — no decision-making, no locking, no `/todo next` impact.
 
-The task's **Status** single-select is mirrored from the task file's frontmatter `status:` by `status.sh` (Open/Design/Coding/Review/Blocked/Parked/Done). Writes are best-effort, failures are logged and ignored — the frontmatter `status:` (and, on `main`, the `sync-tasks` projection) remains the source of truth.
+The task's **Status** single-select is mirrored from the task file's frontmatter `status:` by `status.sh` (Open/Design/In Progress [or the legacy `Coding` alias, T20260809-355059]/Review/Blocked/Parked/Done). Writes are best-effort, failures are logged and ignored — the frontmatter `status:` (and, on `main`, the `sync-tasks` projection) remains the source of truth.
 
 Separately, the task's **issue title** (which the Project item inherits) gets a `(<repo>#<num>)` suffix appended by `set-pr-ref.sh` when a PR opens, e.g. `T20260510-285938: … (ccxp-skills#37)`. The `<task-id>:` prefix is preserved, so the title-prefix lookup keeps working. It is *not* cleared on close — the task→PR mapping stays as a permanent annotation.
 
@@ -22,7 +22,7 @@ Separately, the task's **issue title** (which the Project item inherits) gets a 
 
 | Script | Purpose | Cost |
 |--------|---------|------|
-| `status.sh <task-id> <value>` | Set the Project `Status` single-select (Open/Design/Coding/Review/Blocked/Parked/Done). Mirrors the task file's frontmatter `status:` to the board. | 4-5 GraphQL calls |
+| `status.sh <task-id> <value>` | Set the Project `Status` single-select (Open/Design/In Progress [or legacy Coding]/Review/Blocked/Parked/Done). Mirrors the task file's frontmatter `status:` to the board. | 4-5 GraphQL calls |
 | `set-pr-ref.sh <task-id> <pr-url-or-shortform>` | Append `(<repo>#<num>)` to the task's issue title (which the board inherits) so the task→PR mapping is visible at a glance. Idempotent. | 1 walk + 1 mutation |
 | `pr_task_id.sh <pr-number>` | Echo the task ID for a PR (branch name → body `Task:` link → commit-message fallback) or empty. No mutations. | 1-3 `gh pr view` calls |
 
@@ -106,7 +106,7 @@ Resolving the identity **fails closed**. If `~/.claude/state/` cannot be written
 
 **Convention: claim before flipping status.** Any path that moves a task's `status:` out of `Open` — `/drive`'s Phase 1, `/ccxp`'s Phase 2a.3 design pass, or a session acting on a direct maintainer prompt outside either — should call `task_claim.sh acquire` (with `release-others` first, for release-on-pickup) before or alongside the status change. `status.sh` alone is visualization-only and takes no lock (T20260610-248248); a status flip with no claim is invisible to a peer session's `/todo next` and can race. `_session/claim_gap.sh` (below) detects the gap when this convention is missed.
 
-Verbs (`task_claim.sh <verb> <id> [...]`): `read` (echo current `claimed_by`), `claimant-id` (this session's id), `pr-owner <pr>` (derive PR ownership from the PR's task — see [PR ownership](#pr-ownership-derived-from-the-task-claim)), `reclaimable <id>` (is the claim stale — see below), `acquire <id>` (write `claimed_by` / `status: Coding`), `release <id> <final-status>` (clear the lock on close), `release-others [except-id]` (**release-on-pickup** — clear *every* task held by this identity so a session holds ≤1 active claim; the pick step calls this before `acquire`, keeping the optional about-to-be-acquired `except-id`). Pure logic is unit-tested in `tests/task_claim.bats`. See `/drive` Phase 1 ("Peer mode — cross-session claim lock") for the full claim-PR flow.
+Verbs (`task_claim.sh <verb> <id> [...]`): `read` (echo current `claimed_by`), `claimant-id` (this session's id), `pr-owner <pr>` (derive PR ownership from the PR's task — see [PR ownership](#pr-ownership-derived-from-the-task-claim)), `reclaimable <id>` (is the claim stale — see below), `acquire <id>` (write `claimed_by` / `status: In Progress`), `release <id> <final-status>` (clear the lock on close), `release-others [except-id]` (**release-on-pickup** — clear *every* task held by this identity so a session holds ≤1 active claim; the pick step calls this before `acquire`, keeping the optional about-to-be-acquired `except-id`). Pure logic is unit-tested in `tests/task_claim.bats`. See `/drive` Phase 1 ("Peer mode — cross-session claim lock") for the full claim-PR flow.
 
 ### Reclaiming dead claims
 
@@ -119,12 +119,13 @@ The sweep never frees this session's own claim (self-guard), and a reclaim is ne
 
 ### Detecting never-claimed active tasks (`claim_gap.sh`)
 
-The complementary gap (T20260610-248248): a task whose `status:` is `Coding`
-but whose `claimed_by` was never set — the failure mode when some path flips
-status via `status.sh` alone, without ever calling `task_claim.sh acquire`.
-`_session/claim_gap.sh` enumerates `Coding`-status task files and flags any
-with an empty `claimed_by`, one line per gap. Detector only — it never
-mutates a task file, unlike `reclaim_sweep.sh --apply`.
+The complementary gap (T20260610-248248): a task whose `status:` is `In
+Progress` (or the legacy `Coding` alias, T20260809-355059) but whose
+`claimed_by` was never set — the failure mode when some path flips status via
+`status.sh` alone, without ever calling `task_claim.sh acquire`.
+`_session/claim_gap.sh` enumerates such task files and flags any with an
+empty `claimed_by`, one line per gap. Detector only — it never mutates a task
+file, unlike `reclaim_sweep.sh --apply`.
 
 **`Design`/`Review` + empty `claimed_by` is deliberately NOT flagged**
 (corrected T20260809-310724, 2026-08-09): that's the normal resting state of

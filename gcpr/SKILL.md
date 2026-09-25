@@ -227,7 +227,7 @@ Do not move the task file to JOURNAL in this PR — the task file lives in the h
 
 ### 6.5 Flip task-file Status to `Review`
 
-Right after `gh pr create` succeeds, edit the task file in `dev/TODO/T<id>-*.md` to flip Status from `Coding` to `Review`. This reflects the lifecycle from `dev/guidelines.md` (`Open → Design → Coding → Review → Done`); without it, tasks jump from `Coding` straight to `Done` when the JOURNAL move lands.
+Right after `gh pr create` succeeds, edit the task file in `dev/TODO/T<id>-*.md` to flip Status from `In Progress` to `Review`. This reflects the lifecycle from `dev/guidelines.md` (`Open → Design → In Progress → Review → Done`); without it, tasks jump from `In Progress` straight to `Done` when the JOURNAL move lands.
 
 Done in-place; no separate registry to update.
 

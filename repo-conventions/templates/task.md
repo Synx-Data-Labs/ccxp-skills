@@ -33,13 +33,13 @@ file:line, a failing command, a quoted requirement). Say what "done" looks like.
 <!--
 SCAFFOLD NOTES (delete this block once the task is filed):
 
-- Required frontmatter: `status` (Open|Design|Coding|Review|Blocked by T{id}|Parked|Done)
+- Required frontmatter: `status` (Open|Design|In Progress|Review|Blocked by T{id}|Parked|Done)
   and `estimation` (15m|30m|1h|2h|4h|1d|2d|1w). Everything else is optional.
 - Bullets, not paragraphs, in every section — ~3 per level, nest a sub-list
   instead of running past that or folding detail back into prose. See
   `templates/guidelines.md`'s Documentation section for the canonical wording.
 - A `BLOCKED` or `SUPERVISED` substring anywhere in `status:` (e.g.
-  `Coding — SUPERVISED (needs VPN to GitLab)`) tells the consumer repo's `/ccxp`
+  `In Progress — SUPERVISED (needs VPN to GitLab)`) tells the consumer repo's `/ccxp`
   pre-flight gate not to wake an hourly cron session for this task.
 - Generate {ID} with `bash _taskid/new.sh --check ./dev`, resolved relative
   to wherever the ccxp-skills plugin is installed (a loaded skill's own
