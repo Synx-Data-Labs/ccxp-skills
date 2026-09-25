@@ -215,7 +215,10 @@ _lint_docs_safe_fix() {
   # Empirically confirmed during this task's implementation; a name outside
   # markdownlint-cli2's own recognized-config-filename list sidesteps it.
   local override_config="$tmpdir/lint-docs-safe-fix-override.jsonc"
-  local disable_filter='.config'
+  # `.config // .` tolerates a flat/legacy-shape config (rules at the top
+  # level, no "config" wrapper) — without it, a missing .config key would
+  # silently evaluate to null and discard every other rule customization.
+  local disable_filter='(.config // .)'
   local rule
   for rule in "${_LINT_DOCS_SAFE_FIX_DISABLE_RULES[@]}"; do
     disable_filter+=" | .${rule} = false"
@@ -241,14 +244,29 @@ _lint_docs_safe_fix() {
   out="$(cd "$tmpdir" && "${cmd[@]}" "${paths[@]}" 2>&1)" && rc=0 || rc=$?
   printf '%s\n' "$out"
 
-  if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
-    return 3
-  fi
-
+  # Best-effort copy-back regardless of rc, and NEVER return 3 past this
+  # point (rc=3 is the caller's "fall back to the plain unsafe path"
+  # signal) — the tool has already been invoked against the isolated
+  # copies, so some files may already be safely fixed in $tmpdir even if
+  # the overall exit code is unexpected (e.g. one file in a multi-file
+  # call failed to write for an unrelated reason like a permission
+  # error). Falling back to the plain path here would re-run the
+  # corrupting MD004/MD037 rules over ALL originally-requested files,
+  # including ones already safely fixed — exactly the corruption this
+  # path exists to prevent. A copy-back failure for one file just leaves
+  # that file's original content in place (no worse than before this
+  # feature existed); an unexpected tool exit code is surfaced as rc=1
+  # (not clean, but not "retry unsafely" either).
+  local copy_failed=0
   for p in "${paths[@]}"; do
-    cp "$tmpdir/$p" "$p" || return 3
+    cp "$tmpdir/$p" "$p" || copy_failed=1
   done
-  return "$rc"
+  [ "$copy_failed" -eq 1 ] && echo "lint-docs: safe-fix: failed to copy back one or more fixed files" >&2
+
+  if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
+    return "$rc"
+  fi
+  return 1
 }
 
 # Run the real markdownlint-cli2 via the resolved runner. Echoes its output and
@@ -270,9 +288,8 @@ _lint_docs_run_tool() {
   shift 3
 
   if [ "$fix" -eq 1 ] && [ "$explicit" -eq 1 ]; then
-    local safe_rc
-    _lint_docs_safe_fix "$runner" "$_LINT_DOCS_MDL_VERSION" "$@"
-    safe_rc=$?
+    local safe_rc=0
+    _lint_docs_safe_fix "$runner" "$_LINT_DOCS_MDL_VERSION" "$@" || safe_rc=$?
     [ "$safe_rc" -ne 3 ] && return "$safe_rc"
   fi
 
