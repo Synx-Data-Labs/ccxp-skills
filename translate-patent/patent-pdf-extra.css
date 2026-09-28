@@ -1,0 +1,109 @@
+/* patent-pdf-extra.css — patent-only PDF rules, appended after md-to-pdf's
+ * default CSS via its `--extra-css` flag (md-to-pdf/SKILL.md step 4c).
+ *
+ * These rules are intentionally NOT part of md-to-pdf's own default
+ * stylesheet: md-to-pdf is a general-purpose skill used outside the patent
+ * pipeline, and forcing every h1 to force a page break, or shipping a
+ * CJK-mono font tuned for ASCII box-art, would regress non-patent callers
+ * (T20260422-113041 scope / alternatives-considered-and-rejected).
+ *
+ * Cascade order: md-to-pdf's defaults load first, this file loads second in
+ * the same <style> block, so these rules extend/override the defaults.
+ */
+
+/* --- item 8: CJK-mono font for ASCII figures --------------------------- */
+/* Mixed CJK/ASCII box art only aligns when one font supplies box-drawing +
+ * Latin at halfwidth and CJK at exactly 2x. Sarasa Term SC is the only
+ * common font with these terminal cell metrics (Noto Sans Mono CJK renders
+ * box-drawing fullwidth; Latin-first stacks like Menlo give a ~0.6:1 ratio).
+ * Falls back through md-to-pdf's own pre/code stack if Sarasa isn't
+ * installed. */
+pre,
+pre code {
+  font-family: "Sarasa Term SC", "SF Mono", "Menlo", "Hiragino Sans GB",
+    "Heiti SC", "PingFang SC", "Apple Symbols", "Arial Unicode MS", monospace;
+  line-height: 1.25;
+}
+
+/* Bug fix (latent since md-to-pdf's original merge): pandoc's --standalone
+ * HTML template injects its own "code{white-space: pre-wrap;}" rule, meant
+ * for INLINE code in ordinary prose (so a long inline snippet can wrap
+ * instead of overflowing). It also matches the <code> inside <pre><code>
+ * fenced blocks, silently re-enabling word-wrap on ASCII figures -- a figure
+ * a few characters wider than the page becomes a garbled reflow instead of
+ * a predictable overflow, and (critically) changing font-size has NO effect
+ * on the wrap point once this rule is in play, since it re-wraps at
+ * whatever the container width is regardless of character size. Restore
+ * pre-formatted (no-wrap) behavior for fenced code specifically. */
+pre code {
+  white-space: pre;
+}
+
+/* item 10 (pre-block-not-inline-code CSS) needs no addition here: md-to-pdf's
+ * own defaults already put background/padding on `pre` and reset `pre code`
+ * to zero (md-to-pdf/SKILL.md step 4, the `pre { ... } pre code { ... }`
+ * rules) — verified present, nothing missing to port. */
+
+/* --- item 12: no orphaned part headings -------------------------------- */
+/* A part heading (说明书/Specification, etc.) must never be stranded alone
+ * when the very next section's h2 would otherwise force a page break. */
+h1 + h2 {
+  page-break-before: avoid;
+}
+
+/* --- item 14: filing parts open fresh pages; captions stick to figures - */
+/* Each filing-part h1 (说明书摘要/摘要附图/权利要求书/说明书, or the EN
+ * equivalents) starts a new page... */
+h1 {
+  page-break-before: always;
+}
+
+/* ...except the pandoc title block itself, which is also an h1 but must not
+ * force a leading blank page. */
+h1.title,
+header + h1 {
+  page-break-before: auto;
+}
+
+/* Figure captions are emitted as "#### Figure N: ..." / "#### 图 N：..."
+ * headings (translate-patent/SKILL.md steps 5 and 7) specifically so this
+ * rule has something to bind to: a caption can never be orphaned at the
+ * bottom of a page while its figure jumps to the next one. */
+h4 {
+  page-break-after: avoid;
+}
+
+/* Every figure gets its own page (matches official patent drawing-sheet
+ * convention: one figure per sheet). h4 is used exclusively for figure
+ * captions in this pipeline (postprocess.py only promotes to "#"/"##"), so
+ * this rule can't misfire on unrelated headings. A figure whose h4 already
+ * opens on a fresh page (e.g. the sole figure right after a filing-part h1)
+ * is unaffected -- page-break-before:always is a no-op when already at the
+ * top of a page. */
+h4 {
+  page-break-before: always;
+}
+
+/* Figures render smaller than inline code (md-to-pdf's default is 9pt for
+ * both `code` and `pre`) and must never be severed mid-box across a page
+ * boundary — pair with translate-patent/scripts/postprocess.py's
+ * pagination-split, which pre-breaks each figure at its box boundaries so a
+ * `page-break-inside: avoid` block never needs to span more than one box. */
+pre {
+  page-break-inside: avoid;
+  font-size: 9pt;
+}
+
+/* Utility: shrink one oversized ASCII figure so its widest line fits within
+ * the page's content width instead of wrapping/breaking mid-line (English
+ * box labels can push a figure's character-width well past what 9pt fits at
+ * A4 with 2.5cm margins -- roughly 84 monospace characters at 9pt). Tag the
+ * fenced code block(s) belonging to that one figure with pandoc's
+ * fenced-code-attribute syntax: ```{.fig-compact} ... ``` -- if a figure was
+ * split into multiple chunks by postprocess.py's pagination-split, tag every
+ * chunk belonging to that figure, not just the first. Not a default -- most
+ * figures fit fine at 9pt; this is an opt-in escape hatch for the wide ones. */
+pre.fig-compact,
+pre.fig-compact code {
+  font-size: 7pt;
+}

@@ -1,0 +1,12 @@
+[
+  {
+    "RuleID": "generic-api-key",
+    "File": "scripts/foo.sh",
+    "StartLine": 12
+  },
+  {
+    "RuleID": "aws-access-key",
+    "File": "scripts/foo.sh",
+    "StartLine": 40
+  }
+]

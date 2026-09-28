@@ -1,0 +1,82 @@
+{
+  "skill_name": "todo",
+  "evals": [
+    {
+      "id": "next-skips-done-and-is-read-only",
+      "prompt": "/todo next",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {
+          "type": "skill_invoked",
+          "skill": "todo",
+          "text": "/todo fires"
+        },
+        {
+          "type": "command_ran",
+          "pattern": "todo-next\\.sh",
+          "text": "uses the bundled script, not prose re-derivation"
+        },
+        {
+          "type": "command_succeeded",
+          "pattern": "todo-next\\.sh",
+          "text": "script path resolves from a consumer repo (no exit-127 retry)"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "T20260101-000002",
+          "text": "top pick is the first non-Done task"
+        },
+        {
+          "type": "tool_not_called",
+          "tool": "Edit",
+          "text": "next is report-only (no Edit)"
+        },
+        {
+          "type": "tool_not_called",
+          "tool": "Write",
+          "text": "next is report-only (no Write)"
+        }
+      ]
+    },
+    {
+      "id": "list-uses-script",
+      "prompt": "/todo list",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {
+          "type": "command_succeeded",
+          "pattern": "todo-list\\.sh",
+          "text": "todo-list.sh path resolves from a consumer repo"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "T20260101-000003",
+          "text": "lists every open task"
+        },
+        {
+          "type": "file_matches",
+          "path": "dev/TODO/queue.md",
+          "pattern": "^- \\[T20260101-000001\\]",
+          "text": "queue.md left untouched"
+        }
+      ]
+    },
+    {
+      "id": "natural-language-trigger",
+      "prompt": "what should I pick up next from the backlog in this repo?",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {
+          "type": "skill_invoked",
+          "skill": "todo",
+          "text": "plain-English ask triggers /todo"
+        },
+        {
+          "type": "skill_not_invoked",
+          "skill": "drive",
+          "text": "does not escalate to /drive (action skill)"
+        }
+      ]
+    }
+  ]
+}

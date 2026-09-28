@@ -1,0 +1,26 @@
+{
+  "config": {
+    "default": true,
+    "MD004": { "style": "dash" },
+    "MD024": { "siblings_only": true },
+    "MD013": false,
+    "MD033": false,
+    "MD034": false,
+    "MD040": false,
+    "MD041": false,
+    "MD060": false,
+    "MD049": false,
+    "MD050": false,
+    "MD036": false,
+    "MD029": false,
+    "MD010": false,
+    "MD014": false,
+    "MD056": false,
+    "MD046": false,
+    "MD025": false,
+    "MD051": false,
+    "MD028": false
+  },
+  "globs": [ "**/*.md" ],
+  "ignores": [ "**/node_modules/**" ]
+}
