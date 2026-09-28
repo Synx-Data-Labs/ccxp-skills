@@ -1,0 +1,37 @@
+name: 'Lint task frontmatter'
+description: 'Validate dev/TODO and dev/PARKING task-file frontmatter against the canonical schema.'
+inputs:
+  mode:
+    description: "changed (default — lint the PR's changed task files) or all"
+    default: 'changed'
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - shell: bash
+      run: pip install pyyaml
+    - shell: bash
+      run: |
+        set -euo pipefail
+        script="${GITHUB_ACTION_PATH}/../../repo-conventions/scripts/lint_tasks.py"
+        cd "$GITHUB_WORKSPACE"
+        if [ "${{ inputs.mode }}" = "all" ]; then
+          python3 "$script" --all "$GITHUB_WORKSPACE"
+        else
+          base_ref="${GITHUB_BASE_REF:-main}"
+          git fetch --quiet --depth=1 origin "$base_ref" || true
+          # mapfile (not unquoted $files) so the expansion is space-safe; an
+          # empty diff yields a zero-element array.
+          mapfile -t changed < <(git diff --name-only --diff-filter=d \
+            "origin/${base_ref}"...HEAD -- 'dev/TODO/**' 'dev/PARKING/**' || true)
+          # Always invoke the linter — even with no changed task files. The
+          # board-wide blocked-by cross-reference pass must run on every task PR,
+          # because a blocker going Done in a close-PR (TODO→JOURNAL) does NOT
+          # modify the blocked file, so it would never appear in the diff. The
+          # schema pass still scopes to the changed files; the board pass does
+          # not. (Run the consumer workflow on dev/JOURNAL/** too, so close-PRs
+          # trigger it.)
+          python3 "$script" --changed "${changed[@]}"
+        fi

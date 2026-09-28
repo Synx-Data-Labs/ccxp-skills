@@ -1,0 +1,110 @@
+name: tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'actions/sync-tasks/**'
+      - 'repo-conventions/scripts/**'
+      - '_gh/**'
+      - '_session/**'
+      - '_docs/**'
+      - 'dev/TODO/**'
+      - 'dev/JOURNAL/**'
+      - 'slack/**'
+      - 'design-score/**'
+      - 'retro/**'
+      - 'quality-probe/**'
+      - 'statusline-setup/**'
+      - 'migrate-task/**'
+      - '**/SKILL.md'
+      - 'skill-conventions/**'
+      - 'dev/quality/skill-scores.json'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'actions/sync-tasks/**'
+      - 'repo-conventions/scripts/**'
+      - '_gh/**'
+      - '_session/**'
+      - '_docs/**'
+      - 'dev/TODO/**'
+      - 'dev/JOURNAL/**'
+      - 'slack/**'
+      - 'design-score/**'
+      - 'retro/**'
+      - 'quality-probe/**'
+      - 'statusline-setup/**'
+      - 'migrate-task/**'
+      - '**/SKILL.md'
+      - 'skill-conventions/**'
+      - 'dev/quality/skill-scores.json'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  workflow_dispatch:
+jobs:
+  sync-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+        shell: bash
+      - run: python3 actions/sync-tasks/test_sync.py -v
+        shell: bash
+  lint-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+        shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_tasks.py -v
+        shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_paragraphs.py -v
+        shell: bash
+      - run: python3 repo-conventions/scripts/test_lint_identifiers.py -v
+        shell: bash
+      - name: Internal-identifier scan (all tracked files)
+        # The denylist is injected, never committed: naming the private repos
+        # inside a public repo would defeat the point. Set repo/org secrets
+        # INTERNAL_IDENTIFIERS (comma-separated "term=placeholder" pairs) and
+        # INTERNAL_PRIVATE_REPOS to arm it. UNSET IS A SILENT NO-OP for those
+        # two checks — the structural checks (personal home paths, credential
+        # tokens, private IPs) run either way. This scan shipped with no
+        # secret configured and reported clean for nine days while internal
+        # names sat in the tree; if the summary below says the denylist is
+        # empty, that is what is happening.
+        run: python3 repo-conventions/scripts/lint_identifiers.py --all .
+        shell: bash
+        env:
+          INTERNAL_IDENTIFIERS: ${{ secrets.INTERNAL_IDENTIFIERS }}
+          INTERNAL_PRIVATE_REPOS: ${{ secrets.INTERNAL_PRIVATE_REPOS }}
+  skill-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+        shell: bash
+      - run: python3 skill-conventions/scripts/test_skill_quality.py -v
+        shell: bash
+      - name: Skill score ratchet (no skill may drop below its baseline)
+        run: python3 skill-conventions/scripts/skill_score.py --check dev/quality/skill-scores.json
+        shell: bash
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install bats
+        run: sudo apt-get update && sudo apt-get install -y bats
+        shell: bash
+      - name: Run bats suite
+        run: bats tests/*.bats _docs/*.bats
+        shell: bash

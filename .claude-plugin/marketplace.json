@@ -1,0 +1,15 @@
+{
+  "name": "ccxp-skills",
+  "owner": {
+    "name": "Synx Data Labs",
+    "url": "https://github.com/Synx-Data-Labs"
+  },
+  "description": "Generic, reusable Claude Code skills for the ccxp-family workflow suite.",
+  "plugins": [
+    {
+      "name": "ccxp-skills",
+      "source": "./",
+      "description": "Task lifecycle, PR automation, CI/RCA and retro skills, plus general-purpose dev-tool skills."
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+name: Sync tasks to GitHub Issues
+description: Mirror dev/{TODO,PARKING,JOURNAL} task files to GitHub Issues + Project V2.
+inputs:
+  mode:
+    description: 'sync | backfill | reconcile | dry-run'
+    required: false
+    default: 'sync'
+  gh-token:
+    description: 'Token for issue read/write (usually secrets.GITHUB_TOKEN)'
+    required: true
+  project-pat:
+    description: 'PAT with org Projects RW for Project V2 field sync (optional; issues-only without it)'
+    required: false
+    default: ''
+  project-owner:
+    description: 'Org login owning the Project V2 board (required for Project V2 field sync; no default — issues-only without it, even with project-pat set)'
+    required: false
+    default: ''
+  project-number:
+    description: 'Project V2 number (required for Project V2 field sync; no default — issues-only without it, even with project-pat set)'
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - run: pip install pyyaml
+      shell: bash
+    - run: python "${{ github.action_path }}/sync.py"
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.gh-token }}
+        PROJECT_PAT: ${{ inputs.project-pat }}
+        PROJECT_OWNER: ${{ inputs.project-owner }}
+        PROJECT_NUMBER: ${{ inputs.project-number }}
+        GH_REPO: ${{ github.repository }}
+        MODE: ${{ inputs.mode }}
+        GITHUB_SHA: ${{ github.sha }}
