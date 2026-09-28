@@ -1,11 +1,19 @@
 ---
-status: Open — SUPERVISED (needs a human — live 1Password/GitHub-secret rotation against a real vault, and the referenced upstream design doc at your-org/hub-repo is not accessible from this clone)
+status: Parked
 estimation: 1d
 related: T20260806-374741, T20260806-240910
 source: 2026-08-08 conversation — follow-on from T20260806-374741's finalized design
 ---
 
 # T20260808-192220: Implement the `/rotate-1password <secret>` skill
+
+## Parked (2026-09-28)
+
+Needs a human for live 1Password/GitHub-secret rotation against a real
+vault, and the referenced upstream design doc at `your-org/hub-repo` is
+not accessible from this clone. Revive once both are available: `git mv`
+back to `dev/TODO/`, set `status` to `Open`, `/stage` it back onto
+`queue.md`.
 
 ## Problem
 
