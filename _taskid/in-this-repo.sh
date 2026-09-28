@@ -50,6 +50,11 @@ function in-this-repo--match-in() {
 # in-this-repo--sibling-path <id> — if EXACTLY ONE sibling clone (a peer dir of
 # the cwd repo) has dev/TODO/T<id>-*.md, print its repo root; else print nothing.
 # Best-effort: ambiguity (0 or >1 matches) prints nothing rather than guess.
+#
+# Diagnostic-only (T20260928-324939): this local path exists so a human can
+# SEE where the task currently lives, never so a caller `cd`s into it — that
+# clone may be another live session's working tree. Cloning fresh is what
+# in-this-repo--sibling-slug() below is for.
 function in-this-repo--sibling-path() {
   local id="${1:-}" parent hit n=0 found=""
   [ -n "$id" ] || return 0
@@ -66,6 +71,25 @@ function in-this-repo--sibling-path() {
   if [ "$n" -eq 1 ]; then
     printf '%s\n' "$found"
   fi
+  return 0
+}
+
+# in-this-repo--sibling-slug <id> — like in-this-repo--sibling-path, but
+# resolves the sibling's `origin` remote to a clonable "owner/repo" slug
+# (T20260928-324939) instead of a local path. This is what a caller actually
+# needs to honor the "own clone, always" policy (synxdb-build-pipeline
+# dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md):
+# clone the slug fresh, don't cd into the sibling's working tree. Same
+# ambiguity rule as sibling-path — 0 or >1 matches print nothing.
+function in-this-repo--sibling-slug() {
+  local id="${1:-}" path slug
+  [ -n "$id" ] || return 0
+  path="$(in-this-repo--sibling-path "$id")"
+  [ -n "$path" ] || return 0
+  slug="$(git -C "$path" remote get-url origin 2>/dev/null)" || return 0
+  slug="${slug%.git}"
+  slug="${slug#*github.com[:/]}"
+  [ -n "$slug" ] && printf '%s\n' "$slug"
   return 0
 }
 
@@ -94,11 +118,15 @@ function taskid-in-this-repo() {
 
   # Cross-repo: absent from all three.
   echo "⚠ $id is not defined in this repo ($slug) — it's a cross-repo task." >&2
-  echo "  Its task file lives in another clone. Switch to that clone before working it." >&2
+  echo "  Its task file lives in another repo. Per the own-clone policy, clone it fresh" >&2
+  echo "  (e.g. /tmp/T<id>-<slug>-hub) — do not work from an existing clone directly," >&2
+  echo "  yours or anyone else's; it may be another live session's working tree." >&2
 
-  local sib
+  local sib_slug sib
+  sib_slug="$(in-this-repo--sibling-slug "$id")"
+  [ -n "$sib_slug" ] && echo "  Clone: $sib_slug" >&2
   sib="$(in-this-repo--sibling-path "$id")"
-  [ -n "$sib" ] && echo "  Found it in: $sib" >&2
+  [ -n "$sib" ] && echo "  (a local clone also exists at: $sib — diagnostic only, do not cd into it)" >&2
 
   if [ "${DRIVE_STRICT_CLONE:-0}" = "1" ]; then
     echo "  Refusing (DRIVE_STRICT_CLONE=1)." >&2
