@@ -12,7 +12,7 @@ related: T20260910-919422, T20260922-383156, T20260922-253015
 - **Type**: bug
 - Today, `bash _docs/lint-docs.sh --fix` was called with an accidentally-empty
   path list (a caller-side bug, not the script's). `lint_docs_run` treats zero
-  paths as "default scope" (`_docs/lint-docs.sh:466-467`): it sets
+  paths as "default scope" (`_docs/lint-docs.sh:330`): it sets
   `explicit=0` and substitutes the full repo config-glob, then runs
   `markdownlint-cli2 --fix` directly against it — 1509 files in this repo.
 - That raw run hit an `EACCES` writing into `.git/objects/pack/...rev`
@@ -24,7 +24,7 @@ related: T20260910-919422, T20260922-383156, T20260922-253015
   found `--fix` still corrupts prose (`MD004`/`MD037`) even when scoped, and
   added an isolated-tmpdir safe-fix override — but that override only
   activates when `explicit=1` (`_lint_docs_run_tool`,
-  `_docs/lint-docs.sh:422`). The zero-explicit-paths branch was never
+  `_docs/lint-docs.sh:290`). The zero-explicit-paths branch was never
   covered by either fix, so a caller bug that yields an empty path list
   silently falls back to the exact unscoped, non-isolated `--fix` behavior
   both prior tasks fixed for the explicit-path case.
@@ -48,9 +48,9 @@ related: T20260910-919422, T20260922-383156, T20260922-253015
 - Update the two callers that pass `--fix`: `gcpr/SKILL.md` (Step 1.5) and
   `new-task/SKILL.md` (Step 4) — drop `--fix`, keep the existing
   empty-`$CHANGED_MD`/explicit-path guards.
-- Update `_docs/lint-docs.bats` / `tests/lint-docs.bats` (12 `--fix`
-  assertions currently) to drop fix-mode cases and add a zero-args-errors
-  case.
+- Update `tests/lint-docs.bats` (12 `--fix` assertions currently, all of
+  them — `_docs/lint-docs.bats` has none) to drop the fix-mode cases, and
+  add a zero-args-errors case to `_docs/lint-docs.bats`.
 - Update the header-comment usage block in `_docs/lint-docs.sh` itself
   (currently documents `--fix` and the no-args default scope).
 
