@@ -75,9 +75,9 @@ Append the sweep summary (counts of struck-blockers, auto-closed, parked) to the
 
 ### 1 Carry over WIP (Tier 1)
 
-Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **automatic carry-overs** — they are already in flight and the WIP discipline keeps them in this week's commit until they ship. List them and sum their (revised, if previously estimated) Estimations.
+Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are **automatic carry-overs** — they are already in flight and the WIP discipline keeps them in this week's commit until they ship. List them and sum their (revised, if previously estimated) Estimations.
 
-**Claimed tasks carry too, regardless of Status.** A task with a non-empty `claimed_by:` is in-flight by virtue of the claim (a live session — this box or a peer `@…` — committed to it), even when its Status is still `Design` or `Open`. Include every claimed task in the carry-over set here, not just `Coding`/`Review`. Otherwise a `Design`+claimed task is invisible to *both* this step *and* step 1.5 (it was never in a `## Considered but cut` table), its `scheduled:` never advances, and it silently strands on a stale iteration on the board — the recurring leak that left T20260611-324774 and T20260610-028036 pinned to Iteration 10. **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in step 5). What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
+**Claimed tasks carry too, regardless of Status.** A task with a non-empty `claimed_by:` is in-flight by virtue of the claim (a live session — this box or a peer `@…` — committed to it), even when its Status is still `Design` or `Open`. Include every claimed task in the carry-over set here, not just `In Progress`/`Review`. Otherwise a `Design`+claimed task is invisible to *both* this step *and* step 1.5 (it was never in a `## Considered but cut` table), its `scheduled:` never advances, and it silently strands on a stale iteration on the board — the recurring leak that left T20260611-324774 and T20260610-028036 pinned to Iteration 10. **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in step 5). What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
 
 **Bump-2x reassessment — force a decision before the third commit.** A Tier-1 carry-over carried forward unconditionally becomes a "we'll get to it" comfort blanket: it absorbs IPM accountability week after week without shipping. `/retro`'s bump-3x detector catches this, but only *retrospectively* — after the third wasted week. Catch it here, up front, one step earlier. **Detection (same file-date join key `/retro` uses — no Project-side iteration mapping):** read the **last 2 committed** `*-ipm-weekly.md` files (`PREV_IPM=$(bash <skills-root>/_ipm/current.sh)` gives the newest committed IPM; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date), and for each task in *this* week's Tier-1 carry-over set check whether it appears in the **Tier-1 table of both** prior IPMs. If it does, committing it now would be its **3rd consecutive** Tier-1 commit → flag it **"Bumped 2x — reassess"**. For each flagged task, force an explicit disposition — never a silent re-carry:
 
@@ -85,7 +85,7 @@ Read all `dev/TODO/*.md` files. Tasks with Status `Coding` or `Review` are **aut
 - **Won't fix** — close it (journal-move stub), exactly as a task was after its third bump in a real observed case.
 - **Defer** — move it out of this iteration: advance its `scheduled:` to a future Monday and pre-append it to that Monday's stub, identical to the step 5 "Cut candidates — advance, never clear" mechanics.
 
-**Unattended (the cron default): auto-defer + a Slack note.** Do not silently re-commit, and do not hard-block the IPM waiting on a human (a blocking wait would stall the whole unattended commit). Auto-defer the flagged task per the bullet above and post one line to `#claude-notification`: `*IPM bump-2x*: T<id> deferred — carried 3 IPMs without shipping; reassess (re-commit / Won't fix / defer) by reply.` This keeps the IPM moving while taking the zombie off auto-pilot. `/retro`'s bump-3x detection is unchanged — it remains the safety net for anything that still slips through.
+**Unattended (the cron default): auto-defer + a Slack note.** Do not silently re-commit, and do not hard-block the IPM waiting on a human (a blocking wait would stall the whole unattended commit). Auto-defer the flagged task per the bullet above and post one line to `#acme-dev-notifications`: `*IPM bump-2x*: T<id> deferred — carried 3 IPMs without shipping; reassess (re-commit / Won't fix / defer) by reply.` This keeps the IPM moving while taking the zombie off auto-pilot. `/retro`'s bump-3x detection is unchanged — it remains the safety net for anything that still slips through.
 
 ### 1.5 Seed carry-over candidates (from last IPM's cuts)
 
@@ -108,7 +108,7 @@ Run `/todo next` to get the top 5 ranked Tier 2 tasks (`Design` or `Open`). The 
 For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`** — run `/incept T<id>` (see `incept/SKILL.md`), which interviews the human in frontier rounds and, on confirmation, writes the Design section + Test Plan and any estimation revision into the task file. This phase wraps that call with the lifecycle bookkeeping `/incept` deliberately does not touch:
 
 1. **Grill it.** `/incept T<id>`. It reads the task's Problem (and any existing Design section — a refresh re-validates the assumptions rather than starting cold), asks the frontier rounds, and stops at its synthesis for a go/no-go. Do not run the rounds yourself or summarize on the user's behalf — the whole point is the human answering.
-2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#claude-notification`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
+2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#acme-dev-notifications`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
 3. **Confirm the estimate landed.** `/incept` step 4 already rewrote `estimation:` and appended `Estimation revised from {old} to {new}: {reason}` to the Design section when the estimate moved; check the frontmatter before the step 4 budget cut consumes it. If the pass was a free-text grill (no task file), it wrote nothing — file the task via `/new-task` first, then re-run.
 4. **Claim the task before touching its status** (T20260610-248248 — this step
    previously only mirrored to the board, leaving the task unclaimed mid-pass
@@ -119,7 +119,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    bash <skills-root>/_session/task_claim.sh acquire <task-id>
    ```
 
-   `acquire` sets `claimed_by` **and** `status: Coding` as a side effect. A
+   `acquire` sets `claimed_by` **and** `status: In Progress` as a side effect. A
    grilled-but-not-yet-implemented task belongs in `Design`, so correct the
    status back — same two-step pattern `/drive` Phase 1 uses for "a design
    PR will still run":
@@ -129,7 +129,7 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
-5. Tier 1 carry-overs do **not** get a re-grill — once a task is in Coding, the design is presumed adequate. If Coding has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+5. Tier 1 carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If implementation has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
 
 The grilled task files (Design sections, estimation revisions, claims) are left uncommitted by `/incept`; they land together with the IPM file in step 5's commit PR, not one PR per candidate.
 
@@ -183,7 +183,7 @@ Then **pre-append** each cut task to next-Monday's pre-IPM stub `dev/JOURNAL/${N
 
 | # | Task | Status | Est | Cumulative | Deadline |
 |---|------|--------|-----|------------|----------|
-| 1 | T... | Coding | 2h  | 2h         | 2026-04-30 |
+| 1 | T... | In Progress | 2h  | 2h         | 2026-04-30 |
 
 ## Carry-over candidates (deferred at {prev IPM date})
 
@@ -269,7 +269,7 @@ Sequenced by **dependency unblock + business priority + parallelism (labrun asyn
 
 ### 5a Drain the previous iteration (HARD GATE — the IPM commit is not final until this is green)
 
-Step 5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut. The step 1 carry covers in-flight (`Coding`/`Review`) + `claimed_by` tasks; step 5's cut-advance covers what this IPM explicitly cuts; an unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board (the recurring leak — T20260320-000029 sat on Iteration 10 while the prose "carried" it; T20260622-147834 filed the gate for exactly this).
+Step 5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut. The step 1 carry covers in-flight (`In Progress`/`Review`) + `claimed_by` tasks; step 5's cut-advance covers what this IPM explicitly cuts; an unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board (the recurring leak — T20260320-000029 sat on Iteration 10 while the prose "carried" it; T20260622-147834 filed the gate for exactly this).
 
 The maintainer rule: **at IPM end, every previous-iteration board item that is not terminal (`Done`/`Parked`) must be migrated out.** Enforce it with the hard gate `<skills-root>/_ipm/ipm-iteration-drain-check.sh` (shipped by T20260622-147834; T20260623-811944 wires it here; moved out of build-pipeline's own scripts/ and generalized by T20260719-111051). Run **after** step 5 (so the picks' `scheduled:` are already advanced) and **before** the IPM is considered committed:
 
@@ -330,7 +330,7 @@ If any step fails (clone, edit, commit, push, PR-create): slack the maintainer `
 
 ### 6 Slack the focus
 
-Send to `#claude-notification` via MCP `slack_send_message`. On send failure, apply the same
+Send to `#acme-dev-notifications` via MCP `slack_send_message`. On send failure, apply the same
 webhook fallback as `/ccxp` Phase 1.4 (T20260717-433409) — this is a weekly, guaranteed-to-fire send in
 the same failure-prone path:
 
