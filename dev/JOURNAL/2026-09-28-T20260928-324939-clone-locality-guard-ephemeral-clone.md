@@ -139,8 +139,15 @@ the design PR").
 - `drive/SKILL.md`'s Clone-locality guard section rewritten to route the warn-only cross-repo
   case through an ephemeral clone (mirroring Phase 1.5), instead of pointing at an existing
   sibling clone.
-- New `tests/taskid_in_this_repo.bats` (6 cases, all green); existing adjacent bats suites
-  unaffected; `shellcheck` clean.
+- New `tests/taskid_in_this_repo.bats` (8 cases after an independent-review round added two —
+  the empty-slug fallback banner and a true `>1`-sibling ambiguity case — all green); existing
+  adjacent bats suites unaffected; `shellcheck` clean.
+- Independent review (PR #159) flagged: the banner said "clone it fresh" even when no slug
+  resolved (fixed — now prints a manual-lookup fallback line instead of a bare "clone it fresh"
+  with nothing to clone); a test asserting ambiguity only covered the 0-match case, not the
+  `>1`-match case its name claimed (fixed — added the missing fixture); a tautological OR
+  assertion in one test (fixed — direct string match). All addressed on the same branch before
+  merge.
 - **Not done in this task**: retrofitting `/claim`, `/stage`, or any other pick-by-id skill that
   also calls `in-this-repo.sh` — they inherit the reworded banner text automatically (same
   script), but none were audited for their own prose guidance repeating the old "cd" framing.
@@ -156,5 +163,6 @@ the design PR").
   `shellcheck` before treating the change as complete.
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck, first
   implementation attempt went green.
-- Receiving code review (`superpowers:receiving-code-review`): pending — `/address-pr`'s
-  independent-review step runs after this file is written; addressed there if findings surface.
+- Receiving code review (`superpowers:receiving-code-review`): yes — `/address-pr`'s independent
+  review (PR #159) surfaced 3 real findings (see Closed section above); steelmanned each, agreed
+  all three, fixed all three on the same branch (no pushback needed — the findings were correct).

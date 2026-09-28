@@ -124,7 +124,12 @@ function taskid-in-this-repo() {
 
   local sib_slug sib
   sib_slug="$(in-this-repo--sibling-slug "$id")"
-  [ -n "$sib_slug" ] && echo "  Clone: $sib_slug" >&2
+  if [ -n "$sib_slug" ]; then
+    echo "  Clone: $sib_slug" >&2
+  else
+    echo "  (repo slug could not be auto-detected here — find it manually, e.g. via" >&2
+    echo "  the task's source/related links, before cloning.)" >&2
+  fi
   sib="$(in-this-repo--sibling-path "$id")"
   [ -n "$sib" ] && echo "  (a local clone also exists at: $sib — diagnostic only, do not cd into it)" >&2
 

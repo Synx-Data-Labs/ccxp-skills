@@ -46,9 +46,17 @@ setup() {
   [[ "$output" != *"Switch to that clone before working it"* ]]
   [[ "$output" == *"clone it fresh"* ]]
   [[ "$output" == *"your-org/hub-repo"* ]]
-  # The local path may still be surfaced as diagnostic info, but never as an
-  # instruction to work from it directly.
-  [[ "$output" != *"cd into it"* ]] || [[ "$output" == *"do not"*"cd"* ]]
+  # The local path may still be surfaced as diagnostic info, but the
+  # instruction on it must read "do not cd into it", never an invitation.
+  [[ "$output" == *"a local clone also exists at:"*"do not cd into it"* ]]
+}
+
+@test "cross-repo warn-only, no local sibling found -> banner still actionable, no bare 'Clone:' line" {
+  run taskid-in-this-repo T20260101-000099-truly-unknown
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"clone it fresh"* ]]
+  [[ "$output" == *"could not be auto-detected"* ]]
+  [[ "$output" != *"Clone: "* ]]
 }
 
 @test "cross-repo strict mode -> exit 1, refuses" {
@@ -63,8 +71,21 @@ setup() {
   [ "$output" = "your-org/hub-repo" ]
 }
 
-@test "in-this-repo--sibling-slug prints nothing on ambiguity (0 or >1 siblings)" {
+@test "in-this-repo--sibling-slug prints nothing when no sibling matches" {
   run in-this-repo--sibling-slug T20260101-999999-nonexistent
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "in-this-repo--sibling-slug prints nothing when MORE THAN ONE sibling matches (true ambiguity)" {
+  mkdir -p "$BATS_TEST_TMPDIR/sibling-repo-2/dev/TODO"
+  cd "$BATS_TEST_TMPDIR/sibling-repo-2"
+  git init -q .
+  git remote add origin https://github.com/your-org/another-hub-repo.git
+  touch dev/TODO/T20260928-999999-cross-repo-task.md
+  cd "$BATS_TEST_TMPDIR/cwd-repo"
+
+  run in-this-repo--sibling-slug T20260928-999999
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
