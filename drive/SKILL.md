@@ -62,16 +62,16 @@ If task ID given:
 2. Verify it's not Blocked or Done
 3. Flip the task file's Status to the appropriate next state (Open → Design, Design → In Progress, etc.) in-place
 
-**Clone-locality guard (run right after the id is resolved, before any status/claim write — T20260626-298293):**
+**Clone-locality guard (run right after the id is resolved, before any status/claim write — T20260626-298293, reworked T20260928-324939):**
 
 A task's claim, journal, and file all live in ONE repo. Working a task from a *different* clone takes the claim against the wrong `dev/` tree and leaves the clone-scoped status line blind to it. Before flipping status, assert the task file is actually in this clone:
 
 ```bash
-bash ../_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/cross-repo (prints where to look)
+bash ../_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/cross-repo (prints a clonable slug)
 ```
 
 - **Exit 0** — present in this repo's `dev/TODO`/`dev/PARKING`; proceed.
-- **Non-zero, warn-only (default)** — a loud banner naming the current repo + (best-effort) the sibling clone that has it. Deliberate cross-clone work via absolute paths is legitimate, so this does **not** stop you — but `cd` to the named clone unless you mean to work cross-clone.
+- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same `trap 'rm -rf "$HUB"' EXIT` pattern as Phase 1.5's `$TARGET`) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's — per the maintainer's own "we work on our own clones, and if we need to across repo, we create a new clone" decision (synxdb-build-pipeline `dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md`), a clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation. If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
 - **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone).
 
 (Auto-pick via `/todo next` only surfaces tasks already in this clone, so the guard is a no-op there; it's the explicit-id path that needs it.)
