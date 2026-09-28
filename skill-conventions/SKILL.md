@@ -11,7 +11,7 @@ This suite's own conventions for authoring a SKILL.md, layered on top of generic
 
 ## Argument
 
-`show` (default): print these conventions. No other verbs — this is a reference skill, not a lint. Mechanical checks are out of scope; skill-quality grading lives in `/retro` Phase 4c.
+`show` (default): print these conventions. No other verbs — this is a reference skill. The mechanical checks live in §10's scripts; `/retro` Phase 4c runs the recurring improvement loop.
 
 ## Conventions
 
@@ -43,7 +43,7 @@ When 2+ skills need the same helper, extract it into a `_<prefix>/` directory in
 ### 5. Testing
 
 - Scripts under `_<prefix>/` get **BATS** tests (`tests/*.bats`).
-- Prose-only skills (most SKILL.md files) need no tests — the prose IS the deliverable.
+- Prose-only skills need no BATS tests; their behavior is covered by §10 evals (`<skill>/evals/evals.json`).
 
 This is this suite's counterpart to superpowers' subagent pressure-testing; we do not require that for prose skills.
 
@@ -75,6 +75,34 @@ What stays in prose: logic that makes a real judgment call (a Park recommendatio
 
 Worked example: [T20260914-359646](../dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md) ported `/todo list`'s table-rendering and `/todo next`'s queue-walk into `todo/scripts/{_lib,todo-list,todo-next}.sh`, keeping `sweep`'s judgment-call logic (blocker-order enforcement, Park recommendations) in prose since those genuinely decide, not just read.
 
+### 10. Quality loop: score → evals → feedback (novice → master)
+
+Three deterministic instruments, all under `skill-conventions/scripts/`:
+
+| Instrument | Grades | Command |
+|---|---|---|
+| `skill_score.py` | Static structure, 0–100: trigger phrasing, context cost (full marks ≤ 8 KB body), broken in-repo refs, task-ID changelog noise, sections, long paragraphs, untested scripts | `python3 skill-conventions/scripts/skill_score.py [skill…]` |
+| `skill_eval.py` | Behavior: runs `<skill>/evals/evals.json` via `claude -p` in a throwaway fixture dir, grades with regex/file assertions (no LLM judge), N runs per case, pass at ≥ 90% | `python3 skill-conventions/scripts/skill_eval.py <skill> --record` |
+| `skill_feedback.py` | Real-use misbehavior log (`dev/quality/skill-feedback.jsonl`) | `python3 skill-conventions/scripts/skill_feedback.py add <skill> correction "<what went wrong>"` |
+
+**Maturity ladder** — computed by `skill_score.py`, never self-declared:
+
+- **L0 Draft** — score < 60.
+- **L1 Novice** — score ≥ 60.
+- **L2 Apprentice** — + ≥ 3 eval cases with assertions.
+- **L3 Practitioner** — + latest recorded eval run ≥ 90%.
+- **L4 Master** — + score ≥ 85, last 3 recorded runs ≥ 90%, zero open feedback items.
+
+**The loop** — every real-use failure becomes a permanent regression test:
+
+1. When a skill misbehaves in use (user corrects it, it misfires, skips a step), log it with `skill_feedback.py add`.
+2. Reproduce it as a failing eval case first (red), then edit the SKILL.md until it passes (green) — the §9 parity gate, applied to prose.
+3. Close the item with `skill_feedback.py codify <F-id> <eval-id>`; record the run with `skill_eval.py --record`.
+
+**Ratchet**: CI runs `skill_score.py --check dev/quality/skill-scores.json` — a score may rise but never fall below its baseline, and a new skill must reach 70. After an improvement, lock it in with `--write-baseline dev/quality/skill-scores.json`.
+
+**Eval authoring**: prefer `command_succeeded` (bundled script ran and resolved), `tool_not_called`/`command_not_ran` (safety: no `Edit` in a read-only verb, no `gh pr merge`), and `file_matches` (end state) over `output_matches` on free text. Evals run with GitHub/Slack credentials scrubbed; a case that needs the network stubs it in its fixture.
+
 ## Important Notes
 
-- This skill defers to `superpowers:writing-skills` for everything generic. If the two ever conflict on a *generic* point, superpowers wins; the §1–7 guardrails here are the only intentional local overrides.
+- This skill defers to `superpowers:writing-skills` for everything generic. If the two ever conflict on a *generic* point, superpowers wins; the §1–10 guardrails here are the only intentional local overrides.
