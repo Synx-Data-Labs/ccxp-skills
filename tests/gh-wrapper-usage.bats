@@ -1,13 +1,20 @@
 #!/usr/bin/env bats
-# Tests for the caller-side `GH_TOKEN=` allowlist check (T20260925-219021).
+# Tests for the caller-side `GH_TOKEN=`/`GITHUB_TOKEN=` allowlist check
+# (T20260925-219021).
 #
 # Context: `_gh/gh.sh`/`_gh/git.sh` are the only sanctioned way to call
 # `gh`/authenticated `git` — they pick the right account and set a
 # process-scoped `GH_TOKEN` internally. A script that instead sets
-# `GH_TOKEN=` itself before shelling out bypasses that account-picking (the
-# exact bug `_session/_lib.sh`'s wrapper-present branch had — fixed
-# alongside this test, same task). Three sites are documented, deliberate
-# exceptions, not violations:
+# `GH_TOKEN=` (or `GITHUB_TOKEN=` — `gh` honors either) itself before
+# shelling out bypasses that account-picking (the exact bug
+# `_session/_lib.sh`'s wrapper-present branch had — fixed alongside this
+# test, same task). Both names are checked in every form this repo's
+# shell/Python sources actually use to set an env var: a shell
+# assignment, a Python dict literal (either quote style), a subscript
+# assignment (`os.environ[...] = ...`), or `os.putenv(...)` — a check
+# that only caught one spelling would give false confidence (caught by
+# independent review of PR #175, 2026-09-29). Three sites are documented,
+# deliberate exceptions, not violations:
 #   - `ccxp/scripts/epic-status.sh` (5 sites) — cross-repo reads against
 #     `$ROADMAP_TARGET_REPO`, a different repo than `$PWD`; `gh.sh main()`
 #     has no `--repo` override, so this script sources `gh.sh` for its
@@ -33,9 +40,12 @@ setup() {
 
 # _scan_gh_token_sites <root>
 #
-# Echoes one "relative/path:lineno:content" per caller-side `GH_TOKEN=`
-# (shell) or `"GH_TOKEN":` (Python dict-literal) assignment under <root>'s
-# *.sh/*.py files, excluding:
+# Echoes one "relative/path:lineno:content" per caller-side `GH_TOKEN=`/
+# `GITHUB_TOKEN=` (shell — `gh` honors both, _session/_lib.sh's own
+# comment says so) or a Python assignment of either name — dict-literal
+# (`"GH_TOKEN":`/`'GH_TOKEN':`), subscript (`os.environ["GH_TOKEN"] =`),
+# or `os.putenv("GH_TOKEN", ...)` — under <root>'s *.sh/*.py files,
+# excluding:
 #   - tests/**, dev/JOURNAL/**, dev/TODO/** (fixtures/journal prose/task
 #     prose, not real callers)
 #   - _gh/gh.sh, _gh/git.sh (the wrappers themselves — they set GH_TOKEN
@@ -62,7 +72,7 @@ _scan_gh_token_sites() {
         '#'*) continue ;;
       esac
       printf '%s:%s:%s\n' "$rel" "$lineno" "$content"
-    done < <(grep -nE 'GH_TOKEN=|"GH_TOKEN":' "$f" 2>/dev/null)
+    done < <(grep -nE "(GH_TOKEN|GITHUB_TOKEN)=|[\"'](GH_TOKEN|GITHUB_TOKEN)[\"']:|os\.environ\[[\"'](GH_TOKEN|GITHUB_TOKEN)[\"']\][[:space:]]*=|os\.putenv\([\"'](GH_TOKEN|GITHUB_TOKEN)[\"']" "$f" 2>/dev/null)
   done < <(find "$root" -type f \( -name '*.sh' -o -name '*.py' \) | sort)
 }
 
@@ -124,6 +134,65 @@ EOF
   run _scan_gh_token_sites "$FIXTURE_ROOT"
   [ "$status" -eq 0 ]
   [[ "$output" == *"scripts/bad.py:2:"* ]]
+}
+
+@test "a fixture GITHUB_TOKEN= shell assignment is caught outside the allowlist" {
+  FIXTURE_ROOT="$BATS_TEST_TMPDIR/fixture-repo-githubtoken"
+  mkdir -p "$FIXTURE_ROOT/somewhere"
+  cat > "$FIXTURE_ROOT/somewhere/bad.sh" <<'EOF'
+#!/usr/bin/env bash
+GITHUB_TOKEN="$(gh auth token --user someuser)" gh pr view "$1"
+EOF
+
+  run _scan_gh_token_sites "$FIXTURE_ROOT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"somewhere/bad.sh:2:"* ]]
+}
+
+@test "a fixture Python single-quoted dict-literal GH_TOKEN assignment is caught" {
+  FIXTURE_ROOT="$BATS_TEST_TMPDIR/fixture-repo-py-singlequote"
+  mkdir -p "$FIXTURE_ROOT/scripts"
+  cat > "$FIXTURE_ROOT/scripts/bad.py" <<'EOF'
+import os, subprocess
+env = {**os.environ, 'GH_TOKEN': os.environ['SOME_OTHER_TOKEN']}
+subprocess.run(["gh", "pr", "view"], env=env)
+EOF
+
+  run _scan_gh_token_sites "$FIXTURE_ROOT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scripts/bad.py:2:"* ]]
+}
+
+@test "a fixture os.environ subscript-assignment GH_TOKEN/GITHUB_TOKEN is caught" {
+  FIXTURE_ROOT="$BATS_TEST_TMPDIR/fixture-repo-py-subscript"
+  mkdir -p "$FIXTURE_ROOT/scripts"
+  cat > "$FIXTURE_ROOT/scripts/bad.py" <<'EOF'
+import os, subprocess
+os.environ["GH_TOKEN"] = os.environ["SOME_OTHER_TOKEN"]
+os.environ['GITHUB_TOKEN'] = os.environ['SOME_OTHER_TOKEN']
+subprocess.run(["gh", "pr", "view"])
+EOF
+
+  run _scan_gh_token_sites "$FIXTURE_ROOT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scripts/bad.py:2:"* ]]
+  [[ "$output" == *"scripts/bad.py:3:"* ]]
+}
+
+@test "a fixture os.putenv GH_TOKEN/GITHUB_TOKEN is caught" {
+  FIXTURE_ROOT="$BATS_TEST_TMPDIR/fixture-repo-py-putenv"
+  mkdir -p "$FIXTURE_ROOT/scripts"
+  cat > "$FIXTURE_ROOT/scripts/bad.py" <<'EOF'
+import os, subprocess
+os.putenv("GH_TOKEN", os.environ["SOME_OTHER_TOKEN"])
+os.putenv('GITHUB_TOKEN', os.environ['SOME_OTHER_TOKEN'])
+subprocess.run(["gh", "pr", "view"])
+EOF
+
+  run _scan_gh_token_sites "$FIXTURE_ROOT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scripts/bad.py:2:"* ]]
+  [[ "$output" == *"scripts/bad.py:3:"* ]]
 }
 
 @test "GH_TOKEN= sites under tests/, dev/JOURNAL/, dev/TODO/, or the wrapper scripts are correctly excluded" {
