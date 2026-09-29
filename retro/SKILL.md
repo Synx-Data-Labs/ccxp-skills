@@ -292,7 +292,7 @@ for a week — still worth a sweep, just a rarer one now.
    ```bash
    bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
    git commit -m "docs(tasks): batch journal-move for $(date +%F) (Friday sweep)"
-   git push -u origin "retro/$(date +%F)-journal-sweep"
+   bash ../_gh/git.sh push -u origin "retro/$(date +%F)-journal-sweep"
    bash ../_gh/gh.sh pr create --title "docs(tasks): batch journal-move $(date +%F)" \
      --body "Friday retro journal sweep — moves $(printf '%s\n' "${swept[@]}" | wc -l | tr -d ' ') Done task(s): $(printf '%s; ' "${swept[@]}")"
    ```

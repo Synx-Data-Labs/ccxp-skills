@@ -75,7 +75,7 @@ for id in T<id> [T<id> ...]; do
   [ -n "$f" ] && git add "$f"
 done
 git commit -m "docs(queue): stage T<id> [T<id> ...]"
-git push -u origin "$BRANCH"
+bash ../_gh/git.sh push -u origin "$BRANCH"
 bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
 ```
 

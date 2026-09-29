@@ -9,13 +9,14 @@
 #
 # Why a separate wrapper from gh.sh: `git push` isn't a `gh` subcommand, but
 # on a repo whose `credential.helper` routes through `gh auth git-credential`
-# (the default `gh auth setup-git` leaves, and what `_gh/auto-switch.sh`
-# wires per-repo), that credential helper honors a process-scoped `GH_TOKEN`
-# override exactly like the `gh` CLI itself does — so the same account-
-# picking machinery applies. This retires the ad-hoc pattern of manually
-# running `GH_TOKEN="$(gh auth token --user <name>)" git push ...` with a
-# hardcoded account name; this wrapper auto-detects the right account the
-# same way gh.sh does (T20260911-140914).
+# (the default `gh auth setup-git` leaves, and what this wrapper's own
+# `_git_wire_credentials()` wires per-repo, self-contained, on every call —
+# T20260925-219021), that credential helper honors a process-scoped
+# `GH_TOKEN` override exactly like the `gh` CLI itself does — so the same
+# account-picking machinery applies. This retires the ad-hoc pattern of
+# manually running `GH_TOKEN="$(gh auth token --user <name>)" git push ...`
+# with a hardcoded account name; this wrapper auto-detects the right account
+# the same way gh.sh does (T20260911-140914).
 #
 # Shares its account-picking logic with gh.sh by sourcing it — gh.sh's own
 # `main()` is BASH_SOURCE-guarded, so sourcing it is side-effect-free (see
@@ -27,8 +28,37 @@ _gh_git_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./gh.sh
 source "$_gh_git_dir/gh.sh"
 
+_git_wire_credentials() {
+  # Repo-LOCAL only (`git config --local`, i.e. this repo's `.git/config`)
+  # — never touches `~/.gitconfig` or any global/system config, and never
+  # touches the SSH agent or `~/.ssh/config`. Idempotent: unset-all before
+  # add, so re-running on every git.sh invocation (the normal case) doesn't
+  # pile up duplicate entries. Ported verbatim from the retired
+  # `_gh/auto-switch.sh`'s `_auto_switch_wire_git_credentials()`
+  # (T20260925-219021) — this used to run once per SessionStart hook; now it
+  # runs unconditionally at the top of every main_git() call instead, so
+  # git.sh is fully self-contained and needs no hook.
+  #
+  # credential.helper: reset the inherited helper chain for this repo
+  # (empty string is git's documented way to clear it, gitcredentials(1))
+  # then point it at `gh auth git-credential`, which authenticates as
+  # whichever account this wrapper picks below.
+  #
+  # url.<...>.insteadOf: rewrite SSH-style GitHub remotes to HTTPS at the
+  # transport level so `credential.helper` actually gets consulted — a
+  # credential helper is never invoked for SSH transport, only HTTP(S).
+  git config --local --unset-all credential.helper 2>/dev/null
+  git config --local --add credential.helper '' 2>/dev/null
+  git config --local --add credential.helper '!gh auth git-credential' 2>/dev/null
+  git config --local --unset-all 'url.https://github.com/.insteadOf' 2>/dev/null
+  git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:' 2>/dev/null
+  git config --local --add 'url.https://github.com/.insteadOf' 'ssh://git@github.com/' 2>/dev/null
+  return 0
+}
+
 main_git() {
   local slug user tok
+  _git_wire_credentials
   slug="$(_gh_repo_slug)" || _gh_die "no github 'origin' remote in $PWD"
   [[ -n "$slug" && "$slug" == */* ]] || _gh_die "could not parse owner/repo from origin URL"
   user="$(_gh_pick_account "$slug")" \
