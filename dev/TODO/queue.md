@@ -34,3 +34,4 @@ reprioritize.
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260928-608242](T20260928-608242-lint-docs-remove-fix-require-path.md): Remove `lint-docs.sh`'s `--fix` entirely and require an explicit path argument
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
+- [T20260928-111470](T20260928-111470-ipm-skill-fails-score-ratchet.md): `ipm` skill fails the skill-score ratchet CI check, main is red
