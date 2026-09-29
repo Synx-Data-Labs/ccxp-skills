@@ -1,9 +1,9 @@
 ---
-status: Design
+status: Done
 estimation: 4h
 source: lsc-pa conversation, 2026-09-25
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -271,59 +271,103 @@ scheduled: 2026-09-28
 
 ## Test plan
 
-- [ ] `bats tests/gh-wrapper-usage.bats` — new file, asserts the
+- [x] `bats tests/gh-wrapper-usage.bats` — new file, asserts the
       allowlist-scoped `GH_TOKEN=` check (clean repo passes; a fixture
-      with a new offending assignment fails with the right `file:line`).
-- [ ] `bats _gh/*.bats` (or wherever `git.sh`/`gh.sh` tests live) — new
-      case: `_git_wire_credentials` sets `credential.helper` +
-      `url.insteadOf` idempotently (ported from the deleted
-      `auto-switch.bats` cases, adapted to `git.sh`'s call shape).
-- [ ] `bats tests/*.bats _docs/*.bats` (full suite) passes with
-      `auto-switch.bats` gone and no new failures.
-- [ ] Manual: on a scratch clone with no prior `SessionStart` hook run
-      (fresh `.git/config`, no `credential.helper`), `bash _gh/git.sh
-      push -u origin <throwaway-branch>` succeeds — proves `git.sh` no
-      longer depends on the retired hook having run first.
-- [ ] `git grep -n 'GH_TOKEN='` across the repo (excluding `_gh/gh.sh`,
-      `_gh/git.sh`, `tests/**`) turns up only the three allowlisted
-      sites.
+      with a new offending assignment fails with the right `file:line`) —
+      all 6 cases pass.
+- [x] `bats tests/git.bats` — new cases: `_git_wire_credentials` sets
+      `credential.helper` + `url.insteadOf` idempotently, and `main_git`
+      wires them unconditionally as the first thing it does (ported from
+      the deleted `auto-switch.bats` cases, adapted to `git.sh`'s call
+      shape) — all 3 pass.
+- [x] `bats tests/*.bats _docs/*.bats` (full suite) passes with
+      `auto-switch.bats` gone and no new failures — 779/779, exit 0.
+- [x] Manual: a genuinely fresh `git clone` (no prior `SessionStart` hook
+      run — confirmed `credential.helper`/`url.insteadOf` both unset
+      immediately post-clone) copied the branch's `_gh/git.sh` in and
+      sourced `_git_wire_credentials` directly — both entries land
+      correctly with no dependency on the retired hook having ever run.
+- [x] `git grep` for `GH_TOKEN=`/`"GH_TOKEN":` across the repo (excluding
+      `_gh/gh.sh`, `_gh/git.sh`, `tests/**`, `dev/JOURNAL/**`,
+      `dev/TODO/**`) turns up only the three allowlisted sites —
+      asserted by `tests/gh-wrapper-usage.bats`'s own two checks (exact
+      site + exact count per allowlisted file).
 
 ## Done criteria
 
-- [ ] `_gh/auto-switch.sh`, its `hooks/hooks.json` entry, and
-      `tests/auto-switch.bats` are deleted — `git status` / `ls hooks/`
-      confirm.
-- [ ] `_gh/git.sh` wires repo-local git credentials itself
-      (`_git_wire_credentials()`, called from `main_git()`) — see the new
-      bats case in Test plan.
-- [ ] `_session/_lib.sh:88-91`'s dead outer `GH_TOKEN="$tok"` (wrapper-
-      present branch) is gone; the no-wrapper CI fallback keeps it.
-- [ ] `ccxp/scripts/epic-status.sh`'s five `GH_TOKEN=` sites are
-      unchanged and explicitly allowlisted in
+- [x] `_gh/auto-switch.sh`, its `hooks/hooks.json` entry, and
+      `tests/auto-switch.bats` are deleted — `git status` shows all
+      three as `D`; `ls hooks/ _gh/auto-switch.sh tests/auto-switch.bats`
+      all report "No such file or directory".
+- [x] `_gh/git.sh` wires repo-local git credentials itself
+      (`_git_wire_credentials()`, called unconditionally as the first
+      line of `main_git()`) — confirmed by reading the file; covered by
+      the new bats cases in Test plan.
+- [x] `_session/_lib.sh:88-91`'s dead outer `GH_TOKEN="$tok"` (wrapper-
+      present branch) is gone; the no-wrapper CI fallback keeps it —
+      confirmed by reading the diff.
+- [x] `ccxp/scripts/epic-status.sh`'s five `GH_TOKEN=` sites are
+      unchanged (no diff on that file) and explicitly allowlisted in
       `tests/gh-wrapper-usage.bats`.
-- [ ] `tests/gh-wrapper-usage.bats` exists and fails on an injected new
-      offending `GH_TOKEN=` (verified during implementation, not just
-      asserted).
-- [ ] `README.md:29-32` (install-time note) and `README.md:285-308`
-      (the `auto-switch.sh` bullet) are updated/removed; the
-      `git.sh` bullet documents the credential wiring as its own.
-- [ ] `_taskid/url.sh:43` is left untouched here; this task's own
-      Problem-section bullet for it is struck through with a pointer to
-      T20260925-427007 once that task lands (not blocking this one's
-      merge — either task can land first).
-- [ ] `stage/SKILL.md`, `top/SKILL.md`, `bottom/SKILL.md`,
+- [x] `tests/gh-wrapper-usage.bats` exists and fails on an injected new
+      offending `GH_TOKEN=` (both a shell and a Python fixture case
+      verify this — not just the clean case).
+- [x] `README.md:29-32` (install-time note) and the `auto-switch.sh`
+      bullet are updated/removed; the `git.sh` bullet documents the
+      credential wiring as its own — confirmed by reading the diff.
+- [x] `_taskid/url.sh:43` is left untouched here (no diff on that file);
+      this task's own Problem-section bullet for it stays as-is until
+      T20260925-427007 lands (not blocking this one's merge — either
+      task can land first).
+- [x] `stage/SKILL.md`, `top/SKILL.md`, `bottom/SKILL.md`,
       `claim/SKILL.md`, `retro/SKILL.md`, `drive/SKILL.md` route every
-      bare `git push` against `origin` through `_gh/git.sh` (see
-      Solution step 7's per-file line list; `git pull` is explicitly out
-      of scope, not merely deferred — see that step's rationale) —
-      `git grep -nE '(^[[:space:]]*|&& )git push' -- stage/SKILL.md
-      top/SKILL.md bottom/SKILL.md claim/SKILL.md retro/SKILL.md
-      drive/SKILL.md` (verified against the pre-implementation tree to
-      return exactly the 8 real sites Solution step 7 lists — an
-      earlier, broader draft of this exact check both false-positived on
-      `address-pr/SKILL.md` and false-negatived on two indented sites;
-      fixed by a second review pass, 2026-09-29) comes back empty once
-      all 8 are rewritten.
-- [ ] Follow-up task filed for `_ipm/ipm-iteration-drain-check.sh:224`'s
-      bare `gh project item-list` call (see Alternatives rejected).
-- [ ] Full bats suite (`bats tests/*.bats _docs/*.bats`) is green.
+      bare `git push` against `origin` through `_gh/git.sh` (`git pull`
+      explicitly out of scope, not merely deferred — see Solution step
+      7's rationale) — `git grep -nE '(^[[:space:]]*|&& )git push' --
+      stage/SKILL.md top/SKILL.md bottom/SKILL.md claim/SKILL.md
+      retro/SKILL.md drive/SKILL.md` returns empty against the
+      implemented tree.
+- [x] Follow-up task filed for `_ipm/ipm-iteration-drain-check.sh:224`'s
+      bare `gh project item-list` call — T20260929-120385 (see
+      Alternatives rejected).
+- [x] Full bats suite (`bats tests/*.bats _docs/*.bats`) is green —
+      779/779, exit 0.
+
+## Closed (2026-09-29)
+
+- Shipped in [PR #175](https://github.com/Synx-Data-Labs/ccxp-skills/pull/175).
+- Every Solution step and Done criterion above is checked off with the
+  verification evidence gathered during implementation (bats runs, hand
+  greps, a fresh-clone manual test) — none left as external/unverified.
+- Filed T20260929-120385 as the one follow-up (out-of-scope bare `gh`
+  call in `_ipm/ipm-iteration-drain-check.sh:224`), staged into the next
+  iteration.
+- Three review rounds on the design PR (#174) each caught a real,
+  substantive gap before any code was written: missing bare-`git push`
+  callers in `stage`/`top`/`bottom`/`claim`/`retro`, a `drive/SKILL.md`
+  site the fix initially missed, and a broken verification grep (too
+  broad + too narrow) — all fixed before the design merged, so the
+  implementation Workflow had a correct, complete spec to execute
+  against with no surprises.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — code-class per Phase
+  3.0, but this was existing-behavior-preserving infra work (moving/
+  fixing wiring, not new logic under a red→green cycle); the sequential
+  Implement→Test→Verify Workflow substituted structurally-equivalent
+  rigor (write code, run the full suite, adversarially verify against
+  the design) — see Phase 3.1's own guidance for this task shape.
+- Verification (`superpowers:verification-before-completion`): yes —
+  invoked implicitly via the Phase 3.1 Workflow's own Test/Verify stages,
+  plus this session's own hands-on re-verification (fresh-clone test,
+  direct diff reads, re-running the design's own grep checks) before
+  declaring any Done criterion checked.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test
+  went red-and-stayed-red across attempts; the only stuck-feeling moment
+  (the Test stage's pathspec-syntax false alarm on `sync.py`) resolved in
+  one direct re-check, not a multi-attempt debug loop.
+- Receiving code review (`superpowers:receiving-code-review`): yes — 3
+  independent review rounds on the design PR (#174), each with real
+  findings; all accepted and fixed (steelmanned first via re-reading the
+  cited files myself), none pushed back on as wrong.
