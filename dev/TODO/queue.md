@@ -33,3 +33,4 @@ reprioritize.
 - [T20260925-283679](T20260925-283679-remove-legacy-coding-status-alias.md): Remove the legacy `Coding` status alias once external repos migrate
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260928-608242](T20260928-608242-lint-docs-remove-fix-require-path.md): Remove `lint-docs.sh`'s `--fix` entirely and require an explicit path argument
+- [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
