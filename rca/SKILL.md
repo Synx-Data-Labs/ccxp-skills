@@ -121,7 +121,7 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 
 ### 6. Create task if needed
 
-If 3.5 flagged an open task: invoke `/top <id>` here instead of filing a task below — Infrastructure's retry still runs either way; only its create-task-on-retry-fail step is replaced.
+If 3.5 flagged an open task: invoke `/top <id>` here instead of any task-creation gate below (Infrastructure's retry still always runs; Transient's 3+ check no longer applies).
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
