@@ -64,5 +64,25 @@ related: T20260910-919422, T20260922-383156, T20260922-253015
 
 ## Out of scope
 
-- The still-open, unconfirmed PNG-mutation report (T20260922-253015) —
-  separate investigation, not blocking this removal.
+- The PNG-mutation report (T20260922-253015) — separate investigation, not
+  blocking this removal. **Update 2026-09-29**: that investigation
+  confirmed the reproduction and traced it to the same root mechanism this
+  task already targets — `markdownlint-cli2` given a **directory** argument
+  (the bare/default no-args scope) doesn't filter to `.md`, so `--fix`
+  corrupts any binary file it finds there too. This task's fix (mandatory
+  explicit path, no more directory-arg default scope) closes that vector
+  too, as a side effect — no separate fix task needed.
+
+## Caller-list gap found during T20260922-253015 (2026-09-29)
+
+"Update the two callers that pass `--fix`" above names only `gcpr/SKILL.md`
+and `new-task/SKILL.md`, but `git grep -n "lint-docs.sh --fix"` also finds
+two more bare (no-path) invocations that will need the same treatment once
+`--fix` requires an explicit path: `ccxp/SKILL.md:422` and
+`retro/SKILL.md:293` (both `bash .../lint-docs.sh --fix || true`, no path
+argument — the same default-scope guard use case T20260910-919422's Root
+cause section already flagged as "left unchanged" for CI-parity coverage).
+Add these two to the caller-update step, or decide their default-scope
+guard behavior needs a different replacement (e.g. an explicit `**/*.md`-
+scoped call, or drop the guard from these two skills) before landing this
+task.
