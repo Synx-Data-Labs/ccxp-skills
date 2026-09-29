@@ -60,8 +60,8 @@ blocked-by: T20260925-244717 — both touch the identical `_tc_reclaim_decide`
 - [ ] No known task file anywhere (accessible repos) carries literal
   `status: Coding`
 - [ ] `grep -rn "Coding" _session _ipm ccxp/scripts repo-conventions/scripts
-  actions/sync-tasks` returns zero status-enum hits (Copilot Coding Agent /
-  Cloudflare false positives excluded)
+  actions/sync-tasks tests` returns zero status-enum hits (Copilot Coding
+  Agent / Cloudflare false positives excluded)
 - [ ] Full bats + both Python unittest suites still green after removal
 
 ## Design
