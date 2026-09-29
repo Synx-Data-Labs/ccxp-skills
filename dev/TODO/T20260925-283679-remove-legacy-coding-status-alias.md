@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Design
 scheduled: 2026-10-05
 estimation: 2h
 source: T20260809-355059's Phase A/B implementation (2026-09-25) — follow-up
