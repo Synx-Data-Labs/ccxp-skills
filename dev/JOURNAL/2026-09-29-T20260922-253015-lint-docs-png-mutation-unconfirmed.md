@@ -51,9 +51,14 @@ happens with or without `--no-globs`.
   minimal valid 68-byte PNG) plus one `.md` file, this repo's real
   `.markdownlint-cli2.jsonc` (`"globs": ["**/*.md"]`) copied alongside.
   - `bash _docs/lint-docs.sh --fix` (bare, default scope — `dev/JOURNAL
-    dev/TODO` as directory args) reported `Linting: 2 file(s)` (the `.md`
-    files only) but the PNG's bytes changed anyway: 68 → 82 bytes, hash
-    changed, `cmp` reports a diff at byte 1.
+    dev/TODO` as directory args) reported `Linting: 2 file(s)` and the
+    PNG's bytes changed: 68 → 82 bytes, hash changed, `cmp` reports a diff
+    at byte 1. The fixture had exactly 2 files at this point (1 `.md` + 1
+    `.png`) — a separate check-only run below, against a 3-file fixture (1
+    `.md` + 2 `.png`), reported `Linting: 3 file(s)` and explicitly flagged
+    one of the PNGs with a lint error. Both counts match "every file in the
+    tree", not "every `.md` file" — the reported count includes non-`.md`
+    files.
   - Isolated the mechanism further by bypassing the wrapper script entirely:
     raw `npx --yes markdownlint-cli2@0.22.1 --fix --no-globs dev/JOURNAL
     dev/TODO` (directories as literal args) reproduces the identical
@@ -92,12 +97,17 @@ happens with or without `--no-globs`.
   — see Problem's "Done looks like"): `T20260928-608242` ("Remove
   `lint-docs.sh`'s `--fix` entirely and require an explicit path argument",
   already open, unrelated discovery 2026-09-28) independently proposes
-  removing `--fix` and making a path argument mandatory — once shipped, the
-  bare/default-scope directory-argument path this task reproduces can no
-  longer occur, closing this corruption vector as a side effect. Left a
-  note on that task (its own "Update the two callers" step names only
-  `gcpr`/`new-task`, but `ccxp`/`retro` also invoke the bare form and would
-  need the same update) rather than duplicating a fix task here.
+  removing `--fix` entirely and making a path argument mandatory. Of those
+  two changes, **removing `--fix`** (making the tool check-only) is what
+  closes this specific corruption vector — check-only mode is confirmed
+  harmless above even against a directory argument, it just misreports a
+  bogus lint error against the non-`.md` file instead of corrupting it. The
+  mandatory-explicit-path half addresses a different, already-documented
+  risk (T20260928-608242's own "1509 files, `EACCES`" incident), not this
+  one. Left a note on that task (its own "Update the two callers" step
+  names only `gcpr`/`new-task`, but `ccxp`/`retro` also invoke the bare
+  form and would need the same update) rather than duplicating a fix task
+  here.
 
 ## Closed (2026-09-29)
 
@@ -128,5 +138,11 @@ happens with or without `--no-globs`.
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't
   get stuck; each hypothesis (wrapper bug vs. tool bug vs. coincidence) was
   falsified or confirmed on the first isolating test
-- Receiving code review (`superpowers:receiving-code-review`): no — no
-  code change, no Claude Code review dispatched
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d dispatched an independent review of PR #170; it found
+  one real internal inconsistency (a `Linting: N file(s)` count
+  mischaracterized as "`.md` files only" when it actually counts every
+  file, `.md` or not) and one imprecise causation claim (attributing this
+  vector's closure to "no directory args" rather than "no `--fix`" in
+  `T20260928-608242`'s cross-reference note) — both fixed in a follow-up
+  commit; no pushback needed, the finding was correct

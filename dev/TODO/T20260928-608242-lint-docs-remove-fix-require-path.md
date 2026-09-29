@@ -69,9 +69,13 @@ related: T20260910-919422, T20260922-383156, T20260922-253015
   confirmed the reproduction and traced it to the same root mechanism this
   task already targets — `markdownlint-cli2` given a **directory** argument
   (the bare/default no-args scope) doesn't filter to `.md`, so `--fix`
-  corrupts any binary file it finds there too. This task's fix (mandatory
-  explicit path, no more directory-arg default scope) closes that vector
-  too, as a side effect — no separate fix task needed.
+  corrupts any binary file it finds there too (check-only mode is
+  harmless against the same directory argument — it just misreports a
+  bogus lint error against the non-`.md` file instead of corrupting it).
+  Of this task's two changes, **removing `--fix`** is what closes that
+  vector; the mandatory-explicit-path half is a separate hardening (this
+  task's own "1509 files, `EACCES`" incident) — no separate fix task
+  needed either way, since this task already removes `--fix` entirely.
 
 ## Caller-list gap found during T20260922-253015 (2026-09-29)
 
