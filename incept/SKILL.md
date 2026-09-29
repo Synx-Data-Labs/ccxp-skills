@@ -105,14 +105,18 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
   to the Design section: `Estimation revised from {old} to {new}: {reason}`
   (the exact shape `/ccxp` Phase 2a.3 step 3 and `/retro`'s
   estimate-vs-actual grading expect).
-- Do **not** change `status:`, `claimed_by:`, or `scheduled:` — the caller
-  owns lifecycle transitions (`/ccxp` 2a.3 step 4 claims and sets status;
-  `/drive` Phase 2 does its own).
+- If `status:` is currently `Open`, advance it to `Design` — a completed
+  grilling session settling the design is exactly that lifecycle
+  transition, per `lifecycle.md`. Leave any other status (`In Progress`,
+  `Review`, `Blocked by T{id}`, etc.) untouched — grilling doesn't reopen
+  or rewind a task already past `Design`.
+- Do **not** change `claimed_by:` or `scheduled:` — the caller owns claim
+  lifecycle (`/ccxp` 2a.3 step 4 claims; `/drive` Phase 2 does its own).
 - Lint the touched file, scoped, never repo-wide:
 
   ```bash
   python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
-  bash ../_docs/lint-docs.sh --fix
+  bash ../_docs/lint-docs.sh --fix dev/TODO/T<id>-*.md
   ```
 
 Leave the change uncommitted — the caller decides how it lands (`/ccxp`
