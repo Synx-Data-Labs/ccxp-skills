@@ -35,9 +35,17 @@ _git_wire_credentials() {
   # add, so re-running on every git.sh invocation (the normal case) doesn't
   # pile up duplicate entries. Ported verbatim from the retired
   # `_gh/auto-switch.sh`'s `_auto_switch_wire_git_credentials()`
-  # (T20260925-219021) — this used to run once per SessionStart hook; now it
-  # runs unconditionally at the top of every main_git() call instead, so
-  # git.sh is fully self-contained and needs no hook.
+  # (T20260925-219021) — this used to run once per SessionStart hook, only
+  # after confirming some account could reach the repo; now it runs on
+  # every main_git() call instead (no hook needed), still gated the same
+  # way — called only once `_gh_pick_account` below has confirmed an
+  # account can actually see this repo. Wiring credentials when NO account
+  # has access would only make things worse (e.g. silently breaking a
+  # repo that was authenticating over SSH via a deploy key unrelated to
+  # any `gh auth` account, by force-rewriting it to HTTPS) with no
+  # compensating benefit, since the push/pull is going to fail either way
+  # — this mirrors `_auto_switch_run()`'s own "no account can see the
+  # repo: git config left untouched" behavior exactly.
   #
   # credential.helper: reset the inherited helper chain for this repo
   # (empty string is git's documented way to clear it, gitcredentials(1))
@@ -58,11 +66,11 @@ _git_wire_credentials() {
 
 main_git() {
   local slug user tok
-  _git_wire_credentials
   slug="$(_gh_repo_slug)" || _gh_die "no github 'origin' remote in $PWD"
   [[ -n "$slug" && "$slug" == */* ]] || _gh_die "could not parse owner/repo from origin URL"
   user="$(_gh_pick_account "$slug")" \
     || _gh_die "no authenticated gh account has access to $slug (try: gh auth login)"
+  _git_wire_credentials
   tok="$(_gh_token_for "$user")" || _gh_die "could not read token for account $user"
   GH_TOKEN="$tok" exec git "$@"
 }
