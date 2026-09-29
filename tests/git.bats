@@ -93,3 +93,88 @@ setup() {
   run grep -E 'exec[[:space:]]+env[[:space:]]+GH_TOKEN' "$REPO_ROOT/_gh/git.sh"
   [ "$status" -ne 0 ]
 }
+
+# --- _git_wire_credentials() -------------------------------------------------
+#
+# Ported from the retired _gh/auto-switch.sh's tests/auto-switch.bats
+# ("already-correct account: still wires local git credentials" and "wiring
+# is idempotent across repeated runs") — same repo-local-only git config
+# wiring, now owned by git.sh itself (T20260925-219021) instead of a
+# SessionStart hook. Sourced directly (BASH_SOURCE-guarded dispatch, same
+# convention as gh.sh), against a throwaway repo tree under
+# $BATS_TEST_TMPDIR — never the real ~/.gitconfig or this repo's own
+# .git/config.
+
+@test "_git_wire_credentials sets credential.helper and url.insteadOf" {
+  CWD_REPO="$BATS_TEST_TMPDIR/wire-repo"
+  mkdir -p "$CWD_REPO"
+  cd "$CWD_REPO"
+  git init -q .
+
+  source "$REPO_ROOT/_gh/git.sh"
+  run _git_wire_credentials
+  [ "$status" -eq 0 ]
+
+  # NOTE: intentionally not using bats' `run`/`$lines` here — bash's
+  # IFS-whitespace word splitting silently drops the leading EMPTY line
+  # (the credential.helper reset value) when building that array, so
+  # index-based assertions against it would pass for the wrong reason.
+  # Direct command substitution + sed preserves it.
+  helper="$(git config --local --get-all credential.helper)"
+  [ "$(printf '%s\n' "$helper" | sed -n '1p')" = "" ]
+  [ "$(printf '%s\n' "$helper" | sed -n '2p')" = "!gh auth git-credential" ]
+  [ "$(printf '%s\n' "$helper" | wc -l | tr -d ' ')" = "2" ]
+
+  urls="$(git config --local --get-all 'url.https://github.com/.insteadOf')"
+  [ "$(printf '%s\n' "$urls" | sed -n '1p')" = "git@github.com:" ]
+  [ "$(printf '%s\n' "$urls" | sed -n '2p')" = "ssh://git@github.com/" ]
+  [ "$(printf '%s\n' "$urls" | wc -l | tr -d ' ')" = "2" ]
+}
+
+@test "_git_wire_credentials is idempotent across repeated calls (no duplicate entries)" {
+  CWD_REPO="$BATS_TEST_TMPDIR/wire-repo-idempotent"
+  mkdir -p "$CWD_REPO"
+  cd "$CWD_REPO"
+  git init -q .
+
+  source "$REPO_ROOT/_gh/git.sh"
+  # Each call goes through `run` (not a bare call) — bats runs test bodies
+  # with errexit active, and _git_wire_credentials' own `git config
+  # --unset-all` on a not-yet-set key legitimately exits 5 (git's "key
+  # doesn't exist" code, gitconfig(1)) on a bare/first call; the function
+  # itself ignores that (2>/dev/null, no `set -e` of its own, explicit
+  # `return 0`) exactly like the original _auto_switch_wire_git_credentials
+  # did, but a bare call under bats' OWN errexit would abort the test right
+  # there instead of reaching that `return 0` — `run` suspends errexit for
+  # the call, same as it does for every other command in this test file.
+  run _git_wire_credentials
+  [ "$status" -eq 0 ]
+  run _git_wire_credentials
+  [ "$status" -eq 0 ]
+  run _git_wire_credentials
+  [ "$status" -eq 0 ]
+
+  helper="$(git config --local --get-all credential.helper)"
+  [ "$(printf '%s\n' "$helper" | wc -l | tr -d ' ')" = "2" ]
+  urls="$(git config --local --get-all 'url.https://github.com/.insteadOf')"
+  [ "$(printf '%s\n' "$urls" | wc -l | tr -d ' ')" = "2" ]
+}
+
+@test "main_git wires credentials unconditionally as the first thing it does" {
+  # Even a call that will go on to fail (no 'origin' remote, so
+  # _gh_repo_slug dies) must still have wired credentials first -- the
+  # design puts _git_wire_credentials at the very top of main_git(), before
+  # slug/account/token resolution, precisely so it runs unconditionally.
+  CWD_REPO="$BATS_TEST_TMPDIR/wire-repo-main"
+  mkdir -p "$CWD_REPO"
+  cd "$CWD_REPO"
+  git init -q .
+  # Deliberately no `git remote add origin` -- main_git() must _gh_die
+  # resolving the slug, but only AFTER wiring credentials.
+
+  run bash "$REPO_ROOT/_gh/git.sh" push
+  [ "$status" -ne 0 ]
+
+  helper="$(git config --local --get-all credential.helper)"
+  [ "$(printf '%s\n' "$helper" | wc -l | tr -d ' ')" = "2" ]
+}

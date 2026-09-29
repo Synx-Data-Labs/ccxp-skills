@@ -135,7 +135,7 @@ BRANCH="docs/top-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH"
 git add dev/TODO/queue.md
 git commit -m "docs(queue): move T<id> [T<id> ...] to the top"  # --before mode: "...to immediately before T<targetId>"
-git push -u origin "$BRANCH"
+bash ../_gh/git.sh push -u origin "$BRANCH"
 bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
 ```
 
