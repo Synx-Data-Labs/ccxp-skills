@@ -121,7 +121,7 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 
 ### 6. Create task if needed
 
-If 3.5 flagged an open task: invoke `/top <id>` here instead of the classification steps below (not additive; runs here, not in 3.5).
+If 3.5 flagged an open task: invoke `/top <id>` here instead of filing a task below — Infrastructure's retry still runs either way; only its create-task-on-retry-fail step is replaced.
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
@@ -173,7 +173,7 @@ If classification is **Infrastructure**:
 
 If the classification is **Confirmed** (step 3 verified it with a concrete command, not a guess):
 
-- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the verify command that confirmed it, false positives ruled out, the run URL, `task:` (step 6's ID, if filed), and today's date as "last confirmed."
+- No existing entry matches: append one to `dev/known-failures.md` (create it, with a short header, if it doesn't exist — repo-local, not part of this skill). Record: the grep-able signature, root cause, verify command that confirmed it, false positives ruled out, the run URL, `task:` (step 6's ID, if filed), and today as "last confirmed."
 - If an existing entry's signature matched but its stated cause turned out wrong or incomplete this time (e.g. a `403`'s cause drifting across reproductions): correct that entry in place — don't add a duplicate. Bump "last confirmed" and note the correction.
 - Entry existed, cause still holds: bump "last confirmed"; sync `task:` too — write it if step 6 just filed the entry's first task (e.g. Transient at 3 occurrences), update it if the old task closed and a replacement was filed, else leave it (step 6 ran `/top`).
 
