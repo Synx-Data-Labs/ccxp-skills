@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 4h
 source: lsc-pa conversation, 2026-09-25
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260925-219021: Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
