@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1h
 source: this conversation, 2026-09-28 — main branch CI check on `5d5e07f`
 related: T20260923-584914
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260928-111470: `ipm` skill fails the skill-score ratchet CI check, main is red
