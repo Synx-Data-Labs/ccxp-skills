@@ -94,8 +94,9 @@ scheduled: 2026-09-28
     exception (a GHA runner sparse-cloning just `_session/` has exactly
     one token, no account ambiguity — same rationale the task's own
     "Done looks like" already grants `actions/sync-tasks/`).
-  - `ccxp/scripts/epic-status.sh:144,217,261,276,339` (one more call site
-    than the Problem section above lists — line 339, `gh pr list`): all
+  - `ccxp/scripts/epic-status.sh:144,217,261,276,339` (the Problem
+    section above cites the same fifth site as line `337` — two lines of
+    drift since the task was filed, not a newly-discovered site): all
     five already use the sanctioned `_gh_pick_account`/`_gh_token_for`
     account-picking logic (sourced from `gh.sh`, per its own header
     comment at `epic-status.sh:17-32`) — they just can't call `gh.sh`'s
@@ -116,6 +117,25 @@ scheduled: 2026-09-28
     — a genuine bare, unwrapped `gh` call this task's Problem section
     didn't originally list. Not touched here (see Alternatives rejected)
     — filed as a follow-up instead.
+- **Bare `git push`/`pull` sites bypassing `_gh/git.sh` entirely** (caught
+  by independent review of this design, 2026-09-29 — verified by reading
+  each file): `stage/SKILL.md:78`, `top/SKILL.md:138`, `bottom/SKILL.md:63`,
+  `claim/SKILL.md:129`, `retro/SKILL.md:295` all still instruct a bare
+  `git push -u origin ...` — only `gcpr/SKILL.md:186` was ever updated to
+  `bash ../_gh/git.sh push -u origin <branch>`. This matters *specifically
+  because* of this task's own change: today, a bare `git push` in an
+  existing clone still works by accident (the repo-local
+  `credential.helper` wiring `auto-switch.sh`'s `SessionStart` hook left
+  behind persists in `.git/config` even after the hook stops running).
+  But a **fresh clone that never ran the hook** — exactly what `/drive`
+  Phase 1.5's ephemeral cross-repo target clones are — has no such
+  wiring, and never will, once the hook is deleted with nothing calling
+  these five skills' bare `git push` through `_gh/git.sh` (the only thing
+  left that wires it, per step 1 below). This reintroduces the same
+  wrong-account/no-credential-helper failure the hook's git-wiring half
+  was fixing, for exactly the callers most likely to hit it. Folded into
+  scope below rather than deferred — unlike the `_ipm` bare-`gh` case,
+  this one *is* made strictly worse by this task's own change.
 
 ## Solution
 
@@ -148,9 +168,34 @@ scheduled: 2026-09-28
    `GH_TOKEN="$tok" gh "$@"` only in the no-wrapper fallback (the CI-only
    exception).
 6. **Allowlist `ccxp/scripts/epic-status.sh`** explicitly in the new bats
-   check (step 7) — its five `GH_TOKEN="$tok" gh ...` call sites stay
+   check (step 8) — its five `GH_TOKEN="$tok" gh ...` call sites stay
    as-is; they're the documented cross-repo exception, not a violation.
-7. **New `tests/gh-wrapper-usage.bats`**: greps all `*.sh`/`*.py` under
+7. **Route `stage`/`top`/`bottom`/`claim`/`retro`'s bare `git push`/`pull`
+   through `_gh/git.sh`** — the same mechanical edit `gcpr/SKILL.md:186`
+   already got: any bare `git push`/`pull`/`fetch` against `origin` needs
+   GitHub auth regardless of what local-only command chain precedes it
+   (`git checkout`, `git merge --ff-only`, …), so every occurrence
+   rewrites, including the ones inside a `&&` chain:
+   - `stage/SKILL.md:78`, `top/SKILL.md:138`, `bottom/SKILL.md:63`,
+     `retro/SKILL.md:295`: `git push -u origin "$BRANCH"` →
+     `bash ../_gh/git.sh push -u origin "$BRANCH"`.
+   - `claim/SKILL.md:129`: `git push -u origin t<id>-claim` →
+     `bash ../_gh/git.sh push -u origin t<id>-claim`.
+   - `claim/SKILL.md:62,79` (solo-repo mode): the trailing `git push` in
+     `git checkout main && git merge --ff-only t<id>-<slug> && git push`
+     is the one network call in that chain — rewrite just that segment:
+     `... && bash ../_gh/git.sh push`. `git checkout`/`git merge
+     --ff-only` stay bare (local-only, no GitHub auth involved).
+   - `stage/SKILL.md:87`, `top/SKILL.md:145`, `bottom/SKILL.md:70`,
+     `claim/SKILL.md:52,112,137` (bare `git pull`): lower priority than
+     the pushes (a stale local branch behind `origin/main` is a read,
+     never leaves the account-mismatch failure mode a *push* does — worst
+     case is fetching over SSH with the wrong/no credential, which just
+     fails closed, not silently-wrong-account) but rewritten the same way
+     for consistency: `bash ../_gh/git.sh pull`.
+   No behavior change for an already-wired clone; restores the missing
+   safety net for a fresh one (see Context).
+8. **New `tests/gh-wrapper-usage.bats`**: greps all `*.sh`/`*.py` under
    the repo (excluding `tests/**`, `dev/JOURNAL/**`, `dev/TODO/**`,
    `_gh/gh.sh`, `_gh/git.sh` themselves) for a caller-side `GH_TOKEN=`
    assignment; the only permitted hits are the explicit allowlist
@@ -236,6 +281,13 @@ scheduled: 2026-09-28
       Problem-section bullet for it is struck through with a pointer to
       T20260925-427007 once that task lands (not blocking this one's
       merge — either task can land first).
+- [ ] `stage/SKILL.md`, `top/SKILL.md`, `bottom/SKILL.md`,
+      `claim/SKILL.md`, `retro/SKILL.md` route every bare `git
+      push`/`pull`/`fetch` against `origin` through `_gh/git.sh` (see
+      Solution step 7's per-file line list) — `git grep -n '^git push\|
+      && git push\|git checkout main && git pull' -- '*/SKILL.md'`
+      (excluding the local-only `git checkout`/`git merge --ff-only`
+      segments) comes back empty outside `_gh/git.sh` itself.
 - [ ] Follow-up task filed for `_ipm/ipm-iteration-drain-check.sh:224`'s
       bare `gh project item-list` call (see Alternatives rejected).
 - [ ] Full bats suite (`bats tests/*.bats _docs/*.bats`) is green.
