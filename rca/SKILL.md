@@ -65,11 +65,11 @@ If neither is available — you have a hypothesis ("probably a network glitch") 
 
 ### 3.5 Check for an existing open task
 
-Only when step 3's match is **Confirmed** (else fall to step 6):
+Only when step 3 matched a KB entry, Confirmed (else step 6). Determination only — `/top` runs in step 6, after the report/Slack:
 
 - No `task:` on the matched entry → step 6 as normal.
-- Resolves to a file in `dev/TODO/` → open. Skip step 6; invoke `/top <id>` every recurrence, as the Action item.
-- Doesn't resolve (closed/`dev/JOURNAL/`/another repo) → prior fix didn't hold. Step 6 as normal; note the recurrence.
+- Resolves in `dev/TODO/` → open. Note "T<id>: re-top" as the Action item.
+- Doesn't resolve (closed/`dev/JOURNAL/`/migrated) → step 6 as normal; note the recurrence.
 
 ### 4. Determine impact
 
@@ -110,7 +110,7 @@ Output a structured report:
 <What's blocked>
 
 ### Action
-- [ ] <specific action item — or, per 3.5, "T<id> re-topped">
+- [ ] <specific action item — or, per 3.5, "T<id>: re-top">
 ```
 
 ### 5.5 Post to Slack
@@ -121,7 +121,7 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 
 ### 6. Create task if needed
 
-Skip if 3.5 already re-topped.
+If 3.5 flagged an open task: invoke `/top <id>` here (after the report/Slack post, not in 3.5).
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
@@ -173,9 +173,9 @@ If classification is **Infrastructure**:
 
 If the classification is **Confirmed** (step 3 verified it with a concrete command, not a guess):
 
-- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the exact verify command that confirmed it just now, any false-positive alternatives ruled out along the way, the source (this run's URL), `task:` (step 6's task ID, if filed), and today's date as "last confirmed."
-- If an existing entry's signature matched but its stated cause turned out wrong or incomplete this time (the way a `403` can drift from "credential scope gap" to "storage quota" across repeated reproductions): correct that entry in place — don't add a duplicate. Bump "last confirmed" and note the correction.
-- Re-topped (3.5): bump "last confirmed" only. Its task closed, step 6 filed new: update `task:` instead.
+- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the verify command that confirmed it, false positives ruled out, the run URL, `task:` (step 6's ID, if filed), and today's date as "last confirmed."
+- If an existing entry's signature matched but its stated cause turned out wrong or incomplete this time (e.g. a `403`'s cause drifting across reproductions): correct that entry in place — don't add a duplicate. Bump "last confirmed" and note the correction.
+- Entry existed, cause still holds: bump "last confirmed"; sync `task:` too — write it if step 6 just filed the entry's first task (e.g. Transient at 3 occurrences), update it if the old task closed and a replacement was filed, else leave it (step 6 ran `/top`).
 
 Skip this step entirely if the classification is Unconfirmed — there's nothing confirmed yet to record.
 
@@ -186,4 +186,3 @@ Skip this step entirely if the classification is Unconfirmed — there's nothing
 - **Check if the failure is pre-existing.** Don't blame the latest commit if the same failure existed before.
 - **Check recent history.** A "transient" failure that happens every day is not transient.
 - **Don't skip failures.** Every main branch failure deserves investigation. Normalized failures become permanent.
-- **Confirmed recurrences re-top, not re-file** (step 3.5) — a known-red pipeline can't get buried.
