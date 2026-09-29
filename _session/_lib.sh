@@ -78,16 +78,18 @@ _session_token() {
 _session_gh() {
   # gh wrapper. Prefer the _gh/gh.sh sibling (present in any full clone of
   # this repo) — it has its own keyring-based account auto-detection that
-  # works fine for interactive sessions. Fall back to plain `gh` when the
-  # sibling isn't there (a GHA runner, or a caller that sparse-cloned just
-  # _session/): every GHA runner has exactly one token
-  # (GH_TOKEN/GITHUB_TOKEN) and no account ambiguity, so plain `gh` is
-  # correct there, not just a degraded fallback.
+  # works fine for interactive sessions and re-derives its own token
+  # internally (via _gh_pick_account/_gh_token_for), ignoring any inherited
+  # GH_TOKEN — so there is nothing for this caller to set (T20260925-219021).
+  # Fall back to plain `gh` when the sibling isn't there (a GHA runner, or a
+  # caller that sparse-cloned just _session/): every GHA runner has exactly
+  # one token (GH_TOKEN/GITHUB_TOKEN) and no account ambiguity, so plain
+  # `gh` under that token is correct there, not just a degraded fallback.
   local tok wrapper
   wrapper="$_SESSION_LIB_DIR/../_gh/gh.sh"
   tok="$(_session_token)"
   if [ -f "$wrapper" ]; then
-    if [ -n "$tok" ]; then GH_TOKEN="$tok" bash "$wrapper" "$@"; else bash "$wrapper" "$@"; fi
+    bash "$wrapper" "$@"
   else
     if [ -n "$tok" ]; then GH_TOKEN="$tok" gh "$@"; else gh "$@"; fi
   fi

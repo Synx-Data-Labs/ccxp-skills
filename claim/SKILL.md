@@ -59,7 +59,7 @@ git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
 # Land the claim on main immediately — durable, before any real work,
 # same intent as the PR auto-merging fast in peer mode. If this fails
 # because main moved, rebase the branch onto main first, then retry.
-git checkout main && git merge --ff-only t<id>-<slug> && git push
+git checkout main && git merge --ff-only t<id>-<slug> && bash ../_gh/git.sh push
 
 # ...then go BACK to the branch and stay there for the actual work, so
 # `branch:` in the statusline reads t<id>-<slug> for the task's duration,
@@ -76,7 +76,7 @@ plain `/claim release`):
 bash ../_session/task_claim.sh release T<id> <final-status>
 git add -A   # + any Closed-section / journal-move edits
 git commit -m "docs(tasks): close T<id>"   # or fold into the last work commit
-git checkout main && git merge --ff-only t<id>-<slug> && git push
+git checkout main && git merge --ff-only t<id>-<slug> && bash ../_gh/git.sh push
 git branch -d t<id>-<slug>   # clears the statusline's branch signal back to main
 ```
 
@@ -126,7 +126,7 @@ mode note there is kept in sync with this one.
    ```bash
    git add dev/TODO/*.md dev/PARKING/*.md 2>/dev/null
    git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
-   git push -u origin t<id>-claim
+   bash ../_gh/git.sh push -u origin t<id>-claim
    bash ../_gh/gh.sh pr create --title "docs(claim): claim T<id>" --body "..."
    ```
 

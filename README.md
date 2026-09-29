@@ -26,10 +26,9 @@ the shared libs (`_gh/`, `_session/`, `_taskid/`, `_ipm/`, `_docs/`,
 `_journal/`), so the `../_gh/gh.sh`-style references inside the skills
 resolve correctly under a plugin install.
 
-The `_gh/auto-switch.sh` `SessionStart` hook (see
-[Shared helpers](#shared-helpers-_name) below) wires itself automatically
-via `hooks/hooks.json` — nothing to do. `statusLine.command`
-(`statusline-setup/SKILL.md`) is the one exception: Claude Code has no
+`_gh/git.sh` (see [Shared helpers](#shared-helpers-_name) below) wires its
+own repo-local git credentials on every invocation — nothing to do.
+`statusLine.command` (`statusline-setup/SKILL.md`) is the one exception: Claude Code has no
 per-plugin statusline mechanism, so it still needs a one-time, manual
 `settings.json` entry pointing at wherever `/plugin install` put this
 plugin — and if that install used a marketplace (not the `directory`
@@ -281,33 +280,16 @@ stay invisible as skills). Current set:
   a bare `git push`** on a multi-account machine — same rationale as
   `gh.sh`: don't hardcode `GH_TOKEN="$(gh auth token --user <name>)"` by
   hand, let the wrapper auto-detect the write-capable account
-  (T20260911-140914).
-- `_gh/auto-switch.sh` — `SessionStart` hook complement to `gh.sh` above.
-  It covers what `gh.sh` can't: a **bare, unwrapped** `gh` call (a Bash-tool
-  invocation running `gh pr view` directly, a human typing `gh` in the
-  terminal, any tool that doesn't route through the wrapper) still uses
-  whichever account `gh auth switch` last left active — global, mutable,
-  shared across every shell and Claude Code session on the machine. This
-  script probes accounts the same way `gh.sh` does, but deliberately runs
-  `gh auth switch` — the opposite tradeoff from `gh.sh`'s no-global-mutation
-  design — because that's the only lever available to fix a bare `gh`
-  call. Exits 0 in every case (not a git repo, already-correct account, no
-  account can see the repo) — it never blocks session start.
-
-  Once an account is confirmed (already-active or reached by switching),
-  it also wires the current repo's **local** git config (`.git/config`
-  only — never `~/.gitconfig`) so a bare `git push`/`pull`/`fetch` stops
-  depending on the SSH agent's currently-loaded key: `credential.helper`
-  is pointed at `gh auth git-credential` (so it authenticates as whichever
-  account was just selected) and `url."https://github.com/".insteadOf` is
-  set for both `git@github.com:` and `ssh://git@github.com/`, forcing
-  GitHub-origin traffic onto HTTPS so the credential helper actually gets
-  consulted. `gh auth switch` and the SSH agent's active identity are
-  independent auth paths — fixing one says nothing about the other.
-
-  Wired automatically by the plugin via `hooks/hooks.json`
-  (`${CLAUDE_PLUGIN_ROOT}/_gh/auto-switch.sh`) — nothing to do.
-
+  (T20260911-140914). It also wires the repo's own **local** git config
+  (`.git/config` only — never `~/.gitconfig`) on every invocation:
+  `credential.helper` is pointed at `gh auth git-credential` and
+  `url."https://github.com/".insteadOf` is set for both
+  `git@github.com:` and `ssh://git@github.com/`, so a plain `git
+  push`/`pull`/`fetch` also authenticates over HTTPS as the right account
+  instead of depending on the SSH agent's currently-loaded key. This is
+  self-contained and idempotent — no hook, no prior session required — so
+  it works correctly even on a fresh clone that has never run anything
+  else in this repo (T20260925-219021).
 - `_session/` — on-main task claim lock, Project V2 board mirror,
   PR-ownership resolution, reclaim sweep for dead claims. See
   `_session/README.md`.

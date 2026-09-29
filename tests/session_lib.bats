@@ -26,16 +26,22 @@ STUB
   [ "$(_session_gh pr view 1)" = "stub-invoked: pr view 1" ]
 }
 
-@test "_session_gh passes a resolved token through to the wrapper as GH_TOKEN" {
+@test "_session_gh does NOT pass an outer GH_TOKEN through to the wrapper (T20260925-219021)" {
+  # gh.sh's own main() re-derives its token internally via
+  # _gh_pick_account/_gh_token_for and never reads an inherited GH_TOKEN, so
+  # the old outer `GH_TOKEN="$tok" bash "$wrapper" "$@"` was dead code — a
+  # real bug (an env var set for no effect), not a deliberate exception like
+  # the no-wrapper CI-only fallback below. Fixed to call the wrapper
+  # directly with no GH_TOKEN of its own.
   mkdir -p "$SCRATCH/_gh"
   cat > "$SCRATCH/_gh/gh.sh" <<'STUB'
 #!/usr/bin/env bash
-printf 'token=%s\n' "${GH_TOKEN:-}"
+printf 'token=%s\n' "${GH_TOKEN:-<unset>}"
 STUB
   chmod +x "$SCRATCH/_gh/gh.sh"
   _SESSION_LIB_DIR="$SCRATCH/_session"
   SESSION_TOKEN="secret-tok"
-  [ "$(_session_gh pr view 1)" = "token=secret-tok" ]
+  [ "$(_session_gh pr view 1)" = "token=<unset>" ]
 }
 
 @test "_session_gh falls back to plain gh when no _gh/gh.sh sibling exists (GHA runner shape)" {

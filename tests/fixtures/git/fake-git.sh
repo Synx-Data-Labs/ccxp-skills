@@ -14,11 +14,15 @@
 #
 #   REAL_GIT           absolute path to the real git binary — required,
 #                       delegated to for anything shaped like a plain
-#                       read/plumbing call (`remote get-url ...`, and
-#                       anything else this fixture doesn't recognize as the
-#                       final wrapped call, so it never silently swallows an
-#                       internal call this file's own author didn't
-#                       anticipate).
+#                       read/plumbing call (`remote get-url ...`, `config
+#                       ...` — the latter is main_git()'s own
+#                       _git_wire_credentials() call, T20260925-219021,
+#                       which needs to land in the throwaway repo's REAL
+#                       .git/config for the wrapped call's credential
+#                       helper to actually matter), and anything else this
+#                       fixture doesn't recognize as the final wrapped
+#                       call, so it never silently swallows an internal
+#                       call this file's own author didn't anticipate).
 #
 #   FAKE_GIT_CALLLOG    file the final wrapped call's argv (space-joined,
 #                       "$*") and its own GH_TOKEN env var are appended to,
@@ -30,7 +34,7 @@
 set -uo pipefail
 
 case "${1:-}" in
-  remote)
+  remote|config)
     [ -n "${REAL_GIT:-}" ] || { echo "fake-git.sh: REAL_GIT not set" >&2; exit 99; }
     exec "$REAL_GIT" "$@"
     ;;
