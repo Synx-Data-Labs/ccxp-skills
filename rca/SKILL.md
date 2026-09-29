@@ -63,6 +63,14 @@ bash ../_gh/ci-triage.sh <run-id>
 
 If neither is available — you have a hypothesis ("probably a network glitch") but no way to prove it from what's on hand — do **not** report it as classified. Mark it **Unconfirmed** (see report template, step 5) and, in step 6, file a task whose action item is adding the logging/instrumentation that would make the *next* occurrence provable instead of guessed. Never write "probably X" into a report as if it were a finding.
 
+### 3.5 Check for an existing open task
+
+Only when step 3's match is **Confirmed** (else fall to step 6):
+
+- No `task:` on the matched entry → step 6 as normal.
+- Resolves to a file in `dev/TODO/` → open. Skip step 6; invoke `/top <id>` every recurrence, as the Action item.
+- Doesn't resolve (closed/`dev/JOURNAL/`/another repo) → prior fix didn't hold. Step 6 as normal; note the recurrence.
+
 ### 4. Determine impact
 
 - Is `main` broken? (blocks all builds)
@@ -102,7 +110,7 @@ Output a structured report:
 <What's blocked>
 
 ### Action
-- [ ] <specific action item>
+- [ ] <specific action item — or, per 3.5, "T<id> re-topped">
 ```
 
 ### 5.5 Post to Slack
@@ -112,6 +120,8 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 **Plain text, not a markdown table** — even though the report template in step 5 above reads naturally as a set of labeled fields, render it as bold key-value lines / bullets, not a table, when posting to Slack. Slack does not render markdown tables; a table posted there shows up as a garbled pipe-delimited mess instead of the structured report it's meant to be.
 
 ### 6. Create task if needed
+
+Skip if 3.5 already re-topped.
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
@@ -163,8 +173,9 @@ If classification is **Infrastructure**:
 
 If the classification is **Confirmed** (step 3 verified it with a concrete command, not a guess):
 
-- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the exact verify command that confirmed it just now, any false-positive alternatives ruled out along the way, the source (this run's URL or the task ID), and today's date as "last confirmed."
+- If no existing `dev/known-failures.md` entry matches this signature: append one (create the file with a short header if it doesn't exist yet — it's a repo-local file, not part of this skill). Record: the grep-able error signature, the root cause, the exact verify command that confirmed it just now, any false-positive alternatives ruled out along the way, the source (this run's URL), `task:` (step 6's task ID, if filed), and today's date as "last confirmed."
 - If an existing entry's signature matched but its stated cause turned out wrong or incomplete this time (the way a `403` can drift from "credential scope gap" to "storage quota" across repeated reproductions): correct that entry in place — don't add a duplicate. Bump "last confirmed" and note the correction.
+- Re-topped (3.5): bump "last confirmed" only. Its task closed, step 6 filed new: update `task:` instead.
 
 Skip this step entirely if the classification is Unconfirmed — there's nothing confirmed yet to record.
 
@@ -175,3 +186,4 @@ Skip this step entirely if the classification is Unconfirmed — there's nothing
 - **Check if the failure is pre-existing.** Don't blame the latest commit if the same failure existed before.
 - **Check recent history.** A "transient" failure that happens every day is not transient.
 - **Don't skip failures.** Every main branch failure deserves investigation. Normalized failures become permanent.
+- **Confirmed recurrences re-top, not re-file** (step 3.5) — a known-red pipeline can't get buried.
