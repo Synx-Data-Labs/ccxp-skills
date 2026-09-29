@@ -9,6 +9,20 @@ scheduled: 2026-09-28
 
 # T20260925-219021: Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
 
+## TLDR
+
+- **Type**: chore
+- **Problem**: `_gh/auto-switch.sh`'s `SessionStart` hook globally mutates
+  `gh auth switch`, so concurrent sessions on different accounts keep
+  flipping each other's active account; some callers have worked around
+  this by hardcoding `GH_TOKEN=$(gh auth token --user <name>)` instead.
+- **Solution**: delete `auto-switch.sh` + its hook + its tests; move its
+  git-credential wiring into `_gh/git.sh` (self-contained, idempotent, no
+  hook needed); fix the one caller-side `GH_TOKEN=` site that's actually a
+  bug (`_session/_lib.sh`); explicitly allowlist the one that's a
+  documented, deliberate cross-repo exception (`ccxp/scripts/epic-status.sh`);
+  add a bats check so a new caller-side `GH_TOKEN=` doesn't creep back in.
+
 ## Problem
 
 - **Type**: chore
@@ -41,5 +55,187 @@ scheduled: 2026-09-28
   - Only `gh.sh`/`git.sh` set `GH_TOKEN` internally; CI-only paths
     (`actions/sync-tasks/`, keyring-less) are an explicit allowlisted
     exception
-  - A lint or bats check fails on a new bare `gh` call or a caller-side
-    `GH_TOKEN=` in skill/script sources
+  - A lint or bats check fails on a new caller-side `GH_TOKEN=` in
+    skill/script sources outside the allowlist
+
+## Context
+
+- `_gh/auto-switch.sh` does two things, verified by reading it in full:
+  - Runs `gh auth switch` globally on `SessionStart` (the harmful global
+    mutation this task retires).
+  - Once an account is confirmed, wires the **repo-local** `.git/config`
+    (`credential.helper` → `gh auth git-credential`, plus
+    `url."https://github.com/".insteadOf` for both `git@github.com:` and
+    `ssh://git@github.com/`) so a bare `git push`/`pull`/`fetch` — and
+    `_gh/git.sh`, which relies on this wiring — authenticate over HTTPS
+    instead of the SSH agent (`dev/JOURNAL/2026-09-16-T20260916-873841-auto-switch-git-credentials.md`).
+  - **This second piece has no other owner today.** `_gh/git.sh:20-30`
+    (`main_git()`) just does `GH_TOKEN="$tok" exec git "$@"` — it depends
+    on the credential-helper wiring already being in place; it doesn't set
+    it up itself. Retiring `auto-switch.sh` outright, with no
+    replacement, would break `git.sh` (and any bare push) on a **fresh
+    clone that never ran the `SessionStart` hook** — this task's own
+    "Done looks like" doesn't mention this dependency, so it's easy to
+    miss.
+- `README.md`'s own citations of "the old pattern" are partly stale
+  already: `README.md:275-282` (the `gh.sh`/`git.sh` bullets) and
+  `gcpr/SKILL.md:182` (`Route through _gh/git.sh`) already document the
+  **correct** pattern — no change needed there. Only the `auto-switch.sh`
+  bullet itself (`README.md:285-308`) and the install-time note
+  (`README.md:29-32`) describe the hook being retired.
+- Caller-side `GH_TOKEN=` sites, checked individually:
+  - `_session/_lib.sh:88-91` (`_session_gh()`): when the `_gh/gh.sh`
+    sibling exists, it runs `GH_TOKEN="$tok" bash "$wrapper" "$@"` — but
+    `gh.sh`'s own `main()` re-derives its token internally via
+    `_gh_pick_account`/`_gh_token_for` and never reads an inherited
+    `GH_TOKEN`, so this outer `GH_TOKEN="$tok"` is dead — a real bug, not
+    a deliberate exception. The no-wrapper fallback branch (`bash "$wrapper"`
+    absent → bare `GH_TOKEN="$tok" gh "$@"`) is a legitimate CI-only
+    exception (a GHA runner sparse-cloning just `_session/` has exactly
+    one token, no account ambiguity — same rationale the task's own
+    "Done looks like" already grants `actions/sync-tasks/`).
+  - `ccxp/scripts/epic-status.sh:144,217,261,276,339` (one more call site
+    than the Problem section above lists — line 339, `gh pr list`): all
+    five already use the sanctioned `_gh_pick_account`/`_gh_token_for`
+    account-picking logic (sourced from `gh.sh`, per its own header
+    comment at `epic-status.sh:17-32`) — they just can't call `gh.sh`'s
+    `main()` CLI form, because `main()` always derives its target slug
+    from `$PWD`'s `origin` (`_gh/gh.sh:94-101`, no `--repo` override) and
+    this script does cross-repo reads against `$ROADMAP_TARGET_REPO`, a
+    **different** repo than `$PWD`. This is a documented, deliberate
+    exception — not a bypass of the account-picking mechanism, only of
+    its CLI wrapper shape.
+  - `_taskid/url.sh:43` — **out of scope here.** T20260925-427007 (already
+    filed, `related:` on this task) owns the dead
+    `~/.claude/skills/_gh/gh.sh` legacy-path lookup at this exact site
+    (plus three others); its own file says "this task is just the
+    dead-path lookup ... so it can ship on its own. Tick that bullet
+    there when this one lands." Duplicating it here would just create
+    two PRs touching the same lines.
+  - `_ipm/ipm-iteration-drain-check.sh:224` (`gh project item-list ...`)
+    — a genuine bare, unwrapped `gh` call this task's Problem section
+    didn't originally list. Not touched here (see Alternatives rejected)
+    — filed as a follow-up instead.
+
+## Solution
+
+1. **Move credential wiring into `_gh/git.sh`, not a hook.** Port
+   `_auto_switch_wire_git_credentials()` (verbatim logic) into
+   `_gh/git.sh` as `_git_wire_credentials()`, called at the top of
+   `main_git()` before the `git "$@"` exec. It's cheap (a handful of
+   `git config --local` calls) and already idempotent
+   (unset-all-before-add), so running it on every `git.sh` invocation
+   instead of once per `SessionStart` costs nothing measurable and needs
+   no hook at all — `git.sh` becomes fully self-contained.
+2. **Delete the global-mutation half outright** — nothing replaces `gh
+   auth switch`ing for a genuinely bare, unwrapped `gh` call (a human
+   typing `gh` in a terminal, an ad hoc Bash-tool invocation). That
+   residual risk is accepted: the fix is removing the *reason* code needs
+   to call bare `gh` at all (route everything through the wrapper),
+   not re-inventing a global-mutation safety net whose own side effect
+   (cross-session account flipping) is what motivated this task.
+3. **Delete**: `_gh/auto-switch.sh`, its `hooks/hooks.json` entry (the
+   file becomes empty — delete the whole file, nothing else references
+   it), `tests/auto-switch.bats`, `README.md:285-308` (the bullet),
+   `README.md:29-32` (rewritten to drop the "wires itself automatically"
+   note — nothing to wire anymore).
+4. **Update `README.md`'s `git.sh` bullet** (`README.md:279-284`) to
+   describe the credential wiring as `git.sh`'s own responsibility now,
+   not something a separate hook did for it.
+5. **Fix `_session/_lib.sh:88-91`**: drop the dead outer
+   `GH_TOKEN="$tok"` on the wrapper-present branch (`gh.sh` ignores it
+   regardless) — call `bash "$wrapper" "$@"` directly. Keep
+   `GH_TOKEN="$tok" gh "$@"` only in the no-wrapper fallback (the CI-only
+   exception).
+6. **Allowlist `ccxp/scripts/epic-status.sh`** explicitly in the new bats
+   check (step 7) — its five `GH_TOKEN="$tok" gh ...` call sites stay
+   as-is; they're the documented cross-repo exception, not a violation.
+7. **New `tests/gh-wrapper-usage.bats`**: greps all `*.sh`/`*.py` under
+   the repo (excluding `tests/**`, `dev/JOURNAL/**`, `dev/TODO/**`,
+   `_gh/gh.sh`, `_gh/git.sh` themselves) for a caller-side `GH_TOKEN=`
+   assignment; the only permitted hits are the explicit allowlist
+   (`ccxp/scripts/epic-status.sh`, `_session/_lib.sh`'s no-wrapper
+   fallback line, `actions/sync-tasks/sync.py`). Anything else fails the
+   test with the offending `file:line`.
+   - **Scope note**: this checks the caller-side-`GH_TOKEN=` half of the
+     Problem statement only, not "any bare `gh` call" — see Alternatives
+     rejected for why a general bare-`gh`-call detector is out of scope.
+
+**Alternatives rejected**:
+
+- *Keep `auto-switch.sh`'s global-mutation half, drop only the
+  credential-wiring half* — rejected: the global mutation is the actual
+  harm described in the Problem section (concurrent sessions flipping
+  each other's account); keeping it and dropping the harmless
+  credential-wiring half would be backwards.
+- *Extend `_gh/gh.sh main()` with a `--repo <slug>` override so
+  `epic-status.sh` could route through the CLI wrapper fully* —
+  rejected as disproportionate scope for a 4h chore: `epic-status.sh`
+  already uses the sanctioned account-picking primitives, just not the
+  CLI entrypoint; allowlisting it is a one-line test change vs. a new
+  `gh.sh` command-line surface + its own tests.
+- *Write a general "no bare `gh` call outside the wrapper" static
+  checker* — rejected: reliably distinguishing a real invocation
+  (`gh pr view`) from a comment/doc-string mentioning `gh` (this repo's
+  `SKILL.md`/README files intentionally instruct "use `_gh/gh.sh`" in
+  prose and code-fenced examples) needs either an AST-level shell parser
+  or a hand-tuned regex with a growing exception list — disproportionate
+  for what this task can verify by hand today (one real hit,
+  `_ipm/ipm-iteration-drain-check.sh:224`, handled below). The
+  `GH_TOKEN=`-assignment check (step 7) is unambiguous and covers the
+  Problem section's actual named sites.
+- *Fix `_ipm/ipm-iteration-drain-check.sh:224`'s bare `gh project
+  item-list` call inline here* — rejected: it wasn't in this task's
+  original Problem section, isn't touched by anything this task changes,
+  and fixing it would mean auditing the *rest* of the repo for similar
+  stray bare-`gh` sites to be thorough — real work, but a distinct scope
+  from "retire `auto-switch.sh`". Filed as `T20260929-<new-id>` (soft,
+  non-blocking — a workaround exists: nothing this task does makes that
+  call *worse*, since `auto-switch.sh` was going to flip the wrong
+  account under it just as easily as it already might).
+
+## Test plan
+
+- [ ] `bats tests/gh-wrapper-usage.bats` — new file, asserts the
+      allowlist-scoped `GH_TOKEN=` check (clean repo passes; a fixture
+      with a new offending assignment fails with the right `file:line`).
+- [ ] `bats _gh/*.bats` (or wherever `git.sh`/`gh.sh` tests live) — new
+      case: `_git_wire_credentials` sets `credential.helper` +
+      `url.insteadOf` idempotently (ported from the deleted
+      `auto-switch.bats` cases, adapted to `git.sh`'s call shape).
+- [ ] `bats tests/*.bats _docs/*.bats` (full suite) passes with
+      `auto-switch.bats` gone and no new failures.
+- [ ] Manual: on a scratch clone with no prior `SessionStart` hook run
+      (fresh `.git/config`, no `credential.helper`), `bash _gh/git.sh
+      push -u origin <throwaway-branch>` succeeds — proves `git.sh` no
+      longer depends on the retired hook having run first.
+- [ ] `git grep -n 'GH_TOKEN='` across the repo (excluding `_gh/gh.sh`,
+      `_gh/git.sh`, `tests/**`) turns up only the three allowlisted
+      sites.
+
+## Done criteria
+
+- [ ] `_gh/auto-switch.sh`, its `hooks/hooks.json` entry, and
+      `tests/auto-switch.bats` are deleted — `git status` / `ls hooks/`
+      confirm.
+- [ ] `_gh/git.sh` wires repo-local git credentials itself
+      (`_git_wire_credentials()`, called from `main_git()`) — see the new
+      bats case in Test plan.
+- [ ] `_session/_lib.sh:88-91`'s dead outer `GH_TOKEN="$tok"` (wrapper-
+      present branch) is gone; the no-wrapper CI fallback keeps it.
+- [ ] `ccxp/scripts/epic-status.sh`'s five `GH_TOKEN=` sites are
+      unchanged and explicitly allowlisted in
+      `tests/gh-wrapper-usage.bats`.
+- [ ] `tests/gh-wrapper-usage.bats` exists and fails on an injected new
+      offending `GH_TOKEN=` (verified during implementation, not just
+      asserted).
+- [ ] `README.md:29-32` (install-time note) and `README.md:285-308`
+      (the `auto-switch.sh` bullet) are updated/removed; the
+      `git.sh` bullet documents the credential wiring as its own.
+- [ ] `_taskid/url.sh:43` is left untouched here; this task's own
+      Problem-section bullet for it is struck through with a pointer to
+      T20260925-427007 once that task lands (not blocking this one's
+      merge — either task can land first).
+- [ ] Follow-up task filed for `_ipm/ipm-iteration-drain-check.sh:224`'s
+      bare `gh project item-list` call (see Alternatives rejected).
+- [ ] Full bats suite (`bats tests/*.bats _docs/*.bats`) is green.
