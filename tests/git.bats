@@ -160,21 +160,43 @@ setup() {
   [ "$(printf '%s\n' "$urls" | wc -l | tr -d ' ')" = "2" ]
 }
 
-@test "main_git wires credentials unconditionally as the first thing it does" {
-  # Even a call that will go on to fail (no 'origin' remote, so
-  # _gh_repo_slug dies) must still have wired credentials first -- the
-  # design puts _git_wire_credentials at the very top of main_git(), before
-  # slug/account/token resolution, precisely so it runs unconditionally.
-  CWD_REPO="$BATS_TEST_TMPDIR/wire-repo-main"
-  mkdir -p "$CWD_REPO"
-  cd "$CWD_REPO"
-  git init -q .
-  # Deliberately no `git remote add origin` -- main_git() must _gh_die
-  # resolving the slug, but only AFTER wiring credentials.
+@test "main_git wires credentials once an account is confirmed to reach the repo" {
+  # Gated the same way the retired auto-switch.sh's own SessionStart hook
+  # was: wiring only happens after _gh_pick_account confirms some account
+  # can actually see this repo, not unconditionally -- see the next test
+  # for the "no account can see it" counterpart.
+  PATH="$FAKEBIN:$PATH" \
+    REAL_GIT="$REAL_GIT" \
+    FAKE_GH_ACCOUNTS="alice" \
+    FAKE_GH_PERM="alice-token:true" \
+    FAKE_GIT_CALLLOG="$CALLLOG" \
+    run bash "$REPO_ROOT/_gh/git.sh" push -u origin some-branch
 
-  run bash "$REPO_ROOT/_gh/git.sh" push
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 0 ]
 
   helper="$(git config --local --get-all credential.helper)"
   [ "$(printf '%s\n' "$helper" | wc -l | tr -d ' ')" = "2" ]
+  urls="$(git config --local --get-all 'url.https://github.com/.insteadOf')"
+  [ "$(printf '%s\n' "$urls" | wc -l | tr -d ' ')" = "2" ]
+}
+
+@test "main_git leaves git config untouched when no account can see the repo" {
+  # Mirrors the retired _gh/auto-switch.sh's own "no account can see the
+  # repo: git config left untouched" test (tests/auto-switch.bats) --
+  # wiring credentials here would only risk breaking a repo authenticating
+  # some OTHER way (e.g. an SSH deploy key unrelated to any `gh auth`
+  # account) for no benefit, since the push fails either way.
+  PATH="$FAKEBIN:$PATH" \
+    REAL_GIT="$REAL_GIT" \
+    FAKE_GH_ACCOUNTS="alice" \
+    FAKE_GH_PERM="" \
+    FAKE_GIT_CALLLOG="$CALLLOG" \
+    run bash "$REPO_ROOT/_gh/git.sh" push -u origin some-branch
+
+  [ "$status" -ne 0 ]
+
+  run git config --local --get-all credential.helper
+  [ "$status" -ne 0 ]
+  run git config --local --get-all 'url.https://github.com/.insteadOf'
+  [ "$status" -ne 0 ]
 }
