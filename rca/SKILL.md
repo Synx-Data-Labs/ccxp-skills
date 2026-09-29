@@ -65,9 +65,9 @@ If neither is available — you have a hypothesis ("probably a network glitch") 
 
 ### 3.5 Check for an existing open task
 
-Only when step 3 matched a KB entry, Confirmed (else step 6). Determination only — `/top` runs in step 6, after the report/Slack:
+Only when step 3 matched a KB entry, Confirmed (else step 6). Determination only — `/top` runs in step 6:
 
-- No `task:` on the matched entry → step 6 as normal.
+- No `task:` on the entry → step 6 as normal.
 - Resolves in `dev/TODO/` → open. Note "T<id>: re-top" as the Action item.
 - Doesn't resolve (closed/`dev/JOURNAL/`/migrated) → step 6 as normal; note the recurrence.
 
@@ -121,7 +121,7 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 
 ### 6. Create task if needed
 
-If 3.5 flagged an open task: invoke `/top <id>` here (after the report/Slack post, not in 3.5).
+If 3.5 flagged an open task: invoke `/top <id>` here instead of the classification steps below (not additive; runs here, not in 3.5).
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same Tier 3 auto-promote + `scheduled:` stamp as the paths below.
 
