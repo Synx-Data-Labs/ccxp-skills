@@ -186,7 +186,7 @@ scheduled: 2026-09-28
    fix. Verified against the current tree with
    `git grep -nE '(^[[:space:]]*|&& )git push' -- stage/SKILL.md
    top/SKILL.md bottom/SKILL.md claim/SKILL.md retro/SKILL.md
-   drive/SKILL.md` — exactly seven hits, all real (an earlier version of
+   drive/SKILL.md` — exactly eight hits, all real (an earlier version of
    this check used a `^git push`-anchored, `*/SKILL.md`-repo-wide
    pattern that both false-positived on `address-pr/SKILL.md`'s prose
    mention of "push" and false-negatived on two indented sites; fixed by
@@ -319,11 +319,11 @@ scheduled: 2026-09-28
       `git grep -nE '(^[[:space:]]*|&& )git push' -- stage/SKILL.md
       top/SKILL.md bottom/SKILL.md claim/SKILL.md retro/SKILL.md
       drive/SKILL.md` (verified against the pre-implementation tree to
-      return exactly the 7 real sites Solution step 7 lists — an
+      return exactly the 8 real sites Solution step 7 lists — an
       earlier, broader draft of this exact check both false-positived on
       `address-pr/SKILL.md` and false-negatived on two indented sites;
       fixed by a second review pass, 2026-09-29) comes back empty once
-      all 7 are rewritten.
+      all 8 are rewritten.
 - [ ] Follow-up task filed for `_ipm/ipm-iteration-drain-check.sh:224`'s
       bare `gh project item-list` call (see Alternatives rejected).
 - [ ] Full bats suite (`bats tests/*.bats _docs/*.bats`) is green.
