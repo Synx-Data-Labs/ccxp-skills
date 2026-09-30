@@ -62,7 +62,7 @@ scheduled: 2026-09-28
   dependency introduced by also using it to parse the state file.
 - ISO-8601 → epoch conversion needs a portable helper (GNU `date -d` vs
   BSD `date -j -f`) — `ccxp/scripts/epic-status.sh`'s `_epic_iso_to_epoch`
-  (lines ~107-113) already solves exactly this; port the same two-line
+  (lines 110-116) already solves exactly this; port the same two-line
   fallback shape rather than inventing a new one.
 
 ## Solution
@@ -75,22 +75,38 @@ scheduled: 2026-09-28
      "$state_file" ] || return 0` (no file → silently nothing, matching
      every other helper's "never fail the prompt" convention already
      documented in this file's header comment).
-   - Read `status` via `jq -r '.status // ""' "$state_file" 2>/dev/null`;
-     anything other than exactly `running` → return 0 (covers `stopped`,
-     malformed JSON where `jq` errors and prints nothing, and a missing
-     field).
-   - Read `started_at`, `end_time`, `stuck_count`, `cycle_count` the same
-     defensive way (`// ""`/`// 0`, `2>/dev/null`).
+   - Read all five fields (`status`, `started_at`, `end_time`,
+     `stuck_count`, `cycle_count`) in **one** `jq` call producing a
+     single tab-separated line (`jq -r '[.status, .started_at,
+     .end_time, .stuck_count, .cycle_count] | map(. // "") | @tsv'
+     "$state_file" 2>/dev/null`), then `IFS=$'\t' read -r status
+     started_at end_time stuck_count cycle_count <<<"$line"` — a single
+     read instead of five separate `jq` invocations against the same
+     file closes a TOCTOU gap (`/autopilot` could rewrite the file
+     between two separate reads, mixing an old field with a new one)
+     and is cheaper per statusline render (caught by independent design
+     review, 2026-09-29).
+   - `status` anything other than exactly `running` → return 0 (covers
+     `stopped`, malformed JSON where `jq` errors and prints nothing, and
+     a missing field).
    - Convert `started_at`/`end_time` via `sl-iso-to-epoch`; if either is
      empty (unparsable), return 0 — a malformed timestamp shouldn't
      render a garbled segment.
-   - `elapsed_hr=$(( ( $(date +%s) - started_epoch ) ))`, converted to
-     hours and rounded with `printf '%.0f'` (same rounding style
-     `ctx_part` already uses at line 108) — `awk` for the division
-     (`awk -v s="$secs" 'BEGIN{printf "%.0f", s/3600}'`) rather than bash
-     integer arithmetic, so e.g. 90 minutes rounds to `2`, not truncates
-     to `1`.
-   - `requested_hr` computed the same way from `end_epoch - started_epoch`.
+   - **Guard `end_epoch > started_epoch`** — if not (a corrupted state
+     file with a backwards timestamp pair), return 0 rather than render
+     a negative `requested_hr` like `ap: 1/-2hr` (caught by independent
+     design review, 2026-09-29).
+   - `elapsed_secs=$(( $(date +%s) - started_epoch ))`,
+     `requested_secs=$(( end_epoch - started_epoch ))` — each converted
+     to hours and rounded with `awk` (`awk -v s="$elapsed_secs"
+     'BEGIN{printf "%.0f", s/3600}'`, same for `requested_secs`), not
+     bash integer division, matching the rounding-not-truncating
+     precedent `ctx_part` already sets at line 108 (fixed a variable-
+     naming inconsistency in an earlier draft that assigned seconds to a
+     var named `elapsed_hr` then referenced an undefined `$secs` in the
+     `awk` call — caught by independent design review, 2026-09-29). One
+     `awk` invocation per value, so e.g. 90 minutes rounds to `2`, not
+     truncated to `1`.
    - `printf 'ap: %s/%shr %s/%s' "$elapsed_hr" "$requested_hr"
      "$stuck_count" "$cycle_count"`.
 3. **Wire into `statusline-command()`** (line ~106): add `local
@@ -126,10 +142,19 @@ scheduled: 2026-09-28
         `dev/.autopilot-state.json` doesn't exist.
   - [ ] `sl-autopilot-part` prints nothing when `status` is `"stopped"`.
   - [ ] `sl-autopilot-part` prints `ap: <N>/<M>hr <stuck>/<cycle>` for a
-        fixture `status: "running"` file with known `started_at`/`end_time`
-        (computed against a controllable `now` — see below)/`stuck_count`/
-        `cycle_count`.
+        fixture `status: "running"` file. No time-mocking seam — existing
+        `statusline_setup.bats` cases are all clock-independent, and this
+        adds none: write `started_at`/`end_time` as offsets from the real
+        wall-clock `date` at test-run time (e.g. `started_at` = now minus
+        90 real minutes via `date -u -v-90M` / `date -u -d '90 minutes
+        ago'`, `end_time` = now plus a known delta), then assert the
+        rounded hour values the design's own rounding rule predicts for
+        those offsets (clarified after independent design review flagged
+        this as unspecified, 2026-09-29).
   - [ ] `sl-autopilot-part` prints nothing when the JSON is malformed.
+  - [ ] `sl-autopilot-part` prints nothing when `end_time` is before
+        `started_at` (corrupted state file) — added after independent
+        design review, 2026-09-29.
   - [ ] `statusline-command` end-to-end: with a running-state fixture,
         output starts with `ap: ...` before `ctx: ...`; without one,
         output is unchanged from today (regression guard against the
@@ -139,8 +164,8 @@ scheduled: 2026-09-28
 ## Done criteria
 
 - [ ] `sl-iso-to-epoch` round-trips a known timestamp — `tests/statusline_setup.bats`.
-- [ ] `sl-autopilot-part` covers the four cases (absent file / stopped /
-      running / malformed) — `tests/statusline_setup.bats`.
+- [ ] `sl-autopilot-part` covers all five cases (absent file / stopped /
+      running / malformed / backwards timestamps) — `tests/statusline_setup.bats`.
 - [ ] `statusline-command()` (`statusline-setup/scripts/statusline-command.sh:120`)
       wires `ap_part` first into `sl-join` — end-to-end case in
       `tests/statusline_setup.bats`.
