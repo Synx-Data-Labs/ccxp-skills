@@ -188,8 +188,17 @@ _lint_docs_run_tool() {
   local out rc
   out="$("${cmd[@]}" "$@" 2>&1)" && rc=0 || rc=$?
   printf '%s\n' "$out"
-  if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
-    return "$rc"
+  if [ "$rc" -eq 0 ]; then
+    return 0
+  fi
+  # rc==1 is ambiguous: markdownlint-cli2 reports real violations this way,
+  # but npm/npx itself also exits 1 on its own errors (e.g. a transient
+  # registry fetch failure) — indistinguishable by exit code alone
+  # (T20260930-151922). Only trust it when the tool's own report marker is
+  # actually present; otherwise treat it the same as "couldn't run" (rc==2,
+  # a config error) and fall back to the vendored floor.
+  if [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qE '^Summary: [0-9]+ error'; then
+    return 1
   fi
   return 3
 }

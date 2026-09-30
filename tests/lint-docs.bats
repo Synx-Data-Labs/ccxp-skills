@@ -83,6 +83,29 @@ EOF
   [ "$output" = "1" ]
 }
 
+@test "lint_docs_run falls back to vendored when the runner exits 1 with an npm-error shape, not a real Summary" {
+  # T20260930-151922: npm/npx itself exits 1 on its own errors (e.g. a
+  # transient registry fetch failure), identical to markdownlint-cli2's own
+  # "violations found" exit code. Without checking for the tool's own
+  # `Summary: N error(s)` marker, _lint_docs_run_tool trusts rc==1 as
+  # authoritative and never falls back — misreporting a runner failure as a
+  # lint violation on a file we know is clean.
+  cp "$REPO_ROOT/tests/fixtures/lint-docs/fake-markdownlint-cli2-npm-error.sh" "$FAKEBIN/markdownlint-cli2"
+  chmod +x "$FAKEBIN/markdownlint-cli2"
+
+  # shellcheck source=../_docs/lint-docs.sh
+  source "$REPO_ROOT/_docs/lint-docs.sh"
+
+  printf '# clean\n\nNothing wrong with this file.\n' > dev/TODO/clean.md
+
+  PATH="$FAKEBIN:$PATH" run lint_docs_run dev/TODO/clean.md
+
+  # The fake exits 1 with no Summary: line — that must NOT be trusted as
+  # "violations found." Falling back to the vendored MD032 floor over a
+  # clean file means exit 0, not the fake's raw exit 1.
+  [ "$status" -eq 0 ]
+}
+
 @test "lint_docs_run still detects a real violation in the given explicit path" {
   # Force the vendored floor — deterministic, no network/config dependency;
   # the real-runner path is exercised by the test above.
