@@ -1,8 +1,8 @@
 ---
-status: Design
+status: In Progress
 estimation: 2h
 source: this conversation, 2026-09-28 — live incident while running /land
-related: T20260910-919422, T20260922-383156, T20260922-253015
+related: T20260910-919422, T20260922-383156, T20260922-253015, T20260929-128287
 claimed_by: cc1-50ac6891:bf6b098f35f88e3b
 claimed_role: interactive
 scheduled: 2026-09-28
@@ -78,18 +78,19 @@ Remove the whole `--fix` code path instead of patching the next variant:
    signature accordingly. Update the header usage/comment block to match
    (drop `--fix` and the no-args-default-scope description).
 2. **Update every caller that passes `--fix`** — `git grep -n "lint-docs.sh --fix"`
-   finds six, not the two the original problem statement named (the
-   **caller-list gap**, resolved here — see decision below):
+   over `*.md` finds six, not the two the original problem statement named
+   (the **caller-list gap**, resolved here — see decision below); a second,
+   **unrestricted** sweep (`git grep` over `*.md` **and** `*.sh` — the design
+   phase's own `*.md`-only grep repeated the same narrowing mistake it was
+   meant to fix) turns up two more in `ccxp/scripts/`:
    - `gcpr/SKILL.md:67` — already explicit-path (`$CHANGED_MD`, guarded
      non-empty) — drop `--fix` only.
    - `new-task/SKILL.md:95` — already explicit-path (`dev/TODO/T<id>-<slug>.md`) —
      drop `--fix` only.
    - `incept/SKILL.md:119` — already explicit-path (`dev/TODO/T<id>-*.md`) —
-     drop `--fix` only. (Missed by the original task filing; found via the
-     same `git grep` sweep used for the ccxp/retro gap below — same
-     caller-list-completeness gap, not a separate one.)
+     drop `--fix` only.
    - `drive/SKILL.md:552` — already explicit-path (the journal-move target
-     file) — drop `--fix` only. (Same gap as `incept` above.)
+     file) — drop `--fix` only.
    - `ccxp/SKILL.md:422` — **bare, no path** (`--fix || true`). Decision:
      replace with the same `$CHANGED_MD`-derived scoped call `gcpr` already
      uses (`git status --porcelain` → changed `*.md` paths), guarded
@@ -101,6 +102,17 @@ Remove the whole `--fix` code path instead of patching the next variant:
      journal-move destinations from the batch sweep just above). Decision:
      pass `${swept[@]}` explicitly instead of a fresh `$CHANGED_MD` re-derive
      — the caller already knows precisely which files it's about to commit.
+   - `ccxp/scripts/reclaim-sweep-pr.sh:48` — **bare, no path** (`--fix ||
+     true`), found only by the unrestricted sweep. Its own following line
+     (`git add dev/TODO/*.md`) shows the actual commit scope is whatever
+     `reclaim_sweep.sh --apply` touched in `dev/TODO/`. Decision: same
+     `$CHANGED_MD`-style derivation as `ccxp/SKILL.md`, scoped to
+     `git status --porcelain -- dev/TODO/*.md`.
+   - `ccxp/scripts/update-roadmap.sh:133` — **bare, no path**, found only by
+     the unrestricted sweep. Its own following line (`git add
+     dev/ROADMAP.md`) names the one file this ever edits. Decision: pass
+     `dev/ROADMAP.md` explicitly — no derivation needed, the caller already
+     knows the single file.
 3. **Alternatives considered and rejected**:
    - *Keep `--fix` but make the empty-path branch error too* (i.e. patch only
      the newly-discovered variant) — rejected: this is the third round of
@@ -115,32 +127,59 @@ Remove the whole `--fix` code path instead of patching the next variant:
 
 ## Test plan
 
-- [ ] `_docs/lint-docs.bats`: `bash _docs/lint-docs.sh` (zero args) exits 2
-  with a usage message — new case.
-- [ ] `_docs/lint-docs.bats`: existing MD032/runner-resolution/vendored-fallback
+- [x] `_docs/lint-docs.bats`: `bash _docs/lint-docs.sh` (zero args) exits 2
+  with a usage message — new case (2 new `@test` blocks added).
+- [x] `_docs/lint-docs.bats`: existing MD032/runner-resolution/vendored-fallback
   cases stay green (they don't touch `--fix`).
-- [ ] `tests/lint-docs.bats`: drop all `--fix`-mode cases (12 assertions,
-  8 `@test` blocks — the whole file was written to test `--fix`'s
-  `--no-globs` + safe-fix behavior, both removed).
-- [ ] `bats tests/` and `bats _docs/*.bats` green locally before pushing.
-- [ ] CI `bats` check green on the implementation PR.
+- [x] `tests/lint-docs.bats`: dropped all 8 `--fix`-mode `@test` blocks (12
+  assertions) — the whole file was written to test `--fix`'s `--no-globs` +
+  safe-fix behavior, both removed; replaced with 3 cases covering the
+  surviving check-only `--no-globs` scoping guarantee (still meaningful:
+  paths are mandatory now, so it always applies).
+- [x] `bats tests/lint-docs.bats` and `bats _docs/lint-docs.bats` green locally.
+- [ ] CI `bats` check green on the implementation PR (post-PR item).
 
 ## Done criteria
 
-- [ ] `_docs/lint-docs.sh` has no `--fix` code path and no default-scope
+- [x] `_docs/lint-docs.sh` has no `--fix` code path and no default-scope
   substitution for empty args — verified by `_docs/lint-docs.bats`'s new
-  zero-args case (`lint_docs_run` / `bash _docs/lint-docs.sh` with no args
-  exits 2).
-- [ ] `gcpr`, `new-task`, `incept`, `drive` no longer pass `--fix`
+  zero-args cases (`lint_docs_run` and direct `bash _docs/lint-docs.sh`
+  invocation both exit 2).
+- [x] `gcpr`, `new-task`, `incept`, `drive` no longer pass `--fix`
   (`gcpr/SKILL.md:67`, `new-task/SKILL.md:95`, `incept/SKILL.md:119`,
-  `drive/SKILL.md:552`) — verified by `git grep -n "lint-docs.sh --fix"`
-  returning zero matches under `*/SKILL.md`.
-- [ ] `ccxp/SKILL.md:422` and `retro/SKILL.md:293` no longer pass `--fix`
-  and no longer rely on the removed default-scope fallback — verified by the
-  same `git grep` plus a read of both call sites' replacement (`$CHANGED_MD`
-  for ccxp, `${swept[@]}` for retro).
-- [ ] Both bats suites for `lint-docs.sh` green (`tests/lint-docs.bats`,
-  `_docs/lint-docs.bats`) — verified by local `bats` run + CI `bats` check.
+  `drive/SKILL.md:552`) — verified: `git grep -n "lint-docs.sh.*--fix" -- '*.md' '*.sh'`
+  returns zero matches outside `dev/JOURNAL/`/`dev/quality/` history and this
+  task's own body.
+- [x] `ccxp/SKILL.md:422`, `retro/SKILL.md:293`,
+  `ccxp/scripts/reclaim-sweep-pr.sh:48`, `ccxp/scripts/update-roadmap.sh:133`
+  no longer pass `--fix` and no longer rely on the removed default-scope
+  fallback — verified by the same `git grep` plus a read of each call site's
+  replacement (`$CHANGED_MD` for ccxp/reclaim-sweep, `${swept_paths[@]}` for
+  retro, the single literal `dev/ROADMAP.md` for update-roadmap).
+- [x] Both bats suites for `lint-docs.sh` green (`tests/lint-docs.bats`,
+  `_docs/lint-docs.bats`) — verified by local `bats` run; CI `bats` check
+  verification is a post-PR item above.
+
+## Soft blocker discovered during implementation (2026-09-29)
+
+- While verifying `ccxp/SKILL.md`'s `$CHANGED_MD`-derived replacement (see
+  Solution above), found that the `$CHANGED_MD` unquoted-word-splitting
+  pattern it mirrors from `gcpr/SKILL.md` Step 1.5 silently lints **zero**
+  files (exits 0, reports clean) when the executing shell is zsh — this
+  session's own shell (`$0` → `/bin/zsh`, `$BASH_VERSION` empty) reproduces
+  it directly. Filed as **T20260929-128287** (staged into the current
+  iteration). **Escalation**: `DRIVE_ESCALATION_CHANNEL_ID` is unconfigured
+  in this environment, so per `drive/SKILL.md`'s degraded-transport path
+  this note stands in for the Slack escalation (type: `blocker`, soft).
+- **Soft, not hard** — worked around by proceeding unchanged: the new
+  `ccxp/SKILL.md`/`reclaim-sweep-pr.sh` code mirrors the exact,
+  already-in-production `gcpr/SKILL.md` pattern rather than introducing a
+  new risk, and CI's own `Markdown Lint` check remains the unaffected,
+  authoritative gate either way (this guard is defense-in-depth, not the
+  only backstop). `reclaim-sweep-pr.sh`/`update-roadmap.sh` are unaffected
+  regardless (real `.sh` files with a `bash` shebang, invoked via
+  `bash script.sh` — word-splitting happens inside real bash there,
+  confirmed by direct test). Continuing T20260928-608242 unchanged.
 
 ## Out of scope
 
@@ -179,15 +218,17 @@ Remove the whole `--fix` code path instead of patching the next variant:
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_docs/lint-docs.sh` | 39–48, 57, 59–66, 169–270, 286–346 | `--fix` code path + default-scope substitution to remove; header/usage to update |
-| `_docs/lint-docs.bats` | new test | zero-args-errors case |
-| `tests/lint-docs.bats` | whole file (255 lines, 12 `--fix` assertions) | drop all `--fix`-mode cases |
+| `_docs/lint-docs.sh` | 39–48, 57, 59–66, 169–270, 286–346 (pre-change) | `--fix` code path + default-scope substitution removed; header/usage updated |
+| `_docs/lint-docs.bats` | +2 new `@test` blocks | zero-args-errors cases (via `lint_docs_run` and direct `bash` invocation) |
+| `tests/lint-docs.bats` | whole file (255 lines, 12 `--fix` assertions, pre-change) | rewritten — 3 cases covering surviving check-only `--no-globs` scoping |
 | `gcpr/SKILL.md` | 67 | caller — explicit path, drop `--fix` |
 | `new-task/SKILL.md` | 95 | caller — explicit path, drop `--fix` |
-| `incept/SKILL.md` | 119 | caller — explicit path, drop `--fix` (caller-list gap) |
-| `drive/SKILL.md` | 552 | caller — explicit path, drop `--fix` (caller-list gap) |
-| `ccxp/SKILL.md` | 422 | caller — bare/no-path, replace with `$CHANGED_MD`-scoped call |
-| `retro/SKILL.md` | 293 | caller — bare/no-path, replace with `${swept[@]}`-scoped call |
+| `incept/SKILL.md` | 119 | caller — explicit path, drop `--fix` |
+| `drive/SKILL.md` | 552 | caller — explicit path, drop `--fix` |
+| `ccxp/SKILL.md` | 422 | caller — bare/no-path, replaced with `$CHANGED_MD`-scoped call |
+| `retro/SKILL.md` | 293–298 | caller — bare/no-path, replaced with `${swept_paths[@]}`-scoped call |
+| `ccxp/scripts/reclaim-sweep-pr.sh` | 48 | caller — bare/no-path (found by the unrestricted `.sh`-inclusive sweep), replaced with `$CHANGED_MD`-scoped call over `dev/TODO/*.md` |
+| `ccxp/scripts/update-roadmap.sh` | 133 | caller — bare/no-path (found by the unrestricted `.sh`-inclusive sweep), replaced with the literal `dev/ROADMAP.md` |
 
 ## Skills invoked
 

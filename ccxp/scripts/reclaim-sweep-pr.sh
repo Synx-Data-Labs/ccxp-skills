@@ -45,7 +45,15 @@ restore_main() {
 trap restore_main EXIT
 git checkout -b "$branch_name"
 bash "$SKILLS_ROOT/_session/reclaim_sweep.sh" --apply >/dev/null   # free on the branch
-bash "$SKILLS_ROOT/_docs/lint-docs.sh" --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+# doc-lint guard, scoped to exactly the files the sweep touched — lint-docs.sh
+# requires an explicit path and is check-only (T20260928-608242 removed the
+# bare/default-scope --fix call this used to make).
+CHANGED_MD=$(git status --porcelain -- dev/TODO/*.md | awk '{print $2}' || true)
+if [ -n "$CHANGED_MD" ]; then
+  # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
+  bash "$SKILLS_ROOT/_docs/lint-docs.sh" $CHANGED_MD \
+    || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
+fi
 git add dev/TODO/*.md
 git commit -m "chore(reclaim): free dead task-claims (ccxp Phase-0 sweep)" -m "$reclaimed"
 git push -u origin HEAD

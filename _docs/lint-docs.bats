@@ -158,3 +158,16 @@ setup() {
   [ "$status" -eq 2 ]
   [[ "$output" == *"unknown option"* ]]
 }
+
+@test "lint_docs_run with zero path args prints usage and exits 2 (T20260928-608242)" {
+  # A path argument is mandatory — no more silent default-scope substitution.
+  run lint_docs_run
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: lint-docs.sh"* ]]
+}
+
+@test "bash lint-docs.sh with zero args exits 2 (direct-invocation contract)" {
+  run bash "$SCRIPT"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: lint-docs.sh"* ]]
+}

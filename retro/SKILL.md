@@ -273,6 +273,7 @@ for a week — still worth a sweep, just a rarer one now.
    ```bash
    git checkout -b "retro/$(date +%F)-journal-sweep"
    swept=()
+   swept_paths=()
    for f in dev/TODO/T*.md; do
      status=$(awk -F': ' '/^status:/ {print $2; exit}' "$f")
      status=${status%% *}   # leading token only — some files append narration after Done
@@ -281,6 +282,7 @@ for a week — still worth a sweep, just a rarer one now.
        dest="dev/JOURNAL/${closed_date:-$(date +%F)}-$(basename "$f")"
        git mv "$f" "$dest"
        swept+=("$(basename "$f" .md) -> $dest")
+       swept_paths+=("$dest")
      fi
    done
    ```
@@ -290,7 +292,11 @@ for a week — still worth a sweep, just a rarer one now.
 3. Otherwise, commit and open one PR with all the renames:
 
    ```bash
-   bash ../_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   # doc-lint guard, scoped to exactly the files just moved (lint-docs.sh
+   # requires an explicit path and is check-only — T20260928-608242) —
+   # shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   bash ../_docs/lint-docs.sh "${swept_paths[@]}" \
+     || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
    git commit -m "docs(tasks): batch journal-move for $(date +%F) (Friday sweep)"
    bash ../_gh/git.sh push -u origin "retro/$(date +%F)-journal-sweep"
    bash ../_gh/gh.sh pr create --title "docs(tasks): batch journal-move $(date +%F)" \

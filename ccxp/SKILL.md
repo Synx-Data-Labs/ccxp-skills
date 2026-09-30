@@ -416,16 +416,26 @@ bash <skills-root>/_session/attribution.sh table "$(pwd)/dev"
 The standup doc is committed + PR'd each tick (ad-hoc — there is no scripted commit step here), and
 a list glued to a preceding line is the recurring MD032 red that sits on `main` until a fix-PR
 lands. Before committing/pushing the daily-summary (and any journal docs written this tick), run the
-shared doc-lint guard:
+shared doc-lint guard, scoped to whatever `.md` this tick is actually about to commit — `lint-docs.sh`
+requires an explicit path and is check-only (T20260928-608242 removed the bare/default-scope `--fix`
+call this used to make, after it hit an `EACCES` running unscoped against the full 1509-file repo
+glob):
 
 ```bash
-bash <skills-root>/_docs/lint-docs.sh --fix || true   # doc-lint guard — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+CHANGED_MD=$(git status --porcelain | awk '
+  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
+  { line=substr($0,4); sub(/.* -> /, "", line); print line }
+' | grep -E '\.md$' || true)
+if [ -n "$CHANGED_MD" ]; then
+  # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
+  bash <skills-root>/_docs/lint-docs.sh $CHANGED_MD \
+    || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
+fi
 ```
 
-It auto-fixes the blanks-around-lists class and folds the correction into the commit; an unfixable
-residual surfaces loudly but does not block (the PR's `Markdown Lint` check is the authoritative
-gate). Committing docs via `/gcpr` runs this automatically (Step 1.5) — this explicit call covers
-the ad-hoc standup-commit path that bypasses `/gcpr`.
+Check-only: a violation surfaces loudly but does not block (the PR's `Markdown Lint` check is the
+authoritative gate) — same policy `gcpr/SKILL.md` Step 1.5 already uses (this is the same
+`$CHANGED_MD` recipe, reused here for the ad-hoc standup-commit path that bypasses `/gcpr`).
 
 #### 1.3c Generate the epic-progress section
 
