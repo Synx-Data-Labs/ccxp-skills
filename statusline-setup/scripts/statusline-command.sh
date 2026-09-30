@@ -106,14 +106,22 @@ sl-autopilot-part() {
   IFS=$'\t' read -r ap_status started_at end_time stuck_count cycle_count <<<"$line"
   [ "$ap_status" = "running" ] || return 0
 
-  local started_epoch end_epoch
+  # stuck_count/cycle_count must be non-negative integers — a missing,
+  # negative, or non-numeric value degrades to nothing rather than a
+  # garbled segment (e.g. "ap: 2/5hr /" or "ap: 2/5hr abc/3").
+  [[ "$stuck_count" =~ ^[0-9]+$ ]] || return 0
+  [[ "$cycle_count" =~ ^[0-9]+$ ]] || return 0
+
+  local started_epoch end_epoch now_epoch
   started_epoch=$(sl-iso-to-epoch "$started_at")
   end_epoch=$(sl-iso-to-epoch "$end_time")
   [ -n "$started_epoch" ] && [ -n "$end_epoch" ] || return 0
   [ "$end_epoch" -gt "$started_epoch" ] || return 0
+  now_epoch=$(date +%s)
+  [ "$started_epoch" -le "$now_epoch" ] || return 0
 
   local elapsed_secs requested_secs elapsed_hr requested_hr
-  elapsed_secs=$(( $(date +%s) - started_epoch ))
+  elapsed_secs=$(( now_epoch - started_epoch ))
   requested_secs=$(( end_epoch - started_epoch ))
   elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
   requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
