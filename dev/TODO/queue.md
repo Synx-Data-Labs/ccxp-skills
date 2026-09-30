@@ -22,7 +22,6 @@ reprioritize.
 - [T20260924-159109](T20260924-159109-skill-to-app.md): Design /skill-to-app — compile a matured skill's deterministic steps into a program
 - [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
 - [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
-- [T20260925-219021](T20260925-219021-retire-auto-switch-gh-wrapper-only.md): Retire `auto-switch.sh` and caller-side `GH_TOKEN`; route all `gh` through `_gh/gh.sh`
 - [T20260924-232855](T20260924-232855-estimation-to-story-points.md): Replace `estimation:` duration buckets with XP story points
 - [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
 - [T20260925-407025](T20260925-407025-todo-scripts-bash4-only.md): `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
@@ -33,3 +32,4 @@ reprioritize.
 - [T20260925-283679](T20260925-283679-remove-legacy-coding-status-alias.md): Remove the legacy `Coding` status alias once external repos migrate
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
+- [T20260929-120385](T20260929-120385-ipm-drain-check-bare-gh-call.md): `_ipm/ipm-iteration-drain-check.sh:224` makes a bare, unwrapped `gh` call
