@@ -1,10 +1,17 @@
 ---
-status: Open
+status: In Progress
 estimation: 1h
 source: this conversation, 2026-09-30
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260930-132964: Give /autopilot's dispatched /drive cycles their own persistent clone
+
+Design approved in-conversation 2026-09-30 (brainstormed with the user
+before filing — the Solution section below is that approved design);
+skipping the separate design PR.
 
 ## Problem
 
