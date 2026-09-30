@@ -1,9 +1,9 @@
 ---
-status: In Progress
+status: Done
 estimation: 30m
 source: this conversation, 2026-09-30
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -82,9 +82,10 @@ design-score gate.
   - **Prefix**: `[r]` by default; `[b]` when `status == "running" &&
     last_outcome == "stuck"`; `[s]` when `status == "stopped"`.
   - Output shape unchanged otherwise: `ap:[r] 2/5hr 3/10` — the prefix
-    replaces the literal `ap:` + space with `ap:[x] ` (bracket immediately
-    after the colon, one space before the numbers), keeping the rest of the
-    segment (and its `sl-join`/`ctx:` wiring downstream) untouched.
+    replaces the literal `ap:` + space with `` ap:[x] `` (bracket
+    immediately after the colon, one space before the numbers), keeping
+    the rest of the segment (and its `sl-join`/`ctx:` wiring downstream)
+    untouched.
 - **Alternatives considered and rejected**:
   - *A separate `sl-autopilot-status-tag` helper, composed by the caller* —
     rejected: the prefix is intrinsic to this one segment's own semantics
@@ -160,3 +161,36 @@ design-score gate.
 | `statusline-setup/scripts/statusline-command.sh` | 95-130 (`sl-autopilot-part`) | add `[r]`/`[b]`/`[s]` prefix + stopped-state elapsed calc |
 | `tests/statusline_setup.bats` | 288-429 (existing `sl-autopilot-part`/e2e cases) | update the now-invalid "stopped → nothing" case; add 4 new cases |
 | `autopilot/SKILL.md` | § State file | source of truth for the `status`/`last_outcome`/`last_cycle_at` schema this reads |
+
+## Closed (2026-09-30)
+
+Shipped in **PR #186** (claim in PR #185, both merged to `main`; queue
+staging in PR #184).
+
+- All Done criteria met — `sl-autopilot-part` prefixes `ap:` with
+  `[r]`/`[b]`/`[s]`, stopped-state elapsed uses `last_cycle_at`, and every
+  pre-existing guard still returns nothing on malformed input. All verified
+  by `bats tests/statusline_setup.bats` (36/36 local, including 5
+  new/updated cases) plus the full `bats tests/` suite green.
+- `statusline-setup/SKILL.md` updated to describe the new format (Phase 3.7
+  doc-impact check flagged nothing else stale).
+- quality-probe recorded a `-15` design-score delta vs. the prior recorded
+  task — expected noise from comparing across unrelated tasks (record +
+  warn only, never a gate — `quality-probe/SKILL.md`), not a regression on
+  this task's own 73/100 design-score gate pass.
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — wrote the 5
+  new/updated bats cases first, confirmed red (5 failures matching exactly
+  the new behavior), then implemented to green.
+- Verification (`superpowers:verification-before-completion`): yes — before
+  the PR (full `bats tests/` suite, shellcheck, repo-wide grep for stale
+  `ap:` format references) and here at close.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the one snag (skill-quality ratchet drop from a paragraph
+  crossing the 60-word threshold) was a one-shot fix, not a debugging loop.
+- Receiving code review (`superpowers:receiving-code-review`): no Claude
+  Code review comments yet at close-commit time (dispatched during
+  `/address-pr`'s loop, not before).
