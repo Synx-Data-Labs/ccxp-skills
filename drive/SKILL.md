@@ -175,7 +175,7 @@ Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as si
 - `--recurse-submodules`: correct for repos with submodules. Skip with `SUBMODULES=0` env var if the user wants faster clones for repos without them.
 - For very large repos (e.g. a large monorepo), the user can additionally pass `--filter=blob:none` via a `CLONE_EXTRA_FLAGS` env var; defaults stay simple.
 
-**Orphan cleanup**: the `trap EXIT` covers normal completion + ctrl-c + most crashes. A weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop.
+**Orphan cleanup**: the `trap EXIT` covers normal completion + ctrl-c + most crashes. A weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed at its own Phase 5 stop, but orphaned the same way on a crash).
 
 (History — see T20260513-403409 in `dev/JOURNAL/`. Previous design required 3 safety guards [worktree clean, no in-flight git op, branch=main] + JIT-refresh + degraded path to share an existing target clone with other processes. The ephemeral-clone model makes those unnecessary.)
 
