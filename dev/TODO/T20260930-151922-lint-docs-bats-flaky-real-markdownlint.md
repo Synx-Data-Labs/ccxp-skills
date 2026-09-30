@@ -125,6 +125,7 @@ claimed_role: interactive
 ## Root cause
 
 - Mechanism: `_lint_docs_run_tool` (`_docs/lint-docs.sh:183-198`) —
+
   ```bash
   out="$("${cmd[@]}" "$@" 2>&1)" && rc=0 || rc=$?
   printf '%s\n' "$out"
@@ -133,6 +134,7 @@ claimed_role: interactive
   fi
   return 3
   ```
+
   `rc -eq 1` is returned as authoritative "violations found" with no check
   that the output actually came from a completed markdownlint-cli2 run.
   `npm`/`npx` itself exits `1` on its own errors (confirmed: a
