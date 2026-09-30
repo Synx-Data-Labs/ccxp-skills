@@ -172,9 +172,9 @@ scheduled: 2026-09-28
 - Every Test plan and Done criterion above is checked off with fresh
   verification evidence (bats runs, an explicit RED/GREEN watch per new
   test, a manual guard non-vacuousness check) — none left external or
-  unverified. 33 `statusline_setup.bats` cases total (was 21 pre-existing
-  + 12 new: 8 from the initial implementation, 4 from the second review
-  round below).
+  unverified. 33 `statusline_setup.bats` cases total: 21 pre-existing,
+  plus 12 new (8 from the initial implementation, 4 from the second
+  review round below).
 - Independent review, design PR (#178): caught four real issues before
   any code was written — a variable-naming bug in the Solution
   pseudocode, a TOCTOU gap from five separate `jq` reads, an unhandled
