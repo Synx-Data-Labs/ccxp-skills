@@ -47,8 +47,15 @@ git checkout -b "$branch_name"
 bash "$SKILLS_ROOT/_session/reclaim_sweep.sh" --apply >/dev/null   # free on the branch
 # doc-lint guard, scoped to exactly the files the sweep touched — lint-docs.sh
 # requires an explicit path and is check-only (T20260928-608242 removed the
-# bare/default-scope --fix call this used to make).
-CHANGED_MD=$(git status --porcelain -- dev/TODO/*.md | awk '{print $2}' || true)
+# bare/default-scope --fix call this used to make). Same porcelain-parsing
+# recipe as gcpr/SKILL.md Step 1.5 / ccxp/SKILL.md 1.3b — skip deleted
+# entries and strip a rename's "old -> new" down to the new path; the naive
+# `awk '{print $2}'` was already found to silently mis-lint (or skip
+# linting) a renamed/deleted file once before (T20260910-919422).
+CHANGED_MD=$(git status --porcelain -- dev/TODO/*.md | awk '
+  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
+  { line=substr($0,4); sub(/.* -> /, "", line); print line }
+' || true)
 if [ -n "$CHANGED_MD" ]; then
   # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
   bash "$SKILLS_ROOT/_docs/lint-docs.sh" $CHANGED_MD \
