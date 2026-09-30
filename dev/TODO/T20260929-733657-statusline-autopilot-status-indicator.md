@@ -1,10 +1,16 @@
 ---
-status: Open
+status: In Progress
 estimation: 30m
 source: this conversation, 2026-09-30
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260929-733657: Add a one-letter autopilot status indicator to the statusline's `ap:` segment
+
+Design approved in-conversation 2026-09-30 — see Problem below for the
+agreed `[r]`/`[b]`/`[s]` design; skipping the separate design PR.
 
 ## Problem
 
