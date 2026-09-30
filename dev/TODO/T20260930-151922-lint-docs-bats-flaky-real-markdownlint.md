@@ -36,13 +36,18 @@ claimed_role: interactive
   attempts (only `autopilot/SKILL.md` prose landed on the branch meanwhile).
 - Ran the same test locally 4x in a row (macOS, same pinned
   `markdownlint-cli2@0.22.1` via the npx path) with zero failures.
-- **Verified root cause** (not the original best-guess): `npx --yes
-  <bad-or-unfetchable-pkg>` exits `1` on its own resolution/network errors,
-  identical to markdownlint-cli2's "violations found" exit code —
-  reproduced locally:
+- **Root-cause mechanism verified in isolation** (not the original
+  best-guess, and not the same as confirming it's what happened on this
+  specific CI attempt — bats's TAP output never dumps `$output`, so
+  attempt 1's actual captured text is unrecoverable; this is a verified,
+  reproducible defect that *fully explains* the observed pattern, treated
+  here as the root cause on that strength, not on direct forensic proof of
+  that one run): `npx --yes <bad-or-unfetchable-pkg>` exits `1` on its own
+  resolution/network errors, identical to markdownlint-cli2's "violations
+  found" exit code — reproduced locally:
   `npx --yes this-package-definitely-does-not-exist-xyz123@99.99.99` →
   `npm error 404 ...` → `exit=1`. `_lint_docs_run_tool`
-  (`_docs/lint-docs.sh:183-198`) treats any `rc -eq 1` as authoritative
+  (`_docs/lint-docs.sh:176-195`) treats any `rc -eq 1` as authoritative
   "violations found" and returns it straight through — it never
   distinguishes "the tool ran and found issues" from "npm itself failed
   before the tool ever ran."
@@ -59,7 +64,7 @@ claimed_role: interactive
   - GitHub Actions `ubuntu-latest`: fresh VM per run, no persistent npx
     cache → every invocation does a cold registry fetch → occasional
     transient failure surfaces as a false "violation."
-- `.github/workflows/tests.yml:101-111` runs `bats tests/*.bats
+- `.github/workflows/tests.yml:101-110` runs `bats tests/*.bats
   _docs/*.bats` with no node/npx version pin beyond the runner image's
   default — consistent with the asymmetry, though the actual defect is the
   exit-code ambiguity below, not a version-drift issue (attempts 1 and 3
@@ -117,14 +122,14 @@ claimed_role: interactive
 
 - [x] Root-cause the actual mechanism — see `## Problem` / `## Root
   cause`: verified via local repro, not the original best-guess.
-- [ ] Fix: `_lint_docs_run_tool` (`_docs/lint-docs.sh:183-198`) requires a
+- [ ] Fix: `_lint_docs_run_tool` (`_docs/lint-docs.sh:176-195`) requires a
   `Summary:` marker before trusting `rc == 1` as violations-found.
 - [ ] Regression test added per `## Test plan` above, capturing the actual
   failure mode (npm-error-shaped exit 1, not a real lint violation).
 
 ## Root cause
 
-- Mechanism: `_lint_docs_run_tool` (`_docs/lint-docs.sh:183-198`) —
+- Mechanism: `_lint_docs_run_tool` (`_docs/lint-docs.sh:176-195`) —
 
   ```bash
   out="$("${cmd[@]}" "$@" 2>&1)" && rc=0 || rc=$?
@@ -154,9 +159,9 @@ claimed_role: interactive
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_docs/lint-docs.sh` | 183–198 | `_lint_docs_run_tool` — the exit-code handling to fix |
-| `_docs/lint-docs.sh` | 200–219 | `lint_docs_run` — caller that falls back to vendored on `rc > 1` |
+| `_docs/lint-docs.sh` | 176–195 | `_lint_docs_run_tool` — the exit-code handling to fix |
+| `_docs/lint-docs.sh` | 198–229 | `lint_docs_run` — caller that falls back to vendored on `rc > 1` |
 | `tests/lint-docs.bats` | 24–36 | `setup()` — the fake-binary fixture pattern to reuse for the new regression test |
 | `tests/lint-docs.bats` | 57–84 | the flaking test itself (real npx path, no fake binary) |
 | `tests/fixtures/lint-docs/fake-markdownlint-cli2.sh` | — | existing fake-binary fixture; the new regression test's fake can follow this shape |
-| `.github/workflows/tests.yml` | 101–111 | CI job that runs the bats suite (cold runner, no npx cache) |
+| `.github/workflows/tests.yml` | 101–110 | CI job that runs the bats suite (cold runner, no npx cache) |
