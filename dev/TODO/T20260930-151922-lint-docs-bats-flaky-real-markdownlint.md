@@ -1,9 +1,11 @@
 ---
-status: Open
-scheduled: 2026-10-12
+status: Design
+scheduled: 2026-09-28
 estimation: 1h
 source: this conversation, 2026-09-30 — surfaced during T20260930-132964's PR #189 CI
 related: T20260930-132964
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
 ---
 
 # T20260930-151922: `tests/lint-docs.bats`'s real-markdownlint-cli2 test flaked twice on CI
