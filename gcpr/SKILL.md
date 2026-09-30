@@ -65,18 +65,17 @@ CHANGED_MD=$(git status --porcelain | awk '
 if [ -n "$CHANGED_MD" ]; then
   # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
   bash ../_docs/lint-docs.sh $CHANGED_MD \
-    || echo "::warning::lint-docs: markdown issues remain (check-only, no --fix — T20260928-608242) — CI Markdown Lint will gate"
+    || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
 fi
 ```
 
-`../_docs/lint-docs.sh` (T20260626-117003; moved here from build-pipeline's own
-scripts/ and generalized by T20260719-111051) ships with the skill, so it's available in every repo
-gcpr runs in (ccxp-skills / example-website.com / hub-repo / build-pipeline-repo) — no more
-per-repo `[ -f ]` no-op. Policy is **check-then-continue** (T20260928-608242 removed `--fix`
-entirely — see the script's own header for why): a violation surfaces loudly but does not block
-the commit — the PR's own `Markdown Lint` check is the authoritative gate. This is the canonical
-recipe; the ad-hoc doc-push sites in `/ccxp` and `/drive` call the one-line form of it.
-(T20260627-192311.)
+`../_docs/lint-docs.sh` (moved here from build-pipeline's own scripts/ and generalized) ships with
+the skill, so it's available in every repo gcpr runs in (ccxp-skills / example-website.com /
+hub-repo / build-pipeline-repo) — no more per-repo `[ -f ]` no-op. Policy is
+**check-then-continue** (check-only, no `--fix` — see the script's own header for why): a
+violation surfaces loudly but does not block the commit. The PR's own `Markdown Lint` check is
+the authoritative gate. This is the canonical recipe; the ad-hoc doc-push sites in `/ccxp` and
+`/drive` call the one-line form of it.
 
 Also run the paragraph-length nudge over any changed `dev/TODO/`/`dev/PARKING/` files — same
 non-blocking, print-and-continue policy, surfaced right before the commit so the agent sees it
