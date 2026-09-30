@@ -32,3 +32,4 @@ reprioritize.
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
 - [T20260929-120385](T20260929-120385-ipm-drain-check-bare-gh-call.md): `_ipm/ipm-iteration-drain-check.sh:224` makes a bare, unwrapped `gh` call
 - [T20260929-128287](T20260929-128287-changed-md-unquoted-splitting-not-portable-to-zsh.md): `$CHANGED_MD`-style unquoted word-splitting silently lints zero files under zsh
+- [T20260929-733657](T20260929-733657-statusline-autopilot-status-indicator.md): Add a one-letter autopilot status indicator to the statusline's `ap:` segment
