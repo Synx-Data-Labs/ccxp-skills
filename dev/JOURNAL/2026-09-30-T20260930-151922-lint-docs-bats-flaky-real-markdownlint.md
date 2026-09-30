@@ -105,7 +105,7 @@ claimed_role:
   a nonexistent package) — done above.
 - [x] Reproduce markdownlint-cli2's real exit-1, `Summary:` shape locally
   (forced MD004 violation) — done above.
-- [x] New BATS regression test in `tests/lint-docs.bats:98-117` ("falls
+- [x] New BATS regression test in `tests/lint-docs.bats:86-107` ("falls
   back to vendored when the runner exits 1 with an npm-error shape, not a
   real Summary"): a fake `markdownlint-cli2` binary
   (`tests/fixtures/lint-docs/fake-markdownlint-cli2-npm-error.sh`, same
@@ -175,7 +175,7 @@ Shipped in **PR #193** (design in #192).
   markdownlint-cli2's own exit-1), fixed `_lint_docs_run_tool`
   (`_docs/lint-docs.sh:176-203`) to require the `Summary:` marker before
   trusting `rc == 1`, added a regression test
-  (`tests/lint-docs.bats:98-117` + the new
+  (`tests/lint-docs.bats:86-107` + the new
   `fake-markdownlint-cli2-npm-error.sh` fixture) that fails without the
   fix and passes with it (verified red-green locally), full local bats
   suite green (796/796).
