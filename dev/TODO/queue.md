@@ -32,5 +32,4 @@ reprioritize.
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
 - [T20260929-120385](T20260929-120385-ipm-drain-check-bare-gh-call.md): `_ipm/ipm-iteration-drain-check.sh:224` makes a bare, unwrapped `gh` call
 - [T20260929-128287](T20260929-128287-changed-md-unquoted-splitting-not-portable-to-zsh.md): `$CHANGED_MD`-style unquoted word-splitting silently lints zero files under zsh
-- [T20260930-132964](T20260930-132964-autopilot-dispatch-own-clone.md): Give /autopilot's dispatched /drive cycles their own persistent clone
 - [T20260930-151922](T20260930-151922-lint-docs-bats-flaky-real-markdownlint.md): `tests/lint-docs.bats`'s real-markdownlint-cli2 test flaked twice on CI
