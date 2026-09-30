@@ -103,38 +103,37 @@ design-score gate.
 
 ## Test plan
 
-- [ ] `tests/statusline_setup.bats`: update `"sl-autopilot-part prints
-  nothing when status is stopped"` — this behavior is exactly what the task
-  changes; replace with a same-named-shape assertion that a stopped state
-  now prints `ap:[s] ...`.
-- [ ] New unit case: `[r]` prefix when running with no `last_outcome` field
+- [x] `tests/statusline_setup.bats`: replaced `"sl-autopilot-part prints
+  nothing when status is stopped"` with `"...prints ap:[s] with elapsed
+  from last_cycle_at when stopped"`.
+- [x] New unit case: `[r]` prefix when running with no `last_outcome` field
   (the common case — most cycles aren't stuck).
-- [ ] New unit case: `[b]` prefix when running and `last_outcome ==
+- [x] New unit case: `[b]` prefix when running and `last_outcome ==
   "stuck"`.
-- [ ] New unit case: `[s]` prefix when stopped, `last_cycle_at` set —
+- [x] New unit case: `[s]` prefix when stopped, `last_cycle_at` set —
   elapsed computed from `last_cycle_at`, not `now`.
-- [ ] New unit case: `[s]` prefix when stopped, `last_cycle_at` null —
+- [x] New unit case: `[s]` prefix when stopped, `last_cycle_at` null —
   elapsed is `0`.
-- [ ] Existing malformed/clock-skew/missing-field cases (lines 325-429 in
-  the pre-change file) still return nothing for both `running` and
-  `stopped` — extend at least one existing case (e.g. negative
-  `stuck_count`) to also assert under `status: stopped`.
-- [ ] `statusline-command` end-to-end case updated: the existing "prepends
-  ap: before ctx:" test's expected string gains the `[r]` prefix.
-- [ ] `bats tests/statusline_setup.bats` green locally.
+- [x] Existing malformed/clock-skew/missing-field cases still return
+  nothing for both `running` and `stopped` — extended the negative
+  `stuck_count` case with a `status: stopped` variant.
+- [x] `statusline-command` end-to-end case updated: the "prepends ap:
+  before ctx:" test's expected string now carries the `[r]` prefix.
+- [x] `bats tests/statusline_setup.bats` green locally (36/36) — full
+  `bats tests/` suite also green.
 - [ ] CI `tests` check green on the implementation PR (post-PR item).
 
 ## Done criteria
 
-- [ ] `sl-autopilot-part` (`statusline-command.sh:95-130`) prefixes `ap:`
+- [x] `sl-autopilot-part` (`statusline-command.sh:95-130`) prefixes `ap:`
   with `[r]`/`[b]`/`[s]` per the Solution rules — verified by
   `tests/statusline_setup.bats`'s 4 new `[r]`/`[b]`/`[s]` unit cases.
-- [ ] Statusline shows nothing when the state file doesn't exist (unchanged)
+- [x] Statusline shows nothing when the state file doesn't exist (unchanged)
   — verified by `tests/statusline_setup.bats:288` (untouched by this
   change).
-- [ ] Stopped-state elapsed uses `last_cycle_at` (or `0`), not live `now` —
+- [x] Stopped-state elapsed uses `last_cycle_at` (or `0`), not live `now` —
   verified by the two `[s]`-prefix cases in `tests/statusline_setup.bats`.
-- [ ] All existing malformed/clock-skew/negative-count guards still return
+- [x] All existing malformed/clock-skew/negative-count guards still return
   nothing — verified by `tests/statusline_setup.bats:325-429`'s existing
   cases plus the one extended to also cover `status: stopped`.
 
