@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-09-28
 estimation: 1h
 source: this conversation, 2026-09-30 — surfaced during T20260930-132964's PR #189 CI
@@ -105,15 +105,16 @@ claimed_role: interactive
   a nonexistent package) — done above.
 - [x] Reproduce markdownlint-cli2's real exit-1, `Summary:` shape locally
   (forced MD004 violation) — done above.
-- [ ] New BATS regression test in `tests/lint-docs.bats`: a fake
-  `markdownlint-cli2` binary (same pattern as the existing
-  `fake-markdownlint-cli2.sh` fixture) that exits `1` with npm-error-shaped
-  output and no `Summary:` line — assert `lint_docs_run` falls back to the
-  vendored check (i.e. does NOT report the fake's exit code as
-  authoritative) rather than the fix regressing the existing fake/real
-  test pairs.
-- [ ] `bats tests/lint-docs.bats` passes locally after the fix, all 3
-  existing cases plus the new one.
+- [x] New BATS regression test in `tests/lint-docs.bats:98-117` ("falls
+  back to vendored when the runner exits 1 with an npm-error shape, not a
+  real Summary"): a fake `markdownlint-cli2` binary
+  (`tests/fixtures/lint-docs/fake-markdownlint-cli2-npm-error.sh`, same
+  pattern as the existing `fake-markdownlint-cli2.sh` fixture) exits `1`
+  with npm-error-shaped output and no `Summary:` line — asserts
+  `lint_docs_run` falls back to the vendored check instead of trusting the
+  fake's exit code.
+- [x] `bats tests/lint-docs.bats` passes locally after the fix — all 4
+  cases (3 existing + the new one).
 - [ ] CI green on the implementation PR (this exact class of flake can't
   be forced on demand, so a clean single CI run is the practical bar —
   the local repro above is what proves the mechanism, not the CI run).
@@ -122,9 +123,9 @@ claimed_role: interactive
 
 - [x] Root-cause the actual mechanism — see `## Problem` / `## Root
   cause`: verified via local repro, not the original best-guess.
-- [ ] Fix: `_lint_docs_run_tool` (`_docs/lint-docs.sh:176-195`) requires a
+- [x] Fix: `_lint_docs_run_tool` (`_docs/lint-docs.sh:176-203`) requires a
   `Summary:` marker before trusting `rc == 1` as violations-found.
-- [ ] Regression test added per `## Test plan` above, capturing the actual
+- [x] Regression test added per `## Test plan` above, capturing the actual
   failure mode (npm-error-shaped exit 1, not a real lint violation).
 
 ## Root cause
