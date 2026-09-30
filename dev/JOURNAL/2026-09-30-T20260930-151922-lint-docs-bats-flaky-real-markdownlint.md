@@ -166,3 +166,44 @@ claimed_role:
 | `tests/lint-docs.bats` | 57–84 | the flaking test itself (real npx path, no fake binary) |
 | `tests/fixtures/lint-docs/fake-markdownlint-cli2.sh` | — | existing fake-binary fixture; the new regression test's fake can follow this shape |
 | `.github/workflows/tests.yml` | 101–110 | CI job that runs the bats suite (cold runner, no npx cache) |
+
+## Closed (2026-09-30)
+
+Shipped in **PR #(this journal-move PR — see the implementation PR opened
+alongside it on the same branch)**.
+
+- Met: root-caused the mechanism (npm/npx exit-1 colliding with
+  markdownlint-cli2's own exit-1), fixed `_lint_docs_run_tool`
+  (`_docs/lint-docs.sh:176-203`) to require the `Summary:` marker before
+  trusting `rc == 1`, added a regression test
+  (`tests/lint-docs.bats:98-117` + the new
+  `fake-markdownlint-cli2-npm-error.sh` fixture) that fails without the
+  fix and passes with it (verified red-green locally), full local bats
+  suite green (796/796).
+- External/unverified: the fix is confirmed correct by local repro and
+  the red-green regression test, not by reproducing the exact original
+  CI flake on demand (that class of failure isn't forceable — see
+  `## Problem`'s honesty note re: bats never capturing attempt 1's
+  `$output`). Confirmed by: this PR's own CI running clean, and no
+  recurrence of this specific `not ok 304`-style failure going forward.
+- No follow-up tasks filed — the fix is self-contained to
+  `_docs/lint-docs.sh` and its test.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — wrote the failing
+  regression test first (confirmed `not ok`/expected failure reason),
+  implemented the minimal fix, confirmed green, then did an explicit
+  revert/re-apply red-green cycle to prove the test actually catches the
+  bug.
+- Verification (`superpowers:verification-before-completion`): yes — full
+  bats suite (796/796) run fresh, plus the revert/restore red-green cycle,
+  before committing.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; root cause was found via direct local reproduction (forcing
+  both the npm-404 and the real-markdownlint-violation shapes) rather than
+  trial-and-error.
+- Receiving code review (`superpowers:receiving-code-review`): yes — the
+  design PR's independent review (PR #192) found two real issues (wrong
+  line-range citations, an overclaim on "verified root cause"); both
+  fixed, not pushed back on.
