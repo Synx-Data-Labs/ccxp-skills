@@ -116,7 +116,7 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
 
   ```bash
   python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
-  bash ../_docs/lint-docs.sh --fix dev/TODO/T<id>-*.md
+  bash ../_docs/lint-docs.sh dev/TODO/T<id>-*.md
   ```
 
 Leave the change uncommitted — the caller decides how it lands (`/ccxp`
