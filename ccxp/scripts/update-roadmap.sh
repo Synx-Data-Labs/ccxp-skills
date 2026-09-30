@@ -130,7 +130,11 @@ roadmap_commit_pr() {
 
   trap 'rm -rf "$target"' EXIT
   cd "$target" || return 1
-  bash "$SKILLS_ROOT/_docs/lint-docs.sh" --fix || true   # doc-lint guard — shared script, runs for real here too now (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+  # doc-lint guard, scoped to the one file this edits — lint-docs.sh requires
+  # an explicit path and is check-only (T20260928-608242 removed the
+  # bare/default-scope --fix call this used to make).
+  bash "$SKILLS_ROOT/_docs/lint-docs.sh" dev/ROADMAP.md \
+    || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
   git add dev/ROADMAP.md
   git commit -m "docs(roadmap): IPM commit $(date +%Y-%m-%d) — promotions, demotions, last-updated tick"
   local branch

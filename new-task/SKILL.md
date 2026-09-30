@@ -92,15 +92,15 @@ effect of filing one task:
 
 ```bash
 python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
-bash ../_docs/lint-docs.sh --fix dev/TODO/T<id>-<slug>.md
+bash ../_docs/lint-docs.sh dev/TODO/T<id>-<slug>.md
 python3 ../repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
 python3 ../repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
 ```
 
 `lint_tasks.py` is the hard gate — fix and re-check on any failure.
-`lint-docs.sh`/`lint_paragraphs.py`/`lint_refs.py` are fix-then-continue by
-their own policy (never block the commit), same as `gcpr`'s usage; a
-residual `lint-docs.sh` violation surfaces loudly and the PR's own
+`lint-docs.sh` (check-only, T20260928-608242) / `lint_paragraphs.py` (a
+nudge) / `lint_refs.py --fix` never block the commit, same as `gcpr`'s
+usage; a residual `lint-docs.sh` violation surfaces loudly and the PR's own
 `Markdown Lint` CI check is the authoritative gate for it.
 
 ### 5. Stage it
