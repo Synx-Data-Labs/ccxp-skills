@@ -1,9 +1,9 @@
 ---
-status: In Progress
+status: Done
 estimation: 1h
 source: this conversation, 2026-09-30
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -175,3 +175,39 @@ skipping the separate design PR.
 | `drive/SKILL.md` | 178 (orphan-sweep note) | mention `/tmp/autopilot-clone-*/` alongside `/tmp/T*-target/` |
 | `_session/claimant-id.sh` | `claimant_id()` (~line 78) | confirms path-based identity derivation (read-only reference, not touched) |
 | `_session/task_claim.sh` | `_tc_claimant_id()` (108-125) | confirms no path override exists today (read-only reference, not touched) |
+
+## Closed (2026-09-30)
+
+Shipped in **PR #189** (claim in PR #188, both merged to `main`; queue
+staging in PR #187).
+
+- All Done criteria met — `autopilot/SKILL.md`'s State file, Phase 3
+  (lazy-create/reuse the dispatch clone, `cd`-into-it dispatch prompt
+  instruction, rewritten rationale), and Phase 5 (teardown) all describe
+  the persistent-clone mechanism; `drive/SKILL.md:178`'s orphan-sweep note
+  mentions `/tmp/autopilot-clone-*/`. Verified by manual read-through
+  (no executable tests apply — pure skill-prose change).
+- Hit one snag while implementing: the first draft's added prose tripped
+  the `skill-quality` ratchet twice (paragraph-count, then byte size) —
+  fixed by converting the new explanatory prose into bullets and trimming
+  redundant wording (`skill_score.py --check
+  dev/quality/skill-scores.json` now passes, 48/48 at or above baseline).
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- Brainstorming (`superpowers:brainstorming`): yes — the persistent-clone
+  vs. literal-worktree design was brainstormed and approved with the user
+  before filing this task; found the git-worktree branch-lock conflict
+  during that exploration.
+- TDD (`superpowers:test-driven-development`): no — docs-class (skill
+  prose, no executable code).
+- Verification (`superpowers:verification-before-completion`): yes —
+  full read-through of the edited sections, doc-impact check, lint
+  bundle, and skill-quality ratchet before opening the PR.
+- Systematic debugging (`superpowers:systematic-debugging`): no — the
+  skill-quality ratchet failures were diagnosed directly from the
+  script's own per-check breakdown, not a debugging loop.
+- Receiving code review (`superpowers:receiving-code-review`): no Claude
+  Code review comments yet at close-commit time (dispatched during
+  `/address-pr`'s loop, not before).
