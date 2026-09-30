@@ -135,39 +135,72 @@ scheduled: 2026-09-28
 
 ## Test plan
 
-- [ ] `bats tests/statusline_setup.bats` — new cases:
-  - [ ] `sl-iso-to-epoch` round-trips a known ISO-8601 timestamp to the
+- [x] `bats tests/statusline_setup.bats` — new cases (all 8 written
+      TDD-first, watched RED before GREEN):
+  - [x] `sl-iso-to-epoch` round-trips a known ISO-8601 timestamp to the
         correct epoch value.
-  - [ ] `sl-autopilot-part` prints nothing when
+  - [x] `sl-autopilot-part` prints nothing when
         `dev/.autopilot-state.json` doesn't exist.
-  - [ ] `sl-autopilot-part` prints nothing when `status` is `"stopped"`.
-  - [ ] `sl-autopilot-part` prints `ap: <N>/<M>hr <stuck>/<cycle>` for a
-        fixture `status: "running"` file. No time-mocking seam — existing
-        `statusline_setup.bats` cases are all clock-independent, and this
-        adds none: write `started_at`/`end_time` as offsets from the real
-        wall-clock `date` at test-run time (e.g. `started_at` = now minus
-        90 real minutes via `date -u -v-90M` / `date -u -d '90 minutes
-        ago'`, `end_time` = now plus a known delta), then assert the
-        rounded hour values the design's own rounding rule predicts for
-        those offsets (clarified after independent design review flagged
-        this as unspecified, 2026-09-29).
-  - [ ] `sl-autopilot-part` prints nothing when the JSON is malformed.
-  - [ ] `sl-autopilot-part` prints nothing when `end_time` is before
-        `started_at` (corrupted state file) — added after independent
-        design review, 2026-09-29.
-  - [ ] `statusline-command` end-to-end: with a running-state fixture,
+  - [x] `sl-autopilot-part` prints nothing when `status` is `"stopped"`.
+  - [x] `sl-autopilot-part` prints `ap: <N>/<M>hr <stuck>/<cycle>` for a
+        fixture `status: "running"` file, using real wall-clock offsets
+        (`date -v-90M`/`date -d '90 minutes ago'`) rather than mocked time.
+  - [x] `sl-autopilot-part` prints nothing when the JSON is malformed.
+  - [x] `sl-autopilot-part` prints nothing when `end_time` is before
+        `started_at` (corrupted state file) — verified non-vacuous by
+        temporarily disabling the guard and confirming the test fails.
+  - [x] `statusline-command` end-to-end: with a running-state fixture,
         output starts with `ap: ...` before `ctx: ...`; without one,
         output is unchanged from today (regression guard against the
         existing `statusline-command` tests already in this file).
-- [ ] Full `bats tests/*.bats` passes.
+- [x] Full `bats tests/*.bats _docs/*.bats` passes — 792/792, exit 0.
 
 ## Done criteria
 
-- [ ] `sl-iso-to-epoch` round-trips a known timestamp — `tests/statusline_setup.bats`.
-- [ ] `sl-autopilot-part` covers all five cases (absent file / stopped /
+- [x] `sl-iso-to-epoch` round-trips a known timestamp — `tests/statusline_setup.bats`.
+- [x] `sl-autopilot-part` covers all five cases (absent file / stopped /
       running / malformed / backwards timestamps) — `tests/statusline_setup.bats`.
-- [ ] `statusline-command()` (`statusline-setup/scripts/statusline-command.sh:120`)
+- [x] `statusline-command()` (`statusline-setup/scripts/statusline-command.sh:120`)
       wires `ap_part` first into `sl-join` — end-to-end case in
       `tests/statusline_setup.bats`.
-- [ ] No behavior change when autopilot isn't running — pre-existing
-      `tests/statusline_setup.bats` cases pass unmodified.
+- [x] No behavior change when autopilot isn't running — pre-existing
+      `tests/statusline_setup.bats` cases (21 of them) pass unmodified.
+
+## Closed (2026-09-29)
+
+- Shipped in [PR #179](https://github.com/Synx-Data-Labs/ccxp-skills/pull/179).
+- Every Test plan and Done criterion above is checked off with fresh
+  verification evidence (bats runs, an explicit RED/GREEN watch per new
+  test, a manual guard non-vacuousness check) — none left external or
+  unverified.
+- One independent review round on the design PR (#178) caught four real
+  issues before any code was written: a variable-naming bug in the
+  Solution pseudocode, a TOCTOU gap from five separate `jq` reads, an
+  unhandled backwards-timestamp case, and an unspecified test-time
+  strategy. All fixed before the design merged — the implementation
+  proceeded from a correct, complete spec with no further review findings.
+- `statusline-setup/SKILL.md` updated in the same PR to describe the new
+  segment (caught by `_docs/doc-impact.sh`); four other incidental
+  `statusline-command.sh` mentions (`1password-env-setup`, `claim`,
+  `drive`, `eta` `SKILL.md`s) reviewed and left as-is — none describe the
+  output format in a way this change affects.
+- No follow-up tasks filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class.
+  Every new function/case (`sl-iso-to-epoch`, `sl-autopilot-part`'s five
+  branches, the `statusline-command` end-to-end wiring) was written
+  test-first, watched RED for the expected reason, then given minimal
+  code to reach GREEN. The one guard whose test could have been vacuous
+  (backwards-timestamp) was explicitly proven non-vacuous by disabling
+  it and re-running.
+- Verification (`superpowers:verification-before-completion`): yes —
+  fresh full-suite run (792/792) and a diff-scope check before opening
+  the PR, not a reused earlier result.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test
+  went red-and-stayed-red across attempts.
+- Receiving code review (`superpowers:receiving-code-review`): yes — 1
+  independent review round on the design PR (#178), 4 real findings, all
+  accepted and fixed (steelmanned first via re-reading the cited files),
+  none pushed back on as wrong.
