@@ -79,6 +79,48 @@ sl-claimed-task-label() {
   fi
 }
 
+# $1 ISO-8601 UTC -> epoch seconds, or empty. GNU date then BSD date — same
+# two-line fallback shape as ccxp/scripts/epic-status.sh's _epic_iso_to_epoch.
+sl-iso-to-epoch() {
+  local iso="$1" e
+  e="$(date -u -d "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
+  e="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
+  printf ''
+}
+
+# $1 repo_root -> "ap: <elapsed>/<requested>hr <stuck>/<cycle>" when
+# /autopilot's dev/.autopilot-state.json exists and status is "running",
+# else nothing. Never fails the prompt: any missing/malformed field just
+# degrades to printing nothing (same convention as every other sl- helper).
+sl-autopilot-part() {
+  local repo_root="$1" state_file line
+  state_file="$repo_root/dev/.autopilot-state.json"
+  [ -f "$state_file" ] || return 0
+
+  # One jq call for all fields (not five separate ones) — avoids a TOCTOU
+  # gap where /autopilot could rewrite the file between separate reads.
+  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count] | map(. // "") | @tsv' \
+    "$state_file" 2>/dev/null) || return 0
+
+  local ap_status started_at end_time stuck_count cycle_count
+  IFS=$'\t' read -r ap_status started_at end_time stuck_count cycle_count <<<"$line"
+  [ "$ap_status" = "running" ] || return 0
+
+  local started_epoch end_epoch
+  started_epoch=$(sl-iso-to-epoch "$started_at")
+  end_epoch=$(sl-iso-to-epoch "$end_time")
+  [ -n "$started_epoch" ] && [ -n "$end_epoch" ] || return 0
+  [ "$end_epoch" -gt "$started_epoch" ] || return 0
+
+  local elapsed_secs requested_secs elapsed_hr requested_hr
+  elapsed_secs=$(( $(date +%s) - started_epoch ))
+  requested_secs=$(( end_epoch - started_epoch ))
+  elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
+  requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
+
+  printf 'ap: %s/%shr %s/%s' "$elapsed_hr" "$requested_hr" "$stuck_count" "$cycle_count"
+}
+
 # Join non-empty parts with " | " (array-expansion IFS only uses its first
 # char, so build the separator explicitly).
 sl-join() {
@@ -103,7 +145,8 @@ statusline-command() {
   todo_dir="$repo_root/dev/TODO"
   task_label=$(sl-claimed-task-label "$todo_dir" "$clone_id")
 
-  local ctx_part="" branch_part="" task_part branch_name
+  local ap_part="" ctx_part="" branch_part="" task_part branch_name
+  ap_part=$(sl-autopilot-part "$repo_root")
   if [ -n "$remaining" ]; then
     ctx_part="ctx: $(printf '%.0f' "$remaining")% left"
   fi
@@ -117,7 +160,7 @@ statusline-command() {
     task_part="no claimed task"
   fi
 
-  sl-join "$ctx_part" "$branch_part" "$task_part"
+  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part"
 }
 
 # Run only when executed directly (not when sourced), matching the

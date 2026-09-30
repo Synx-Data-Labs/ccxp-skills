@@ -270,3 +270,104 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" = "ctx: 100% left | branch: $branch | no claimed task" ]
 }
+
+# ---------------------------------------------------------------------------
+# sl-iso-to-epoch
+# ---------------------------------------------------------------------------
+
+@test "sl-iso-to-epoch round-trips a known ISO-8601 timestamp" {
+  run bash -c "source '$SCRIPT'; sl-iso-to-epoch '2026-01-01T00:00:00Z'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "1767225600" ]
+}
+
+# ---------------------------------------------------------------------------
+# sl-autopilot-part
+# ---------------------------------------------------------------------------
+
+@test "sl-autopilot-part prints nothing when the state file doesn't exist" {
+  local repo
+  repo=$(_make_repo repo-ap-absent)
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when status is stopped" {
+  local repo
+  repo=$(_make_repo repo-ap-stopped)
+  mkdir -p "$repo/dev"
+  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
+{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 1, "cycle_count": 3}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints ap: <elapsed>/<requested>hr <stuck>/<cycle> when running" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-running)
+  mkdir -p "$repo/dev"
+  # Real wall-clock offsets, not mocked time — 90 minutes ago rounds to 2hr
+  # elapsed (awk %.0f rounds, doesn't truncate); requested window is a fixed
+  # 5 real hours from started_at.
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 3, "cycle_count": 10}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap: 2/5hr 3/10" ]
+}
+
+@test "sl-autopilot-part prints nothing when the JSON is malformed" {
+  local repo
+  repo=$(_make_repo repo-ap-malformed)
+  mkdir -p "$repo/dev"
+  printf '{not valid json' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when end_time is before started_at" {
+  local repo
+  repo=$(_make_repo repo-ap-backwards)
+  mkdir -p "$repo/dev"
+  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
+{"status": "running", "started_at": "2026-01-01T05:00:00Z", "end_time": "2026-01-01T00:00:00Z", "stuck_count": 0, "cycle_count": 1}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ---------------------------------------------------------------------------
+# statusline-command wiring (ap_part first)
+# ---------------------------------------------------------------------------
+
+@test "statusline-command prepends ap: before ctx: when autopilot is running" {
+  local repo branch started_at end_time
+  repo=$(_make_repo repo-ap-e2e-running)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 3, "cycle_count": 10}
+EOF
+  branch=$(git -C "$repo" symbolic-ref --short HEAD)
+  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap: 2/5hr 3/10 | ctx: 42% left | branch: $branch | no claimed task" ]
+}
+
+@test "statusline-command output is unchanged when autopilot state file is absent" {
+  local repo branch
+  repo=$(_make_repo repo-ap-e2e-absent)
+  branch=$(git -C "$repo" symbolic-ref --short HEAD)
+  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ctx: 42% left | branch: $branch | no claimed task" ]
+}
