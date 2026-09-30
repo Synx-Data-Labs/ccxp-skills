@@ -88,27 +88,31 @@ sl-iso-to-epoch() {
   printf ''
 }
 
-# $1 repo_root -> "ap: <elapsed>/<requested>hr <stuck>/<cycle>" when
-# /autopilot's dev/.autopilot-state.json exists and status is "running",
-# else nothing. Never fails the prompt: any missing/malformed field just
-# degrades to printing nothing (same convention as every other sl- helper).
+# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>"
+# when /autopilot's dev/.autopilot-state.json exists and status is "running"
+# or "stopped", else nothing. [r] running normally, [b] running but backing
+# off (last_outcome == "stuck"), [s] stopped — [s] lingers with no
+# dismiss/expiry, same as the state file itself (autopilot/SKILL.md Phase 5
+# never deletes it). Never fails the prompt: any missing/malformed field
+# just degrades to printing nothing (same convention as every other sl-
+# helper).
 sl-autopilot-part() {
   local repo_root="$1" state_file line
   state_file="$repo_root/dev/.autopilot-state.json"
   [ -f "$state_file" ] || return 0
 
-  # One jq call for all fields (not five separate ones) — avoids a TOCTOU
+  # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
-  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count] | map(. // "") | @tsv' \
+  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at] | map(. // "") | @tsv' \
     "$state_file" 2>/dev/null) || return 0
 
-  local ap_status started_at end_time stuck_count cycle_count
-  IFS=$'\t' read -r ap_status started_at end_time stuck_count cycle_count <<<"$line"
-  [ "$ap_status" = "running" ] || return 0
+  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at
+  IFS=$'\t' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at <<<"$line"
+  [ "$ap_status" = "running" ] || [ "$ap_status" = "stopped" ] || return 0
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
   # negative, or non-numeric value degrades to nothing rather than a
-  # garbled segment (e.g. "ap: 2/5hr /" or "ap: 2/5hr abc/3").
+  # garbled segment (e.g. "ap:[r] 2/5hr /" or "ap:[r] 2/5hr abc/3").
   [[ "$stuck_count" =~ ^[0-9]+$ ]] || return 0
   [[ "$cycle_count" =~ ^[0-9]+$ ]] || return 0
 
@@ -120,13 +124,35 @@ sl-autopilot-part() {
   now_epoch=$(date +%s)
   [ "$started_epoch" -le "$now_epoch" ] || return 0
 
-  local elapsed_secs requested_secs elapsed_hr requested_hr
-  elapsed_secs=$(( now_epoch - started_epoch ))
+  local prefix elapsed_secs
+  if [ "$ap_status" = "stopped" ]; then
+    prefix='[s]'
+    # Elapsed for a stopped run is last_cycle_at - started_at (or 0 if no
+    # cycle ever ran), not now - started_at — the run is long over, so
+    # "now" would give an ever-growing, meaningless elapsed. Mirrors
+    # autopilot/SKILL.md Phase 0's own status-report elapsed rule.
+    if [ -n "$last_cycle_at" ]; then
+      local last_cycle_epoch
+      last_cycle_epoch=$(sl-iso-to-epoch "$last_cycle_at")
+      if [ -n "$last_cycle_epoch" ] && [ "$last_cycle_epoch" -ge "$started_epoch" ]; then
+        elapsed_secs=$(( last_cycle_epoch - started_epoch ))
+      else
+        elapsed_secs=0
+      fi
+    else
+      elapsed_secs=0
+    fi
+  else
+    if [ "$last_outcome" = "stuck" ]; then prefix='[b]'; else prefix='[r]'; fi
+    elapsed_secs=$(( now_epoch - started_epoch ))
+  fi
+
+  local requested_secs elapsed_hr requested_hr
   requested_secs=$(( end_epoch - started_epoch ))
   elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
   requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
 
-  printf 'ap: %s/%shr %s/%s' "$elapsed_hr" "$requested_hr" "$stuck_count" "$cycle_count"
+  printf 'ap:%s %s/%shr %s/%s' "$prefix" "$elapsed_hr" "$requested_hr" "$stuck_count" "$cycle_count"
 }
 
 # Join non-empty parts with " | " (array-expansion IFS only uses its first
