@@ -293,19 +293,33 @@ EOF
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when status is stopped" {
+@test "sl-autopilot-part prints ap:[s] with elapsed from last_cycle_at when stopped" {
   local repo
   repo=$(_make_repo repo-ap-stopped)
   mkdir -p "$repo/dev"
+  # last_cycle_at is 2hr after started_at — elapsed must come from that, not
+  # from "now" (the run is long over; "now" would give a bogus huge elapsed).
   cat > "$repo/dev/.autopilot-state.json" <<'EOF'
-{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 1, "cycle_count": 3}
+{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 1, "cycle_count": 3, "last_outcome": "stuck", "last_cycle_at": "2026-01-01T02:00:00Z"}
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [ "$output" = "ap:[s] 2/5hr 1/3" ]
 }
 
-@test "sl-autopilot-part prints ap: <elapsed>/<requested>hr <stuck>/<cycle> when running" {
+@test "sl-autopilot-part prints ap:[s] with elapsed 0 when stopped and last_cycle_at is null" {
+  local repo
+  repo=$(_make_repo repo-ap-stopped-no-cycle)
+  mkdir -p "$repo/dev"
+  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
+{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 0, "cycle_count": 0, "last_outcome": null, "last_cycle_at": null}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap:[s] 0/5hr 0/0" ]
+}
+
+@test "sl-autopilot-part prints ap:[r] <elapsed>/<requested>hr <stuck>/<cycle> when running normally" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-running)
   mkdir -p "$repo/dev"
@@ -319,7 +333,21 @@ EOF
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap: 2/5hr 3/10" ]
+  [ "$output" = "ap:[r] 2/5hr 3/10" ]
+}
+
+@test "sl-autopilot-part prints ap:[b] when running and last_outcome is stuck" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-backing-off)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 2, "cycle_count": 4, "last_outcome": "stuck"}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap:[b] 2/5hr 2/4" ]
 }
 
 @test "sl-autopilot-part prints nothing when the JSON is malformed" {
@@ -360,7 +388,7 @@ EOF
   branch=$(git -C "$repo" symbolic-ref --short HEAD)
   run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap: 2/5hr 3/10 | ctx: 42% left | branch: $branch | no claimed task" ]
+  [ "$output" = "ap:[r] 2/5hr 3/10 | ctx: 42% left | branch: $branch | no claimed task" ]
 }
 
 @test "statusline-command output is unchanged when autopilot state file is absent" {
@@ -408,6 +436,18 @@ EOF
   end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": -5, "cycle_count": 3}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when stuck_count is negative and status is stopped" {
+  local repo
+  repo=$(_make_repo repo-ap-negative-count-stopped)
+  mkdir -p "$repo/dev"
+  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
+{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": -5, "cycle_count": 3}
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
