@@ -118,31 +118,31 @@ skipping the separate design PR.
 
 ## Test plan
 
-- [ ] Manual read-through: `autopilot/SKILL.md` Phase 3/5 + State file
+- [x] Manual read-through: `autopilot/SKILL.md` Phase 3/5 + State file
   section describe the persistent-clone mechanism consistently (no stale
   "deliberately no isolation" prose left).
-- [ ] Manual read-through: `drive/SKILL.md:178`'s orphan-sweep note
+- [x] Manual read-through: `drive/SKILL.md:178`'s orphan-sweep note
   mentions `/tmp/autopilot-clone-*/`.
-- [ ] `skill-quality` ratchet (`skill_score.py --check
+- [x] `skill-quality` ratchet (`skill_score.py --check
   dev/quality/skill-scores.json`) passes on `autopilot/SKILL.md` — no
-  regression from the prose changes.
-- [ ] `_docs/lint-docs.sh` / `lint_paragraphs.py` clean on both edited
+  regression from the prose changes (48/48 skills at or above baseline).
+- [x] `_docs/lint-docs.sh` / `lint_paragraphs.py` clean on both edited
   files.
 - No BATS tests — this is a skill-prose change (dispatch mechanics
   described in `autopilot/SKILL.md`, no new script), not executable code.
 
 ## Done criteria
 
-- [ ] `autopilot/SKILL.md`'s State file section (line ~19-28) documents
+- [x] `autopilot/SKILL.md`'s State file section (line 19-28) documents
   `dispatch_clone_path`.
-- [ ] Phase 3 (line ~53-73) creates the clone lazily (only if missing) and
+- [x] Phase 3 (line 56-72) creates the clone lazily (only if missing) and
   reuses it otherwise, with the naming convention above.
-- [ ] Phase 3's dispatch prompt (line ~57) tells the sub-agent to `cd`
+- [x] Phase 3's dispatch prompt (line 72) tells the sub-agent to `cd`
   into the dispatch clone and sync before running `/drive`.
-- [ ] Phase 5 (line ~83-104) removes the dispatch clone on stop.
-- [ ] Phase 3's "deliberately no isolation" paragraph (line 55) is
+- [x] Phase 5 (line 118) removes the dispatch clone on stop.
+- [x] Phase 3's "deliberately no isolation" paragraph (former line 55) is
   rewritten to match the new mechanism (no stale rationale left behind).
-- [ ] `drive/SKILL.md:178`'s orphan-sweep note also mentions
+- [x] `drive/SKILL.md:178`'s orphan-sweep note also mentions
   `/tmp/autopilot-clone-*/`.
 
 ## Root cause
