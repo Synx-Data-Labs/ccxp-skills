@@ -23,11 +23,14 @@ Keep dispatching bare `/drive` cycles back-to-back until at least `<duration>` h
   "stuck_count": 0, "cycle_count": 0,
   "last_cycle_at": null, "last_outcome": null,
   "last_task": null, "last_stuck_reason": null,
-  "stop_reason": null
+  "stop_reason": null,
+  "dispatch_clone_path": null
 }
 ```
 
 `last_task` is `{"id": "T...", "slug": "..."}` or `null`. Everything else this skill might want to report (which tasks merged, which PRs are still open) is **not** stored here — Phase 0 derives it live from `dev/TODO/`, `dev/JOURNAL/`, and `gh`, since those are the actual source of truth and a cached copy here would drift.
+
+`dispatch_clone_path` is the dedicated clone Phase 3 dispatches `/drive` into — `null` until first created, then the same path all run. Phase 5 removes the directory on stop.
 
 ## Workflow
 
@@ -52,9 +55,21 @@ If `now >= end_time`: go to Phase 5 with stop reason `elapsed`.
 
 ### Phase 3: Run one cycle
 
-Dispatch `/drive` (bare auto-pick) via the `Agent` tool instead of invoking it inline — `subagent_type: general-purpose` (needs `/drive`'s full tool surface: git, `gh`, Bash, Edit, Skill), **deliberately no `isolation`**, unlike `/drive`'s own `--dispatch-blockers` mode which uses `isolation: "worktree"`. This is not an oversight — a worktree is actively wrong here: `_session/claimant-id.sh` hashes `git rev-parse --show-toplevel` (the clone path) into the task-claim identity, and a `git worktree` has its own distinct toplevel path. `--dispatch-blockers` gets away with that because it's a single one-off call inside one `/drive` invocation — B's claim only has to succeed once. `/autopilot` dispatches repeatedly, cycle after cycle; giving each cycle a different worktree would give each cycle a *different claimant identity*, breaking the "same clone = same claimant, self-releases its own prior claim" assumption the whole anti-steal system depends on (`_session/task_claim.sh`) — an accumulating-orphaned-claims bug across a long run, not a hypothetical. Plain no-isolation dispatch keeps every cycle's claimant identity pinned to this one clone's path, exactly like the inline behavior it replaces. The wait-state this creates (idle between dispatch and notification, same clone) is no different from the pre-existing hazard of anything else touching this clone while `/drive` runs inline — unchanged by this PR either way, and Phase 0's `status` path is read-only (`git log`, `gh pr view` — no checkout) so it isn't a collision case. Keeping a full `/drive` cycle's internal work (git diffs, CI polling, review iterations, journal writes) out of `/autopilot`'s own context is what bounds a multi-hour run's context growth — there is no `/clear`/`/compact` this skill can trigger itself (neither is exposed as a tool; `/compact` also already runs automatically as a harness-level backstop regardless), so dispatch is the only mechanism actually available to it. This still mirrors `--dispatch-blockers`'s core pattern (`drive/SKILL.md` "Recurse into B", T20260719-204917) — Agent-tool dispatch, compact report only — just without the isolation flag, for the reason above.
+**Ensure the dispatch clone exists (once per run, then reuse it every cycle).** Read `dispatch_clone_path` from `dev/.autopilot-state.json`. If `null` or the directory no longer exists (e.g. `/tmp` cleared since a `/clear`/resume), create it and record the path back into `dispatch_clone_path`:
 
-The dispatch prompt must be self-contained — the sub-agent has no memory of this conversation. State plainly: this is `/autopilot` invoking `/drive` for its next unattended cycle (bare, auto-pick — no specific task), name the repo/working directory, and require the agent to run `/drive` to completion. Don't just hand it the report template below — the sub-agent is the one directly observing `/drive`'s outcome, so it needs Phase 4's actual classification criteria to self-report accurately, not just a shape to fill in: give it a condensed restatement of what Stuck means (`/drive` errored; returned having neither merged anything nor advanced any task's state — **a commit alone is not advancement; only a merge, or a genuinely self-resolving wait, counts as Progress**; stopped via its own Escalation Rules; or its delegated `/address-pr` call stopped-and-reported without merging — Phase 4's Stuck bullet, verbatim in brief, qualifier included) alongside the format, so it can tell "no advancement" apart from a genuine `WAITING` state itself rather than guessing which section applies. End its final message in exactly this format, so Phase 4 can classify mechanically without reading the sub-agent's full transcript:
+```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+REPO_HASH="$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c1-8)"
+CLONE_PATH="/tmp/autopilot-clone-$(basename "$REPO_ROOT")-${REPO_HASH}"
+[ -d "$CLONE_PATH" ] || git clone "$(git -C "$REPO_ROOT" remote get-url origin)" "$CLONE_PATH"
+```
+
+- **Full clone (own `.git`), not a worktree, not shallow.** A worktree shares `.git` with the parent clone — git refuses to check out a branch already checked out elsewhere (`fatal: 'main' is already checked out at ...`), and `/drive` does `git checkout main && git pull` at nearly every phase transition while the parent session normally sits on `main` at rest, so a worktree would collide almost every cycle. `/drive`'s own `--dispatch-blockers` mode gets away with `isolation: "worktree"` because it's one-off, not reused. Non-shallow because this clone is reused for potentially hours.
+- **Reused, never recreated, for the life of the run.** Same path every cycle → same `claimant_id` (`_session/claimant-id.sh` hashes the clone's toplevel path) → claims from this clone behave like a normal peer clone (`_session/task_claim.sh` peer-mode already supports this). A fresh clone/worktree per dispatch would instead give every cycle a different identity, breaking the "same clone = same claimant" assumption the anti-steal system depends on.
+
+Dispatch `/drive` (bare auto-pick) via the `Agent` tool — `subagent_type: general-purpose`, **no `isolation` parameter** (the dispatch clone above already provides it; the Agent tool's own worktree isolation would be a different, non-reused worktree per call, reintroducing the identity problem). This is also what bounds a multi-hour run's own context growth — no `/clear`/`/compact` action exists for this skill to call, so dispatch is the only mechanism available.
+
+The dispatch prompt must be self-contained. State plainly: this is `/autopilot` invoking `/drive` for its next unattended cycle (bare, auto-pick); **name the exact `$CLONE_PATH` and instruct the agent to `cd` there and `git checkout main && git pull` before anything else — never the interactive session's own directory**; require it to run `/drive` to completion from there. Give it Phase 4's actual classification criteria too, not just the report shape (a commit alone is not advancement; only a merge or a genuinely self-resolving wait counts as Progress), so it can self-report accurately rather than guessing which section applies. End its final message in exactly this format, so Phase 4 can classify mechanically without reading the sub-agent's full transcript:
 
 ```
 MERGED: T<id> (<slug>) — PR #<n>
@@ -100,8 +115,9 @@ Needs your attention:
 1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
 2. **Done** lists only what actually merged this run. **Needs your attention** applies the same **Needs-your-attention filter** as Phase 0 (see Important Notes) — a Stuck task still mid-backoff when `elapsed` fired always qualifies (that's the definition of Stuck: no skill resolved it); a merely-open PR or a task `Blocked by T{id}` does not, since a fresh `/autopilot`/`/drive` invocation drains/recurses into those automatically — omit them even though the run has stopped. For the `queue-empty` stop reason this is usually "Nothing outstanding". The tally isn't guaranteed to survive a `ScheduleWakeup` resume — reconstruct what you can from this conversation's history, but don't claim precision it can't back up.
 3. Update the state file (see § State file): `status: "stopped"`, `stop_reason: <reason>`. Leave `stuck_count`/`cycle_count`/`last_*` at whatever Phase 4 (or the `queue-empty` branch) last set — this is what makes the report reconstructible by a later `/autopilot status` even after this conversation is gone.
-4. Post the report to `/slack --channel dev` (`#acme-dev-notifications` — not the default automation-alerts channel).
-5. Report the same template, filled in the same way, to the user in this turn's response.
+4. **Remove the dispatch clone**: if `dispatch_clone_path` is set, `rm -rf "$dispatch_clone_path"` (plain directory removal — it's a real clone, not a worktree).
+5. Post the report to `/slack --channel dev` (`#acme-dev-notifications` — not the default automation-alerts channel).
+6. Report the same template, filled in the same way, to the user in this turn's response.
 
 ## Important Notes
 
@@ -117,12 +133,13 @@ Needs your attention:
 - **Stuck backoff is silent — from `/autopilot`'s side.** `/autopilot` itself only posts to Slack once, at the final Phase 5 stop — a backing-off cycle just reschedules quietly (`noop: true`) and moves on. A Stuck cycle folded in from `/drive`'s own Escalation Rules may already have sent its own Slack message before `/autopilot` ever classified the outcome; that's `/drive`'s notification, not a repeat autopilot post, and it can recur once per backoff retry for as long as the underlying escalation cause persists. The `/address-pr`-delegated Stuck case (safety valve, unresolvable conflict, unverifiable item) posts **no** notification of its own — it's silent through every backoff retry it causes, with no way out but the window elapsing (this path never produces the `queue-empty` reason, only `elapsed`), so the only visibility is this skill's own Phase 5 summary once that happens.
 - **Queue-empty is a stop, not a backoff case.** If there is genuinely nothing actionable, waking up again on a timer won't change that; only a future `/stage`/`/todo sweep` adding new work would, and the user can just re-run `/autopilot` then.
 - **This does not replace `/ccxp`.** `/ccxp` is the full ritual-aware orchestrator (standup, IPM, retro) meant for the daily/weekly cron cadence; `/autopilot` is a plain duration-boxed `/drive` loop for an interactive "go work for N hours" ask.
-- **One active run per repo, best-effort.** The state file assumes a single `/autopilot` loop per repo — there's no lock. Running two concurrently in the same repo will have the second's writes clobber the first's; not guarded against, same as the rest of this skill's concurrency posture today.
+- **One active run per repo, best-effort.** The state file assumes a single `/autopilot` loop per repo — there's no lock. Running two concurrently in the same repo will have the second's writes clobber the first's, including the dispatch clone (its path is deterministic per repo) — not a new hazard, same posture as everything else here.
 
 ## Cross-references
 
 - `/drive` — does all the actual task-selection/implementation/merge work, once per cycle, run via a dispatched sub-agent (Phase 3), not inline
-- `drive/SKILL.md`'s `--dispatch-blockers` mode — the precedent this skill's Phase 3 dispatch pattern mirrors (Agent tool, compact report only, T20260719-204917)
+- `drive/SKILL.md`'s Phase 1.5 ephemeral cross-repo clone — the precedent Phase 3's dispatch clone mirrors, reused across cycles instead of per-task
+- `drive/SKILL.md`'s `--dispatch-blockers` mode — a one-off `isolation: "worktree"` dispatch, fine for a single call but not for `/autopilot`'s repeated cycles (see Phase 3)
 - `/ccxp` — the full ritual-aware orchestrator this skill deliberately does not replace
 - `/slack` — posts the stop summary (`--channel dev`, i.e. `#acme-dev-notifications`)
 - `superpowers` `ScheduleWakeup` — the resume mechanism between cycles
