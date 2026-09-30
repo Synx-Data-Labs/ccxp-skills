@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 2h
 source: this conversation, 2026-09-28 — live incident while running /land
 related: T20260910-919422, T20260922-383156, T20260922-253015, T20260929-128287
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -230,6 +230,49 @@ Remove the whole `--fix` code path instead of patching the next variant:
 | `ccxp/scripts/reclaim-sweep-pr.sh` | 48 | caller — bare/no-path (found by the unrestricted `.sh`-inclusive sweep), replaced with `$CHANGED_MD`-scoped call over `dev/TODO/*.md` |
 | `ccxp/scripts/update-roadmap.sh` | 133 | caller — bare/no-path (found by the unrestricted `.sh`-inclusive sweep), replaced with the literal `dev/ROADMAP.md` |
 
+## Closed (2026-09-29)
+
+Shipped in **PR #182** (design in PR #181, both merged to `main`).
+
+- All Done criteria met — `_docs/lint-docs.sh` has no `--fix` path and no
+  default-scope substitution (verified by `_docs/lint-docs.bats`'s 2 new
+  zero-args cases); all 8 real callers (`gcpr`, `new-task`, `incept`,
+  `drive`, `ccxp/SKILL.md`, `retro`, `ccxp/scripts/reclaim-sweep-pr.sh`,
+  `ccxp/scripts/update-roadmap.sh`) updated; both bats suites green
+  locally (20/20) and in CI.
+- **Independent review round 1** (PR #182, sha 53107c7) found one real
+  regression bug — `ccxp/scripts/reclaim-sweep-pr.sh`'s `$CHANGED_MD`
+  derivation used the naive `awk '{print $2}'` pattern already known
+  (T20260910-919422) to mis-handle a renamed file's path and to not skip
+  deleted entries — plus one minor consistency nit (`drive/SKILL.md`'s bare
+  `|| true`). Both fixed in a follow-up commit (c1befe9); **review round 2**
+  confirmed the fix and gave a clean bill.
+- **Also caught mid-implementation**: `gcpr/SKILL.md`'s own edit initially
+  dropped its `skill-quality` CI check below its 90 baseline (88 < 90,
+  `dev/quality/skill-scores.json`) by adding redundant task-ID mentions and
+  lengthening a paragraph past 60 words — fixed by trimming the noise
+  (history belongs in `dev/JOURNAL`, not inline).
+- **Follow-up task filed**: T20260929-128287 (non-blocking) — a soft
+  discovery made while verifying the `$CHANGED_MD` replacement pattern:
+  unquoted word-splitting of a newline-joined variable is shell-dependent
+  (works under bash, silently no-ops under zsh). Staged into the current
+  iteration; doesn't block this close since the new code mirrors an
+  already-in-production pattern rather than introducing a new risk.
+- Nothing left unverified — no post-merge-only items on this task.
+
 ## Skills invoked
 
-(filled at close)
+- `ccxp-skills:drive` — end-to-end orchestration (claim → design →
+  implement → PR → close), Phases 1-4 and 7.
+- `ccxp-skills:todo` (`sweep`, `next`) — Phase 1 backlog sync and task pick.
+- `ccxp-skills:design-score` — design PR gate (88/100, PASS).
+- `ccxp-skills:address-pr` — both the design PR (#181) and implementation
+  PR (#182) merge loops, including the independent-review dispatch (two
+  rounds) and CI-gate verification.
+- `ccxp-skills:quality-probe` — recorded post-implementation metrics
+  (`dev/quality/metrics.jsonl`); non-blocking regressions noted, not acted
+  on beyond the `skill-quality` CI-enforced ratchet (which is a separate,
+  blocking check the ratchet-restore commit fixed).
+- `superpowers:receiving-code-review` (implicit) — verified rather than
+  reflexively applied the independent reviewer's finding on
+  `reclaim-sweep-pr.sh` before fixing it.

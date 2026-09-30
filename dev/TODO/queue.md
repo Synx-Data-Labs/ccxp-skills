@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20260928-608242](T20260928-608242-lint-docs-remove-fix-require-path.md): Remove `lint-docs.sh`'s `--fix` entirely and require an explicit path argument
 - [T20260924-366770](T20260924-366770-statusline-last-input-slug.md): Add a last-user-input slug to the statusline
 - [T20260922-155006](T20260922-155006-gcpr-changed-md-awk-rename-unsafe.md): `gcpr/SKILL.md`'s `CHANGED_TASKS`/`CHANGED_REFS` extraction is rename/delete-unsafe, same bug as the fixed `CHANGED_MD` one
 - [T20260922-409644](T20260922-409644-disable-model-invocation-never-used.md): `disable-model-invocation` is never set to `true` anywhere in ccxp-skills
