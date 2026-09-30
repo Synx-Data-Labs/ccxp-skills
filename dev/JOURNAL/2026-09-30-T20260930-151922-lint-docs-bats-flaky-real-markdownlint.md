@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-28
 estimation: 1h
 source: this conversation, 2026-09-30 — surfaced during T20260930-132964's PR #189 CI
 related: T20260930-132964
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260930-151922: `_docs/lint-docs.sh` misreads a transient npx failure as "violations found"
