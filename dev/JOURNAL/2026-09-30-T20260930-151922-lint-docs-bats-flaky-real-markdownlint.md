@@ -169,8 +169,7 @@ claimed_role:
 
 ## Closed (2026-09-30)
 
-Shipped in **PR #(this journal-move PR — see the implementation PR opened
-alongside it on the same branch)**.
+Shipped in **PR #193** (design in #192).
 
 - Met: root-caused the mechanism (npm/npx exit-1 colliding with
   markdownlint-cli2's own exit-1), fixed `_lint_docs_run_tool`
