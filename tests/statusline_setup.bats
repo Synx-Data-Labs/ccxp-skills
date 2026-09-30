@@ -371,3 +371,59 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" = "ctx: 42% left | branch: $branch | no claimed task" ]
 }
+
+@test "sl-autopilot-part prints nothing when started_at is in the future (clock skew)" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-future-start)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v+10M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '10 minutes' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 0, "cycle_count": 1}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when stuck_count/cycle_count are missing" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-null-counts)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time"}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when stuck_count is negative" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-negative-count)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": -5, "cycle_count": 3}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-part prints nothing when cycle_count is non-numeric" {
+  local repo started_at end_time
+  repo=$(_make_repo repo-ap-nonnumeric-count)
+  mkdir -p "$repo/dev"
+  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
+  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
+  cat > "$repo/dev/.autopilot-state.json" <<EOF
+{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 1, "cycle_count": "abc"}
+EOF
+  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
