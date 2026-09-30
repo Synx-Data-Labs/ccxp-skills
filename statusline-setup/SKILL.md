@@ -1,6 +1,6 @@
 ---
 name: statusline-setup
-description: Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar, driven by settings.json's statusLine.command
+description: Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap: <elapsed>/<requested>hr <stuck>/<cycle>" segment leads it while /autopilot is running), driven by settings.json's statusLine.command
 disable-model-invocation: false
 argument-hint: "[edit|test]"
 ---
@@ -10,8 +10,10 @@ argument-hint: "[edit|test]"
 Canonical, version-tracked home for `scripts/statusline-command.sh` — the
 script `~/.claude/settings.json`'s `statusLine.command` invokes on every
 prompt render. It surfaces the task claimed by *this* clone (matching
-`claimed_by: cc1-<machine-id>:<path-hash>` written by `_session/task_claim.sh`) and
-the remaining context-window percentage.
+`claimed_by: cc1-<machine-id>:<path-hash>` written by `_session/task_claim.sh`),
+the remaining context-window percentage, and — while `/autopilot` is
+running in this clone — an `ap: <elapsed>/<requested>hr <stuck>/<cycle>`
+segment read from its `dev/.autopilot-state.json`.
 
 The script previously lived loose at `~/.claude/statusline-command.sh`,
 untracked by any repo. It now lives here so changes go through a normal
