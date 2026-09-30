@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1h
 source: this conversation, 2026-09-29
 related: T20260924-366770
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
