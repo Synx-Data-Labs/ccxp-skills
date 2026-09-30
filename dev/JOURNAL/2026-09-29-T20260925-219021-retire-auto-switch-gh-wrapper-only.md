@@ -346,9 +346,18 @@ scheduled: 2026-09-28
   substantive gap before any code was written: missing bare-`git push`
   callers in `stage`/`top`/`bottom`/`claim`/`retro`, a `drive/SKILL.md`
   site the fix initially missed, and a broken verification grep (too
-  broad + too narrow) — all fixed before the design merged, so the
-  implementation Workflow had a correct, complete spec to execute
-  against with no surprises.
+  broad + too narrow) — all fixed before the design merged.
+- A 4th independent review, on the *implementation* PR (#175) itself,
+  still caught two real gaps the design didn't anticipate: `_git_wire_
+  credentials()` running unconditionally (a behavior change from the
+  retired `auto-switch.sh`, which only wired credentials once an account
+  was confirmed reachable — silently wiring regardless could break a
+  repo authenticating some other way, e.g. an SSH deploy key), and
+  `tests/gh-wrapper-usage.bats`'s own `GH_TOKEN=` detector missing
+  `GITHUB_TOKEN=`, single-quoted Python dict literals, and subscript/
+  `putenv` assignment forms. Both fixed (commit `62f54ce`) before merge —
+  a good design doesn't guarantee a good implementation matches it in
+  every detail; the review loop caught the gap either way.
 
 ## Skills invoked
 
@@ -367,7 +376,8 @@ scheduled: 2026-09-28
   went red-and-stayed-red across attempts; the only stuck-feeling moment
   (the Test stage's pathspec-syntax false alarm on `sync.py`) resolved in
   one direct re-check, not a multi-attempt debug loop.
-- Receiving code review (`superpowers:receiving-code-review`): yes — 3
-  independent review rounds on the design PR (#174), each with real
-  findings; all accepted and fixed (steelmanned first via re-reading the
-  cited files myself), none pushed back on as wrong.
+- Receiving code review (`superpowers:receiving-code-review`): yes — 4
+  independent review rounds total (3 on the design PR #174, 1 on the
+  implementation PR #175), each with real findings; all accepted and
+  fixed (steelmanned first via re-reading the cited files myself), none
+  pushed back on as wrong.
