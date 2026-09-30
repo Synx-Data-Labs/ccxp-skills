@@ -172,13 +172,21 @@ scheduled: 2026-09-28
 - Every Test plan and Done criterion above is checked off with fresh
   verification evidence (bats runs, an explicit RED/GREEN watch per new
   test, a manual guard non-vacuousness check) — none left external or
-  unverified.
-- One independent review round on the design PR (#178) caught four real
-  issues before any code was written: a variable-naming bug in the
-  Solution pseudocode, a TOCTOU gap from five separate `jq` reads, an
-  unhandled backwards-timestamp case, and an unspecified test-time
-  strategy. All fixed before the design merged — the implementation
-  proceeded from a correct, complete spec with no further review findings.
+  unverified. 33 `statusline_setup.bats` cases total (was 21 pre-existing
+  + 12 new: 8 from the initial implementation, 4 from the second review
+  round below).
+- Independent review, design PR (#178): caught four real issues before
+  any code was written — a variable-naming bug in the Solution
+  pseudocode, a TOCTOU gap from five separate `jq` reads, an unhandled
+  backwards-timestamp case, and an unspecified test-time strategy. All
+  fixed before the design merged.
+- Independent review, implementation PR (#179): caught two more real
+  gaps the design didn't anticipate — no guard against a future
+  `started_at` (clock skew would render a negative elapsed hours, e.g.
+  `ap: -2/5hr`), and `stuck_count`/`cycle_count` were never validated
+  (missing/negative/non-numeric values rendered garbage instead of
+  degrading to nothing, unlike every other field). Both fixed (commit
+  `4ea12c7`) with 4 new TDD-first tests before merge.
 - `statusline-setup/SKILL.md` updated in the same PR to describe the new
   segment (caught by `_docs/doc-impact.sh`); four other incidental
   `statusline-command.sh` mentions (`1password-env-setup`, `claim`,
@@ -200,7 +208,7 @@ scheduled: 2026-09-28
   the PR, not a reused earlier result.
 - Systematic debugging (`superpowers:systematic-debugging`): no — no test
   went red-and-stayed-red across attempts.
-- Receiving code review (`superpowers:receiving-code-review`): yes — 1
-  independent review round on the design PR (#178), 4 real findings, all
-  accepted and fixed (steelmanned first via re-reading the cited files),
-  none pushed back on as wrong.
+- Receiving code review (`superpowers:receiving-code-review`): yes — 2
+  independent review rounds (design PR #178, 4 findings; implementation
+  PR #179, 2 findings), all 6 accepted and fixed (steelmanned first via
+  re-reading the cited files myself), none pushed back on as wrong.
