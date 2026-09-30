@@ -192,6 +192,20 @@ staging in PR #187).
   fixed by converting the new explanatory prose into bullets and trimming
   redundant wording (`skill_score.py --check
   dev/quality/skill-scores.json` now passes, 48/48 at or above baseline).
+- **Real finding from `/address-pr`'s independent review**: the first
+  draft's Phase 3 relied on a one-time "`cd $CLONE_PATH` first" dispatch-
+  prompt instruction, assuming that persisted across the dispatched
+  sub-agent's later Bash calls. Verified directly (not just argued) that
+  it does not — a `cd` in one call followed by a bare `pwd` in the next
+  landed back in the original directory every time. Fixed by rewriting
+  the dispatch-prompt rule to require `cd "$CLONE_PATH" &&` prefixed on
+  *every* bash command for the whole `/drive` run, not a one-time setup.
+  Also fixed: `dispatch_clone_path` wasn't nulled on Phase 1
+  fresh-init/Phase 5 teardown, the clone snippet lacked
+  `--recurse-submodules` (inconsistent with `drive/SKILL.md`'s own
+  convention), no recovery path for a dirty/crashed clone, and the
+  concurrent-runs note understated the risk (live git races, not just a
+  JSON clobber).
 - No follow-up tasks filed.
 
 ## Skills invoked
@@ -204,10 +218,15 @@ staging in PR #187).
   prose, no executable code).
 - Verification (`superpowers:verification-before-completion`): yes —
   full read-through of the edited sections, doc-impact check, lint
-  bundle, and skill-quality ratchet before opening the PR.
+  bundle, and skill-quality ratchet before opening the PR; and, critically,
+  empirically testing the dispatch-prompt's cwd-persistence assumption
+  with a real dispatched sub-agent rather than trusting the docs (which
+  turned out to be silent on the question either way).
 - Systematic debugging (`superpowers:systematic-debugging`): no — the
   skill-quality ratchet failures were diagnosed directly from the
   script's own per-check breakdown, not a debugging loop.
-- Receiving code review (`superpowers:receiving-code-review`): no Claude
-  Code review comments yet at close-commit time (dispatched during
-  `/address-pr`'s loop, not before).
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr`'s independent review flagged the cwd-persistence
+  assumption as unverified; steelmanned it, verified it empirically
+  (confirmed real, not a false positive), and fixed the dispatch-prompt
+  rule plus four smaller gaps it also found.
