@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 2h
 source: this conversation, 2026-09-28 — live incident while running /land
 related: T20260910-919422, T20260922-383156, T20260922-253015
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260928-608242: Remove `lint-docs.sh`'s `--fix` entirely and require an explicit path argument
