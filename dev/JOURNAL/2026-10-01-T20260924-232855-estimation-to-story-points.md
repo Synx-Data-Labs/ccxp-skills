@@ -362,6 +362,41 @@ merged).
     retired duration scale — updated to the points scale for consistency
     with the "no duration-bucket string in any doc/template" done
     criterion.
+  - **Independent review (PR #205, dispatched per `/address-pr` §2.d) found
+    two more real issues, both fixed before merge:**
+    1. `ESTIMATION_RE`'s `\b` boundary matched right after the leading
+       digit regardless of what followed, so `^(1|2|3|5|8)\b` wrongly
+       accepted garbage like `1-2h`. Tightened to
+       `^(1|2|3|5|8)(\s|$)`, with two new regression tests
+       (`test_estimation_rejects_a_digit_followed_by_non_whitespace`,
+       `test_estimation_rejects_multi_digit_number`); `lifecycle.md`'s
+       own copy of the regex was also stale and is now corrected.
+    2. `compute-velocity.sh`'s original claim-start resolution read the
+       **current** `claimed_by:` off the archived JOURNAL file and
+       searched history for that exact value — but `task_claim.sh`'s
+       release path always clears `claimed_by` to empty as part of
+       closing a task, so every real JOURNAL file's `claimed_by` is
+       empty and the search could never find anything (confirmed: 0 of
+       this repo's dev/JOURNAL/*.md files have a non-empty `claimed_by`).
+       `hours_per_point` was permanently stuck at the bootstrap default —
+       the review caught it because the bats fixtures didn't mirror the
+       real clear-on-close contract. Fixed by (a) resolving claim-start
+       from history via a task-ID glob pathspec instead of `--follow`
+       (which was independently found to mis-attribute history between
+       textually-similar task files — verified against this repo's real,
+       squash-born history) and (b) deriving the close timestamp from the
+       actual oldest commit touching the task's exact JOURNAL path instead
+       of a synthetic "noon UTC" guess (which was systematically negative
+       for this repo's common same-day claim→close cycles). Verified
+       against this repo's real history post-fix: 9 genuine positive
+       samples resolved (`hours_per_point≈0.28`, consistent with this
+       repo's fast bot-driven cycle times), with the one pre-public-squash
+       artifact correctly excluded by the existing `actual_hours > 0`
+       guard. `tests/compute_velocity.bats`'s `close_task` fixture now
+       clears `claimed_by` on close (mirroring reality) and its two
+       hand-computed hour assertions were corrected (51h/25.5 → 48h/24.0;
+       36.0 → 24.0, since the close timestamp is now a real commit time,
+       not a synthetic one).
 - **Confirmed out-of-scope, left untouched, as designed**: `/ccxp`'s (now
   `/ipm`'s, after the T20260923-584914 extraction that landed after this
   task was designed) IPM budget-cut arithmetic (`~12h product` line,
@@ -395,9 +430,20 @@ merged).
   the full `bats tests/` suite (792/792) and every affected Python test
   module fresh immediately before this close, plus a line-by-line Done-
   criteria re-verification pass (grep-based, not "should work").
-- Systematic debugging (`superpowers:systematic-debugging`): no — no test
-  failed more than once per fix; no behavior contradicted a stated
-  invariant.
-- Receiving code review (`superpowers:receiving-code-review`): no — no
-  Claude Code review comments yet at the time of writing this section
-  (addressed in `/address-pr`, which may append to this record).
+- Systematic debugging (`superpowers:systematic-debugging`): yes (post-review,
+  Phase 3.5-equivalent during `/address-pr`) — `compute-velocity.sh` reported
+  `sample_size: 0` against real repo history after the first fix attempt
+  despite correct-looking logic; traced it hypothesis-by-hypothesis (dumped
+  `cv_rows`, isolated the python math, found negative `actual_hours` on
+  every row, traced that to `--follow`'s rename-detection latching onto an
+  unrelated file's history via this repo's squashed-history timestamps,
+  then found the synthetic "noon UTC close" proxy was independently wrong
+  for same-day claim→close cycles) before landing the real fix.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d dispatched an independent review of PR #205's diff.
+  It reported two real findings (the `ESTIMATION_RE` `\b`-boundary bug and
+  `compute-velocity.sh`'s dead-on-arrival claim-start resolution). Both
+  verified independently against this repo's real data before accepting
+  (confirmed 0/49 JOURNAL files have a non-empty `claimed_by`; confirmed
+  `1-2h` passes the naive regex), then fixed — no pushback needed, both
+  were correct.

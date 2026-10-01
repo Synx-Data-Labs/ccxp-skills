@@ -35,9 +35,20 @@ EOF
 }
 
 # Move a TODO file to JOURNAL with a given close date, as its own commit.
+# Mirrors the REAL _session/task_claim.sh release contract (_tc_release,
+# called by /drive Phase 4 at close): claimed_by is cleared to empty as
+# part of closing, same commit as the journal move — so by the time a
+# task lives in dev/JOURNAL/, its claimed_by is ALWAYS empty (verified:
+# every dev/JOURNAL/*.md in this repo has an empty claimed_by). A fixture
+# that left claimed_by populated after close would never exercise the
+# real "derive start time from history, not from the current frontmatter
+# value" code path.
 # $1=id $2=close-date(YYYY-MM-DD) $3=close-commit-time(ISO8601)
 close_task() {
   local id="$1" close_date="$2" close_time="$3"
+  sed -i.bak -e 's/^claimed_by:.*/claimed_by:/' -e 's/^status:.*/status: Done/' \
+    "$WORK/dev/TODO/${id}-x.md"
+  rm -f "$WORK/dev/TODO/${id}-x.md.bak"
   git -C "$WORK" mv "dev/TODO/${id}-x.md" "dev/JOURNAL/${close_date}-${id}-x.md"
   GIT_AUTHOR_DATE="$close_time" GIT_COMMITTER_DATE="$close_time" \
     git -C "$WORK" commit -q -m "close $id"
@@ -60,24 +71,25 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   mk_claimed_todo T20260101-000001 2 cc1-abc:1111
   commit_dated "2026-01-05T09:00:00+00:00" "claim"
   close_task T20260101-000001 2026-01-07 "2026-01-07T09:00:00+00:00"
-  # claim 2026-01-05T09:00 -> close (noon UTC on 2026-01-07) = 51 hours
-  # hours_per_point = 51 / 2 points = 25.5
+  # claim 2026-01-05T09:00 -> close (the real close-commit timestamp,
+  # 2026-01-07T09:00) = exactly 48 hours
+  # hours_per_point = 48 / 2 points = 24.0
   # points_per_week = 2 points / 4-week window = 0.5
 
   run_script --today 2026-01-10
   [ "$status" -eq 0 ]
   run cat "$WORK/dev/velocity.json"
-  [[ "$output" == *'"hours_per_point": 25.5'* ]]
+  [[ "$output" == *'"hours_per_point": 24.0'* ]]
   [[ "$output" == *'"points_per_week": 0.5'* ]]
   [[ "$output" == *'"sample_size": 1'* ]]
   [[ "$output" == *'"bootstrap": false'* ]]
 }
 
 @test "median resists an outlier task skewing hours_per_point" {
-  # Two normal-pace 1-point tasks (claimed midnight, closed next day — 36h
-  # at the script's noon-UTC close-timestamp convention) and one wildly
-  # slow 1-point task (claimed 11+ days earlier) — the median must land on
-  # the normal-pace value, not be dragged toward the mean by the outlier.
+  # Two normal-pace 1-point tasks (claimed midnight, closed exactly 24h
+  # later) and one wildly slow 1-point task (claimed 11+ days earlier) —
+  # the median must land on the normal-pace value, not be dragged toward
+  # the mean by the outlier.
   mk_claimed_todo T20260101-000001 1 cc1-a:1
   commit_dated "2026-01-01T00:00:00+00:00" "claim 1"
   close_task T20260101-000001 2026-01-02 "2026-01-02T00:00:00+00:00"
@@ -93,7 +105,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   run_script --today 2026-01-10
   [ "$status" -eq 0 ]
   run cat "$WORK/dev/velocity.json"
-  [[ "$output" == *'"hours_per_point": 36.0'* ]]
+  [[ "$output" == *'"hours_per_point": 24.0'* ]]
 }
 
 @test "a task closed outside the trailing window is excluded" {
