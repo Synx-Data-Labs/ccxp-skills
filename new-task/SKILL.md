@@ -45,9 +45,7 @@ don't re-ask about something the user just told you. At minimum you need:
 
 Don't ask for an estimation — every new task files at `estimation: 1`
 (see step 3). Real sizing happens at `/incept` time, once grilling
-surfaces actual scope; asking for a point guess before any design work
-would just reproduce the old duration-bucket guessing habit this schema
-replaced (T20260924-232855).
+surfaces actual scope.
 
 Ask about these only when they plausibly apply — don't force them:
 
