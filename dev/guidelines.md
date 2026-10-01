@@ -33,7 +33,7 @@ Task metadata uses **YAML frontmatter** (`---` … `---` at the top of the file)
 
 ```markdown
 ---
-estimation: {30m|1h|2h|4h|1d|2d|1w|2w}
+estimation: {1|2|3|5|8}
 status: {Open|Design|In Progress|Review|Blocked by T{id}}
 source: {GitHub issue, upstream link, or process note}
 description: {One-line summary}

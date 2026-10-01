@@ -8,7 +8,7 @@ import lint_tasks
 
 
 def write_task(root, name="T20260611-000001-demo.md",
-               frontmatter="status: Open\nestimation: 2h",
+               frontmatter="status: Open\nestimation: 2",
                body=None, sub="TODO"):
     """Write a task file under <root>/dev/<sub>/ and return its Path."""
     tid = "-".join(name.split("-")[:2])
@@ -39,7 +39,7 @@ class LintTasksTest(unittest.TestCase):
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_missing_status_fails(self):
-        f = write_task(self.root, frontmatter="estimation: 2h")
+        f = write_task(self.root, frontmatter="estimation: 2")
         self.assertIn("missing required field 'status'", lint_tasks.lint_file(f))
 
     def test_missing_estimation_fails(self):
@@ -49,12 +49,12 @@ class LintTasksTest(unittest.TestCase):
     def test_prose_suffixed_status_passes(self):
         f = write_task(self.root, frontmatter=(
             "status: Coding — UNBLOCKED 2026-06-06: maintainer picked B\n"
-            "estimation: 2h\n"
+            "estimation: 2\n"
             "scheduled: 2026-06-09"))
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_unknown_status_fails(self):
-        f = write_task(self.root, frontmatter="status: Inprogress\nestimation: 2h")
+        f = write_task(self.root, frontmatter="status: Inprogress\nestimation: 2")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("not a known status" in m for m in out), out)
 
@@ -63,34 +63,54 @@ class LintTasksTest(unittest.TestCase):
         # task_claim.sh acquire writes it, so lint must accept it (a
         # one-word lookalike typo like "Inprogress" above must still fail).
         f = write_task(self.root, frontmatter=(
-            "status: In Progress\nestimation: 2h\nscheduled: 2026-06-09"))
+            "status: In Progress\nestimation: 2\nscheduled: 2026-06-09"))
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_prose_suffixed_in_progress_status_passes(self):
         f = write_task(self.root, frontmatter=(
             "status: In Progress — SUPERVISED (needs a human)\n"
-            "estimation: 2h\n"
+            "estimation: 2\n"
             "scheduled: 2026-06-09"))
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_bad_estimation_fails(self):
         f = write_task(self.root, frontmatter="status: Open\nestimation: soon")
         out = lint_tasks.lint_file(f)
-        self.assertTrue(any("must start with a duration" in m for m in out), out)
+        self.assertTrue(any("must be one of" in m for m in out), out)
+
+    def test_legacy_duration_estimation_fails(self):
+        # No compatibility window (T20260924-232855 Migration §4) — a
+        # leftover duration-bucket value fails lint immediately once this
+        # repo has migrated, same as any other invalid value.
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 2h")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("must be one of" in m for m in out), out)
 
     def test_estimation_with_prose_suffix_passes(self):
-        f = write_task(self.root, frontmatter="status: Open\nestimation: 2h (S)")
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 2 (S)")
         self.assertEqual(lint_tasks.lint_file(f), [])
+
+    def test_estimation_rejects_non_fibonacci_integer(self):
+        # 4 and 6 are not in the {1,2,3,5,8} Fibonacci-style enum.
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 4")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("must be one of" in m for m in out), out)
+
+    def test_estimation_accepts_each_fibonacci_value(self):
+        for v in (1, 2, 3, 5, 8):
+            f = write_task(self.root, name=f"T20260611-00000{v}-demo.md",
+                            frontmatter=f"status: Open\nestimation: {v}")
+            self.assertEqual(lint_tasks.lint_file(f), [], v)
 
     def test_unknown_field_fails(self):
         f = write_task(self.root,
-            frontmatter="status: Open\nestimation: 2h\nname: Foo")
+            frontmatter="status: Open\nestimation: 2\nname: Foo")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("unknown field 'name'" in m for m in out), out)
 
     def test_allowed_extra_fields_pass(self):
         f = write_task(self.root, frontmatter=(
-            "status: Open\nestimation: 2h\n"
+            "status: Open\nestimation: 2\n"
             "related: T20260101-000001\nowner: Alex\ndescription: x"))
         self.assertEqual(lint_tasks.lint_file(f), [])
 
@@ -119,7 +139,7 @@ class LintTasksTest(unittest.TestCase):
     def test_all_lints_todo_and_parking_skips_journal(self):
         write_task(self.root, name="T20260611-000001-good.md", sub="TODO")
         write_task(self.root, name="T20260611-000002-park.md",
-                   frontmatter="status: Parked\nestimation: 2h", sub="PARKING")
+                   frontmatter="status: Parked\nestimation: 2", sub="PARKING")
         j = Path(self.root) / "dev" / "JOURNAL" / "2025-01-01-legacy.md"
         j.parent.mkdir(parents=True, exist_ok=True)
         j.write_text("# 2025-01-01: legacy entry\n", encoding="utf-8")  # no frontmatter
@@ -141,13 +161,13 @@ class LintTasksTest(unittest.TestCase):
     def test_blocked_by_live_blocker_passes(self):
         write_task(self.root, name="T20260611-000010-blocker.md")  # live in TODO
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
 
     def test_blocked_by_done_blocker_fails(self):
         write_journal(self.root, "2026-06-17-T20260611-000010-blocker.md")
         dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         out = lint_tasks.lint_blocked_by(self.root)
         self.assertIn(dep, out)
         self.assertTrue(any("already Done" in m for m in out[dep]), out)
@@ -158,7 +178,7 @@ class LintTasksTest(unittest.TestCase):
         write_journal(self.root, "2026-01-01-T20260611-000010-blocker.md")
         write_task(self.root, name="T20260611-000010-blocker.md")  # re-opened, live
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
 
     def test_blocked_by_multiple_blockers_flags_only_done_one(self):
@@ -166,7 +186,7 @@ class LintTasksTest(unittest.TestCase):
         write_journal(self.root, "2026-06-17-T20260611-000020-done.md")  # done
         dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
             "status: Blocked by T20260611-000010 and T20260611-000020\n"
-            "estimation: 2h"))
+            "estimation: 2"))
         out = lint_tasks.lint_blocked_by(self.root)
         msgs = out.get(dep, [])
         self.assertEqual(len(msgs), 1, msgs)  # only the Done blocker flagged
@@ -175,7 +195,7 @@ class LintTasksTest(unittest.TestCase):
     def test_bare_blocked_status_without_id_passes(self):
         # `status: Blocked` with no T-id names nothing to resolve — not flagged.
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked — external vendor\nestimation: 2h"))
+            "status: Blocked — external vendor\nestimation: 2"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
 
     def test_non_blocked_status_mentioning_id_is_ignored(self):
@@ -183,12 +203,12 @@ class LintTasksTest(unittest.TestCase):
         # (only `status: Blocked by …` triggers the cross-reference).
         write_journal(self.root, "2026-06-17-T20260611-000010-done.md")
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Coding — superseded T20260611-000010\nestimation: 2h"))
+            "status: Coding — superseded T20260611-000010\nestimation: 2"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
 
     def test_blocked_by_missing_blocker_fails(self):
         dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-999999\nestimation: 2h"))
+            "status: Blocked by T20260611-999999\nestimation: 2"))
         out = lint_tasks.lint_blocked_by(self.root)
         self.assertTrue(any("not found" in m for m in out.get(dep, [])), out)
 
@@ -197,7 +217,7 @@ class LintTasksTest(unittest.TestCase):
         write_journal(self.root, "2026-06-17-T20260611-000010-blocker.md")
         dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
             "status: Blocked by T20260611-000010 — waiting on review\n"
-            "estimation: 2h"))
+            "estimation: 2"))
         out = lint_tasks.lint_blocked_by(self.root)
         self.assertTrue(any("already Done" in m for m in out.get(dep, [])), out)
 
@@ -206,7 +226,7 @@ class LintTasksTest(unittest.TestCase):
         # in strikethrough (a historical note) — must NOT be flagged.
         write_journal(self.root, "2026-06-17-T20260611-000010-old.md")
         f = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Open\nestimation: 2h\n"
+            "status: Open\nestimation: 2\n"
             "blocked-by: '~~T20260611-000010~~ closed 2026-06-17'"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
         self.assertEqual(lint_tasks.lint_file(f), [])  # schema still clean
@@ -214,7 +234,7 @@ class LintTasksTest(unittest.TestCase):
     def test_all_mode_fails_on_stale_blocker(self):
         write_journal(self.root, "2026-06-17-T20260611-000010-blocker.md")
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         self.assertEqual(lint_tasks.main(["--all", self.root]), 1)
 
     def test_changed_mode_catches_stale_blocker_on_unchanged_file(self):
@@ -223,7 +243,7 @@ class LintTasksTest(unittest.TestCase):
         # when --changed names an unrelated, schema-clean file.
         write_journal(self.root, "2026-06-17-T20260611-000010-blocker.md")
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         write_task(self.root, name="T20260611-000012-other.md")  # clean, changed
         cwd = os.getcwd()
         os.chdir(self.root)
@@ -237,7 +257,7 @@ class LintTasksTest(unittest.TestCase):
         # run and catch the now-stale dependent.
         write_journal(self.root, "2026-06-17-T20260611-000010-blocker.md")
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Blocked by T20260611-000010\nestimation: 2h"))
+            "status: Blocked by T20260611-000010\nestimation: 2"))
         cwd = os.getcwd()
         os.chdir(self.root)
         self.addCleanup(os.chdir, cwd)
@@ -255,25 +275,25 @@ class LintTasksTest(unittest.TestCase):
 
     def test_coding_without_scheduled_fails(self):
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 1d")
+                       frontmatter="status: Coding\nestimation: 3")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m and "missing" in m for m in out), out)
 
     def test_open_without_scheduled_passes(self):
         # Open tasks are not required to carry scheduled:.
         f = write_task(self.root,
-                       frontmatter="status: Open\nestimation: 1d")
+                       frontmatter="status: Open\nestimation: 3")
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_parked_without_scheduled_passes(self):
         # Parked tasks are not required to carry scheduled:.
         f = write_task(self.root,
-                       frontmatter="status: Parked\nestimation: 1d", sub="PARKING")
+                       frontmatter="status: Parked\nestimation: 3", sub="PARKING")
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_design_without_scheduled_fails(self):
         f = write_task(self.root,
-                       frontmatter="status: Design\nestimation: 2h")
+                       frontmatter="status: Design\nestimation: 2")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m for m in out), out)
 
@@ -283,19 +303,19 @@ class LintTasksTest(unittest.TestCase):
         f = write_task(self.root,
                        frontmatter=(
                            "status: Coding — UNBLOCKED 2026-06-06: pick B\n"
-                           "estimation: 2h"))
+                           "estimation: 2"))
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m for m in out), out)
 
     def test_coding_with_valid_scheduled_passes(self):
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 1d\nscheduled: 2026-06-09")
+                       frontmatter="status: Coding\nestimation: 3\nscheduled: 2026-06-09")
         self.assertEqual(lint_tasks.lint_file(f), [])
 
     def test_coding_with_invalid_scheduled_fails(self):
         # scheduled: present but not YYYY-MM-DD → still a violation.
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 1d\nscheduled: next-monday")
+                       frontmatter="status: Coding\nestimation: 3\nscheduled: next-monday")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m and "not a valid" in m for m in out), out)
 

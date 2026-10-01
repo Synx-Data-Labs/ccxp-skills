@@ -30,7 +30,7 @@ FILENAME_RE = re.compile(r"^T\d{8}-\d{6}-.+\.md$")
 # subject to the task filename/frontmatter schema at all.
 NON_TASK_FILES = {"queue.md"}
 TASK_ID_RE = re.compile(r"T\d{8}-\d{6}")
-ESTIMATION_RE = re.compile(r"^\d+(m|h|d|w)\b")
+ESTIMATION_RE = re.compile(r"^(1|2|3|5|8)\b")
 H1_RE = re.compile(r"^#\s+(T\d{8}-\d{6})\b")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -120,8 +120,10 @@ def check_estimation(ctx):
     if "estimation" not in ctx.keys:
         return []
     if not ESTIMATION_RE.match(str(ctx.keys["estimation"]).strip()):
-        return [f"estimation '{ctx.keys['estimation']}' must start with a "
-                f"duration (e.g. 30m, 2h, 1d, 1w)"]
+        return [f"estimation '{ctx.keys['estimation']}' must be one of "
+                f"the Fibonacci-style points {{1, 2, 3, 5, 8}} "
+                f"(T20260924-232855 — duration buckets retired, no "
+                f"compatibility window)"]
     return []
 
 
