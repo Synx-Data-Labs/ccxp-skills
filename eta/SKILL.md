@@ -5,10 +5,11 @@ disable-model-invocation: false
 argument-hint: "[T<id>] [--tz <IANA-zone>]"
 ---
 
-Report a projected finish time for a task: reads its `estimation:` bucket,
-derives a start time from the git commit that set its `claimed_by:` line, and
-prints elapsed / remaining / projected-finish. No argument reports on
-whichever task this clone currently holds (same `claimed_by:` match the
+Report a projected finish time for a task: reads its `estimation:` points
+value, converts it to hours via `dev/velocity.json`'s `hours_per_point`
+ratio, derives a start time from the git commit that set its `claimed_by:`
+line, and prints elapsed / remaining / projected-finish. No argument reports
+on whichever task this clone currently holds (same `claimed_by:` match the
 statusline uses); an explicit `T<id>` reports on that task regardless of who
 claimed it.
 
@@ -45,17 +46,22 @@ bash ../eta/scripts/eta.sh
      segment of the statusline, so the two always agree on "what's current."
    - Neither resolves → exit 1 with `no current task` (never a silent empty
      output).
-2. **Read `estimation:`** from the task's frontmatter and map the bucket to a
-   **literal wall-clock duration**: `15m/30m/1h/2h/4h` map to themselves,
-   `1d`→24h, `2d`→48h, `1w`→7d, `2w`→14d.
+2. **Read `estimation:`** from the task's frontmatter — a bare Fibonacci-style
+   point value, one of `{1, 2, 3, 5, 8}` (T20260924-232855; a leftover
+   duration-bucket string is rejected, not silently accepted) — and convert
+   it to a **literal wall-clock duration**: `projected_hours = points *
+   hours_per_point`, where `hours_per_point` is read from
+   `dev/velocity.json` (written every `/retro` run from real completed-task
+   history). Missing file, or a missing/non-numeric `hours_per_point`
+   field, both fall back to the same flat bootstrap default `/retro` itself
+   uses on a zero-sample window: `hours_per_point: 1` — never an error.
 
    **Assumption, stated plainly**: this is calendar time, not working-hours
-   time — no repo convention currently defines the buckets as
-   workday-relative (verified: no existing script converts `estimation:` to
-   a duration), so the simplest well-defined reading was chosen for v1. A
-   `1d` estimate projects a finish 24 real hours out, not "one 8-hour
-   workday from now." If that turns out to be the wrong default in practice,
-   revisit with a dedicated task rather than silently drifting.
+   time — no repo convention currently defines points as workday-relative,
+   so the simplest well-defined reading was chosen. A `3`-point estimate at
+   the bootstrap ratio projects a finish 3 real hours out, not "3 points'
+   worth of an 8-hour workday." If that turns out to be the wrong default in
+   practice, revisit with a dedicated task rather than silently drifting.
 3. **Derive a start time**: `git log -S"claimed_by: <value>"
    --format=%aI -- <task-file>`, oldest match — the commit that first landed
    the current `claimed_by:` line. Every claim path in this repo
@@ -66,9 +72,10 @@ bash ../eta/scripts/eta.sh
 4. **Fallback — start time unknown.** If `git log -S` finds no match (most
    commonly: the repo runs `drive/SKILL.md`'s `CCXP_PEER_MODE=0` opt-out,
    which flips only `status:` on claim and never touches `claimed_by:` at
-   all — so there's no such commit to find), print the estimation bucket
-   with **no** elapsed/remaining/projected-finish math, rather than
-   guessing or failing silently.
+   all — so there's no such commit to find), print the estimation points
+   value (and its converted duration) with **no**
+   elapsed/remaining/projected-finish math, rather than guessing or failing
+   silently.
 5. **Report**: elapsed (start → now), remaining (duration − elapsed;
    `overdue by <Δ>` instead of a negative when past due), and the projected
    finish timestamp, rendered in the local system timezone by default or
@@ -79,7 +86,7 @@ bash ../eta/scripts/eta.sh
 ```
 $ /eta
 T20260922-453135
-  estimation: 2h
+  estimation: 2
   elapsed:    0h6m
   remaining:  1h53m
   projected finish: 2026-09-23 01:04 PDT

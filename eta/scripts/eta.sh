@@ -4,11 +4,14 @@
 # Estimate time-to-completion for the current task (or an explicit T<id>):
 # resolves the task file, derives a start time from the git commit that set
 # claimed_by (git log -S — see _session/task_claim.sh:525-539, which confirms
-# no timestamp field exists to read directly), converts the estimation:
-# bucket to a literal wall-clock duration, and prints elapsed / remaining /
+# no timestamp field exists to read directly), converts the task's
+# estimation: points (Fibonacci-style {1,2,3,5,8} — T20260924-232855) to a
+# wall-clock duration via points * hours_per_point (read from
+# dev/velocity.json, written by /retro; a flat bootstrap default when the
+# file or field is missing), and prints elapsed / remaining /
 # projected-finish. Defaults to the local system timezone; --tz overrides.
 #
-# See eta/SKILL.md for the duration-bucket assumption and the
+# See eta/SKILL.md for the velocity-ratio assumption and the
 # start-time-unknown fallback this deliberately degrades to.
 set -uo pipefail
 
@@ -116,27 +119,36 @@ if [ -z "$eta_estimation" ]; then
   exit 1
 fi
 
-# Bucket → literal wall-clock duration in seconds (documented assumption —
-# see eta/SKILL.md: not workday-relative, a future task can revisit that).
-eta_bucket_seconds() {
-  case "$1" in
-    15m) printf '900' ;;
-    30m) printf '1800' ;;
-    1h)  printf '3600' ;;
-    2h)  printf '7200' ;;
-    4h)  printf '14400' ;;
-    1d)  printf '86400' ;;
-    2d)  printf '172800' ;;
-    1w)  printf '604800' ;;
-    2w)  printf '1209600' ;;
-    *) return 1 ;;
-  esac
-}
-
-eta_duration_s="$(eta_bucket_seconds "$eta_estimation")" || {
-  echo "eta: unrecognized estimation bucket '$eta_estimation' (expected one of 15m 30m 1h 2h 4h 1d 2d 1w 2w)" >&2
+# estimation: is a bare Fibonacci-style point value {1,2,3,5,8}
+# (T20260924-232855 — duration buckets retired). Reject anything else before
+# doing any math with it.
+if ! [[ "$eta_estimation" =~ ^(1|2|3|5|8)$ ]]; then
+  echo "eta: unrecognized estimation value '$eta_estimation' (expected one of 1 2 3 5 8)" >&2
   exit 1
-}
+fi
+
+# hours_per_point comes from dev/velocity.json, written every /retro run
+# (retro/scripts/compute-velocity.sh). Missing file or missing field both
+# degrade to the same flat bootstrap default retro itself uses on a
+# zero-sample window — never an error (T20260924-232855 §3).
+eta_velocity_file="$eta_repo_root/dev/velocity.json"
+eta_hours_per_point="1"
+if [ -f "$eta_velocity_file" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    eta_hp_read="$(jq -r 'if (.hours_per_point|type)=="number" then .hours_per_point else empty end' \
+      "$eta_velocity_file" 2>/dev/null)"
+  else
+    eta_hp_read="$(grep -oE '"hours_per_point"[[:space:]]*:[[:space:]]*[0-9]+(\.[0-9]+)?' \
+      "$eta_velocity_file" 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)?$')"
+  fi
+  [ -n "${eta_hp_read:-}" ] && eta_hours_per_point="$eta_hp_read"
+fi
+
+# points * hours_per_point, in seconds. awk handles the float multiply
+# (hours_per_point is a median, rarely a whole number) — bash arithmetic is
+# integer-only.
+eta_duration_s="$(awk -v p="$eta_estimation" -v h="$eta_hours_per_point" \
+  'BEGIN { printf "%d", (p * h * 3600) + 0.5 }')"
 
 # Validate --tz early (before doing any date math) so an invalid zone always
 # exits 2 with a clear error rather than silently falling back to UTC — GNU
