@@ -315,6 +315,42 @@ this sweep, by design, not a miss. What this sweep actually catches is the
 backstop case: a task closed by hand, or by a session that predates that
 change.
 
+### Phase 2c: Compute velocity (T20260924-232855)
+
+Run this **after** Phase 2b's sweep, so every task actually closed this
+window is in `dev/JOURNAL/` before computing over it (a task still sitting
+in `dev/TODO/` with `status: Done` would otherwise be invisible to this
+step, same reasoning as the sweep itself).
+
+```bash
+bash ../retro/scripts/compute-velocity.sh --repo-root .
+```
+
+Recomputes, over a trailing 4-calendar-week window (Monday–Sunday, purely
+calendar time — independent of `scheduled:`, IPM files, or whether `/ccxp`'s
+IPM ritual ever runs in this repo):
+
+- `points_per_week` — mean of (sum of points **closed**) per calendar week,
+  binned by each task's `dev/JOURNAL/` filename date.
+- `hours_per_point` — `median(actual_hours / points)` over the same
+  window's completed tasks, where `actual_hours` is wall-clock claim
+  (the commit that introduced `claimed_by:`) to close.
+
+Writes `dev/velocity.json` every run, including the **bootstrap** path (zero
+qualifying samples in the window — a freshly migrated repo, or one that has
+never run `/retro`): flat defaults `hours_per_point: 1`, `points_per_week: 10`,
+`bootstrap: true`. This file is what `/eta` reads to project a task's
+remaining wall-clock time (`points * hours_per_point`) instead of a static
+duration-bucket lookup.
+
+Commit `dev/velocity.json` alongside whatever else this retro's own PR
+carries (the Phase 4/5 action items, the report) — it's a small, machine-
+generated file with no design content, so it never needs its own PR.
+
+Carry the one-line summary (`hours_per_point`, `points_per_week`,
+`sample_size`, `bootstrap`) into the Phase 5 report so the trend is visible
+to a human reading the write-up, not only in the JSON.
+
 ### Phase 3: Metrics snapshot
 
 Compute and report these metrics for the review period:
@@ -354,7 +390,7 @@ For each "needs improvement" finding, create a concrete, actionable task:
 
    Run this once per action item. The helper checks `dev/{TODO,PARKING,JOURNAL}/` and retries on collision. Do NOT invent sequential IDs (e.g. `-100001`, `-100002`) and do NOT inline the `printf ... /dev/urandom ...` command.
 2. Create task files in `dev/TODO/` using the repo's required TODO metadata bullets in this exact order:
-   - Estimation: use standard buckets (30m, 1h, 2h — keep action items small)
+   - Estimation: `1` (every action item files at the standard default — keep action items small; `/incept` revises upward later if grilling surfaces real scope)
    - Status: Open
    - Blocks: only include if this task blocks another task
    - Source: `Retro YYYY-MM-DD`
