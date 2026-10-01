@@ -48,7 +48,7 @@ claimed_role: interactive
   a new architecture.
 - Reuses the clone-stable per-session caching pattern already established by
   `_session/claimant-id.sh`'s `CLAIMANT_STATE_DIR`/`_claimant_cached`
-  (`_session/claimant-id.sh:40-70`) — this task mirrors that convention for a
+  (`_session/claimant-id.sh:30,58-81`) — this task mirrors that convention for a
   new `LAST_INPUT_STATE_DIR` rather than inventing a new one.
 - Grilled via `/incept` 2026-10-01 (see Solution below for the resulting
   design and the alternative it replaced).
@@ -72,7 +72,7 @@ claimed_role: interactive
 - **Cache path**: `~/.claude/state/last-input/<session_id>`, one line of
   plain text, overridable via a `LAST_INPUT_STATE_DIR` env var mirroring
   `claimant-id.sh`'s existing `CLAIMANT_STATE_DIR` convention
-  (`_session/claimant-id.sh:40`), for BATS isolation.
+  (`_session/claimant-id.sh:30`), for BATS isolation.
 - **Truncation/sanitization**: happens in the hook at write-time (~40
   chars + `…` if truncated, newlines replaced with spaces) — the hook
   fires once per submitted prompt, vs. `statusline-command.sh` which can
@@ -174,7 +174,7 @@ Not a bug — this is a gap-analysis, not a regression root cause:
 | `statusline-setup/scripts/statusline-command.sh` | `99-167` | existing `sl-*` helper + `sl-join` convention this feature extends |
 | `statusline-setup/scripts/statusline-command.sh` | `169-198` | `statusline-command()` — wires the new `sl-last-input-part` into the joined line |
 | `statusline-setup/scripts/last-input-hook.sh` | new file | the `UserPromptSubmit` hook: sanitize, truncate, write, prune |
-| `_session/claimant-id.sh` | `40-70` | `CLAIMANT_STATE_DIR`/`_claimant_cached` convention mirrored for `LAST_INPUT_STATE_DIR` |
+| `_session/claimant-id.sh` | `30,58-81` | `CLAIMANT_STATE_DIR`/`_claimant_cached` convention mirrored for `LAST_INPUT_STATE_DIR` |
 | `statusline-setup/SKILL.md` | `46-68` | deploy workflow — multi-config-dir wiring convention to extend for the new hook |
 | `tests/statusline_setup.bats` | existing | add coverage for `sl-last-input-part` |
 | `tests/last_input_hook.bats` | new file | hook write/truncate/prune coverage |
