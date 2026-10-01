@@ -31,6 +31,20 @@ setup() {
   [ "$status" -eq 0 ]
 }
 
+@test "does NOT fall back to \$(pwd)/.env under BATS, even if one exists with a real token" {
+  # Regression guard: without the BATS_TEST_TMPDIR check in
+  # _slack_api_load_token, this test's pass/fail would depend on whether a
+  # real .env happens to sit in whatever directory `bats` is invoked from
+  # — not on the code under test. Prove the guard directly by planting a
+  # .env with a token and asserting it's still ignored.
+  local fake_repo="$BATS_TEST_TMPDIR/fake-repo"
+  mkdir -p "$fake_repo"
+  echo 'SLACK_BOT_TOKEN=xoxb-from-dotenv' > "$fake_repo/.env"
+  run env -u SLACK_BOT_TOKEN HOME="$BATS_TEST_TMPDIR/nohome" bash -c "cd '$fake_repo' && bash '$WEBAPI' post C123 hi"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SLACK_BOT_TOKEN is not set"* ]]
+}
+
 # --- post ---
 
 @test "post: calls chat.postMessage with channel and text" {
@@ -146,6 +160,46 @@ EOF
   run bash "$WEBAPI" find-by-text C_BOGUS "anything"
   [ "$status" -eq 0 ]
   [ "$output" = "[]" ]
+}
+
+@test "find-by-text: returns an empty array (not blank stdout) on a transport failure" {
+  # A real curl failure (timeout, DNS, connection reset, ...) can print
+  # nothing at all — not even invalid JSON. jq's own "if/else" filter run
+  # over empty stdin produces NO output (not even the else branch), which
+  # would silently violate the "[] on any error" contract this function
+  # promises. Simulate that directly: curl exits 0 but prints nothing.
+  curl() { :; }
+  export -f curl
+  run bash "$WEBAPI" find-by-text C123 "anything"
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+# --- missing required args ---
+
+@test "post: dies with a clear message instead of 'unbound variable' when args are missing" {
+  run bash "$WEBAPI" post C123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slack-api-post: expected at least 2 argument(s), got 1"* ]]
+  [[ "$output" != *"unbound variable"* ]]
+}
+
+@test "history: dies with a clear message when the channel_id arg is missing" {
+  run bash "$WEBAPI" history
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slack-api-history: expected at least 1 argument(s), got 0"* ]]
+}
+
+@test "thread-replies: dies with a clear message when args are missing" {
+  run bash "$WEBAPI" thread-replies C123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slack-api-thread-replies: expected at least 2 argument(s), got 1"* ]]
+}
+
+@test "find-by-text: dies with a clear message when args are missing" {
+  run bash "$WEBAPI" find-by-text C123
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"slack-api-find-by-text: expected at least 2 argument(s), got 1"* ]]
 }
 
 # --- CLI dispatch ---
