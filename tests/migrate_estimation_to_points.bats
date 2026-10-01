@@ -7,7 +7,7 @@ setup() {
   REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/repo-conventions/scripts/migrate-estimation-to-points.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
-  mkdir -p "$WORK/dev/TODO" "$WORK/dev/JOURNAL"
+  mkdir -p "$WORK/dev/TODO" "$WORK/dev/PARKING" "$WORK/dev/JOURNAL"
 }
 
 # $1=path (repo-relative) $2=estimation-value $3=extra-frontmatter(optional)
@@ -59,6 +59,14 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   run_script
   [ "$status" -eq 0 ]
   run grep '^estimation:' "$WORK/dev/JOURNAL/2026-01-01-T20260101-000001-a.md"
+  [[ "$output" == "estimation: 3" ]]
+}
+
+@test "migrates dev/PARKING/*.md files too (lint_tasks.py lints PARKING under the same schema)" {
+  mk_file dev/PARKING/T20260101-000001-a.md '1d'
+  run_script
+  [ "$status" -eq 0 ]
+  run grep '^estimation:' "$WORK/dev/PARKING/T20260101-000001-a.md"
   [[ "$output" == "estimation: 3" ]]
 }
 

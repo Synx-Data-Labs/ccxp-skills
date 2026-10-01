@@ -1,7 +1,7 @@
 ---
 status: Design
 scheduled: 2026-10-05
-estimation: 2h
+estimation: 2
 source: T20260809-355059's Phase A/B implementation (2026-09-25) — follow-up
   filed at close per that task's Done criteria and its dual-accept design.
 related: T20260809-355059

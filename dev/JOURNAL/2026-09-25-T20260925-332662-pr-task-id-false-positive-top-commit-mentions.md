@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: discovered while /address-pr-ing hub-repo PR #666 (a /top queue reorder)
 related: T20260718-160579, T20260922-324422, T20260918-404944
 claimed_by:

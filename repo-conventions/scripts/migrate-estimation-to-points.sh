@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 # migrate-estimation-to-points.sh [--repo-root DIR] [--dry-run]
 #
-# One-time, idempotent migration: rewrite every dev/TODO/*.md and
-# dev/JOURNAL/*.md file's frontmatter `estimation:` value from the retired
-# duration-bucket enum to the new Fibonacci-style points enum
-# (T20260924-232855). Lossy by design (old durations were rough guesses
+# One-time, idempotent migration: rewrite every dev/TODO/*.md,
+# dev/PARKING/*.md, and dev/JOURNAL/*.md file's frontmatter `estimation:`
+# value from the retired duration-bucket enum to the new Fibonacci-style
+# points enum (T20260924-232855). dev/PARKING is in scope even though the
+# design's own file-reference table only named TODO/JOURNAL — lint_tasks.py
+# lints PARKING under the same schema (its `iter_task_files` covers
+# TODO+PARKING), so skipping it here would leave `--all` lint failing on
+# every parked task. Lossy by design (old durations were rough guesses
 # anyway; /incept corrects real ones during normal grilling):
 #
 #   15m, 30m, 1h -> 1
@@ -97,7 +101,7 @@ print(path)
 PY
 }
 
-for mep_dir in "$mep_repo_root/dev/TODO" "$mep_repo_root/dev/JOURNAL"; do
+for mep_dir in "$mep_repo_root/dev/TODO" "$mep_repo_root/dev/PARKING" "$mep_repo_root/dev/JOURNAL"; do
   [ -d "$mep_dir" ] || continue
   for mep_f in "$mep_dir"/*.md; do
     [ -e "$mep_f" ] || continue

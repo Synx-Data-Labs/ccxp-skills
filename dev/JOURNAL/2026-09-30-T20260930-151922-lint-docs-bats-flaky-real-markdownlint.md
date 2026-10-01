@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-28
-estimation: 1h
+estimation: 1
 source: this conversation, 2026-09-30 — surfaced during T20260930-132964's PR #189 CI
 related: T20260930-132964
 claimed_by:

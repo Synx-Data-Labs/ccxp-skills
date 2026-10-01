@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-28
-estimation: 30m
+estimation: 1
 source: T20260910-919422's Closed section, 2026-09-22 — an unconfirmed report from that task's original 2026-09-10 Problem section
 related: T20260910-919422
 claimed_by:

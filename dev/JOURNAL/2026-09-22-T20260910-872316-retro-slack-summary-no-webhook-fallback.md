@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: /ccxp session 2026-09-11 (01:03Z tick), discovered while verifying the 2026-09-11 retro's Slack post
 related: T20260717-433409
 claimed_by:

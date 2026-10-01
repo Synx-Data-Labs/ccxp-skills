@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-10-05
-estimation: 2h
+estimation: 2
 source: T20260914-412750 (research: learn from mattpocock/skills)
 related: T20260914-412750
 description: Scope whether ccxp-skills should adopt a maturity tier (promoted vs misc/in-progress/deprecated) so the shipped plugin bundle isn't every skill unconditionally

@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 2h
+estimation: 2
 source: 2026-09-24 conversation — surfaced while designing T20260924-232855
   (estimation → story points); the human driving this work confirmed the
   weekly IPM/GH-Project-board cadence has been abandoned for a long time

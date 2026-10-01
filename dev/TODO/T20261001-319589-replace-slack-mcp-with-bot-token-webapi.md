@@ -1,6 +1,6 @@
 ---
 status: In Progress
-estimation: 1d
+estimation: 3
 source: User report 2026-10-01 — two labrun Slack alerts (synxdb-build-pipeline
   #C0ALGAPRCA3/p1790829253605319, p1790860307828209) never got an RCA thread
   reply despite the failures being correctly classified and tracked internally

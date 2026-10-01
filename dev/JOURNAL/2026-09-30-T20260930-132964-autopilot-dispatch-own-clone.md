@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: this conversation, 2026-09-30
 claimed_by:
 claimed_role:

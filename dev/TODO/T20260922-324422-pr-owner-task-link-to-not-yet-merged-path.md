@@ -1,7 +1,7 @@
 ---
 status: Design
 scheduled: 2026-10-05
-estimation: 2h
+estimation: 2
 source: discovered while /address-pr-ing T20260915-315552's implementation PR (#85)
 related: T20260915-315552, T20260918-404944
 ---

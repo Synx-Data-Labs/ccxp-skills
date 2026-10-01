@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-10-05
-estimation: 2h
+estimation: 2
 source: this /autopilot run, discovered when a dispatched /drive sub-agent
   closed T20260919-231319 without the always-immediate journal-move
   (T20260914-422854), then fixed via a follow-up housekeeping PR (#105)

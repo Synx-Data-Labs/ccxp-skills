@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1d
+estimation: 3
 source: conversation with @shine, 2026-09-23
 ---
 

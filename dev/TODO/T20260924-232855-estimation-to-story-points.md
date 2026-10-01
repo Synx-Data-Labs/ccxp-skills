@@ -1,5 +1,5 @@
 ---
-estimation: 1d
+estimation: 3
 status: In Progress
 source: 2026-09-24 conversation — brainstormed after a /todo next run surfaced
   "is estimation even useful", worked through with superpowers:brainstorming

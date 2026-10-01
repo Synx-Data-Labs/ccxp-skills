@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1h
+estimation: 1
 source: memory-to-skill 2026-09-24 (synx-data-labs/build-pipeline-repo)
 ---
 
