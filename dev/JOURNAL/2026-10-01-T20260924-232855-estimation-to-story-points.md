@@ -328,9 +328,8 @@ scheduled: 2026-09-28
 
 ## Closed (2026-10-01)
 
-Shipped in **PR #TBD** (filled on open — same-repo implementation PR;
-docs-only claim PR #204 landed the pre-implementation claim separately and
-already merged).
+Shipped in **PR #205** (same-repo implementation PR; docs-only claim PR
+#204 landed the pre-implementation claim separately and already merged).
 
 - All §Done criteria above are met; all Test plan items pass (see their
   checkboxes for the exact commands/evidence).
