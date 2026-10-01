@@ -40,7 +40,7 @@ Task files use **YAML frontmatter** for canonical metadata — same convention a
 
 ```yaml
 ---
-estimation: 1d
+estimation: 3
 status: Design
 scheduled: 2026-05-19
 deadline: 2026-05-22
@@ -55,7 +55,7 @@ source: Retro 2026-04-25
 
 **Field semantics:**
 
-- `estimation`: standard buckets (`15m`, `30m`, `1h`, `2h`, `4h`, `1d`, `2d`, `1w`). Required for IPM budget arithmetic.
+- `estimation`: a Fibonacci-style story point, one of `1`, `2`, `3`, `5`, `8` (T20260924-232855 — duration buckets retired). Always `1` at file time; `/incept` is the only place it's revised upward. Required for `/eta` projections (`points * hours_per_point`, from `dev/velocity.json`).
 - `status`: one of `Open`, `Design`, `In Progress` (or the legacy `Coding` alias, T20260809-355059), `Review`, `Blocked by T{id}`, `Parked`, `Done`. Required. The field is free-text after its leading token, so a `BLOCKED` or `SUPERVISED` substring can be appended to narrate why (e.g. `status: In Progress — SUPERVISED (needs VPN to GitLab)`). Consumer repos' `/ccxp` pre-flight gate (`dev/daily-ccxp.sh`) greps for these substrings to avoid waking an hourly cron session for work that's blocked or needs a human (VPN, a supervised force-push, an interactive decision) to progress.
 - `scheduled`: `YYYY-MM-DD` (always a Monday). Written **only at IPM commit time** (`/ccxp` Phase 2a) for whichever tasks the IPM actually picks off the top of `queue.md` — it records which iteration a task landed in, for the GH Project board mirror; it does not drive priority (the queue does that). **Update-forward-only — never removed.** The GH Project mirror workflow (`.github/scripts/sync-tasks-to-issues.py`, per consumer repo) reads `scheduled` and looks up the matching iteration on the Project's iteration definition (which has authoritative start/end dates per iteration) — that's the source of truth for "what iteration is this?", not anything computed client-side. Used by retro for bump-counting (same task cited across 3 consecutive IPM files = bumped 3×).
 - `deadline`: `YYYY-MM-DD`. Hard date the task must be delivered by — usually customer-, release-, or compliance-driven. Informational — display it, but it does not reorder the queue; if a deadline makes something urgent, reflect that by `/top`-ing it.
