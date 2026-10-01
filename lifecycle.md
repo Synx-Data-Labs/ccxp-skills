@@ -138,7 +138,7 @@ Tasks carry a Fibonacci-style **story point** (`{1, 2, 3, 5, 8}`) — a relative
 
 **`lint-tasks` v6 requires `estimation` to be exactly one of `{1, 2, 3, 5, 8}`** — regex `^(1|2|3|5|8)(\s|$)` (trailing prose after the value is fine, e.g. `2 (S)`; the simpler `\b`-terminated form was tried first but wrongly accepts garbage like `1-2h` — `\b` matches the digit/non-digit boundary regardless of what follows). It lints only a PR's **changed** task files (`mode: changed`), so pre-existing non-conforming `estimation:` values already on `main` are not valid precedent — they simply haven't been re-touched under v6 yet. Validate locally before pushing: `python3 repo-conventions/scripts/lint_tasks.py --changed <file>`, run from the ccxp-skills repo root (exit 0 = conforms).
 
-A one-time, lossy migration script (`repo-conventions/scripts/migrate-estimation-to-points.sh`) maps the retired duration buckets onto the new scale: `15m/30m/1h → 1`, `2h/4h → 2`, `1d → 3`, `2d → 5`, `1w/2w → 8`. Each consumer repo runs it once, after pulling this schema/lint change, against its own `dev/TODO/` and `dev/JOURNAL/`.
+A one-time, lossy migration script (`repo-conventions/scripts/migrate-estimation-to-points.sh`) maps the retired duration buckets onto the new scale: `15m/30m/1h → 1`, `2h/4h → 2`, `1d → 3`, `2d → 5`, `1w/2w → 8`. Each consumer repo runs it once, after pulling this schema/lint change, against its own `dev/TODO/`, `dev/PARKING/`, and `dev/JOURNAL/` (`lint_tasks.py` lints `dev/PARKING/` under the same schema, so it's in scope too).
 
 ## Creating a Task
 

@@ -154,8 +154,9 @@ EOF
   run_script --today 2026-01-10
   [ "$status" -eq 0 ]
   run cat "$WORK/dev/velocity.json"
-  [[ "$output" == *'"bootstrap": true'* ]]           # no resolvable sample for hours_per_point
-  [[ "$output" == *'"points_per_week": 10'* ]]        # still bootstrap default (sample_size 0 gate)
+  [[ "$output" == *'"bootstrap": true'* ]]            # no resolvable sample for hours_per_point
+  [[ "$output" == *'"hours_per_point": 1'* ]]         # ...so hours_per_point IS the bootstrap default
+  [[ "$output" == *'"points_per_week": 0.75'* ]]      # but points_per_week is real: 3 points / 4-week window
 }
 
 @test "window-weeks override changes the points_per_week denominator" {
