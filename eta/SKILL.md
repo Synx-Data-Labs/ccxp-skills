@@ -6,11 +6,10 @@ argument-hint: "[T<id>] [--tz <IANA-zone>]"
 ---
 
 Report a projected finish time for a task: reads its `estimation:` points
-value, converts it to hours via `dev/velocity.json`'s `hours_per_point`
-ratio, derives a start time from the git commit that set its `claimed_by:`
-line, and prints elapsed / remaining / projected-finish. No argument reports
-on whichever task this clone currently holds (same `claimed_by:` match the
-statusline uses); an explicit `T<id>` reports on that task regardless of who
+value, derives a start time from the git commit that set its `claimed_by:`
+line, and prints elapsed / remaining / projected-finish. No argument uses
+whichever task this clone holds (same `claimed_by:` match as the
+statusline); an explicit `T<id>` reports on that task regardless of who
 claimed it.
 
 ## Argument
@@ -46,22 +45,21 @@ bash ../eta/scripts/eta.sh
      segment of the statusline, so the two always agree on "what's current."
    - Neither resolves → exit 1 with `no current task` (never a silent empty
      output).
-2. **Read `estimation:`** from the task's frontmatter — a bare Fibonacci-style
-   point value, one of `{1, 2, 3, 5, 8}` (T20260924-232855; a leftover
-   duration-bucket string is rejected, not silently accepted) — and convert
-   it to a **literal wall-clock duration**: `projected_hours = points *
-   hours_per_point`, where `hours_per_point` is read from
-   `dev/velocity.json` (written every `/retro` run from real completed-task
-   history). Missing file, or a missing/non-numeric `hours_per_point`
-   field, both fall back to the same flat bootstrap default `/retro` itself
-   uses on a zero-sample window: `hours_per_point: 1` — never an error.
+2. **Read `estimation:`** — a bare Fibonacci-style point, one of
+   `{1, 2, 3, 5, 8}` (a leftover duration-bucket string is rejected, not
+   silently accepted). Convert it to a **literal wall-clock duration**:
+   `projected_hours = points * hours_per_point`.
+   - `hours_per_point` is read from `dev/velocity.json` (written every
+     `/retro` run from real completed-task history).
+   - A missing file, or a missing/non-numeric field, both fall back to the
+     same flat bootstrap default `/retro` itself uses on a zero-sample
+     window: `hours_per_point: 1` — never an error.
 
    **Assumption, stated plainly**: this is calendar time, not working-hours
-   time — no repo convention currently defines points as workday-relative,
-   so the simplest well-defined reading was chosen. A `3`-point estimate at
-   the bootstrap ratio projects a finish 3 real hours out, not "3 points'
-   worth of an 8-hour workday." If that turns out to be the wrong default in
-   practice, revisit with a dedicated task rather than silently drifting.
+   time, so the simplest well-defined reading was chosen. A `3`-point
+   estimate at the bootstrap ratio projects a finish 3 real hours out, not
+   "3 points' worth of an 8-hour workday." Revisit with a dedicated task
+   rather than silently drifting if that's the wrong default in practice.
 3. **Derive a start time**: `git log -S"claimed_by: <value>"
    --format=%aI -- <task-file>`, oldest match — the commit that first landed
    the current `claimed_by:` line. Every claim path in this repo
