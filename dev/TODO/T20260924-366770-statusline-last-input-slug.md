@@ -1,8 +1,10 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-09-28
 estimation: 2
 source: this conversation, 2026-09-24
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260924-366770: Add a last-user-input slug to the statusline
