@@ -397,6 +397,20 @@ merged).
        hand-computed hour assertions were corrected (51h/25.5 → 48h/24.0;
        36.0 → 24.0, since the close timestamp is now a real commit time,
        not a synthetic one).
+    3. **Round 2 of the same independent review**, run after the round-1
+       fixes (a fresh push resets `/address-pr`'s review state), found a
+       third bug: the `if sample_size == 0:` branch discarded the real
+       `points_by_week` total whenever no `hours_per_point` sample
+       resolved, contradicting the script's own documented contract
+       ("a task contributes to points_per_week... even without a
+       resolvable claim commit") — and a bats test I'd written
+       (`"a task with no claimed_by contributes to points_per_week..."`)
+       locked in the *wrong* (bug-matching) value with a comment admitting
+       it. Fixed by computing `points_per_week` and `hours_per_point`
+       independently — `points_per_week` falls back to the flat `10`
+       default only when literally zero points closed in the window,
+       regardless of whether any claim resolved; `bootstrap` stays tied to
+       `hours_per_point` specifically (the only field `/eta` reads).
 - **Confirmed out-of-scope, left untouched, as designed**: `/ccxp`'s (now
   `/ipm`'s, after the T20260923-584914 extraction that landed after this
   task was designed) IPM budget-cut arithmetic (`~12h product` line,
@@ -439,11 +453,19 @@ merged).
   unrelated file's history via this repo's squashed-history timestamps,
   then found the synthetic "noon UTC close" proxy was independently wrong
   for same-day claim→close cycles) before landing the real fix.
-- Receiving code review (`superpowers:receiving-code-review`): yes —
-  `/address-pr` §2.d dispatched an independent review of PR #205's diff.
-  It reported two real findings (the `ESTIMATION_RE` `\b`-boundary bug and
-  `compute-velocity.sh`'s dead-on-arrival claim-start resolution). Both
-  verified independently against this repo's real data before accepting
-  (confirmed 0/49 JOURNAL files have a non-empty `claimed_by`; confirmed
-  `1-2h` passes the naive regex), then fixed — no pushback needed, both
-  were correct.
+- Receiving code review (`superpowers:receiving-code-review`): yes — two
+  independent review rounds, per `/address-pr` §2.d's "every push resets
+  the loop" rule (each fix changed the head SHA, re-triggering review).
+  Round 1 reported the `ESTIMATION_RE` `\b`-boundary bug and
+  `compute-velocity.sh`'s dead-on-arrival claim-start resolution. Round 2
+  (after those fixes) reported a third real bug: the `sample_size == 0`
+  branch discarded real `points_by_week` data whenever no hours sample
+  resolved, contradicting the script's own documented contract (and a
+  bats test I had written to match the *buggy* behavior rather than the
+  intended one). All three findings verified independently against this
+  repo's real data or logic before accepting (confirmed 0/49 JOURNAL files
+  have non-empty `claimed_by`; confirmed `1-2h` passes the naive regex;
+  re-read the design doc's own "every completed task contributes to
+  points_per_week" language against the code) — no pushback needed, all
+  three were correct. Round 2 otherwise gave a clean bill after
+  independently re-verifying the round-1 fixes against real repo data.

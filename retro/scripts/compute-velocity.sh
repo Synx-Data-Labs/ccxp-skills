@@ -201,25 +201,27 @@ for line in rows.split("\n"):
         except ValueError:
             pass
 
-if sample_size == 0:
-    result = {
-        "hours_per_point": 1,
-        "points_per_week": 10,
-        "computed_at": today.isoformat(),
-        "window_weeks": window_weeks,
-        "sample_size": 0,
-        "bootstrap": True,
-    }
-else:
-    total_points = sum(points_by_week.values())
-    result = {
-        "hours_per_point": round(statistics.median(hours_per_point_samples), 2),
-        "points_per_week": round(total_points / window_weeks, 2),
-        "computed_at": today.isoformat(),
-        "window_weeks": window_weeks,
-        "sample_size": sample_size,
-        "bootstrap": False,
-    }
+# The two numbers bootstrap independently (caught in PR review,
+# T20260924-232855: an earlier version gated points_per_week on sample_size
+# too, discarding real points_by_week data — and a sample_size==0 window,
+# e.g. every closed task using the CCXP_PEER_MODE=0 claim bypass, is a real
+# scenario, not just "freshly migrated"). A task contributes to
+# points_per_week as soon as it has a parseable points value and closed in
+# the window, with no dependency on a resolvable claim->close pair — only
+# hours_per_point's sample (and the bootstrap flag, which tracks hours_per_
+# point specifically, the only field /eta reads) needs one.
+total_points = sum(points_by_week.values())
+points_per_week_value = round(total_points / window_weeks, 2) if total_points > 0 else 10
+hours_per_point_value = round(statistics.median(hours_per_point_samples), 2) if sample_size else 1
+
+result = {
+    "hours_per_point": hours_per_point_value,
+    "points_per_week": points_per_week_value,
+    "computed_at": today.isoformat(),
+    "window_weeks": window_weeks,
+    "sample_size": sample_size,
+    "bootstrap": sample_size == 0,
+}
 
 with open(out_path, "w") as fh:
     json.dump(result, fh, indent=2, sort_keys=True)
