@@ -27,10 +27,10 @@ claimed_role: interactive
 - `statusline-command()` (`statusline-setup/scripts/statusline-command.sh:169-198`)
   builds its line from `ap_part`/`ctx_part`/`branch_part`/`task_part` only —
   no user-input signal exists today.
-- Verified: `/Users/xlj/.claude/settings.json`'s `hooks` block has no
+- Verified: a live `~/.claude/settings.json`'s `hooks` block has no
   per-session last-input cache; the only `UserPromptSubmit` entry present is
   the unrelated iTerm2 status hook (`hooks.UserPromptSubmit[0].hooks[0].command
-  == "/Users/xlj/.config/iterm2/cc-status"`), confirmed by reading that file
+  == "~/.config/iterm2/cc-status"`), confirmed by reading that file
   directly.
 - Impact: glancing at the terminal status bar across several parallel
   clones/sessions gives no clue which one is working on what was just typed
@@ -163,7 +163,7 @@ Not a bug — this is a gap-analysis, not a regression root cause:
   so its absence isn't an oversight to fix so much as a capability to add.
 - The `UserPromptSubmit` hook event already exists in Claude Code's hook
   schema and is already wired for an unrelated purpose
-  (`/Users/xlj/.claude/settings.json`'s iTerm2 `cc-status` entry, verified
+  (a live `~/.claude/settings.json`'s iTerm2 `cc-status` entry, verified
   directly) — this task adds a second, independent hook entry on the same
   event rather than introducing new hook machinery.
 
