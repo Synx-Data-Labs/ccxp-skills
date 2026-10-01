@@ -4,7 +4,7 @@ Validates `dev/TODO/` + `dev/PARKING/` task-file frontmatter against the canonic
 
 Two kinds of check:
 
-1. **Per-file schema** — required fields, status/estimation format, the field allowlist, filename, H1↔filename id. Scoped to the PR's changed task files in `changed` mode (so legacy drift never blocks an unrelated PR).
+1. **Per-file schema** — required fields, status format, `estimation` format (a Fibonacci-style point, one of `1`/`2`/`3`/`5`/`8` — T20260924-232855 retired the old duration-bucket enum with no compatibility window), the field allowlist, filename, H1↔filename id. Scoped to the PR's changed task files in `changed` mode (so legacy drift never blocks an unrelated PR).
 2. **Board-wide blocked-by cross-reference** — every `status: Blocked by T<id>` must name a *live* blocker (a file in `dev/TODO`/`dev/PARKING`). A blocker already Done (moved to `dev/JOURNAL/`) or resolving to no file at all fails the lint. This is the **stale-block / missed-cascade-unblock gate**: it runs over the whole board on every task PR — **regardless of the changed-file set** — because a block goes stale in the PR that *closes the blocker*, which never touches the blocked file. Keyed on `status:` only, not the free-text `blocked-by:` field (that field carries prose / strikethrough historical notes).
 
 ## Usage (consumer caller workflow)
