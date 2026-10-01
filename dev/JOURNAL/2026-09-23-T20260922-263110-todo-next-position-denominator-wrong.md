@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 15m
+estimation: 1
 source: /drive cycle, discovered using todo/scripts/todo-next.sh live after merging T20260914-359646
 related: T20260914-359646
 description: todo-next.sh's "#N of M" denominator counts raw queue.md file lines, not actual task entries

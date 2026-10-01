@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-28
-estimation: 1h
+estimation: 1
 source: conversation with @shine, 2026-09-23
 ---
 

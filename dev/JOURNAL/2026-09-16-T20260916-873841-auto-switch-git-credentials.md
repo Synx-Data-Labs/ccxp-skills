@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: consumer-repo session (pointer, your-org/consumer-repo), 2026-09-16 — /stage's own `git push -u origin` failed with "Repository not found" because the loaded SSH key belonged to a different gh-authenticated account than the one `gh auth switch` had already selected
 scheduled: 2026-09-14
 description: auto-switch.sh also wires local git credential.helper + url.insteadOf, so bare git push/pull/fetch stop depending on the SSH agent

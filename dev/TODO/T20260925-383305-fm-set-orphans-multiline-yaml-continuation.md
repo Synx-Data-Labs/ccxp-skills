@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 2h
+estimation: 2
 source: 2026-09-25 conversation — surfaced live while /address-pr claiming
   T20260916-232402 in build-pipeline-repo
 related: T20260809-355059 (same file, same `status:` field, different bug —

@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 2h
+estimation: 2
 source: session 2026-09-19 — internal names reappeared on the now-public repo within 2 days of the visibility flip
 related: T20260914-234656
 description: Add a pre-merge check for company-internal identifiers so genericization stops being a recurring manual scrub

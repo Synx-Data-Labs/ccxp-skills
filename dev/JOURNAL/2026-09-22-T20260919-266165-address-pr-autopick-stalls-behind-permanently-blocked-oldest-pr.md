@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 2h
+estimation: 2
 source: Discovered 2026-09-19 during a build-pipeline-repo autopilot run — bare /address-pr auto-pick never reached any of that session's own open PRs
 related: T20260622-404636 (PR ownership derivation — the mechanism this bug interacts with)
 claimed_by:

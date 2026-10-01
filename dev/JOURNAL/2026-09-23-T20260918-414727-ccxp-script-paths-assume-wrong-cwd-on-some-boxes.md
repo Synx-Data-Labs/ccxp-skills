@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: Retro 2026-09-18 (build-pipeline-repo) — Phase 4c skill quality review
 related: none yet — no existing task covers this
 claimed_by:

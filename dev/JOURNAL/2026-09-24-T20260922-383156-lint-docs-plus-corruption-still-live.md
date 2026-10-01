@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-21
-estimation: 1h
+estimation: 1
 source: T20260910-919422's Closed section, 2026-09-22 — the +/- and comma-spacing corruption itself is not fixed by that task's scoping fix
 related: T20260910-919422
 claimed_by:

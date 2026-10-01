@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-10-12
-estimation: 30m
+estimation: 1
 source: T20260925-219021 implementation, 2026-09-29 — surfaced during that
   task's own bare-`gh`-call sweep, deliberately left out of scope there
 related: T20260925-219021

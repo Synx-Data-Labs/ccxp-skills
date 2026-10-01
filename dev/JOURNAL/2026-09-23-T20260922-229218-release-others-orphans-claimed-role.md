@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-21
-estimation: 15m
+estimation: 1
 source: Claude Code review on an internal consumer-repo claim PR, 2026-09-22
 related: T20260720-113930, T20260911-140914
 claimed_by:

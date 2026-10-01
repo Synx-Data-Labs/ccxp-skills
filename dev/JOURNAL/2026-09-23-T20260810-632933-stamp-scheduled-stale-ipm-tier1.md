@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-08-17
-estimation: 1h
+estimation: 1
 source: Discovered while filing follow-up tasks from T20260515-128802 (2026-08-10)
 related: T20260515-128802
 claimed_by:

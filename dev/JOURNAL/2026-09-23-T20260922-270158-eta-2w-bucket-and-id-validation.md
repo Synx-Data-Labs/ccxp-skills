@@ -1,7 +1,7 @@
 ---
 status: Done
 scheduled: 2026-09-21
-estimation: 30m
+estimation: 1
 source: independent code-review agent on PR #115 (T20260922-453135), 2026-09-22
 related: T20260922-453135
 claimed_by:

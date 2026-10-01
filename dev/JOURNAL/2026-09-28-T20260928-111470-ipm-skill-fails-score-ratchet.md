@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: this conversation, 2026-09-28 — main branch CI check on `5d5e07f`
 related: T20260923-584914
 claimed_by:

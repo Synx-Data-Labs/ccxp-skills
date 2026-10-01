@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 4h
+estimation: 2
 source: this conversation, 2026-09-14 — maintainer asked to retire the deferred-to-Friday-retro default
 claimed_by:
 claimed_role:

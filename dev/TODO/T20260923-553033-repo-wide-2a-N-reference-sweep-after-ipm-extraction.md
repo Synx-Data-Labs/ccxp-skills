@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-09-21
-estimation: 1h
+estimation: 1
 source: discovered driving T20260923-584914, 2026-09-23
 related: T20260923-584914
 claimed_by:

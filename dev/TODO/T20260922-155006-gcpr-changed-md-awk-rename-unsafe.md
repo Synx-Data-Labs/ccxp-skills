@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-10-05
-estimation: 15m
+estimation: 1
 source: PR #64's independent review, 2026-09-22 — the same `awk '{print $2}'` pattern this PR fixed for `CHANGED_MD` also exists at two other call sites in the same file
 related: T20260910-919422
 ---

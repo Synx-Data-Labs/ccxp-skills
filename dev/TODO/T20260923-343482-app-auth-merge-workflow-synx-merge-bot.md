@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 2d
+estimation: 5
 source: 2026-09-23 interactive session with Shine, split off T20260418-124634 (hub-repo)
 related: T20260418-124634 (hub-repo — Drata/SOC2 readiness, the driving requirement)
 owner: Xin Zhang (Shine)

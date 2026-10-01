@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 4h
+estimation: 2
 source: conversation with @shine, 2026-09-23
 related: T20260923-584914
 claimed_by:

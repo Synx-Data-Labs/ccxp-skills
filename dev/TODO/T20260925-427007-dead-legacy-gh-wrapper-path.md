@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-10-05
-estimation: 2h
+estimation: 2
 source: lsc-pa PR #159 follow-up, 2026-09-25
 related: T20260925-219021
 ---
