@@ -87,8 +87,10 @@ design tree visited, nothing left silently assumed. Print:
 1. **Decisions** — every settled decision as one bullet each
 2. **Open** — anything still undecided, and why it can wait
 3. **Out of scope** — what was explicitly excluded
-4. **Estimate** — a revised `estimation` (`15m|30m|1h|2h|4h|1d|2d|1w`) with
-   a one-line reason if it differs from the task's current value
+4. **Estimate** — a revised `estimation` (a Fibonacci-style point, one of
+   `1|2|3|5|8`) with a one-line reason if it differs from the task's
+   current value — this is the only place a point value moves up from the
+   `1` every task files at (T20260924-232855)
 5. Ask: "Aligned? Should I record this, or adjust anything?"
 
 Do not act on it until the user confirms you have reached a shared
@@ -136,4 +138,4 @@ Leave the change uncommitted — the caller decides how it lands (`/ccxp`
   answer your own questions.
 - **Interview in the user's language.**
 - Not for existing code (`/address-pr`, `superpowers:requesting-code-review`)
-  or trivial one-off tasks — grilling a 15m chore wastes more than it saves.
+  or trivial one-off tasks — grilling a 1-point chore wastes more than it saves.

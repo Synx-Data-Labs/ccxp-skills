@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
 # Tests for eta/scripts/eta.sh — projects a finish time for the current (or
-# an explicit) task from its estimation: bucket and the git-log-S-derived
+# an explicit) task from its estimation: points (points * hours_per_point,
+# read from dev/velocity.json — T20260924-232855) and the git-log-S-derived
 # start time of its claimed_by: line (T20260922-453135).
 
 setup() {
@@ -40,7 +41,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 
 @test "resolves current task via claimed_by auto-detection" {
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '1h' "$me"
+  mk_task dev/TODO/T20260101-000001-x.md '1' "$me"
   commit_dated "2026-01-01T00:00:00+00:00" 'claim task'
 
   run_script
@@ -50,8 +51,8 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 
 @test "resolves explicit T<id> even when a different task is claimed" {
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '1h' "$me"
-  mk_task dev/TODO/T20260101-000002-y.md '2h' ''
+  mk_task dev/TODO/T20260101-000001-x.md '1' "$me"
+  mk_task dev/TODO/T20260101-000002-y.md '2' ''
   commit_dated "2026-01-01T00:00:00+00:00" 'claim first task'
 
   run_script T20260101-000002
@@ -60,7 +61,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 }
 
 @test "no current task: exit 1 with a clear message when nothing is claimed" {
-  mk_task dev/TODO/T20260101-000001-x.md '1h' ''
+  mk_task dev/TODO/T20260101-000001-x.md '1' ''
   commit_dated "2026-01-01T00:00:00+00:00" 'file task'
 
   run_script
@@ -68,26 +69,60 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   [[ "$output" == *"no current task"* ]]
 }
 
-@test "duration mapping covers all 8 estimation buckets" {
+@test "duration mapping covers all 5 Fibonacci point values (bootstrap hours_per_point=1)" {
   local me; me="$(claimant_id "$WORK")"
   local i=1
-  for bucket in 15m 30m 1h 2h 4h 1d 2d 1w; do
-    mk_task "dev/TODO/T2026010${i}-00000${i}-x.md" "$bucket" "$me"
-    commit_dated "2026-01-0${i}T00:00:00+00:00" "claim $bucket task"
+  for pts in 1 2 3 5 8; do
+    mk_task "dev/TODO/T2026010${i}-00000${i}-x.md" "$pts" "$me"
+    commit_dated "2026-01-0${i}T00:00:00+00:00" "claim $pts-point task"
     run_script "T2026010${i}-00000${i}"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"estimation: $bucket"* ]]
+    [[ "$output" == *"estimation: $pts"* ]]
     i=$((i+1))
   done
 }
 
-@test "unrecognized estimation bucket errors clearly" {
+@test "unrecognized estimation value errors clearly" {
   mk_task dev/TODO/T20260101-000001-x.md '3h' ''
   commit_dated "2026-01-01T00:00:00+00:00" 'file task'
 
   run_script T20260101-000001
   [ "$status" -eq 1 ]
-  [[ "$output" == *"unrecognized estimation bucket"* ]]
+  [[ "$output" == *"unrecognized estimation value"* ]]
+}
+
+@test "non-Fibonacci integer (4) is rejected" {
+  mk_task dev/TODO/T20260101-000001-x.md '4' ''
+  commit_dated "2026-01-01T00:00:00+00:00" 'file task'
+
+  run_script T20260101-000001
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unrecognized estimation value"* ]]
+}
+
+@test "missing dev/velocity.json falls back to hours_per_point=1 bootstrap" {
+  local me; me="$(claimant_id "$WORK")"
+  mk_task dev/TODO/T20260101-000001-x.md '2' "$me"
+  commit_dated "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" 'claim task'
+
+  run_script T20260101-000001
+  [ "$status" -eq 0 ]
+  # 2 points * 1h/point bootstrap = 2h total; near-zero elapsed → ~1h59m remaining
+  [[ "$output" == *"remaining:  1h59m"* || "$output" == *"remaining:  2h0m"* ]]
+}
+
+@test "dev/velocity.json's hours_per_point scales the projected duration" {
+  local me; me="$(claimant_id "$WORK")"
+  mk_task dev/TODO/T20260101-000001-x.md '2' "$me"
+  cat > "$WORK/dev/velocity.json" <<'JSON'
+{"hours_per_point": 3, "points_per_week": 9, "computed_at": "2026-01-01", "window_weeks": 4, "sample_size": 14, "bootstrap": false}
+JSON
+  commit_dated "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" 'claim task'
+
+  run_script T20260101-000001
+  [ "$status" -eq 0 ]
+  # 2 points * 3h/point = 6h total; near-zero elapsed → ~5h59m remaining
+  [[ "$output" == *"remaining:  5h59m"* || "$output" == *"remaining:  6h0m"* ]]
 }
 
 @test "start-time-unknown fallback when git log -S finds no claimed_by commit" {
@@ -98,7 +133,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   # count of the string) finds no match for a string present since the file's
   # birth with no prior absence to diff against... to force the "truly no
   # match" path, use a claimed_by value that never appears in any commit.
-  mk_task dev/TODO/T20260101-000001-x.md '1h' 'cc1-deadbeef:0000000000000000'
+  mk_task dev/TODO/T20260101-000001-x.md '1' 'cc1-deadbeef:0000000000000000'
   commit_dated "2026-01-01T00:00:00+00:00" 'file task'
   # Rewrite claimed_by to a DIFFERENT value WITHOUT committing the change, so
   # the frontmatter (read off disk) carries a value no commit ever introduced
@@ -119,7 +154,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   # the override is the ONLY thing that can make America/New_York's
   # abbreviation (EST/EDT) appear.
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '1h' "$me"
+  mk_task dev/TODO/T20260101-000001-x.md '1' "$me"
   commit_dated "2026-01-01T00:00:00+00:00" 'claim task'
 
   TZ="Asia/Tokyo" run bash "$SCRIPT" --repo-root "$WORK" --tz America/New_York T20260101-000001
@@ -130,7 +165,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 
 @test "--tz with an invalid zone exits 2 with a clear error" {
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '1h' "$me"
+  mk_task dev/TODO/T20260101-000001-x.md '1' "$me"
   commit_dated "2026-01-01T00:00:00+00:00" 'claim task'
 
   run_script --tz Not/AZone T20260101-000001
@@ -140,7 +175,7 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
 
 @test "overdue task reports 'overdue by' instead of a negative remaining" {
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '15m' "$me"
+  mk_task dev/TODO/T20260101-000001-x.md '1' "$me"
   commit_dated "2020-01-01T00:00:00+00:00" 'claim task long ago'
 
   run_script T20260101-000001
@@ -148,19 +183,20 @@ run_script() { run bash "$SCRIPT" --repo-root "$WORK" "$@"; }
   [[ "$output" == *"overdue by"* ]]
 }
 
-@test "estimation: 2w is a recognized bucket, not rejected (regression, T20260922-270158)" {
-  # lifecycle.md's canonical estimation enum includes 2w; commit "now" so
-  # elapsed is near-zero and this exercises the "remaining" (not overdue)
-  # branch, confirming eta_bucket_seconds actually mapped 2w to a real
-  # duration rather than failing "unrecognized estimation bucket".
+@test "estimation: 8 (top of the Fibonacci scale) is recognized, not rejected" {
+  # Commit "now" so elapsed is near-zero and this exercises the "remaining"
+  # (not overdue) branch, confirming the top-end point value maps to a real
+  # duration rather than failing "unrecognized estimation value" — same
+  # saturation-boundary regression class as the old 2w-bucket check
+  # (T20260922-270158), now against the points enum's own top value.
   local me; me="$(claimant_id "$WORK")"
-  mk_task dev/TODO/T20260101-000001-x.md '2w' "$me"
-  commit_dated "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" 'claim 2w task'
+  mk_task dev/TODO/T20260101-000001-x.md '8' "$me"
+  commit_dated "$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" 'claim 8-point task'
 
   run_script T20260101-000001
   [ "$status" -eq 0 ]
-  [[ "$output" != *"unrecognized estimation bucket"* ]]
-  [[ "$output" == *"estimation: 2w"* ]]
+  [[ "$output" != *"unrecognized estimation value"* ]]
+  [[ "$output" == *"estimation: 8"* ]]
   [[ "$output" == *"remaining:"* ]]
 }
 

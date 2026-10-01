@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 2h
+estimation: 1
 # Optional — delete the lines you don't use:
 # deadline: 2026-06-30         # hard date (release / compliance / customer) — informational, does not affect queue order
 # blocks: [T20260101-000001]   # task IDs that depend on THIS one (bidirectional)
@@ -34,7 +34,9 @@ file:line, a failing command, a quoted requirement). Say what "done" looks like.
 SCAFFOLD NOTES (delete this block once the task is filed):
 
 - Required frontmatter: `status` (Open|Design|In Progress|Review|Blocked by T{id}|Parked|Done)
-  and `estimation` (15m|30m|1h|2h|4h|1d|2d|1w). Everything else is optional.
+  and `estimation` — a Fibonacci-style point value (1|2|3|5|8). Always file at `1`;
+  `/incept` is the only place a point value is revised upward, once grilling
+  surfaces real scope. Everything else is optional.
 - Bullets, not paragraphs, in every section — ~3 per level, nest a sub-list
   instead of running past that or folding detail back into prose. See
   `templates/guidelines.md`'s Documentation section for the canonical wording.

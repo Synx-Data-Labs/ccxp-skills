@@ -34,7 +34,7 @@ Task metadata uses **YAML frontmatter** (`---` … `---` at the top of the file)
 
 ```markdown
 ---
-estimation: {30m|1h|2h|4h|1d|2d|1w|2w}
+estimation: {1|2|3|5|8}
 status: {Open|Design|In Progress|Review|Blocked by T{id}}
 source: {GitHub issue, upstream link, or process note}
 description: {One-line summary of what's wrong and what "done" looks like}
@@ -130,11 +130,15 @@ A task **deferred ("cut")** at an IPM has its `scheduled` *advanced* to next Mon
 
 ## Estimation
 
-Tasks carry a free-text time-based estimate (e.g. `1h`, `0.5d`, `2w`). For a small team, time estimates are more grounded than story points — `1d` tells you whether work fits in a day, while `3 points` requires a calibrated team velocity to interpret.
+Tasks carry a Fibonacci-style **story point** (`{1, 2, 3, 5, 8}`) — a relative-size abstraction, not a duration guess (T20260924-232855 retired the old duration-bucket enum: `estimation:` used to be filed as a time guess before any real design work, then silently re-guessed by `/incept`; it never captured real XP velocity, and nothing fed real completion history back into planning).
 
-**`lint-tasks` v5 requires `estimation` to START with a bare duration** — regex `^\d+(m|h|d|w)\b`, units `m|h|d|w` only (no `s`). So `~2d remaining …` FAILS (the `~` prefix breaks the match) but `2d remaining …` passes (trailing prose after the duration is fine). It lints only a PR's **changed** task files (`mode: changed`), so pre-existing non-conforming `estimation:` values already on `main` are not valid precedent — they simply haven't been re-touched under v5 yet. Validate locally before pushing: `python3 repo-conventions/scripts/lint_tasks.py --changed <file>`, run from the ccxp-skills repo root (exit 0 = conforms).
+- `/new-task` always files new tasks at `estimation: 1` — it no longer asks the filer for a duration guess.
+- `/incept` is the only place a point value is revised upward, once grilling surfaces real scope.
+- `/retro` computes rolling velocity (`points_per_week`, calendar-based) and a points→hours ratio (`hours_per_point`) from completed-task history into `dev/velocity.json`; `/eta` reads that file to project a task's remaining wall-clock time (`points * hours_per_point`) instead of looking up a static duration table.
 
-(The previous Estimate→Size Fibonacci bucket mapping was used by `_claims/sync-tasks.sh` to derive a Project board `Size` field; that derivation was removed in T20260513-422869 along with the rest of the `_claims/` machinery. If formal-bucket grouping comes back, the previous mapping is in git history.)
+**`lint-tasks` v6 requires `estimation` to be exactly one of `{1, 2, 3, 5, 8}`** — regex `^(1|2|3|5|8)\b` (trailing prose after the value is fine, e.g. `2 (S)`). It lints only a PR's **changed** task files (`mode: changed`), so pre-existing non-conforming `estimation:` values already on `main` are not valid precedent — they simply haven't been re-touched under v6 yet. Validate locally before pushing: `python3 repo-conventions/scripts/lint_tasks.py --changed <file>`, run from the ccxp-skills repo root (exit 0 = conforms).
+
+A one-time, lossy migration script (`repo-conventions/scripts/migrate-estimation-to-points.sh`) maps the retired duration buckets onto the new scale: `15m/30m/1h → 1`, `2h/4h → 2`, `1d → 3`, `2d → 5`, `1w/2w → 8`. Each consumer repo runs it once, after pulling this schema/lint change, against its own `dev/TODO/` and `dev/JOURNAL/`.
 
 ## Creating a Task
 

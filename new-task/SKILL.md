@@ -42,7 +42,12 @@ don't re-ask about something the user just told you. At minimum you need:
 - **Title** — a short, action-oriented line
 - **Problem** — what's wrong or needed, as bullets with evidence (a
   `file:line`, a failing command, a quoted requirement) — not a paragraph
-- **Estimation** — one of `15m|30m|1h|2h|4h|1d|2d|1w`
+
+Don't ask for an estimation — every new task files at `estimation: 1`
+(see step 3). Real sizing happens at `/incept` time, once grilling
+surfaces actual scope; asking for a point guess before any design work
+would just reproduce the old duration-bucket guessing habit this schema
+replaced (T20260924-232855).
 
 Ask about these only when they plausibly apply — don't force them:
 
@@ -51,10 +56,9 @@ Ask about these only when they plausibly apply — don't force them:
   YYYY-MM-DD" when that's genuinely the origin rather than asking),
   `related`, `owner`
 
-**Never fabricate Problem detail, an estimation, or a source the user
-hasn't given and that isn't clearly inferable from the conversation — ask
-instead of guessing.** A vague or wrong task file is worse than one more
-question.
+**Never fabricate Problem detail or a source the user hasn't given and
+that isn't clearly inferable from the conversation — ask instead of
+guessing.** A vague or wrong task file is worse than one more question.
 
 ### 3. Mint the ID and write the file
 
@@ -64,9 +68,9 @@ bash ../_taskid/new.sh --check ./dev
 
 Write `dev/TODO/T<id>-<slug>.md` from
 [`repo-conventions/templates/task.md`](../repo-conventions/templates/task.md) —
-frontmatter (`status: Open`, `estimation`, and whichever optional fields
-step 2 collected — delete the ones that don't apply, per the template's own
-instructions), then:
+frontmatter (`status: Open`, `estimation: 1` always, and whichever optional
+fields step 2 collected — delete the ones that don't apply, per the
+template's own instructions), then:
 
 ```markdown
 # T<id>: <title>
