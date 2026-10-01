@@ -1,11 +1,11 @@
 ---
 estimation: 3
-status: In Progress
+status: Done
 source: 2026-09-24 conversation — brainstormed after a /todo next run surfaced
   "is estimation even useful", worked through with superpowers:brainstorming
 related: T20260808-192220, T20260809-355059, T20260924-252293
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -193,49 +193,69 @@ scheduled: 2026-09-28
 
 ## Test plan
 
-- [ ] Unit: `/retro`'s velocity calc against a fixture completed-task set —
+- [x] Unit: `/retro`'s velocity calc against a fixture completed-task set —
       assert `hours_per_point` (median) and `points_per_week` (mean) match
       hand-computed values, using each task's close-date to bin it into its
-      calendar week.
-- [ ] Unit: zero-sample bootstrap case — assert flat defaults
+      calendar week. (`tests/compute_velocity.bats` — "single completed
+      task" + "median resists an outlier" cases.)
+- [x] Unit: zero-sample bootstrap case — assert flat defaults
       (`hours_per_point: 1`, `points_per_week: 10`, `bootstrap: true`).
-- [ ] Unit: migration mapping script against fixture `dev/TODO/` +
+      (`tests/compute_velocity.bats` — "zero-sample window".)
+- [x] Unit: migration mapping script against fixture `dev/TODO/` +
       `dev/JOURNAL/` dirs — assert every `estimation:` lands in
       `{1,2,3,5,8}` and no other field/content changes. **Include a `2w`
       fixture** (a recurring omission class — see
       `dev/JOURNAL/2026-09-23-T20260922-270158-eta-2w-bucket-and-id-validation.md`)
-      and assert it maps to `8`, same as `1w`.
-- [ ] Integration: `design-score` and `repo-conventions` lint both accept
+      and assert it maps to `8`, same as `1w`. (`tests/migrate_estimation_to_points.bats`
+      — also extended to `dev/PARKING/`, found missing from this task's own
+      file-reference table during implementation; see Closed.)
+- [x] Integration: `design-score` and `repo-conventions` lint both accept
       the new enum and reject a leftover duration string.
-- [ ] Manual/dry-run: `/eta` runs cleanly against a missing
+      (`repo-conventions/scripts/test_lint_tasks.py` — 44/44 pass, incl. new
+      `test_legacy_duration_estimation_fails`/`test_estimation_accepts_each_fibonacci_value`;
+      `tests/design_score.bats` — 21/21 pass, unaffected.)
+- [x] Manual/dry-run: `/eta` runs cleanly against a missing
       `dev/velocity.json` (bootstrap fallback, no crash).
-- [ ] Manual, post-migration: `/todo list`/`next` in this repo lint clean
-      end-to-end.
+      (`tests/eta.bats` — "missing dev/velocity.json falls back to
+      hours_per_point=1 bootstrap".)
+- [x] Manual, post-migration: `/todo list`/`next` in this repo lint clean
+      end-to-end. (Ran both after the real migration; `python3
+      repo-conventions/scripts/lint_tasks.py --all .` → "27 task file(s)
+      conform".)
 
 ## Done criteria
 
-- [ ] `estimation:` schema and docs describe `{1,2,3,5,8}` — no
+- [x] `estimation:` schema and docs describe `{1,2,3,5,8}` — no
       duration-bucket string in any doc/template
       (`repo-conventions/SKILL.md:54,58` and the templates listed below).
       `design-score/scripts/score.sh:150`'s non-empty check needs no code
-      change — verify it still passes against an integer value.
-- [ ] `/new-task` files new tasks with `estimation: 1`
+      change — verified it still passes against an integer value (score.sh
+      run against this file: 74/100, PASS).
+- [x] `/new-task` files new tasks with `estimation: 1`
       (`new-task/SKILL.md:45,54,67`).
-- [ ] `/retro` writes `dev/velocity.json` every run with the shape above,
-      including the bootstrap path (`retro/SKILL.md` new step, next to
-      `retro/scripts/estimation-revisions.sh`).
-- [ ] `/eta` (`eta/scripts/eta.sh`) computes projected hours from
-      `points * hours_per_point` — `eta_bucket_seconds()` is gone.
-- [ ] Migration script exists, is idempotent, and has been run
+- [x] `/retro` writes `dev/velocity.json` every run with the shape above,
+      including the bootstrap path (`retro/SKILL.md` new Phase 2c, next to
+      `retro/scripts/estimation-revisions.sh`;
+      `retro/scripts/compute-velocity.sh` is the implementation).
+- [x] `/eta` (`eta/scripts/eta.sh`) computes projected hours from
+      `points * hours_per_point` — `eta_bucket_seconds()` is gone (verified:
+      `grep eta_bucket_seconds eta/scripts/eta.sh` → no matches).
+- [x] Migration script exists, is idempotent, and has been run
       successfully against this repo's own `dev/TODO/*.md` and
-      `dev/JOURNAL/*.md` — every value now in `{1,2,3,5,8}`.
-- [ ] Consumer-repo migration is documented (script location + when to run
+      `dev/JOURNAL/*.md` — every value now in `{1,2,3,5,8}` (also extended
+      to `dev/PARKING/*.md`, which `lint_tasks.py` lints under the same
+      schema — see Closed). 75 files migrated; `lint_tasks.py --all` → 27/27
+      conform.
+- [x] Consumer-repo migration is documented (script location + when to run
       it) but left for each consumer repo to execute on its own — not
-      claimed as done here.
-- [ ] `/ccxp` Phase 2a.4 is untouched beyond the incidental regex/type
+      claimed as done here. (`lifecycle.md` § Estimation.)
+- [x] `/ccxp` Phase 2a.4 is untouched beyond the incidental regex/type
       change (string → integer) — its IPM-ritual redesign is explicitly
-      out of scope, tracked instead by T20260924-252293.
-- [ ] All Test plan items above pass.
+      out of scope, tracked instead by T20260924-252293. (Verified: that
+      logic has actually already moved to `ipm/SKILL.md` since this task
+      was designed — T20260923-584914's IPM extraction — and was left
+      untouched there too, same reasoning.)
+- [x] All Test plan items above pass.
 
 ## Repo file references
 
@@ -305,3 +325,79 @@ scheduled: 2026-09-28
      a missing `2w` bucket in the migration mapping table (now `1w/2w → 8`,
      both saturating the scale's top bucket); and an uncited
      `retro/SKILL.md:351` site that also hardcodes duration buckets.
+
+## Closed (2026-10-01)
+
+Shipped in **PR #TBD** (filled on open — same-repo implementation PR;
+docs-only claim PR #204 landed the pre-implementation claim separately and
+already merged).
+
+- All §Done criteria above are met; all Test plan items pass (see their
+  checkboxes for the exact commands/evidence).
+- 75 live task files (`dev/TODO` + `dev/PARKING` + `dev/JOURNAL`) migrated
+  from duration buckets to points in this repo; every one now lints clean
+  (`lint_tasks.py --all` → 27/27 conform for the live board).
+- Full suite green at merge time: `bats tests/` — 792/792; every touched
+  Python test module (`test_lint_tasks.py`, `test_lint_refs.py`,
+  `test_lint_paragraphs.py`, `design_score` bats, `actions/sync-tasks`'s
+  `test_sync.py`) — all passing, no regressions.
+- **Gaps found during implementation, beyond the design's own file-
+  reference table** (none blocking, all fixed in this PR — noted here per
+  the design-doc discipline of anchoring every claim, including the ones
+  the original design missed):
+  - `repo-conventions/scripts/lint_tasks.py`'s `ESTIMATION_RE` (the actual
+    CI-enforcing regex, `^\d+(m|h|d|w)\b`) was not in the design's file-
+    reference table — only `design-score/scripts/score.sh`'s unrelated
+    non-empty check was. Left unfixed, every task PR's `lint-tasks` CI
+    check would have started failing the moment any file carried a bare
+    point value. Fixed alongside its test suite
+    (`test_lint_tasks.py` — 44/44 pass, including new regression tests).
+  - The migration script's scan scope (`dev/TODO/` + `dev/JOURNAL/` per the
+    design) missed `dev/PARKING/`, which `lint_tasks.py` lints under the
+    identical schema — left one parked task failing `--all` lint. Extended
+    the script + added a regression test.
+  - `drive/SKILL.md`'s own Phase 2 prose ("a `15m`/`1h`/`2h` task earns a
+    few bullets…") and `repo-conventions/templates/design-doc.md`'s
+    one-pager-discipline prose both still illustrated task size with the
+    retired duration scale — updated to the points scale for consistency
+    with the "no duration-bucket string in any doc/template" done
+    criterion.
+- **Confirmed out-of-scope, left untouched, as designed**: `/ccxp`'s (now
+  `/ipm`'s, after the T20260923-584914 extraction that landed after this
+  task was designed) IPM budget-cut arithmetic (`~12h product` line,
+  Tier 1/2/3 tables) still reads `estimation:` as if it were hours — it was
+  already nonsensical in practice (the ritual has never run — zero
+  `dev/JOURNAL/*-ipm-weekly.md` files exist) and its redesign is explicitly
+  tracked by T20260924-252293, not this task.
+- **`doc-impact.sh` flags reviewed, no further changes needed**: the
+  unattended doc-freshness check flagged ~14 files for referencing
+  `guidelines.md`/`lifecycle.md`/`README.md`/`lint_tasks.py`/
+  `design-doc.md`/`task.md` by name. Checked each directly (grep for
+  estimation/duration content) — all false positives from the generic
+  cross-reference heuristic; none duplicate the estimation schema content
+  this task changed. No follow-up doc-conformance task filed.
+- `dev/velocity.json` is not pre-created by this PR — it's written lazily
+  on the next `/retro` run (or any run of `retro/scripts/compute-velocity.sh`);
+  `/eta` already degrades to the bootstrap default when the file is absent,
+  verified by test.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — code-class (Phase 3.0).
+  Red/green verified directly for `lint_tasks.py`'s `ESTIMATION_RE` (wrote
+  failing tests, confirmed RED, then implemented) and for
+  `compute-velocity.sh`/`migrate-estimation-to-points.sh`/`eta.sh` (wrote
+  the implementation and its test suite together given the task's breadth,
+  then iterated red→green on two real bugs the tests caught: a bash
+  heredoc/stdin conflict in `compute-velocity.sh`, and a wrong hand-computed
+  expectation in a bats fixture — see commit history on this branch).
+- Verification (`superpowers:verification-before-completion`): yes — ran
+  the full `bats tests/` suite (792/792) and every affected Python test
+  module fresh immediately before this close, plus a line-by-line Done-
+  criteria re-verification pass (grep-based, not "should work").
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test
+  failed more than once per fix; no behavior contradicted a stated
+  invariant.
+- Receiving code review (`superpowers:receiving-code-review`): no — no
+  Claude Code review comments yet at the time of writing this section
+  (addressed in `/address-pr`, which may append to this record).

@@ -211,7 +211,7 @@ class LintFileTest(unittest.TestCase):
         body = (
             "---\n"
             "status: Open\n"
-            "estimation: 1h\n"
+            "estimation: 1\n"
             "related: T20260611-000001\n"
             "---\n\n"
             "# T20260611-000002: Demo\n\nSee T20260611-000001 too.\n"
@@ -233,7 +233,7 @@ class LintFileTest(unittest.TestCase):
         body = (
             "---\n"
             "status: Done\n"
-            "estimation: 2h\n"
+            "estimation: 2\n"
             "target-repo: 'your-org/ccxp-skills'\n"
             "---\n\n"
             "# T20260611-000002: Demo\n\nToday PR #134 landed the fix.\n"
@@ -279,7 +279,7 @@ class LintFileTest(unittest.TestCase):
         body = (
             "---\n"
             "status: Done\n"
-            "estimation: 2h\n"
+            "estimation: 2\n"
             "target-repo: 'your-org/hub-repo'\n"
             "---\n\n"
             "# T20260611-000002: Demo\n\nToday PR #134 landed the fix.\n"
@@ -299,7 +299,7 @@ class LintFileTest(unittest.TestCase):
         body = (
             "---\n"
             "status: Open\n"
-            "estimation: 1h\n"
+            "estimation: 1\n"
             "---\n\n"
             "# T20260611-000002: Demo\n\nSee T20260611-000002 again in prose.\n"
         )
