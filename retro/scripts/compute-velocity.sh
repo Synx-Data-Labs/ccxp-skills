@@ -14,10 +14,16 @@
 #                       yyyy-mm-dd prefix on its dev/JOURNAL/ filename).
 #   hours_per_point  — median(actual_hours / points) over the same window's
 #                       completed tasks, where actual_hours is wall-clock
-#                       claim (the commit that introduced the task's
-#                       claimed_by: line, oldest match) to close (its
-#                       JOURNAL filename date, at noon UTC — avoids a
-#                       systematic bias toward either edge of the day).
+#                       claim (the newest commit that added a non-empty
+#                       claimed_by: for this task) to close (the OLDEST
+#                       commit touching the task's current, exact
+#                       dev/JOURNAL/ path — i.e. the git-mv-into-JOURNAL
+#                       commit itself, not a synthetic time-of-day guess:
+#                       an earlier "noon UTC on the close date" proxy was
+#                       caught in PR review as systematically wrong — most
+#                       tasks here claim and close same-day, and noon UTC
+#                       sits earlier in the day than a same-day afternoon
+#                       claim in US time zones, producing a negative span).
 #                       Median, not mean, to resist one outlier skewing the
 #                       ratio (T20260924-232855 Appendix decision 1).
 #
@@ -68,14 +74,59 @@ cv_fm_get() {
   ' "$file"
 }
 
-# Emit one TSV row per JOURNAL task file: close_date, points, start_iso
-# (empty if unresolvable). Piped into the python3 heredoc below for all the
-# date-bucketing / median / JSON-writing math — this repo's established
-# pattern for calendar arithmetic that must work on both GNU and BSD date
-# (see _ipm/stamp-scheduled.sh), sidestepping bash's lack of a portable
-# "Monday of this date" primitive entirely.
+# Resolve a task's claim-start time from git HISTORY, not from the file's
+# current claimed_by: value. _session/task_claim.sh's release path (_tc_release,
+# called by /drive Phase 4 at close) explicitly CLEARS claimed_by to empty as
+# part of closing — every dev/JOURNAL/*.md file's claimed_by is empty by
+# construction, so reading it off the archived file and searching history for
+# THAT (empty) value can never find anything (caught in PR review,
+# T20260924-232855: the bug made hours_per_point permanently stuck at the
+# bootstrap default — 0 of this repo's real completed tasks ever resolved).
+#
+# `git log --follow` is deliberately NOT used here: --follow's rename
+# detection is content-similarity-based, and every task file shares nearly
+# identical frontmatter boilerplate — on this repo's real history, --follow
+# repeatedly latched onto an unrelated task's commits (confirmed: it produced
+# claim timestamps dated AFTER the task's own close date for several real
+# tasks, an impossible timeline, once the fix below replaced it). Query by
+# the task ID instead — a glob pathspec matching any historical path
+# containing the id (dev/TODO/<id>-*.md, dev/PARKING/<id>-*.md, and every
+# dev/JOURNAL/<date>-<id>-*.md this task ever lived at) is exact, because the
+# id is immutable and unique, with no content-similarity guessing involved.
+#
+# Walk that history and take the NEWEST commit that ADDED a non-empty
+# "claimed_by: <value>" line — the last claim this task received before it
+# closed. git log without --reverse is newest-first, so the FIRST matching
+# added-line seen while scanning is that newest commit (awk sets `found`
+# once and never overwrites it).
+cv_resolve_claim_start() {
+  local f="$1" id
+  id="$(basename "$f" | grep -oE 'T[0-9]{8}-[0-9]{6}')"
+  [ -n "$id" ] || return 0
+  git -C "$cv_repo_root" log -p --format='===CMT===%aI' -- "*${id}*" 2>/dev/null | awk '
+    /^===CMT===/ { cur=substr($0,10); next }
+    /^\+claimed_by:[ \t]*[^ \t]/ { if (found == "") found = cur }
+    END { if (found != "") print found }
+  '
+}
+
+# The close timestamp: the OLDEST commit touching the task's exact current
+# dev/JOURNAL/ path. That path never existed before the git-mv-into-JOURNAL
+# commit, so this is exact (no rename-detection ambiguity) and reflects a
+# real moment in time, unlike a synthetic time-of-day guess.
+cv_resolve_close_time() {
+  local f="$1"
+  git -C "$cv_repo_root" log --format=%aI -- "$f" 2>/dev/null | tail -1
+}
+
+# Emit one TSV row per JOURNAL task file: close_iso, points, start_iso
+# (start_iso empty if unresolvable). Piped into the python3 heredoc below
+# for all the date-bucketing / median / JSON-writing math — this repo's
+# established pattern for calendar arithmetic that must work on both GNU
+# and BSD date (see _ipm/stamp-scheduled.sh), sidestepping bash's lack of a
+# portable "Monday of this date" primitive entirely.
 cv_rows="$(
-  if [ -d "$cv_journal_dir" ]; then
+  if [ -d "$cv_journal_dir" ] && git -C "$cv_repo_root" rev-parse --git-dir >/dev/null 2>&1; then
     for f in "$cv_journal_dir"/*.md; do
       [ -e "$f" ] || continue
       base="$(basename "$f")"
@@ -83,16 +134,12 @@ cv_rows="$(
         [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-T*) ;;
         *) continue ;;   # not a dated close entry (legacy/undated JOURNAL file)
       esac
-      close_date="${base:0:10}"
       points="$(cv_fm_get "$f" estimation)"
       [[ "$points" =~ ^(1|2|3|5|8)$ ]] || continue   # unmigrated/unparseable — skip, don't crash
-      claimed_by="$(cv_fm_get "$f" claimed_by)"
-      start_iso=""
-      if [ -n "$claimed_by" ] && git -C "$cv_repo_root" rev-parse --git-dir >/dev/null 2>&1; then
-        start_iso="$(git -C "$cv_repo_root" log --follow -S"claimed_by: $claimed_by" \
-          --format=%aI -- "$f" 2>/dev/null | tail -1)"
-      fi
-      printf '%s\t%s\t%s\n' "$close_date" "$points" "$start_iso"
+      close_iso="$(cv_resolve_close_time "$f")"
+      [ -n "$close_iso" ] || close_iso="${base:0:10}T12:00:00+00:00"   # no git history (e.g. a test fixture never committed) — fall back to the filename date at noon UTC
+      start_iso="$(cv_resolve_claim_start "$f")"
+      printf '%s\t%s\t%s\n' "$close_iso" "$points" "$start_iso"
     done
   fi
 )"
@@ -126,10 +173,15 @@ for line in rows.split("\n"):
     parts = line.split("\t")
     if len(parts) < 2:
         continue
-    close_date_s, points_s = parts[0], parts[1]
+    close_iso, points_s = parts[0], parts[1]
     start_iso = parts[2] if len(parts) > 2 else ""
     try:
-        close_date = datetime.date.fromisoformat(close_date_s)
+        # Bin by the close commit's own wall-clock date (the first 10 chars
+        # of its ISO-8601 timestamp, i.e. the committer's local date) rather
+        # than converting through UTC — this matches the convention the
+        # dev/JOURNAL/ filename's own yyyy-mm-dd prefix already uses.
+        close_date = datetime.date.fromisoformat(close_iso[:10])
+        close_dt = datetime.datetime.fromisoformat(close_iso)
         points = int(points_s)
     except ValueError:
         continue
@@ -142,13 +194,6 @@ for line in rows.split("\n"):
     if start_iso:
         try:
             start_dt = datetime.datetime.fromisoformat(start_iso)
-            # Close timestamp: noon UTC on the close date — avoids a
-            # systematic bias toward either edge of the day when all we
-            # have is a date, not a time (T20260924-232855 Appendix: wall
-            # clock, simplest well-defined reading).
-            close_dt = datetime.datetime(
-                close_date.year, close_date.month, close_date.day, 12, 0, 0,
-                tzinfo=datetime.timezone.utc)
             actual_hours = (close_dt - start_dt).total_seconds() / 3600
             if actual_hours > 0:
                 hours_per_point_samples.append(actual_hours / points)
