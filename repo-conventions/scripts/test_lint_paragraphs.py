@@ -9,7 +9,7 @@ import lint_paragraphs
 def write_task(root, name="T20260611-000001-demo.md", body="", sub="TODO"):
     f = Path(root) / "dev" / sub / name
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(f"---\nstatus: Open\nestimation: 2h\n---\n\n{body}",
+    f.write_text(f"---\nstatus: Open\nestimation: 2\n---\n\n{body}",
                  encoding="utf-8")
     return f
 
