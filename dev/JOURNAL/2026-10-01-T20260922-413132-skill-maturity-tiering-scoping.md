@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Done
 scheduled: 2026-10-05
 estimation: 2h
 source: T20260914-412750 (research: learn from mattpocock/skills)
@@ -66,17 +66,43 @@ description: Scope whether ccxp-skills should adopt a maturity tier (promoted vs
 
 ## Test plan
 
-- [ ] This task's `## Closed` section states one of the three shapes above
+- [x] This task's `## Closed` section states one of the three shapes above
       (or a fourth, if scoping surfaces a better one) with reasoning —
       manual read-through test.
-- [ ] If a shape other than "do nothing" is chosen, a follow-up
-      implementation task is filed (`dev/TODO/T<id>-*.md`) with its own
-      estimation, rather than folding the migration into this scoping task.
+- [x] N/A — "do nothing" chosen, no follow-up implementation task needed.
 
 ## Done criteria
 
-- [ ] A maturity-tiering decision is recorded for `ccxp-skills` — see
+- [x] A maturity-tiering decision is recorded for `ccxp-skills` — see
       `## Closed` below, this task's own read-through test.
-- [ ] Any resulting implementation work is filed as its own follow-up task,
+- [x] Any resulting implementation work is filed as its own follow-up task,
       not implemented inline here — see `## Closed` for the filed task ID,
       or "do nothing, none filed" if that's the outcome.
+
+## Closed (2026-10-01)
+
+Grilled via `/incept`. **Decision: do nothing** — the README's existing
+informal prose categories (Task lifecycle & PR automation, Notification &
+integration, General-purpose utility, Cloudflare developer platform) are
+sufficient signal for a small, trusted internal team.
+
+- No confirmed pain point found: no plugin-bloat or unwanted-skill
+  auto-fire complaint surfaced in this session, nor in the recent
+  2026-09-28 skill-quality review (`dev/quality/skill-review-2026-09-28/`),
+  which found correctness/concision bugs, not a selection/visibility
+  problem.
+- Physical bucket folders (mirroring `mattpocock/skills` exactly) were
+  seriously considered but rejected on cost: a repo-wide grep found **174
+  cross-skill relative-path references** (161 in `SKILL.md` files, 13 in
+  scripts) — every skill here assumes a flat directory (e.g.
+  `../other-skill/scripts/foo.sh`), so bucketing would mean rewriting all
+  of them, a large, invasive, error-prone migration far beyond the "every
+  skill's directory moves" cost this task's own Solution section
+  originally estimated.
+- The lightweight `maturity:` frontmatter-field option was also
+  considered and rejected: it adds ongoing upkeep (keeping the field
+  accurate as skills mature) for a benefit — filtering unpromoted skills
+  from the plugin bundle — that has no demonstrated need yet.
+- **Revisit trigger**: reopen this question if a real plugin-bloat
+  complaint or a surprise-fire incident actually surfaces.
+- No follow-up implementation task filed, consistent with "do nothing."
