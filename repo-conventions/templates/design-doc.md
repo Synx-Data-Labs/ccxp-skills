@@ -9,7 +9,7 @@ use the same docs/code classifier `/drive` Phase 3.0 already computes:
 
 **One-pager discipline**: most tasks should read top-to-bottom on one scrolled
 screen. The goal is the *right sections completed*, **not a line count** — a
-`15m`/`1h`/`2h` task earns a few bullets per section; only a `2d`+ or
+`1`/`2`/`3`-point task earns a few bullets per section; only a `5`/`8`-point or
 Critical/RCA task earns real length. The reference exemplar
 `dev/JOURNAL/2026-06-09-T20260608-672829-port-bin-elf-scan-for-fcs-runtime-libs.md`
 is long because it's a Critical three-factor RCA — study its anatomy, not its
