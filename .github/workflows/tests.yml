@@ -106,5 +106,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y bats
         shell: bash
       - name: Run bats suite
-        run: bats tests/*.bats _docs/*.bats
+        run: bats tests/*.bats _docs/*.bats _slack/*.bats
         shell: bash

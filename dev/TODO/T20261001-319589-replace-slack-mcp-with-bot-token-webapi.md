@@ -1,5 +1,5 @@
 ---
-status: Open
+status: In Progress
 estimation: 1d
 source: User report 2026-10-01 — two labrun Slack alerts (synxdb-build-pipeline
   #C0ALGAPRCA3/p1790829253605319, p1790860307828209) never got an RCA thread
@@ -9,6 +9,9 @@ related: T20260724-176269 (prior, "corrected" occurrence of this exact symptom,
   that closure doesn't explain the current recurrence)
 blocked-by: none (code-side work is NOT blocked; final activation is — see
   "Manual step" below)
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20261001-319589: retire MCP-based Slack access for ccxp automation — move to a bot-token Web API
@@ -115,17 +118,42 @@ doesn't block landing the implementation.
 
 ## Done criteria
 
-- [ ] A small Slack Web API helper (curl-based, no MCP) added to this repo
-      exposing: post message (optionally `thread_ts`), read channel history
-      (time-windowed, text-filterable — the `conversations.history`
-      replacement for MCP's `slack_search_public_and_private`), read thread
-      replies (`conversations.replies` — the `slack_read_thread`
-      replacement).
-- [ ] `ccxp/SKILL.md` Phase 1.2.2a rewritten to use the helper instead of
-      `mcp__claude_ai_Slack__*` tools.
+- [x] A small Slack Web API helper (curl-based, no MCP) added to this repo:
+      `_slack/webapi.sh` — `post` (optionally `thread_ts`), `history`
+      (time-windowed), `thread-replies` (`conversations.replies`, the
+      `slack_read_thread` replacement), and `find-by-text` (history + `jq`
+      substring filter, the single-channel `slack_search_public_and_private`
+      replacement — a bot token can't call Slack's `search.messages`, that's
+      user-token-only). 20 BATS tests (`_slack/webapi.bats`), shellcheck
+      clean, wired into `tests.yml`'s bats glob (was missing it — the test
+      file alone wouldn't have run in CI otherwise).
+- [ ] `ccxp/SKILL.md` rewritten to use the helper instead of
+      `mcp__claude_ai_Slack__*` tools. **Scope turned out larger than this
+      task's original estimate** — grepping `ccxp/SKILL.md` for MCP Slack
+      calls found 7 distinct call sites, not just 1.2.2a:
+      - L142 — 1.1#5b mandatory maintainer-reply check (delegates to
+        `/slack-check-reply all`, so fixing that skill covers this one)
+      - L162, L175 — 1.1a cheap-hold note (search for standup parent +
+        threaded reply)
+      - L237–251 — **1.2.2a itself** (search alert + dedup-read + reply) —
+        the direct cause of the two misses reported 2026-10-01; do this one
+        first if doing this incrementally
+      - L453–496 — the main standup-message post (already has a webhook
+        *send* fallback for T20260717-433409; the search/read side of this
+        block still needs the `find-by-text` swap)
+      - L721 — `/drive`-inherited escalation protocol
+      Recommend doing 1.2.2a (the confirmed-broken one) first as its own
+      PR, then the rest as a second pass — not one giant rewrite, so each
+      piece can be verified against the real API independently once the
+      manual step below is done.
 - [ ] `labrun-rca/SKILL.md` steps 2–5 rewritten the same way.
-- [ ] `slack-check-reply/SKILL.md`'s maintainer-reply search rewritten the
-      same way.
+- [ ] `slack-check-reply/SKILL.md`'s maintainer-reply search + standup-thread
+      discovery (step 1a) rewritten the same way — note its `from:me` search
+      filter has no direct Web API equivalent once posting moves off the
+      OAuth-connector identity; `find-by-text`'s text match (e.g. "Daily
+      Standup") is the replacement, not a user filter. This skill already
+      degrades gracefully today (explicit "skip if `SLACK_STANDUP_CHANNEL`
+      unset" path) so it's lower urgency than 1.2.2a.
 - [ ] `synxdb-build-pipeline`'s `.github/workflows/_slack-notify.yml` posts
       via `chat.postMessage` (bot token) instead of the bare webhook, with a
       fallback to the existing webhook if `SLACK_BOT_TOKEN` isn't configured
