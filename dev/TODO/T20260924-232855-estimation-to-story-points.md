@@ -1,9 +1,12 @@
 ---
 estimation: 1d
-status: Design
+status: In Progress
 source: 2026-09-24 conversation — brainstormed after a /todo next run surfaced
   "is estimation even useful", worked through with superpowers:brainstorming
 related: T20260808-192220, T20260809-355059, T20260924-252293
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260924-232855: Replace `estimation:` duration buckets with XP story points
