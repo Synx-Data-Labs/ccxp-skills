@@ -76,7 +76,7 @@ EOF
 
 # --- real lint (fixtures under dev/TODO) ------------------------------------
 
-@test "real lint: a non-bucket estimation (1-2h) is frozen (return 0)" {
+@test "real lint: an invalid estimation (1-2h) is frozen (return 0)" {
   command -v python3 >/dev/null || skip "python3 unavailable"
   [ -f "$LINT" ] || skip "lint_tasks.py not found"
   f="$(_mk_task "$BATS_TEST_TMPDIR" T20260101-000001 1-2h)"
@@ -84,10 +84,10 @@ EOF
   [ "$status" -eq 0 ]
 }
 
-@test "real lint: a bucket estimation (2h) is claimable (return 1)" {
+@test "real lint: a valid points estimation (3) is claimable (return 1)" {
   command -v python3 >/dev/null || skip "python3 unavailable"
   [ -f "$LINT" ] || skip "lint_tasks.py not found"
-  f="$(_mk_task "$BATS_TEST_TMPDIR" T20260102-000002 2h)"
+  f="$(_mk_task "$BATS_TEST_TMPDIR" T20260102-000002 3)"
   run lint_frozen_is_frozen "$f" "$BATS_TEST_TMPDIR"
   [ "$status" -eq 1 ]
 }
@@ -97,7 +97,7 @@ EOF
 @test "dispatch: is-frozen returns the probe exit code (claimable ⇒ 1)" {
   command -v python3 >/dev/null || skip "python3 unavailable"
   [ -f "$LINT" ] || skip "lint_tasks.py not found"
-  f="$(_mk_task "$BATS_TEST_TMPDIR" T20260102-000002 2h)"
+  f="$(_mk_task "$BATS_TEST_TMPDIR" T20260102-000002 3)"
   run bash "$REPO_ROOT/_session/lint_frozen.sh" is-frozen "$f" "$BATS_TEST_TMPDIR"
   [ "$status" -eq 1 ]
 }

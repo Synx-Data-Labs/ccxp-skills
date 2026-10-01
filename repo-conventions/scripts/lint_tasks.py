@@ -30,7 +30,7 @@ FILENAME_RE = re.compile(r"^T\d{8}-\d{6}-.+\.md$")
 # subject to the task filename/frontmatter schema at all.
 NON_TASK_FILES = {"queue.md"}
 TASK_ID_RE = re.compile(r"T\d{8}-\d{6}")
-ESTIMATION_RE = re.compile(r"^(1|2|3|5|8)\b")
+ESTIMATION_RE = re.compile(r"^(1|2|3|5|8)(\s|$)")
 H1_RE = re.compile(r"^#\s+(T\d{8}-\d{6})\b")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

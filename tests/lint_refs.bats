@@ -58,7 +58,7 @@ run_lint_refs() {
   cat > dev/TODO/T20260611-000002-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000002: Demo
@@ -75,7 +75,7 @@ EOF
   cat > dev/TODO/T20260611-000003-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000003: Demo
@@ -91,7 +91,7 @@ EOF
   cat > dev/TODO/T20260611-000004-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000004: Demo
@@ -110,7 +110,7 @@ EOF
   cat > dev/TODO/T20260611-000005-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000005: Demo
@@ -127,7 +127,7 @@ EOF
   cat > dev/TODO/T20260611-000006-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000006: Demo
@@ -144,7 +144,7 @@ EOF
   cat > dev/TODO/T20260611-000007-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000007: Demo
@@ -161,7 +161,7 @@ EOF
   cat > dev/TODO/T20260611-000008-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000008: Demo
@@ -196,7 +196,7 @@ EOF
   cat > dev/TODO/T20260611-000010-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000010: Demo
@@ -214,7 +214,7 @@ EOF
   cat > dev/TODO/T20260611-000011-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000011: Demo
@@ -231,7 +231,7 @@ EOF
   cat > dev/TODO/T20260611-000012-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000012: Demo
@@ -248,7 +248,7 @@ EOF
   cat > dev/TODO/T20260611-000001-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000001: Demo
@@ -267,7 +267,7 @@ EOF
   cat > dev/TODO/T20260611-000009-demo.md <<'EOF'
 ---
 status: Open
-estimation: 1h
+estimation: 1
 ---
 
 # T20260611-000009: Demo

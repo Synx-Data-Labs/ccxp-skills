@@ -102,6 +102,20 @@ class LintTasksTest(unittest.TestCase):
                             frontmatter=f"status: Open\nestimation: {v}")
             self.assertEqual(lint_tasks.lint_file(f), [], v)
 
+    def test_estimation_rejects_a_digit_followed_by_non_whitespace(self):
+        # A naive `^(1|2|3|5|8)\b` regex would wrongly accept "1-2h" — \b
+        # matches the word/non-word transition right after the leading "1",
+        # regardless of what garbage follows. Require whitespace or
+        # end-of-string after the point value instead.
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 1-2h")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("must be one of" in m for m in out), out)
+
+    def test_estimation_rejects_multi_digit_number(self):
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 28")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("must be one of" in m for m in out), out)
+
     def test_unknown_field_fails(self):
         f = write_task(self.root,
             frontmatter="status: Open\nestimation: 2\nname: Foo")
