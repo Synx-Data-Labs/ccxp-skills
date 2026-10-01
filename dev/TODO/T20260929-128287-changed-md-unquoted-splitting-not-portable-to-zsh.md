@@ -1,7 +1,7 @@
 ---
 status: Open
 scheduled: 2026-10-05
-estimation: 1h
+estimation: 1
 source: discovered while implementing T20260928-608242 (2026-09-29)
 related: T20260910-919422, T20260627-192311, T20260928-608242
 ---

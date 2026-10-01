@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1d
+estimation: 3
 ---
 
 # T20260923-140360: Add an external-skillset scan to /retro

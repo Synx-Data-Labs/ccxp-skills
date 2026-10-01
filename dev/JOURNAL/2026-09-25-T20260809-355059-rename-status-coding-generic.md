@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1d
+estimation: 3
 source: 2026-08-09 conversation — surfaced while /address-pr-ing T20260529-651055, whose
   `task_claim.sh acquire` flow unconditionally flipped its status to `Coding` even though
   the task is IRS paperwork, not code

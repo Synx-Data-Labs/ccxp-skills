@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 4h
+estimation: 2
 source: this conversation, 2026-09-14
 related: T20260912-279229
 description: Research mattpocock/skills to find next-level improvements for ccxp-skills

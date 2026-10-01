@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 2d
+estimation: 2
 source: split off a larger "App-auth merge workflow" task (2026-09-23); the org-specific rollout moved out of this repo
 owner: Xin Zhang (Shine)
 ---

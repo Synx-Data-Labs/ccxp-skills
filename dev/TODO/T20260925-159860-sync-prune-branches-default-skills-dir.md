@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 30m
+estimation: 1
 source: /ccxp interactive run, 2026-09-25 — Phase 0 sync on build-pipeline-repo
 ---
 

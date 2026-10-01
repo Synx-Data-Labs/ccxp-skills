@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 2h
+estimation: 2
 source: this conversation, 2026-09-12 — user asked to bring the Hermes grill-me skill into the ccxp suite
 scheduled: 2026-09-07
 related: T20260610-248248

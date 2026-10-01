@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: this conversation, 2026-09-18
 related: T20260718-160579, T20260922-324422
 claimed_by:

@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 30m
+estimation: 1
 source: this conversation, 2026-09-28 — independent review finding on PR #164
 related: T20260610-248248
 ---

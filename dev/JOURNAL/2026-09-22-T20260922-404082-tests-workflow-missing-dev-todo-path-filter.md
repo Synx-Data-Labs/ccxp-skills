@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 15m
+estimation: 1
 source: this conversation, 2026-09-22 — noticed while /address-pr'ing PR #56, a pure task-filing PR that only got Markdown Lint as its CI signal
 claimed_by:
 claimed_role:

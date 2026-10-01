@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 2h
+estimation: 2
 source: this conversation, 2026-09-28 — live incident while running /land
 related: T20260910-919422, T20260922-383156, T20260922-253015, T20260929-128287
 claimed_by:

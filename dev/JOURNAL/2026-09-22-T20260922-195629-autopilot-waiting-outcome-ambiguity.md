@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1h
+estimation: 1
 source: PR #53 review comments (ccxp-skills), 2026-09-22 — surfaced by independent review during /address-pr's loop on autopilot's dispatch-redesign PR
 related: PR #53 (autopilot dispatch redesign), T20260719-204917 (--dispatch-blockers precedent this PR's dispatch pattern mirrors)
 claimed_by:

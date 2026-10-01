@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1w
+estimation: 8
 source: Skill quality review, this conversation, 2026-09-28 (dev/quality/skill-review-2026-09-28/)
 related: [T20260922-155006, T20260925-159860, T20260923-584914, T20260922-409644, T20260923-292618]
 description: Fix the correctness bugs, script-path breakage and concision debt found by the 2026-09-28 review of all 47 skills

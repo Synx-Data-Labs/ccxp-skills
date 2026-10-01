@@ -1,6 +1,6 @@
 ---
 status: Parked
-estimation: 1d
+estimation: 3
 related: T20260806-374741, T20260806-240910
 source: 2026-08-08 conversation — follow-on from T20260806-374741's finalized design
 ---

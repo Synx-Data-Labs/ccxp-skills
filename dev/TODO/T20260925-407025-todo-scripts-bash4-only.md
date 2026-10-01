@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1h
+estimation: 1
 source: /ccxp interactive run, 2026-09-25 — Phase 1.2b top-5 computation on build-pipeline-repo
 related: T20260914-359646 (introduced todo-list.sh/todo-next.sh as local scripts)
 ---

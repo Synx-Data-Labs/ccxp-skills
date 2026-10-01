@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 4h
+estimation: 2
 source: lsc-pa conversation, 2026-09-25
 claimed_by:
 claimed_role:

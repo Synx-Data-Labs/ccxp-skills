@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 1d
+estimation: 3
 source: consumer-repo session, 2026-09-09 — discovered while running /address-pr on a multi-account clone
 related: T20260911-140914
 scheduled: 2026-09-14

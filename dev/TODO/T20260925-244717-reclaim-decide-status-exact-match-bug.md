@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1h
+estimation: 1
 source: 2026-09-25 conversation — surfaced live while taking over a stale
   claim on T20260914-175513 in build-pipeline-repo
 related: T20260925-383305 (same file, `_tc_fm_set` — a different bug in the

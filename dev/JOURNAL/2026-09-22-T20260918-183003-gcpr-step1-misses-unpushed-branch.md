@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 30m
+estimation: 1
 scheduled: 2026-09-14
 source: this conversation, 2026-09-18 — discovered running /land on a branch with a committed-but-unpushed change and no PR yet
 claimed_by:

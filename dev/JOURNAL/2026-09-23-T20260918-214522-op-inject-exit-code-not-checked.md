@@ -1,6 +1,6 @@
 ---
 status: Done
-estimation: 30m
+estimation: 1
 source: this conversation, 2026-09-18
 claimed_by:
 claimed_role:

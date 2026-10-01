@@ -1,7 +1,7 @@
 ---
 status: Design
 scheduled: 2026-10-05
-estimation: 4h
+estimation: 2
 source: T20260914-412750 (research: learn from mattpocock/skills)
 related: T20260914-412750
 description: Adopt disable-model-invocation:true for skills that must be human-typed only, instead of relying on prose-only guardrails
