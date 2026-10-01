@@ -1,5 +1,6 @@
 ---
-status: Open
+status: Done
+scheduled: 2026-10-05
 estimation: 1h
 source: conversation with @shine, 2026-09-23
 ---
@@ -45,3 +46,18 @@ source: conversation with @shine, 2026-09-23
   - Whether to still ask when the user's one-line description already
     signals unusual size (e.g. explicitly says "quick fix" or "big
     project").
+
+## Closed (2026-10-01)
+
+Superseded by
+[T20260924-232855](../TODO/T20260924-232855-estimation-to-story-points.md)
+(`/top`'d to the front of the queue the same day this was closed — see
+that PR). This task's entire concern — stop blocking task creation on an
+estimation question — is resolved as a side effect of T20260924-232855's
+decision #2: `/new-task` will always write a `1`-point default at file
+time and never ask, with `/incept` the only place a value is ever revised
+upward. That's a cleaner, more complete answer than this task's own
+"pick a sensible duration default" framing (which still left open
+whether/when to ask), so implementing both would mean redoing this same
+`new-task/SKILL.md` edit twice under two different schemes. No separate
+implementation of this task's own narrower scope is needed.
