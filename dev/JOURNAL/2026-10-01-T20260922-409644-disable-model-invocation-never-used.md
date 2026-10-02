@@ -172,7 +172,7 @@ doc update with a worked counter-example.
 
 ## Closed (2026-10-01)
 
-Shipped in PR TBD (this task's implementation PR).
+Shipped in PR [#213](https://github.com/Synx-Data-Labs/ccxp-skills/pull/213).
 
 - **Bucket A flipped to `disable-model-invocation: true`**: `autopilot/SKILL.md`,
   `bottom/SKILL.md`, `cleanup-branch/SKILL.md`, `memory-to-skill/SKILL.md`.
