@@ -163,6 +163,16 @@ class LintTasksTest(unittest.TestCase):
             "status: Done\nestimation: 2\nscheduled: 2026-06-09"), sub="PARKING")
         self.assertEqual(lint_tasks.lint_file(f), [])
 
+    def test_closed_status_in_todo_fails(self):
+        # sync.py's status_to_option_id treats "closed"-leading status as
+        # Done-equivalent for the board sync — the guard must too, or a
+        # Closed-but-stranded-in-TODO file is exactly the symptom this check
+        # exists for, just via the other spelling.
+        f = write_task(self.root, frontmatter=(
+            "status: Closed\nestimation: 2\nscheduled: 2026-06-09"), sub="TODO")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("still in dev/TODO" in m for m in out), out)
+
     def test_narrated_done_status_in_todo_fails(self):
         f = write_task(self.root, frontmatter=(
             "status: Done — superseded by T20260914-422854\n"
