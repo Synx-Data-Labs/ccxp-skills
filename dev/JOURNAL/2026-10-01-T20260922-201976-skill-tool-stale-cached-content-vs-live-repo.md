@@ -193,3 +193,36 @@ Candidates 2 and 3 are rejected — reasons below.
   `status: Done` file sitting in `dev/TODO/` — satisfied by
   `check_not_done_in_todo` in `repo-conventions/scripts/lint_tasks.py`
   plus its `test_lint_tasks.py` regression cases (see Test plan)
+
+## Closed (2026-10-01)
+
+- Shipped in **PR #219** (design in PR #218, claim in PR #217). CI
+  (`tests.yml`'s `lint-tasks` job) pending at commit time — ticked once
+  green, per `/address-pr`'s own hard-gate loop.
+- Met: both Done-criteria items above — the design decision (Candidate 1
+  only) and the implemented/tested CI guard.
+- The underlying platform-level `Skill`-tool caching behavior that
+  prompted this task remains unfixed and unreproducible on demand (see
+  Context) — out of scope for this repo; this task's own scope was
+  always the repo-side detection backstop, not the platform root cause.
+  No follow-up task filed for the platform issue itself: there is no
+  concrete reproduction to anchor one, per the original filing's own
+  "not reproduced on demand" caveat.
+- No other follow-up tasks filed — Candidates 2 and 3 were evaluated and
+  explicitly rejected (see Solution), not deferred.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — wrote the 4
+  `test_lint_tasks.py` cases first (confirmed 2 failures), then
+  implemented `check_not_done_in_todo` to green (50/50 pass)
+- Verification (`superpowers:verification-before-completion`): yes —
+  manual throwaway-file regression (fail then clean), full
+  `test_lint_tasks.py`/`test_lint_paragraphs.py`/`test_lint_identifiers.py`
+  runs, full `bats` suite (872/872), `doc-impact.sh` review
+- Systematic debugging (`superpowers:systematic-debugging`): no — no
+  stuck test, straight TDD red-to-green on the first implementation
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  design PR #218's independent review found two off-by-a-few-lines
+  citations; fixed in a follow-up commit on that PR, no pushback needed
+  (the finding was correct)
