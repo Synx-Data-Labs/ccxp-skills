@@ -127,21 +127,12 @@ skill, a self-pruning mechanism, and BATS coverage across three surfaces
 
 ## Test plan
 
-- [ ] Unit: `tests/last_input_hook.bats` — hook writes a sanitized,
-      truncated, single-line file to `LAST_INPUT_STATE_DIR/<session_id>`
-      for a synthetic `UserPromptSubmit` stdin payload.
-- [ ] Unit: `tests/last_input_hook.bats` — multi-line/huge input collapses
-      to one line capped at ~40 chars with a trailing `…`.
-- [ ] Unit: `tests/last_input_hook.bats` — a write past the 30-day prune
-      window removes stale sibling files.
-- [ ] Unit: `tests/statusline_setup.bats` — `sl-last-input-part` reads the
-      cache file keyed by the stdin payload's `session_id` and emits it as
-      a joined segment; emits nothing when no cache file exists yet.
-- [ ] Local: `/statusline-setup` (no argument) confirms `settings.json`'s
-      `hooks.UserPromptSubmit` includes the new entry across every config
-      dir, without disturbing the existing iTerm2 hook entry.
-- [ ] CI: `bats tests/last_input_hook.bats tests/statusline_setup.bats`
-      green.
+- [x] Unit: `tests/last_input_hook.bats` — hook writes a sanitized, truncated, single-line file to `LAST_INPUT_STATE_DIR/<session_id>` for a synthetic `UserPromptSubmit` stdin payload. Verified locally.
+- [x] Unit: `tests/last_input_hook.bats` — multi-line/huge input collapses to one line capped at ~40 chars with a trailing `…`. Verified locally.
+- [x] Unit: `tests/last_input_hook.bats` — a write past the 30-day prune window removes stale sibling files. Verified locally.
+- [x] Unit: `tests/statusline_setup.bats` — `sl-last-input-part` reads the cache file keyed by the stdin payload's `session_id` and emits it as a joined segment; emits nothing when no cache file exists yet. Verified locally.
+- [ ] CI: `bats tests/*.bats` green (full suite, 859 cases including the above — verified locally pre-push, re-verified in CI).
+- [ ] Post-merge, manual, one-time per machine: `/statusline-setup` (no argument) confirms `settings.json`'s `hooks.UserPromptSubmit` includes the new entry across every config dir, without disturbing the existing iTerm2 hook entry. Not run as part of this PR — it edits the operator's live `~/.claude/settings.json`, which is outside repo scope and is exactly what the Deploy workflow (`statusline-setup/SKILL.md`) exists to do after merge.
 
 ## Done criteria
 

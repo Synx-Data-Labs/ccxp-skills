@@ -15,6 +15,11 @@
 # loads ~/.claude/.env at source time, and this runs on every prompt render.
 # claimant-id.sh is side-effect-free for exactly this caller.
 
+# Last-user-input cache dir, written by last-input-hook.sh's UserPromptSubmit
+# hook (T20260924-366770). Mirrors claimant-id.sh's CLAIMANT_STATE_DIR
+# override convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
+LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
+
 _SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh" \
                 "$HOME/.claude/skills/_session/claimant-id.sh"; do
@@ -155,6 +160,19 @@ sl-autopilot-part() {
   printf 'ap:%s %s/%shr %s/%s' "$prefix" "$elapsed_hr" "$requested_hr" "$stuck_count" "$cycle_count"
 }
 
+# $1 last-input state dir, $2 session_id -> "last: <cached text>", or
+# nothing when no cache file exists yet for this session (degrade-to-empty,
+# same convention as every other sl-* helper here).
+sl-last-input-part() {
+  local dir="$1" session_id="$2" file text
+  [ -n "$session_id" ] || return 0
+  file="$dir/$session_id"
+  [ -r "$file" ] || return 0
+  text="$(cat "$file" 2>/dev/null)"
+  [ -n "$text" ] || return 0
+  printf 'last: %s' "$text"
+}
+
 # Join non-empty parts with " | " (array-expansion IFS only uses its first
 # char, so build the separator explicitly).
 sl-join() {
@@ -167,10 +185,11 @@ sl-join() {
 }
 
 statusline-command() {
-  local input cwd remaining
+  local input cwd remaining session_id
   input=$(cat)
   cwd=$(printf '%s' "$input" | jq -r '.cwd // .workspace.current_dir // ""')
   remaining=$(printf '%s' "$input" | jq -r '.context_window.remaining_percentage // 100')
+  session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
   [ -n "$cwd" ] || cwd="$PWD"
 
   local repo_root clone_id todo_dir task_label
@@ -179,7 +198,7 @@ statusline-command() {
   todo_dir="$repo_root/dev/TODO"
   task_label=$(sl-claimed-task-label "$todo_dir" "$clone_id")
 
-  local ap_part="" ctx_part="" branch_part="" task_part branch_name
+  local ap_part="" ctx_part="" branch_part="" task_part branch_name last_input_part=""
   ap_part=$(sl-autopilot-part "$repo_root")
   if [ -n "$remaining" ]; then
     ctx_part="ctx: $(printf '%.0f' "$remaining")% left"
@@ -193,8 +212,9 @@ statusline-command() {
   else
     task_part="no claimed task"
   fi
+  last_input_part=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
 
-  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part"
+  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$last_input_part"
 }
 
 # Run only when executed directly (not when sourced), matching the

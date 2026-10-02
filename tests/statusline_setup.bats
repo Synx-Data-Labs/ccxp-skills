@@ -16,6 +16,8 @@ setup() {
   # The machine-id/secret cache lives under ~/.claude/state by default; tests
   # must neither read the developer's real identity nor write to their home.
   export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/claimant-state"
+  # Same isolation for the last-user-input cache (T20260924-366770).
+  export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
 }
 
 _load() { source "$SCRIPT"; }
@@ -222,6 +224,38 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# sl-last-input-part
+# ---------------------------------------------------------------------------
+
+@test "sl-last-input-part prints nothing when session_id is empty" {
+  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' ''"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-last-input-part prints nothing when no cache file exists for this session" {
+  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li-missing' 'sess-1'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-last-input-part prints 'last: <text>' when a cache file exists" {
+  mkdir -p "$BATS_TEST_TMPDIR/li"
+  printf '%s' 'fix the thing' > "$BATS_TEST_TMPDIR/li/sess-1"
+  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' 'sess-1'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "last: fix the thing" ]
+}
+
+@test "sl-last-input-part prints nothing when the cache file is empty" {
+  mkdir -p "$BATS_TEST_TMPDIR/li"
+  : > "$BATS_TEST_TMPDIR/li/sess-1"
+  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' 'sess-1'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+# ---------------------------------------------------------------------------
 # statusline-command (full stdin -> stdout pipeline)
 # ---------------------------------------------------------------------------
 
@@ -269,6 +303,26 @@ EOF
   run bash -c "cd '$repo' && echo '{}' | '$SCRIPT'"
   [ "$status" -eq 0 ]
   [ "$output" = "ctx: 100% left | branch: $branch | no claimed task" ]
+}
+
+@test "statusline-command appends the last-input segment when a cache file exists for session_id" {
+  local repo branch
+  repo=$(_make_repo repo10)
+  branch=$(git -C "$repo" symbolic-ref --short HEAD)
+  mkdir -p "$LAST_INPUT_STATE_DIR"
+  printf '%s' 'fix the thing' > "$LAST_INPUT_STATE_DIR/sess-xyz"
+  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":55},\"session_id\":\"sess-xyz\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ctx: 55% left | branch: $branch | no claimed task | last: fix the thing" ]
+}
+
+@test "statusline-command omits the last-input segment when no cache file exists for session_id" {
+  local repo branch
+  repo=$(_make_repo repo11)
+  branch=$(git -C "$repo" symbolic-ref --short HEAD)
+  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":55},\"session_id\":\"sess-never-wrote\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ctx: 55% left | branch: $branch | no claimed task" ]
 }
 
 # ---------------------------------------------------------------------------
