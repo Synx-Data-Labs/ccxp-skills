@@ -176,11 +176,19 @@ Shipped in PR [#213](https://github.com/Synx-Data-Labs/ccxp-skills/pull/213).
 
 - **Bucket A flipped to `disable-model-invocation: true`**: `autopilot/SKILL.md`,
   `bottom/SKILL.md`, `cleanup-branch/SKILL.md`, `memory-to-skill/SKILL.md`.
-  Confirmed by repo-wide grep that no other `SKILL.md`'s workflow prose
-  nested-invokes any of the four (only descriptive/cross-reference mentions
-  in `statusline-setup/SKILL.md`, `drive/SKILL.md`, `top/SKILL.md`,
-  `stage/SKILL.md` — none of them an instruction to invoke the skill as a
-  step).
+  Confirmed by `grep -rln "/<skill>\b" --include="SKILL.md" .` (precise
+  invocation-syntax match, not a bare-word search — `bottom`/`top` are
+  common English words that false-positive heavily otherwise) that no
+  other `SKILL.md`'s workflow prose nested-invokes any of the four. Every
+  hit outside each skill's own file is a descriptive/cross-reference
+  mention, never an instruction to invoke the skill as a step:
+  `statusline-setup/SKILL.md`, `drive/SKILL.md`, `top/SKILL.md`,
+  `stage/SKILL.md` (bottom/autopilot cross-references), `slack/SKILL.md`
+  (a file-path mention, `` `autopilot/SKILL.md` Phase 5 ``, not a `/`
+  invocation), and `ccxp/SKILL.md` (mentions `/cleanup-branches` —
+  plural, a differently-named reference — while explicitly *inlining*
+  that workflow "so the cron-driven ccxp run stays self-contained, no
+  nested skill dispatch needed").
 - **Empirical Bucket B test — ran, result: inconclusive/blocked, not
   "fired."** Built the throwaway harness exactly as designed
   (`_test-nested-invoker/SKILL.md`, `_test-nested-target/SKILL.md`,
@@ -206,10 +214,29 @@ Shipped in PR [#213](https://github.com/Synx-Data-Labs/ccxp-skills/pull/213).
   the design (cheap regression coverage — re-run the same dispatch from an
   environment where the Skill tool registry does rescan per-dispatch to
   get a real answer).
+- **Known trade-off, called out explicitly (independent review finding):**
+  `README.md`'s "Shared helpers (`_<name>/`)" section documents that
+  leading-underscore dirs stay invisible to Claude Code specifically
+  *because they contain no `SKILL.md`* — not because of the underscore
+  itself. `_test-nested-invoker/SKILL.md` and `_test-nested-target/SKILL.md`
+  break that invariant: they **are** real, registered skills (the repo's
+  `SKILL.md` count is now 50, not 48), so they show up in every downstream
+  consumer's skill listing, and `_test-nested-invoker` (`false`, by design —
+  it must stay directly dispatchable to exercise the mechanism under test)
+  is technically model-discoverable. Both also deviate from
+  `skill-conventions/SKILL.md` §2's kebab-case naming rule. This is the
+  literal mechanism the merged `/incept`-reviewed design specified (naming
+  included), and both skills are zero-side-effect no-ops with descriptions
+  that say so plainly, so the blast radius of leaving this as designed is
+  low — but it is a real, deliberate wart, not an oversight, and is
+  recorded here rather than silently accepted.
 - **Bucket C (`/drive`) — permanently excluded, documented inline.**
   `drive/SKILL.md`'s frontmatter now carries a `#`-comment directly under
   `disable-model-invocation: false` explaining why it must never flip
-  (breaks `/autopilot` Phase 3's fresh-subagent dispatch of `/drive`).
+  (breaks `/autopilot` Phase 3's fresh-subagent dispatch of `/drive`), with
+  a citation ([code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills),
+  verified via WebFetch during this close — the original Design section
+  above asserted the same claim without a link).
 - **`skill-conventions/SKILL.md` updated** (§1) to document both guardrail
   mechanisms side by side — the prose-only `"Use when…"` convention vs. the
   hard `disable-model-invocation: true` flag — with the "could the model
