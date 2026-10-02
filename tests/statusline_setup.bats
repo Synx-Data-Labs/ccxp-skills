@@ -255,6 +255,14 @@ EOF
   [ -z "$output" ]
 }
 
+@test "sl-last-input-part rejects a path-traversal session_id instead of reading outside the state dir" {
+  mkdir -p "$BATS_TEST_TMPDIR/li"
+  printf 'secret' > "$BATS_TEST_TMPDIR/outside-marker"
+  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' '../outside-marker'"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
 # ---------------------------------------------------------------------------
 # statusline-command (full stdin -> stdout pipeline)
 # ---------------------------------------------------------------------------

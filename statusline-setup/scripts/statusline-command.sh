@@ -166,6 +166,12 @@ sl-autopilot-part() {
 sl-last-input-part() {
   local dir="$1" session_id="$2" file text
   [ -n "$session_id" ] || return 0
+  # Reject anything that isn't a safe bare filename (path separator, or
+  # exactly "." / "..") — mirrors last-input-hook.sh's li-safe-session-id so
+  # a crafted session_id can't read an arbitrary file outside $dir.
+  case "$session_id" in
+    */*|.|..) return 0 ;;
+  esac
   file="$dir/$session_id"
   [ -r "$file" ] || return 0
   text="$(cat "$file" 2>/dev/null)"

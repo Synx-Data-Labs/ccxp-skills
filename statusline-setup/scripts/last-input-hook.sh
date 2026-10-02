@@ -23,12 +23,30 @@ LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
 LAST_INPUT_MAX_CHARS="${LAST_INPUT_MAX_CHARS:-40}"
 LAST_INPUT_PRUNE_DAYS="${LAST_INPUT_PRUNE_DAYS:-30}"
 
-# Collapse newlines/tabs to spaces, squeeze repeated whitespace, trim ends.
+# True (0) iff $1 is safe to use as a bare filename under LAST_INPUT_STATE_DIR
+# — no path separator (blocks traversal: a session_id can never escape the
+# state dir without one) and not exactly "." or ".." (which would otherwise
+# collide with the directory's own entries). Claude Code always generates a
+# UUID-shaped session_id, but the hook/reader trust externally-supplied JSON,
+# so this is defense-in-depth, not a format assumption.
+li-safe-session-id() {
+  local id="$1"
+  [ -n "$id" ] || return 1
+  case "$id" in
+    */*|.|..) return 1 ;;
+  esac
+  return 0
+}
+
+# Collapse newlines/tabs to spaces, strip other C0/DEL control bytes (an
+# escape/control sequence pasted into a prompt must not be replayed into the
+# terminal on every statusline render), squeeze repeated whitespace, trim
+# ends.
 li-sanitize() {
   local text="$1"
   text="${text//$'\n'/ }"
   text="${text//$'\t'/ }"
-  printf '%s' "$text" | sed -E 's/ +/ /g; s/^ //; s/ $//'
+  printf '%s' "$text" | tr -d '\000-\010\013-\037\177' | sed -E 's/ +/ /g; s/^ //; s/ $//'
 }
 
 # Truncate to N chars, appending a single "…" when cut.
@@ -60,10 +78,11 @@ last-input-hook() {
   session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
   prompt=$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)
 
-  # No session id — nothing to key the cache file on.
-  [ -n "$session_id" ] || exit 0
+  # No session id, or one that isn't a safe bare filename — nothing to key
+  # the cache file on.
+  li-safe-session-id "$session_id" || exit 0
 
-  mkdir -p "$LAST_INPUT_STATE_DIR" 2>/dev/null || exit 0
+  ( umask 077; mkdir -p "$LAST_INPUT_STATE_DIR" ) 2>/dev/null || exit 0
 
   sanitized=$(li-sanitize "$prompt")
   sanitized=$(li-truncate "$sanitized" "$LAST_INPUT_MAX_CHARS")
