@@ -26,3 +26,4 @@ reprioritize.
 - [T20261002-219904](T20261002-219904-document-ipm-ceremony-as-optional.md): Document `/ccxp`'s Monday IPM ceremony as optional/ad-hoc, not a mandatory cron step
 - [T20261002-245216](T20261002-245216-retro-bump-detector-dormant-note-and-stale-field-cleanup.md): Note retro's bump-3x/2x detectors as dormant-by-design; clean up two stale cross-references
 - [T20261002-359869](T20261002-359869-lifecycle-md-note-ipm-board-mirror-opt-in.md): Note in `lifecycle.md` that IPM / `scheduled:` board-mirroring is opt-in
+- [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
