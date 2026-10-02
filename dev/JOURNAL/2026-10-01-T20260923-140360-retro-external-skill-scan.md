@@ -1,8 +1,8 @@
 ---
-status: Design
+status: Done
 estimation: 3
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 source: Conversation 2026-09-23 — grill-me vs mattpocock-skills:grilling comparison
 related: T20260923-986928
@@ -184,29 +184,64 @@ related: T20260923-986928
 
 ## Test plan
 
-- [ ] `bash _docs/lint-docs.sh retro/SKILL.md` passes after the edit
-- [ ] Manual walkthrough: re-run the enumeration steps against this
-  clone's real `~/.claude/settings.json` + plugin cache (the same paths
-  verified in Context above) and confirm the external-skill list includes
-  `superpowers`'s skills with their descriptions
-- [ ] Manual walkthrough: using the 2026-09-23 `grill-me` vs
-  `mattpocock-skills:grilling` example from Problem, confirm the new
-  Phase 4e steps (as written) would have surfaced `grilling` as a
-  candidate against `grill-me`/`incept`'s description — the concrete case
-  that motivated this task
-- [ ] Confirm the new Phase 5 `## External skillset scan` report block and
-  Phase 6 `External scan:` Slack bullet are present, directly after their
-  respective `## Skill quality` / `Skill quality:` anchors (locate by
-  heading/bullet text, not a line number — see the line-number caveat in
-  Context) — `retro/SKILL.md:530-534`/`596` name the pre-edit anchors
+- [x] `bash _docs/lint-docs.sh retro/SKILL.md` passes after the edit — 0 errors
+- [x] Manual walkthrough: re-ran the enumeration steps against this
+  clone's real `~/.claude/settings.json` + plugin cache and confirmed the
+  external-skill list includes all 15 of `superpowers`'s skills with their
+  descriptions (e.g. `brainstorming`, `systematic-debugging`,
+  `test-driven-development`)
+- [x] Manual walkthrough: `mattpocock-skills` is not installed on this
+  host to literally re-run Step 2 against, so verified qualitatively
+  instead — our current `incept` skill's description ("Use when the user
+  explicitly asks to grill, interview, or stress-test a plan or task
+  before implementation…") plainly overlaps the Problem section's
+  characterization of `grilling` ("the same frontier-round interview
+  algorithm"); the Step 4 trigger-overlap judgment as written would flag
+  this pair
+- [x] Confirmed the new Phase 5 `## External skillset scan` report block
+  and Phase 6 `External scan:` Slack bullet are present, directly after
+  their respective `## Skill quality` / `Skill quality:` anchors
 - [ ] Next real `/retro` run post-merge exercises Phase 4e at least once
   and its `## External skillset scan` section renders (post-merge item —
   can't be verified before this PR merges)
 
 ## Done criteria
 
-- [ ] `retro/SKILL.md:475` (pre-edit anchor — locate by heading, not this number post-edit) — `### Phase 4e: External skillset scan` section exists between Phase 4d and Phase 5
-- [ ] `retro/SKILL.md:475` (pre-edit anchor) — Phase 4e documents all 6 steps (enumerate marketplaces, list external skills, scope to whatever 4c step 1 produced — exact names or domain buckets, trigger-overlap judgment, report-not-adopt, guards); verified by the `## Test plan` manual walkthrough below
-- [ ] `retro/SKILL.md:534` (pre-edit anchor) — `## External skillset scan` block added to the Phase 5 report template
-- [ ] `retro/SKILL.md:596` (pre-edit anchor, corrected from an earlier `:594`) — `External scan:` bullet added to the Phase 6 Slack summary template
-- [ ] `_docs/lint-docs.sh retro/SKILL.md` passes (see Test plan)
+- [x] `### Phase 4e: External skillset scan` section exists between Phase
+  4d and Phase 5 — `retro/SKILL.md:476-499` (post-edit)
+- [x] Phase 4e documents all 6 steps (enumerate marketplaces, list
+  external skills, scope to whatever 4c step 1 produced, trigger-overlap
+  judgment, report-not-adopt, guards) — `retro/SKILL.md:478-496`
+  (post-edit); verified by the `## Test plan` manual walkthrough above
+- [x] `## External skillset scan` block added to the Phase 5 report
+  template — `retro/SKILL.md:559-561` (post-edit)
+- [x] `External scan:` bullet added to the Phase 6 Slack summary template
+  — `retro/SKILL.md:625` (post-edit)
+- [x] `_docs/lint-docs.sh retro/SKILL.md` passes (see Test plan)
+
+## Closed (2026-10-01)
+
+Shipped in **PR #225** (`retro/SKILL.md` Phase 4e + Phase 5/6 template
+hooks). All Done criteria met except the one explicitly-external
+post-merge item (next real `/retro` run exercising the phase live) —
+left unchecked per the honest-over-green-washed convention; will be
+confirmed the next time `/retro` runs and either reports "no external
+marketplaces configured" / "none flagged" / a real candidate.
+
+No follow-up tasks filed — the three open design questions from the
+original Problem section were resolved in the design PR (#224) rather
+than deferred.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (prose-only
+  `retro/SKILL.md` edit, no code/scripts touched)
+- Verification (`superpowers:verification-before-completion`): yes —
+  Phase 3.6 pre-PR (manual walkthroughs above) and Phase 7.0 final check
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  design PR #224's independent review found 2 real issues (stale line
+  citation, a no-audit-block scoping gap) and 1 minor ambiguity; all
+  fixed on the design branch before merge, confirmed via a design-score
+  re-run (88/100)
