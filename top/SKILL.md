@@ -134,6 +134,18 @@ plain `/top`, which would have pushed them down too.
 BRANCH="docs/top-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH"
 git add dev/TODO/queue.md
+# Untracked task file being promoted for the first time (e.g. /drive just
+# minted it and called /top immediately, or /new-task + /top instead of
+# /stage): also add THAT exact file, so creation and queue-placement land in
+# ONE commit/PR instead of two — nobody needs "file exists, not yet queued"
+# to be its own visible state on main. Mirrors /stage's identical fix. Does
+# NOT widen scope for the common case: a task file already committed on
+# main is untouched here, only a currently-untracked one this exact
+# invocation names.
+for id in T<id> [T<id> ...]; do
+  f="$(git status --porcelain -- "dev/TODO/${id}-"*.md | awk '/^\?\?/{print $2}')"
+  [ -n "$f" ] && git add "$f"
+done
 git commit -m "docs(queue): move T<id> [T<id> ...] to the top"  # --before mode: "...to immediately before T<targetId>"
 bash ../_gh/git.sh push -u origin "$BRANCH"
 bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
@@ -179,6 +191,7 @@ Landed: PR #<n> merged
 - **Does not give any task permanent protection.** A `/top`'d task can be `/top`'d again by something else later — it's a position, not a lock. If an in-flight task needs to stay protected across the whole week, re-`/top` it if it drifts, or raise it at the IPM.
 - **`--before` mode does not verify the blocking relationship is real.** It trusts the caller (a human, `/stage`, or `/todo sweep`) to have already established that `T<id>` genuinely gates `T<targetId>` — it just performs the reposition. Garbage in, garbage out.
 - **Is not the P0 escalation channel.** `/top` reorders a list; it doesn't page anyone. For production-down / customer-blocked / security incidents, use the Slack escalation protocol (see `/todo`'s P0 escape hatch) — do that first, and `/top` the resulting task as a secondary, non-urgent bookkeeping step if it helps.
+- **Does not bundle unrelated working-tree changes.** The commit in step 4 adds only `dev/TODO/queue.md` and, when applicable, the exact newly-untracked `T<id>` task file(s) this invocation is promoting — nothing else in the working tree, same scope discipline as `/stage`.
 
 ## When NOT to use `/top`
 
