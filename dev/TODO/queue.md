@@ -7,7 +7,6 @@ front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
 - [T20260923-343482](T20260923-343482-gh-app-token-script.md): Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
-- [T20260924-159109](T20260924-159109-skill-to-app.md): Design /skill-to-app — compile a matured skill's deterministic steps into a program
 - [T20260924-390953](T20260924-390953-rca-post-to-slack-plain-text.md): Amend /rca to post results to Slack automatically, plain text (no tables)
 - [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
 - [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
@@ -26,3 +25,4 @@ reprioritize.
 - [T20261001-289904](T20261001-289904-vendor-mattpocock-tdd-replace-superpowers.md): Vendor `mattpocock/skills` `tdd` to replace the `superpowers:test-driven-development` hard gate
 - [T20261001-334141](T20261001-334141-vendor-mattpocock-diagnosing-bugs-replace-superpowers.md): Vendor `mattpocock/skills` `diagnosing-bugs` to replace the `superpowers:systematic-debugging` soft gate
 - [T20261001-995405](T20261001-995405-scope-native-verification-before-completion-replacement.md): Scope a native replacement for the `superpowers:verification-before-completion` hard gate (no ready mattpocock equivalent)
+- [T20261002-363468](T20261002-363468-skill-conventions-script-drift-detection.md): Detect drift between a bundled `scripts/` helper and the SKILL.md prose it replaced

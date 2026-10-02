@@ -79,6 +79,10 @@ What stays in prose: logic that makes a real judgment call (a Park recommendatio
 
 Worked example: [T20260914-359646](../dev/JOURNAL/2026-09-22-T20260914-359646-todo-next-as-local-script.md) ported `/todo list`'s table-rendering and `/todo next`'s queue-walk into `todo/scripts/{_lib,todo-list,todo-next}.sh`, keeping `sweep`'s judgment-call logic (blocker-order enforcement, Park recommendations) in prose since those genuinely decide, not just read.
 
+**"Mature" enough to extract?** Use §10's ladder: a good extraction candidate is **L3+** (ideally **L4** — zero open feedback means the prose isn't still shifting). A lower rung means re-porting after the next correction.
+
+**Vs. the `Workflow` tool**: `drive/SKILL.md` Phase 3.1's sequential `Workflow` compiles *control-flow* between steps that each still need a model call; §9 eliminates the model call entirely. Different tools for different steps — a skill can use both.
+
 ### 10. Quality loop: score → evals → feedback (novice → master)
 
 Three deterministic instruments, all under `skill-conventions/scripts/`:
