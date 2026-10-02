@@ -1,6 +1,6 @@
 ---
 name: statusline-setup
-description: Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>" segment leads it while /autopilot is running or after it last stopped), driven by settings.json's statusLine.command
+description: Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>" segment leads it while /autopilot is running or after it last stopped; an optional trailing "last=<slug>" segment is fed by a companion UserPromptSubmit hook), driven by settings.json's statusLine.command
 disable-model-invocation: false
 argument-hint: "[edit|test]"
 ---
@@ -17,6 +17,15 @@ the remaining context-window percentage, and an `ap:` segment read from
 - `ap:[r] <elapsed>/<requested>hr <stuck>/<cycle>` — `/autopilot` running normally
 - `ap:[b] ...` — running but backing off after a stuck `/drive` cycle
 - `ap:[s] ...` — stopped; lingers until the next `/autopilot` invocation overwrites the file
+
+A trailing `last: <slug>` segment (T20260924-366770):
+
+- Shows a sanitized, ~40-char truncation of the last prompt *this session*
+  submitted — useful when several clones/sessions run in parallel and the
+  terminal tabs alone don't say which is working on what.
+- Fed by a companion `scripts/last-input-hook.sh` `UserPromptSubmit` hook —
+  mechanical truncation only, no LLM call (see that script's own header).
+- Omitted entirely when no cache file exists yet for the session.
 
 The script previously lived loose at `~/.claude/statusline-command.sh`,
 untracked by any repo. It now lives here so changes go through a normal
@@ -85,11 +94,30 @@ change," not editing.)
    `~/.claude/plugins/cache/ccxp-skills/ccxp-skills/` if unsure which
    version is current.
 
+4. For **each** config dir from step 2, confirm its `settings.json`'s
+   `hooks.UserPromptSubmit` array includes an entry pointing at
+   `scripts/last-input-hook.sh` (T20260924-366770 — feeds the `last: ...`
+   statusline segment). This is **additive**, alongside whatever other
+   `UserPromptSubmit` hook may already be configured for an unrelated
+   purpose (e.g. a terminal-integration status hook) — never replace the
+   array, append to it:
+
+   ```json
+   "UserPromptSubmit": [
+     { "hooks": [ { "type": "command", "command": "<existing unrelated hook, if any>" } ] },
+     { "hooks": [ { "type": "command", "command": "bash /Users/YOUR_USERNAME/.claude/plugins/cache/ccxp-skills/ccxp-skills/<version>/statusline-setup/scripts/last-input-hook.sh" } ] }
+   ]
+   ```
+
+   Same marketplace-vs-directory-source path convention as step 3 above —
+   use the matching form for this config dir's install.
+
 ### Edit
 
-1. Edit `scripts/statusline-command.sh` in your own working clone (e.g.
-   `~/workspace/ccxp-skills`) — not the plugin cache, which is managed by
-   `/plugin` and overwritten on every update.
+1. Edit `scripts/statusline-command.sh` and/or `scripts/last-input-hook.sh`
+   in your own working clone (e.g. `~/workspace/ccxp-skills`) — not the
+   plugin cache, which is managed by `/plugin` and overwritten on every
+   update.
 2. Test (see below).
 3. PR + merge to `main` as normal.
 4. Run this skill with no argument (deploy) to pick up the merged change.
@@ -97,19 +125,23 @@ change," not editing.)
 ### Test
 
 ```bash
-bats tests/statusline_setup.bats
+bats tests/statusline_setup.bats tests/last_input_hook.bats
 ```
 
 Helper functions (`sl-repo-root`, `sl-clone-id`, `sl-claimed-task-label`,
-`sl-join`) are sourced and unit-tested directly; the stdin entrypoint
-(`statusline-command`) is tested by piping a synthetic hook-input JSON
-payload, same pattern as `quality-probe/scripts/probe.sh`.
+`sl-join`, `sl-last-input-part`) are sourced and unit-tested directly; the
+stdin entrypoints (`statusline-command`, `last-input-hook`) are each tested
+by piping a synthetic hook-input JSON payload, same pattern as
+`quality-probe/scripts/probe.sh`.
 
 ## Important Notes
 
 - This script runs on **every** statusline render — keep it fast (cheap
   `grep`/`jq` only, no network) and never let it hang or exit non-zero; a
   broken statusline command degrades the whole terminal UI.
+- `last-input-hook.sh` runs on **every prompt submission** instead (once,
+  not per-render) — same "never hang, never exit non-zero" constraint, since
+  a broken hook would block the user from submitting anything.
 - It is invoked directly by `settings.json`, not as a slash command — the
   `argument-hint`/dual-invocation frontmatter above is for *maintaining* the
   script through this skill, not for how Claude Code *runs* it.
