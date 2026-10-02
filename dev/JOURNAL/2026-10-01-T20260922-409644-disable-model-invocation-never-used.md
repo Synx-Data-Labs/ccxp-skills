@@ -1,12 +1,12 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-28
 estimation: 2
 source: T20260914-412750 (research: learn from mattpocock/skills)
 related: T20260914-412750
 description: Adopt disable-model-invocation:true for skills that must be human-typed only, instead of relying on prose-only guardrails
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260922-409644: `disable-model-invocation` is never set to `true` anywhere in ccxp-skills — action-taking skills rely on prose alone to avoid surprise auto-fire
@@ -147,16 +147,99 @@ doc update with a worked counter-example.
 
 ## Test plan
 
-- [ ] After the audit, `grep -rl "disable-model-invocation: true"
+- [x] After the audit, `grep -rl "disable-model-invocation: true"
       --include="SKILL.md" .` returns at least one hit (the flipped
-      skills) — this is a test of the audit outcome, not a script.
-- [ ] `skill-conventions/SKILL.md` documents both mechanisms with the
+      skills) — this is a test of the audit outcome, not a script. 6 hits:
+      `autopilot/SKILL.md`, `bottom/SKILL.md`, `cleanup-branch/SKILL.md`,
+      `memory-to-skill/SKILL.md` (Bucket A, actual frontmatter flips),
+      `_test-nested-target/SKILL.md` (throwaway harness, actual flip), and
+      `skill-conventions/SKILL.md` (a prose mention of the literal string
+      in its own documentation, not a frontmatter flip).
+- [x] `skill-conventions/SKILL.md` documents both mechanisms with the
       "could the model usefully reach for this autonomously?" test —
-      manual read-through test.
+      manual read-through test. See §1's new "A second, harder mechanism
+      exists" paragraphs.
 
 ## Done criteria
 
-- [ ] Every action-taking skill judged risky under the invocation test has
-      `disable-model-invocation: true` — manual audit test, see Solution.
-- [ ] `skill-conventions/SKILL.md` documents when to use each mechanism —
+- [x] Every action-taking skill judged risky under the invocation test has
+      `disable-model-invocation: true` — manual audit test, see Design.
+      Bucket A (4 skills) flipped; Bucket B (7 skills) left `false` per the
+      empirical-test fallback (see `## Closed`); Bucket C (`/drive`)
+      permanently excluded with an inline frontmatter comment.
+- [x] `skill-conventions/SKILL.md` documents when to use each mechanism —
       manual read-through test.
+
+## Closed (2026-10-01)
+
+Shipped in PR TBD (this task's implementation PR).
+
+- **Bucket A flipped to `disable-model-invocation: true`**: `autopilot/SKILL.md`,
+  `bottom/SKILL.md`, `cleanup-branch/SKILL.md`, `memory-to-skill/SKILL.md`.
+  Confirmed by repo-wide grep that no other `SKILL.md`'s workflow prose
+  nested-invokes any of the four (only descriptive/cross-reference mentions
+  in `statusline-setup/SKILL.md`, `drive/SKILL.md`, `top/SKILL.md`,
+  `stage/SKILL.md` — none of them an instruction to invoke the skill as a
+  step).
+- **Empirical Bucket B test — ran, result: inconclusive/blocked, not
+  "fired."** Built the throwaway harness exactly as designed
+  (`_test-nested-invoker/SKILL.md`, `_test-nested-target/SKILL.md`,
+  committed permanently per the design's instruction) and dispatched a
+  fresh `general-purpose` subagent via the `Agent` tool, instructed to
+  invoke `_test-nested-invoker`. **Verbatim result**: the Skill tool call
+  failed with `Unknown skill: _test-nested-invoker` — the dispatched
+  subagent's skill registry did not contain the newly-created throwaway
+  skill at all, so the nested-invocation question (does
+  `disable-model-invocation: true` block a same-session nested call) was
+  never actually reached. This is a test-infrastructure limitation of this
+  session's environment (the Skill tool's available-skill list appears
+  fixed per session rather than rescanned per dispatch), not a finding
+  about the flag itself — the same root class of problem as
+  [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md)
+  (Skill tool serving stale/cached content vs. the live repo checkout),
+  filed separately and still open. Per the design's own explicit
+  fallback ("if blocked/unavailable: leave Bucket B at `false`, record the
+  concrete result, don't gamble on breaking orchestration"): **Bucket B
+  (`/gcpr`, `/land`, `/address-pr`, `/slack`, `/top`,
+  `/1password-env-setup`, `/migrate-task`) stays at `disable-model-invocation:
+  false`, unchanged.** The two throwaway skills are kept permanently per
+  the design (cheap regression coverage — re-run the same dispatch from an
+  environment where the Skill tool registry does rescan per-dispatch to
+  get a real answer).
+- **Bucket C (`/drive`) — permanently excluded, documented inline.**
+  `drive/SKILL.md`'s frontmatter now carries a `#`-comment directly under
+  `disable-model-invocation: false` explaining why it must never flip
+  (breaks `/autopilot` Phase 3's fresh-subagent dispatch of `/drive`).
+- **`skill-conventions/SKILL.md` updated** (§1) to document both guardrail
+  mechanisms side by side — the prose-only `"Use when…"` convention vs. the
+  hard `disable-model-invocation: true` flag — with the "could the model
+  usefully reach for this autonomously?" test and `/drive` as the worked
+  "never flip this" counter-example.
+- **Quality-score note**: `skill-conventions/SKILL.md`'s structural score
+  (`skill-conventions/scripts/skill_score.py`) dropped from 99 to 98 after
+  this addition, entirely from the byte-budget `size` sub-check (new body
+  size nudges past the linear-scaling rounding threshold for full marks)
+  — prose was already tightened twice to minimize this. Baseline
+  (`dev/quality/skill-scores.json`) re-written via `--write-baseline` in
+  this same PR to match, per §10's documented ratchet mechanism; this is a
+  deliberate, recorded 1-point trade for the new, required documentation
+  content, not an unnoticed regression.
+- **Follow-up**: none filed. The Bucket B empirical question remains open
+  — re-attempt the harness dispatch from a session where fresh-subagent
+  skill discovery actually works (tracked implicitly by
+  T20260922-201976's resolution, not a new task).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (all
+  changes are `SKILL.md`/task-file markdown; Phase 3.0 classifier).
+- Verification (`superpowers:verification-before-completion`): yes —
+  Phase 3.6 (markdown lint, bats, skill-quality scripts run locally before
+  PR) and Phase 7.0 (this close).
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the skill-score regression was root-caused directly (byte
+  budget vs. the linear size-scoring formula) without needing the
+  hypothesis-driven process.
+- Receiving code review (`superpowers:receiving-code-review`): no — no
+  Copilot/Claude Code review comments at claim-PR time; applies if the
+  implementation PR gets findings.

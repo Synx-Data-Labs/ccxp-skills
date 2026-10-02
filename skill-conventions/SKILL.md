@@ -23,6 +23,10 @@ These skills are model-invocable (see §2), so the `description` is the text the
 
 Example — `/drive`: not `"Pick ONE task, drive it to done"` (what) but `"Use when the user explicitly asks to start focused work on a single task and drive it to a merged PR"` (tightly-scoped when).
 
+**A second, harder mechanism exists.** The prose above is a request the model can ignore. `disable-model-invocation: true` is enforced by the harness — it blocks autonomous discovery outright. Test: **"could the model usefully reach for this autonomously?"** No (hard to reverse, high-blast-radius) → flip it, but verify first if another skill's prose nested-invokes it.
+
+Counter-example — never flip `/drive`: the flag also blocks preloading into subagents, and `/autopilot` dispatches a subagent to run `/drive`; flipping it breaks that. Said inline in `/drive`'s own frontmatter.
+
 ### 2. Dual invocation
 
 These skills are BOTH:
