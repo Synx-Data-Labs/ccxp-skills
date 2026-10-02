@@ -91,6 +91,14 @@ other.
   - `ds-check-c1()` (`design-score/scripts/score.sh:147-159`): delete
     the `priority`-with-rationale sub-check (lines 154-157), leaving
     `estimation`/`status`/`source`/`related` (4 pts each = 16 total).
+    **Also update the descriptive comment directly above the function
+    (`:145-146`)** — it currently reads "C1: frontmatter completeness —
+    20 (...); priority-WITH-RATIONALE 4 ..." and must drop the
+    `priority` clause and the stale "20" so it doesn't describe a
+    sub-check that no longer exists (caught in independent review —
+    leaving it would also make the `grep -rn priority
+    design-score/scripts/score.sh` done-criterion below unreliable,
+    since that grep would still hit the stale comment text).
   - `local c1_max=20` (`design-score/scripts/score.sh:336`) → `c1_max=16`.
     `max_sum` (`:337`) is a sum of the per-check max variables, so it
     recomputes automatically (104 → 100); `pct = round(100*raw/max_sum)`
@@ -152,7 +160,7 @@ other.
 - [ ] `design-score/scripts/score.sh:336` sets `c1_max=16`, and `max_sum` (`:337`) totals 100.
 - [ ] `design-score/SKILL.md:50` (C1 row) and `design-score/SKILL.md:64` (arithmetic sentence) both reflect the new ceilings.
 - [ ] `tests/design_score.bats:153-163` — both C1-related assertions pass at the new ceiling: run `bats tests/design_score.bats`.
-- [ ] `grep -rn priority design-score/scripts/score.sh` — the `ds-check-c1` sub-check is gone, confirmed via `design_score.bats` passing (SKILL.md prose may still mention `priority` only to explain it is *not* scored).
+- [ ] `grep -rn priority design-score/scripts/score.sh` — zero hits (the `ds-check-c1` sub-check *and* its descriptive comment at `:145-146` are both gone), plus `design_score.bats` passing (SKILL.md prose may still mention `priority` only to explain it is *not* scored).
 
 ## Root cause
 
@@ -180,7 +188,7 @@ other.
 
 | File | Lines | Purpose |
 |---|---|---|
-| `design-score/scripts/score.sh` | 145-159 | `ds-check-c1()` — remove the `priority`-with-rationale sub-check |
+| `design-score/scripts/score.sh` | 145-159 | `ds-check-c1()` + its descriptive comment — remove the `priority`-with-rationale sub-check and the stale "20"/priority mention in the comment above it |
 | `design-score/scripts/score.sh` | 336-337 | `c1_max`/`max_sum` — shrink `c1_max` 20→16 |
 | `design-score/SKILL.md` | 50 | C1 table row — max 20→16, drop `priority` from description |
 | `design-score/SKILL.md` | 64 (the "104 don't need to sum to 100" sentence) | update literal arithmetic to 100 |
