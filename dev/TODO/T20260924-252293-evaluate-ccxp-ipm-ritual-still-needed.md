@@ -31,8 +31,8 @@ related: T20260924-232855
   but left the underlying question unanswered: **should the IPM machinery
   itself still exist?**
 - A related, narrower question raised in the same conversation: even if
-  IPM keeps running somewhere, does its (`/ipm` step 4, formerly `ccxp`
-  Phase 2a.4) three-line product/infra/slack budget split still earn its
+  IPM keeps running somewhere, does its three-line product/infra/slack
+  budget split (`ccxp` Phase 2a.4, now `/ipm` step 4) still earn its
   complexity now that `dev/TODO/queue.md` is a single flat priority list?
   (The split exists to guard against a real regression — an infra task
   silently eating a scheduled feature's budget — so simply collapsing to

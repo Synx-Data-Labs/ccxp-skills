@@ -20,7 +20,7 @@ related: T20260610-248248
   done yet) gets silently flipped to `In Progress` the moment
   `/address-pr` claims it — misrepresenting the task as actively being
   coded.
-- `/ipm` step 3.4 (formerly `ccxp/SKILL.md` Phase 2a.3 step 4) already hit
+- `ccxp/SKILL.md` Phase 2a.3 step 4, now `/ipm` step 3.4, already hit
   this exact issue (T20260610-248248) and has the fix in place: `acquire`
   then `bash <skills-root>/_session/status.sh <task-id> Design` to correct
   the status back. `address-pr/SKILL.md` §1.6's `free` procedure has no
