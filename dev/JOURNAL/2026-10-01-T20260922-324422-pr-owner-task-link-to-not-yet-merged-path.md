@@ -168,3 +168,42 @@ independent sets of BATS coverage.
 | `_session/task_claim.sh` | 765–800 | `_tc_pr_has_cross_repo_task_link` — got the identical repo-match fix |
 | `_session/task_claim.sh` | 845–891 | `_tc_pr_owner` — the sole caller of both functions above |
 | `tests/task_claim.bats` | 920–964, 1068–1088 | new coverage for both fixed functions |
+
+## Closed (2026-10-01)
+
+- Shipped in **PR #215** (`https://github.com/Synx-Data-Labs/ccxp-skills/pull/215`).
+- Both Done-criteria items met: `_tc_resolve_task_location` and
+  `_tc_pr_has_cross_repo_task_link` now filter/classify a `Task:` link by
+  actual repo match before trusting it as cross-repo-authoritative; new
+  `tests/task_claim.bats` cases cover the same-repo-JOURNAL-link
+  reproduction, the genuinely-cross-repo case, and the
+  unresolvable-own-repo fail-closed case for both functions.
+- Full local suite green pre-push: 823/823 (`bats tests/`, exit 0). The
+  PR's own CI `bats` run is the one remaining unchecked test-plan item —
+  verified during `/address-pr` before merge, not re-asserted here.
+- No follow-up tasks filed — T20260918-404944's own "new"-PR mechanism
+  and head-ref fallback were confirmed out of scope and left unchanged
+  (see `## Solution`).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0 code-class.
+  Wrote the 5 new `tests/task_claim.bats` cases first, watched 2 of them
+  fail for the expected reason (same-repo link still treated as
+  cross-repo / still reporting "link present") before implementing the
+  repo-match-first fix; the other 3 (genuinely-cross-repo,
+  unresolvable-own-repo, genuinely-different-repo) passed immediately as
+  regression guards for behavior that was correctly unchanged.
+- Verification (`superpowers:verification-before-completion`): yes — ran
+  the full `bats tests/` suite (823/823, exit 0) and `shellcheck` on the
+  touched script before committing, not just the new test file.
+- Systematic debugging (`superpowers:systematic-debugging`): yes — the
+  first implementation attempt (repo-match check placed AFTER the
+  id-token match) left one new test failing; traced it with `bash -x`
+  rather than guessing, which surfaced that a same-repo JOURNAL-path
+  link's date-prefixed basename never token-matches the task id in the
+  first place, so the repo-match check needed to run BEFORE that match,
+  not after it — corrected the root-cause framing in this doc to match.
+- Receiving code review (`superpowers:receiving-code-review`): TBD — not
+  yet driven through `/address-pr` as of this commit; updated once that
+  loop completes, before merge.
