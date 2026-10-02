@@ -12,6 +12,20 @@ claimed_role: interactive
 
 # T20260922-201976: `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
 
+## TLDR
+
+- **Type**: bug (platform caching) + chore (this repo's mitigation)
+- **Problem**: the harness can display stale `Skill`-tool content that
+  disagrees with the live `drive/SKILL.md` checkout, and once (this session)
+  that caused a dispatched `/drive` sub-agent to close a task without the
+  mandatory immediate journal-move — a `status: Done` file left sitting in
+  `dev/TODO/`.
+- **Solution**: implement Candidate 1 only — a new `lint_tasks.py` check
+  (`check_not_done_in_todo`) that fails whenever a `dev/TODO/*.md` file's
+  `status:` leading token is `done`. Cheap, mechanical, catches this exact
+  failure mode regardless of its root cause (stale skill cache, a rushed
+  manual close, anything). Candidates 2 and 3 are explicitly rejected below.
+
 ## Problem
 
 - **Type**: bug (tooling/platform, not this repo's own scripts)
@@ -28,9 +42,9 @@ claimed_role: interactive
   contained.
 - **Concrete downstream cost, this run**: a dispatched `/drive` sub-agent
   (fresh session, no memory of the discovery above) closed
-  T20260919-231319 — flipped `status: Done`, wrote `## Closed`/`## Skills
-  invoked` — but never journal-moved the file from `dev/TODO/` to
-  `dev/JOURNAL/`. Caught only because the coordinating `/autopilot` loop
+  T20260919-231319 — flipped `status: Done`, wrote the close sections, but
+  never journal-moved the file from `dev/TODO/` to `dev/JOURNAL/`.
+  Caught only because the coordinating `/autopilot` loop
   happened to notice the sub-agent's own final report still listed the
   task file at its `dev/TODO/` path and manually diffed. Fixed via a
   small follow-up PR (#105) — but a genuinely unattended, unsupervised
@@ -70,41 +84,109 @@ claimed_role: interactive
   earlier draft of this task cited it by mistake, caught and corrected
   before filing.
 
-## Solution (sketch — needs a design pass, filed as a task not a bounded PR)
+## Solution
 
-- Candidate mitigations, not yet chosen between:
-  1. **A new CI guard** (this repo doesn't have one today — see the
-     verified-directly note above): fail loudly (in `lint-tasks` CI, or a
-     new dedicated check) if any `dev/TODO/*.md` or `dev/PARKING/*.md`
-     file's frontmatter `status:` leads with `Done` — such a file should
-     always have been journal-moved. Cheap, mechanical, and would have
-     caught this exact case on `main` after PR #104 merged (before this
-     task's own follow-up PR #105 fixed it by hand).
-  2. `/drive`/`/autopilot`'s own post-merge verification step could
-     explicitly re-check `git ls-files dev/TODO/ | grep "$task_id"`
-     returns empty right after a close-PR merges, failing loudly (not
-     just trusting a dispatched sub-agent's own self-report) if the file
-     is still present there — catches it at merge time, not on a later
-     CI run.
-  3. Investigate whether re-reading a skill's file directly (e.g. `cat
-     drive/SKILL.md` or `git show HEAD:drive/SKILL.md`) instead of
-     relying solely on the `Skill` tool's returned content, immediately
-     before acting on a recently-changed convention, is a reasonable
-     standing practice for skills that get edited frequently by the same
-     session (self-diagnosis / workaround, not a real fix for the
-     underlying platform caching behavior).
-- Candidates 1 and 2 are complementary (a CI guard as a backstop, a
-  `/drive`-side check for immediate feedback), not mutually exclusive —
-  whoever picks this up should decide whether to do one or both, and
-  whether the platform-level caching root cause is worth reporting
-  upstream separately from this repo's own mitigation.
+**Decision: implement Candidate 1 only** (a new `lint_tasks.py` check).
+Candidates 2 and 3 are rejected — reasons below.
+
+- **Where it lives**: `repo-conventions/scripts/lint_tasks.py` (not a new
+  standalone workflow step) — it already owns per-file frontmatter schema
+  checks (`check_required`, `check_status`, `check_estimation`, …) run via
+  `CHECKS` in `lint_file()` (`repo-conventions/scripts/lint_tasks.py:181-182`),
+  and it is consumed both by this repo's own `test_lint_tasks.py` CI job
+  (`.github/workflows/tests.yml:60-68`) and by every consumer repo's
+  `actions/lint-tasks` composite action (`actions/lint-tasks/action.yml:18`).
+  Adding the check here means every repo using the shared action gets the
+  guard for free on its next `lint_tasks.py` pull, not just this repo.
+- **New check — `check_not_done_in_todo(ctx)`**. Scope: `dev/TODO/` files
+  only, never `dev/PARKING/` — a parked task legitimately keeps whatever
+  status it had when parked, and `status: Parked` can't collide with the
+  `done` leading token anyway. Condition: `status_head(ctx.keys["status"])`
+  equals `done`. Violation message references T20260914-422854 (every
+  close journal-moves immediately) and tells the reader to move the file
+  into `dev/JOURNAL`. Reuses
+  the existing `status_head()` helper (`repo-conventions/scripts/lint_tasks.py:71-79`)
+  for the same leading-token tolerance every other status check already
+  gets (a narrated `Done — superseded by T…` still matches).
+  - `Ctx` doesn't currently carry which directory a file came from —
+    `is_task_file()`/`iter_task_files()` do, but `Ctx` is built from a bare
+    path. Derive scope the same way `is_task_file()` already does: test
+    whether `ctx.path.parts` contains the open-tasks folder name — no new
+    field needed on `Ctx`.
+  - Register it in the `CHECKS` tuple (`repo-conventions/scripts/lint_tasks.py:181`)
+    alongside the other per-file checks — it then runs automatically in both
+    `--all` and `--changed` modes via the existing `lint_file()` loop, no
+    `main()` changes needed.
+- **Test**: add `test_lint_tasks.py` cases (mirroring the existing per-check
+  test shape) — one `dev/TODO/`-status-Done file fails with the new message;
+  the same content under `dev/PARKING/` passes (scope check); a
+  `dev/JOURNAL/`-adjacent Done status is out of lint scope entirely
+  (`is_task_file`/`iter_task_files` never look at JOURNAL) so no test needed
+  there.
+
+**Rejected alternatives:**
+
+- **Candidate 2** (`/drive`/`/autopilot` post-merge self-check — list the
+  open-tasks folder and grep for the task id right after a close-PR merges)
+  — rejected as
+  the *primary* fix: it only runs inside `/drive`'s own close path, so it
+  can't catch the actual observed failure mode (a dispatched sub-agent that
+  skipped the close path's own journal-move step entirely) any better than
+  the sub-agent's self-report already should have. It also adds a second,
+  bespoke verification surface to maintain in `drive/SKILL.md` for a class
+  of bug a single CI check already covers for every path that can produce a
+  `dev/TODO/` file — manual close, a different automation, a human editing
+  by hand. Not implementing it now; CI is the one chokepoint every path
+  through main has to cross regardless of which tool produced the bad file.
+- **Candidate 3** (re-`cat`/`git show` a skill file directly instead of
+  trusting the `Skill` tool's returned content before acting on a
+  recently-changed convention) — rejected as out of this task's scope: it's
+  a per-session workaround for a platform-level caching behavior this repo
+  cannot fix or verify (no reproduction trigger — see Context above), not a
+  repo-side mitigation with a testable done-criterion. Worth raising with
+  the platform separately (outside this repo), not worth encoding as a
+  standing practice here with no way to confirm compliance.
+
+## Root cause
+
+- `repo-conventions/scripts/lint_tasks.py` has never had a status-vs-location
+  check — it was introduced in the initial public release (`5051a9e`) with
+  only schema checks (`check_required`, `check_status`, `check_estimation`,
+  `check_allowlist`, `check_h1_id`, `check_scheduled_when_advanced` — see
+  the `CHECKS` tuple) and the board-wide `check_blocked_by` cross-reference
+  pass. A file's own `status:` was always validated against the known-token
+  list (`check_status`) but never cross-checked against *where the file
+  lives* (open-tasks folder vs. `dev/JOURNAL`). This is an oversight from day one, not
+  a deliberate decision — the schema-only scope made sense when the file
+  was first written, before T20260914-422854 (2026-09-14) made "every close
+  journal-moves immediately" the hard invariant that a `status: Done` file
+  in `dev/TODO/` now violates.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `repo-conventions/scripts/lint_tasks.py` | 71-79 (`status_head`), 107-114 (`check_status`, model for the new check), 181-182 (`CHECKS` tuple) | add `check_not_done_in_todo` here, register it in `CHECKS` |
+| `repo-conventions/scripts/test_lint_tasks.py` | (new cases, mirroring existing per-check test shape) | regression coverage for the new check |
+| `.github/workflows/tests.yml` | 60-68 (`lint-tasks` job) | already runs `test_lint_tasks.py -v` — no workflow change needed |
+| `actions/lint-tasks/action.yml` | 18 | consumer-repo entry point that calls `lint_tasks.py --changed`/`--all` — picks up the new check automatically once this PR merges |
+
+## Test plan
+
+- [ ] `python3 repo-conventions/scripts/test_lint_tasks.py -v` — new
+  `check_not_done_in_todo` cases pass locally
+- [ ] Manual regression per the original Done-criteria ask: create a
+  throwaway `dev/TODO/T00000000-000000-test.md` with `status: Done`, run
+  `python3 repo-conventions/scripts/lint_tasks.py --all .`, confirm it
+  fails; delete the throwaway file, confirm a clean run
+- [ ] CI (`tests.yml`'s `lint-tasks` job) green on the PR
 
 ## Done criteria
 
-- [ ] A decision recorded on which mitigation(s) from the Solution
-  sketch above are worth implementing (a new CI guard, a `/drive`-side
-  post-merge check, both, or neither pending more data)
-- [ ] If a CI guard is chosen: implemented, tested, and verified to
-  actually catch a `status: Done` file sitting in `dev/TODO/`
-  (regression test: create one, confirm the guard fails; journal-move
-  it, confirm the guard passes)
+- [x] A decision recorded on which mitigation(s) from the Solution
+  sketch above are worth implementing — Candidate 1 only (see Solution
+  above); Candidates 2 and 3 explicitly rejected with reasons
+- [ ] CI guard implemented, tested, and verified to actually catch a
+  `status: Done` file sitting in `dev/TODO/` — satisfied by
+  `check_not_done_in_todo` in `repo-conventions/scripts/lint_tasks.py`
+  plus its `test_lint_tasks.py` regression cases (see Test plan)
