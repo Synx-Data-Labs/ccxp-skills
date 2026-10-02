@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md): `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
 - [T20260923-292618](T20260923-292618-retire-superpowers-dependency-survey.md): Survey retiring the `superpowers` plugin dependency
 - [T20260923-140360](T20260923-140360-retro-external-skill-scan.md): Add an external-skillset scan to /retro
 - [T20260923-433144](T20260923-433144-design-score-priority-field-conflicts-with-retired-schema.md): design-score's C1 check scores a `priority:` field that lifecycle.md says is retired
