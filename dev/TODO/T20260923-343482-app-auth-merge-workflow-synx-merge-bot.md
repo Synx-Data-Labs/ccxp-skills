@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Open — SUPERVISED (needs 1Password sign-in to mint the synx-merge-bot GitHub App token; unavailable in headless automation)
 estimation: 5
 source: 2026-09-23 interactive session with Shine, split off T20260418-124634 (hub-repo)
 related: T20260418-124634 (hub-repo — Drata/SOC2 readiness, the driving requirement)
@@ -7,6 +7,29 @@ owner: Xin Zhang (Shine)
 ---
 
 # T20260923-343482: Build App-auth merge workflow using synx-merge-bot, so required-review branch protection needs no bypass list
+
+## Automation note (2026-10-01, autopilot cycle)
+
+`/drive` auto-picked this as the #1 queue item and hit a hard "missing
+credentials" escalation (see `/drive`'s Escalation Rules table) before any
+claim/implementation work started: this task's Rollout step 1
+(`_gh/gh-app-token.sh`) requires minting a live `synx-merge-bot`
+installation token from the private key stored in 1Password
+(`GitHub App - synx-merge-bot`, SynxDB Build vault), and later steps flip
+`required_approving_review_count` branch protection on shared production
+repos (`hub-repo`, `build-pipeline-repo`, `ccxp-skills`) — both a
+missing-credential blocker (`op whoami` → "account is not signed in", no
+`OP_SERVICE_ACCOUNT_TOKEN` in this headless session) and an
+irreversible/outward-facing change, so per the Decide-don't-wait gate this
+is an escalate-and-wait case, not a decide-and-act one.
+
+`DRIVE_ESCALATION_CHANNEL_ID` is unset in this session's `~/.claude/.env`,
+so the Slack escalation transport degraded per `/drive`'s own fallback —
+this note is the escalation record in place of a Slack thread. Marked
+`SUPERVISED` in the status line so unattended `/ccxp`/autopilot loops skip
+it until a human with 1Password access (interactive `op signin`, or an
+`OP_SERVICE_ACCOUNT_TOKEN`) drives it. No code changes made; task content
+otherwise unchanged.
 
 ## Problem
 
