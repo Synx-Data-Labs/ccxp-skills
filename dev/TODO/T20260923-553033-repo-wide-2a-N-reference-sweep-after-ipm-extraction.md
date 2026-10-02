@@ -1,11 +1,11 @@
 ---
-status: Open
+status: In Progress
 scheduled: 2026-09-21
 estimation: 1
 source: discovered driving T20260923-584914, 2026-09-23
 related: T20260923-584914
-claimed_by:
-claimed_role:
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260923-553033: Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
