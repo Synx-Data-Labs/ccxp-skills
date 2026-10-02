@@ -1,7 +1,10 @@
 ---
-status: Open
+status: In Progress
 estimation: 3
 source: conversation with @shine, 2026-09-23
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260923-292618: Survey retiring the `superpowers` plugin dependency
