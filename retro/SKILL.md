@@ -473,6 +473,30 @@ Idempotent — skip if an open chore for that same `<metric> on <repo>` regressi
 
 **Report**: add a `Quality trend` row to the metrics table (Phase 3) — `hold N / regress M (3wk); gate-readiness X%` — a `## Quality trend` section to the retro report (Phase 5), and a `Quality trend:` line to the Slack summary (Phase 6).
 
+### Phase 4e: External skillset scan (T20260923-140360)
+
+Pairs with Phase 4c — that grades skills in *our own* marketplace(s); this looks **outward** at every other installed marketplace for a skill that already does something leaner/better than ours, so the comparison stops depending on a human happening to notice (the concrete case that motivated this phase: `ccxp-skills:grill-me` vs. the newly-installed `mattpocock-skills:grilling` implementing the same interview algorithm, found only by a human manually diffing the two).
+
+**Step 1 — enumerate external marketplaces.** Read `enabledPlugins` from `~/.claude/settings.json`, excluding **our own** marketplace(s) — whichever repo `/retro` is currently running in, plus any sibling marketplace that repo's own `CLAUDE.md`/`dev/guidelines.md` names as "ours" (in this hub repo: `ccxp-skills` and `synx-skills`; a different adopting repo names its own instead — never a hardcoded list). No external marketplaces enabled → report "no external marketplaces configured" and end the phase.
+
+**Step 2 — list each external marketplace's skills.** For every remaining marketplace/plugin, read only the frontmatter `description:` (the trigger one-liner) from each `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/*/SKILL.md` — never the full body. This is the cheap side of the comparison, which is what keeps the phase affordable to run every week instead of on a slower cadence.
+
+**Step 3 — scope the comparison to whatever Phase 4c step 1 already produced this week.** Reuse that evidence as-is:
+
+- A `## Skills invoked` audit block was present this week (`retro/SKILL.md:421`) → compare those exact skill names' descriptions against the Step 2 list.
+- No audit block (the common case) → compare the member skills of whichever coarse domain buckets Phase 4c step 1 fell back to (`drive`, `todo`, `address-pr`, …) against the Step 2 list — never skip the phase just because the week had no audit block.
+
+**Step 4 — trigger-overlap judgment.** For each skill from Step 3, scan the Step 2 description list for topic/trigger overlap — a judgment call, same nature as Phase 4c step 2's "pick the worst offender" (no formula). A hit is a **candidate**, not a verdict; reading the external skill's full body (going past the cheap Step 2 description) is reasonable at this point, scoped to just the candidate(s) that cleared this filter.
+
+**Step 5 — report, never auto-adopt.** For each candidate, file a `Category: quality` action item (Source `Retro YYYY-MM-DD`) proposing a follow-up comparison/design pass — the same "needs real design" downgrade Phase 4c step 3 uses for its own bounded-vs-needs-design triage. Never draft a bounded fix here: adopting behavior from an independently-versioned external plugin is a materially different trust model than Phase 4c's own-repo bounded-edit path.
+
+**Guards:**
+
+- No external marketplaces enabled → "no external marketplaces configured", skip (Step 1).
+- No skills exercised this week → "no skill activity" — the same guard Phase 4c already has (`retro/SKILL.md:436`), shared rather than duplicated.
+
+**Report**: add a `## External skillset scan` section to the retro report (Phase 5), directly after `## Skill quality`, and an `External scan:` line to the Slack summary (Phase 6), directly after `Skill quality:`.
+
 ### Phase 5: Write the retro report
 
 Create `dev/JOURNAL/YYYY-MM-DD-retro-weekly.md` with:
@@ -531,6 +555,10 @@ Same link convention as the Focus list grade table above (`taskid-mdlink T<id>`,
 - Worst offender: `<skill>` (signal: outcome | authoring | compliance | combined)
 - Action: drafted ccxp-skills PR #N | filed T<id> (Category: quality) | none flagged
 - Runners-up (noted, not acted on): `<skill>`, `<skill>` (or "none")
+
+## External skillset scan
+- Marketplaces scanned: `<marketplace>`, `<marketplace>` (or "none configured")
+- Candidates found: `<our-skill>` vs. `<external-marketplace>:<external-skill>` — filed T<id> (Category: quality) | (or "none flagged")
 
 ## Memory review
 - Total: N memories across M clone(s) (user: X, feedback: Y, project: Z, reference: W)
@@ -594,6 +622,7 @@ Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP 
 - Top improvement area: {one-liner}
 - {K} action items created — see retro report
 - Skill quality: {<skill> → PR #N | <skill> → filed T<id> | none flagged}
+- External scan: {<our-skill> vs <marketplace>:<external-skill> → filed T<id> | none flagged | no external marketplaces configured}
 - Escalation hygiene: {auto_resolved_a + auto_resolved_b} auto-resolved, {stale_surfaced} surfaced for user action (skip the bullet if both counts are 0)
 - Chore review: {chores_evaluated} evaluated, {chores_untracked_flagged} untracked flagged (skip the bullet on repos with no `dev/chore.md`)
 ```
