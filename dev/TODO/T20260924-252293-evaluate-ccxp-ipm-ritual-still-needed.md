@@ -1,10 +1,13 @@
 ---
-status: Open
+status: Design
 estimation: 2
 source: 2026-09-24 conversation — surfaced while designing T20260924-232855
   (estimation → story points); the human driving this work confirmed the
   weekly IPM/GH-Project-board cadence has been abandoned for a long time
 related: T20260924-232855
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260924-252293: Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
