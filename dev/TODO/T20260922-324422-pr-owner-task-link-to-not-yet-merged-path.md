@@ -131,14 +131,14 @@ independent sets of BATS coverage.
 
 ## Test plan
 
-- [ ] New `tests/task_claim.bats` case: a same-repo PR whose `Task:` link
+- [x] New `tests/task_claim.bats` case: a same-repo PR whose `Task:` link
   (`_session/task_claim.sh:653-654` grep) points at the file's post-move
   JOURNAL path (present only on the PR branch, absent from `main`)
   resolves via the same-repo directory lookup (`mine`/`free`/`new` as
   appropriate), not `unknown`.
-- [ ] Existing cross-repo and same-repo-without-`Task:`-link cases in
+- [x] Existing cross-repo and same-repo-without-`Task:`-link cases in
   `tests/task_claim.bats` unchanged/still green (`bats tests/task_claim.bats`).
-- [ ] New `tests/task_claim.bats` case for `_tc_pr_has_cross_repo_task_link`
+- [x] New `tests/task_claim.bats` case for `_tc_pr_has_cross_repo_task_link`
   (`_session/task_claim.sh:739-762`): a same-repo `Task:` link no longer
   reports "cross-repo link present" — the head-ref fallback gate
   correctly treats it as same-repo.
@@ -146,15 +146,15 @@ independent sets of BATS coverage.
 
 ## Done criteria
 
-- [ ] `pr-owner` (or `_tc_resolve_task_location` directly,
+- [x] `pr-owner` (or `_tc_resolve_task_location` directly,
   `_session/task_claim.sh:634-708`) resolves `mine` for a same-repo PR
   shaped like #85 (a `Task:` link to the file's post-move JOURNAL path,
   task actually still at its pre-move `dev/TODO/` path on `main`) — new
   `tests/task_claim.bats` case covers this.
-- [ ] `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:739-762`)
+- [x] `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:739-762`)
   correctly reports "no cross-repo link" for a same-repo `Task:` link —
   new `tests/task_claim.bats` case covers this.
-- [ ] Existing cross-repo and same-repo-without-a-`Task:`-link cases in
+- [x] Existing cross-repo and same-repo-without-a-`Task:`-link cases in
   `tests/task_claim.bats` unchanged/still green.
 
 ## Repo file references

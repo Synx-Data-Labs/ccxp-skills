@@ -907,6 +907,62 @@ CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
   [ "$status" -ne 0 ]
 }
 
+# --- repo-match-first: a same-repo PR can carry a Task: link too (T20260922-324422) --
+# A same-repo close PR that journal-moves its own task in the same commit
+# (T20260914-422854's always-immediate convention) can legitimately include a
+# `Task:` link in its body pointing at the file's POST-move JOURNAL path, per
+# drive/SKILL.md Phase 4 cross-repo step 3's convention applied to a same-repo
+# close (PR #85's real shape). That path is absent from `main` until merge, so
+# honoring the link as cross-repo-authoritative 404s and reports `unknown`
+# instead of falling back to the same-repo lookup that WOULD have resolved the
+# file at its true (pre-move) `dev/TODO/` location.
+
+@test "resolve_task_location: same-repo close PR whose Task: link points at a not-yet-merged JOURNAL path -> falls through to the same-repo lookup, not the stale link" {
+  TODO_NAMES='T20260915-315552-repo-conventions-mode-solo-team-switch.md'
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)
+        printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/JOURNAL/2026-09-23-T20260915-315552-repo-conventions-mode-solo-team-switch.md\n'
+        ;;
+      *"repo view"*)         printf 'your-org/hub-repo' ;;   # SAME repo as the Task: link
+      *"contents/dev/TODO"*) printf '%s\n' "$TODO_NAMES" ;;
+      *)                     return 1 ;;
+    esac
+  }
+  loc="$(_tc_resolve_task_location 85 T20260915-315552)"
+  [ "${loc%%$'\t'*}" = "your-org/hub-repo" ]
+  [ "${loc#*$'\t'}" = "dev/TODO/T20260915-315552-repo-conventions-mode-solo-team-switch.md" ]
+}
+
+@test "resolve_task_location: GENUINELY cross-repo Task: link (different repo, own repo resolvable) -> still honored as cross-repo" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)
+        printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/TODO/T20260622-404636-real.md\n'
+        ;;
+      *"repo view"*) printf 'your-org/ccxp-skills' ;;   # DIFFERENT repo than the Task: link
+      *)             return 1 ;;
+    esac
+  }
+  loc="$(_tc_resolve_task_location 85 T20260622-404636)"
+  [ "${loc%%$'\t'*}" = "your-org/hub-repo" ]
+  [ "${loc#*$'\t'}" = "dev/TODO/T20260622-404636-real.md" ]
+}
+
+@test "resolve_task_location: own-repo lookup fails -> fails closed to the pre-fix cross-repo behavior (no regression)" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)
+        printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/TODO/T20260622-404636-real.md\n'
+        ;;
+      *) return 1 ;;   # repo view fails too -> own_repo unresolvable
+    esac
+  }
+  loc="$(_tc_resolve_task_location 85 T20260622-404636)"
+  [ "${loc%%$'\t'*}" = "your-org/hub-repo" ]
+  [ "${loc#*$'\t'}" = "dev/TODO/T20260622-404636-real.md" ]
+}
+
 # --- pr-owner head-ref fallback for a task file new in THIS PR (T20260918-404944) --
 # /stage commits queue.md + the new task file in the SAME PR the first time a
 # task is staged, so the file legitimately doesn't exist on `main` yet at the
@@ -1007,6 +1063,28 @@ CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
   # `resolve_task_location: body-fetch FAILURE fails closed` test above).
   run _tc_pr_has_cross_repo_task_link 123
   [ "$status" -eq 0 ]
+}
+
+@test "pr_has_cross_repo_task_link: a SAME-repo Task: link -> false (not a genuine cross-repo signal, T20260922-324422)" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)   printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/JOURNAL/x.md' ;;
+      *"repo view"*) printf 'your-org/hub-repo' ;;   # SAME repo as the Task: link
+      *)             return 1 ;;
+    esac
+  }
+  ! _tc_pr_has_cross_repo_task_link 123
+}
+
+@test "pr_has_cross_repo_task_link: a GENUINELY different-repo Task: link -> still true" {
+  _session_gh() {
+    case "$*" in
+      *"pr view"*)   printf 'Task: https://github.com/your-org/hub-repo/blob/main/dev/TODO/x.md' ;;
+      *"repo view"*) printf 'your-org/ccxp-skills' ;;   # DIFFERENT repo than the Task: link
+      *)             return 1 ;;
+    esac
+  }
+  _tc_pr_has_cross_repo_task_link 123
 }
 
 # --- pr-owner: the new/free/unknown routing this task adds (T20260918-404944) --

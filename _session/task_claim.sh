@@ -645,13 +645,39 @@ _tc_resolve_task_location() {
   # A body-fetch FAILURE is not an empty body: fail closed (return 1 -> unknown)
   # rather than silently degrading to the same-repo lookup against the wrong
   # (target) clone — gh always resolves against $PWD's origin.
-  local pr="$1" id="$2" body rc links matched n url repo path
+  local pr="$1" id="$2" body rc links matched n url repo path own_repo cross_links u u_repo
   body="$(_session_gh pr view "$pr" --json body --jq '.body // ""' 2>/dev/null)"; rc=$?
   [ "$rc" -eq 0 ] || return 1
+  # Resolved once, up front — both branches below need it: the cross-repo
+  # branch to repo-match-first (T20260922-324422), the same-repo branch to
+  # know which repo it's even looking in (unchanged from before).
+  own_repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
   # All blob links on `Task:` lines (a cross-repo PR carries exactly one; a prose
   # "Task:" mention without a link contributes nothing).
   links="$(printf '%s' "$body" | grep -iE '^[[:space:]]*Task:' \
            | grep -oE 'github\.com/[^/]+/[^/]+/blob/[^ )]+\.md')"
+  # Repo-match-first (T20260922-324422): drop any link that names THIS PR's
+  # own repo BEFORE the id-token match below — a same-repo close PR can carry
+  # a `Task:` link pointing at the file's post-move JOURNAL path (e.g.
+  # `dev/JOURNAL/2026-09-23-<id>-<slug>.md`, drive/SKILL.md Phase 4 cross-repo
+  # step 3's convention, applied here to a same-repo close) while the task
+  # file is still at its pre-move `dev/TODO/` path on `main`. That link is
+  # NOT a genuine cross-repo signal, and its date-prefixed basename would
+  # fail the token-boundary id match below anyway (`2026-09-23-<id>-...`
+  # does not start with `<id>`) — so filtering it out HERE, before that
+  # match, is what lets a genuinely cross-repo link still resolve normally
+  # while a same-repo one correctly falls through to the same-repo lookup
+  # instead of being rejected as a mismatched/foreign link. An unresolvable
+  # own_repo fails closed to the pre-fix behavior (keep every link as a
+  # cross-repo candidate) rather than guessing same-repo.
+  if [ -n "$own_repo" ] && [ -n "$links" ]; then
+    cross_links="$(printf '%s\n' "$links" | while IFS= read -r u; do
+      [ -n "$u" ] || continue
+      u_repo="$(printf '%s' "$u" | sed -E 's#.*github\.com/([^/]+/[^/]+)/blob/.*#\1#')"
+      [ "$u_repo" != "$own_repo" ] && printf '%s\n' "$u"
+    done)"
+    links="$cross_links"
+  fi
   if [ -n "$links" ]; then
     # Keep only links to THIS task's file via a TOKEN-BOUNDARY id match
     # (`<id>-<slug>.md` or bare `<id>.md`) — a string-prefix test would let a
@@ -677,7 +703,7 @@ _tc_resolve_task_location() {
   # `main` (T20260805-345509). Mirrors _tc_find_file_anydir's existing
   # dual-directory search, same token-boundary id match as the cross-repo path
   # above.
-  repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
+  repo="$own_repo"
   [ -n "$repo" ] || return 1
   local dir name
   for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
@@ -738,26 +764,38 @@ _tc_resolve_task_location_head() {
 
 _tc_pr_has_cross_repo_task_link() {
   # $1 pr → 0 (the body has a `Task:`-prefixed line naming a github blob-link
-  # URL) | 1 (no such line — either no `Task:` line at all, or one with no
-  # link). Mirrors _tc_resolve_task_location's OWN two-stage gate at
-  # _session/task_claim.sh:642-644 EXACTLY (Task:-prefix grep piped into a
+  # URL to a DIFFERENT repo than this PR's own) | 1 (no such line, or every
+  # matched line names this PR's OWN repo — not a genuine cross-repo signal,
+  # T20260922-324422). The Task:-prefix/blob-URL extraction mirrors
+  # _tc_resolve_task_location's OWN two-stage gate at
+  # _session/task_claim.sh:653-654 EXACTLY (Task:-prefix grep piped into a
   # blob-URL grep) so this can never disagree with which branch that function
   # actually takes — see T20260918-404944 design review findings (a
   # presence-only check on the `Task:` prefix alone was too broad: it fired
   # even for a Task:-worded line with no link, which never sends
   # _tc_resolve_task_location down its cross-repo branch in the first place).
   #
-  # Fails CLOSED on its own body-fetch failure: prints/returns as if a link
-  # WERE present (blocking the same-repo head-ref fallback) rather than as
-  # "no link" (which would wrongly allow it) — mirrors
-  # _tc_resolve_task_location's own fetch-failure fail-closed behavior
-  # (_session/task_claim.sh:638-639, tests/task_claim.bats:780).
-  local pr="$1" body rc links
+  # Fails CLOSED on its own body-fetch failure, or on an unresolvable own
+  # repo: prints/returns as if a genuinely cross-repo link WERE present
+  # (blocking the same-repo head-ref fallback) rather than as "no link"
+  # (which would wrongly allow it) — mirrors _tc_resolve_task_location's own
+  # fetch-failure fail-closed behavior (_session/task_claim.sh:649,
+  # tests/task_claim.bats "resolve_task_location: body-fetch FAILURE fails
+  # closed").
+  local pr="$1" body rc links own_repo repo url
   body="$(_session_gh pr view "$pr" --json body --jq '.body // ""' 2>/dev/null)"; rc=$?
   [ "$rc" -eq 0 ] || return 0   # fetch failed -> fail closed -> "link present"
   links="$(printf '%s' "$body" | grep -iE '^[[:space:]]*Task:' \
            | grep -oE 'github\.com/[^/]+/[^/]+/blob/[^ )]+\.md')"
-  [ -n "$links" ]
+  [ -n "$links" ] || return 1
+  own_repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
+  [ -n "$own_repo" ] || return 0   # unresolvable -> fail closed (pre-fix behavior)
+  while IFS= read -r url; do
+    [ -n "$url" ] || continue
+    repo="$(printf '%s' "$url" | sed -E 's#.*github\.com/([^/]+/[^/]+)/blob/.*#\1#')"
+    [ "$repo" != "$own_repo" ] && return 0
+  done <<<"$links"
+  return 1   # every matched link names this PR's own repo -> not cross-repo
 }
 
 _tc_is_own_cross_repo_clone() {
