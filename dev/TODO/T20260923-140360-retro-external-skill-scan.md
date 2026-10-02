@@ -27,7 +27,7 @@ related: T20260923-986928
 ## Problem
 
 - **Type**: feature
-- `/retro` Phase 4c (`retro/SKILL.md:373`) already grades *our own*
+- `/retro` Phase 4c (`retro/SKILL.md:415`) already grades *our own*
   skills weekly and drafts a bounded fix for the single worst offender
   — but it only ever looks inward at `ccxp-skills` itself. There's no
   step that looks at other installed/known marketplaces (e.g.
@@ -81,7 +81,22 @@ related: T20260923-986928
   graceful-degradation signal gathering → judgment-based pick → bounded-vs-
   needs-design triage → a `## <section>` in the Phase 5 report
   (`retro/SKILL.md:530-534`) → a summary line in the Phase 6 Slack template
-  (`retro/SKILL.md:587-596`).
+  (`retro/SKILL.md:587-596` — the `Skill quality:` bullet itself is at line
+  `596`, not `594`).
+- **Line-number caveat**: every `retro/SKILL.md:<N>` citation below is the
+  **current, pre-this-change** location — it's where to make the edit, not
+  where the result will end up (inserting ~40-60 new Phase 4e lines shifts
+  everything after it down). Verification (Test plan / Done criteria) must
+  anchor on section headers and bullet text, never re-check these same
+  absolute line numbers post-edit.
+- **4c step 1's own evidence isn't always a full skill inventory**: per
+  `retro/SKILL.md:421`, exact per-skill attribution only exists when a
+  `## Skills invoked` audit block is present in the week's JOURNAL or
+  still-open task files; absent that, 4c step 1 falls back to coarse *domain buckets*
+  (`drive`, `todo`, `address-pr`, …), not individual skill names. Phase 4e
+  (Solution step 3 below) must consume whichever granularity 4c step 1
+  actually produced this week — exact skill names when available, domain
+  buckets otherwise — not assume a full name list always exists.
 
 ## Solution
 
@@ -90,8 +105,12 @@ related: T20260923-986928
   like 4c:
   1. **Enumerate external marketplaces** — read `enabledPlugins` from
      `~/.claude/settings.json`, excluding this suite's own marketplace
-     name(s) (`ccxp-skills`, and any other marketplace the running repo's
-     own `CLAUDE.md` names as "ours" — `synx-skills` for this repo).
+     name(s). "Our own" is **whichever repo `/retro` is currently running
+     in** plus its sibling marketplaces named in *that repo's own*
+     `CLAUDE.md`/`dev/guidelines.md` (e.g. in this hub repo, `ccxp-skills`
+     and `synx-skills` are both ours; a different consumer repo running
+     `/retro` would name its own marketplace instead) — never a hardcoded
+     list, so the exclusion travels correctly to any adopting repo.
      **Resolves the "all installed vs. allowlist" open question**: scan
      every *currently enabled* external marketplace, no allowlist — an
      allowlist needs manual upkeep every time a plugin is installed, which
@@ -101,16 +120,22 @@ related: T20260923-986928
      name + frontmatter `description:` (the trigger one-liner), from
      `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/*/SKILL.md`.
      Cheap: frontmatter only, never the full body.
-  3. **Scope comparison to this week's exercised skills** — reuse Phase
-     4c step 1's own outcome-attribution evidence (skills exercised this
-     week) rather than diffing the *entire* local skill inventory against
-     the *entire* external inventory every run. **Resolves the "every
-     retro vs. monthly" open question**: because the expensive side (full
-     external inventory) is description-only and the compared side is
-     already bounded to this week's handful of exercised skills, the cheap
-     comparison can run **every retro** — no slower cadence needed. (A
-     full-body diff, if a candidate needs one, happens only after a
-     trigger-overlap hit — see alternatives below.)
+  3. **Scope comparison to whatever Phase 4c step 1 already produced this
+     week** — reuse that evidence as-is rather than diffing the *entire*
+     local skill inventory against the *entire* external inventory every
+     run: when a `## Skills invoked` audit block was present (exact skill
+     names, per `retro/SKILL.md:421`), compare those names' descriptions
+     directly; when only the coarse domain-bucket fallback is available
+     (`drive`, `todo`, `address-pr`, …), compare the bucket's *member*
+     skills (the repo's own skills tagged under that domain, e.g. `drive`
+     → the `drive` skill itself) — never skip the phase just because the
+     week had no audit block. **Resolves the "every retro vs. monthly"
+     open question**: because the expensive side (full external inventory)
+     is description-only and the compared side is already bounded to this
+     week's handful of exercised skills/buckets, the cheap comparison can
+     run **every retro** — no slower cadence needed. (A full-body diff, if
+     a candidate needs one, happens only after a trigger-overlap hit — see
+     alternatives below.)
   4. **Trigger-overlap judgment** — for each exercised skill, scan the
      external skill-description list for topic/trigger overlap (same
      judgment-call nature as 4c step 2's "pick the worst offender" — no
@@ -127,10 +152,11 @@ related: T20260923-986928
      skill activity" (same guard 4c already has at `retro/SKILL.md:436`,
      shared — not duplicated).
 - **Report**: a `## External skillset scan` section in the Phase 5
-  template, inserted after the existing `## Skill quality` block
-  (`retro/SKILL.md:530-534`); an `External scan:` bullet in the Phase 6
-  Slack summary template, inserted after the `Skill quality:` bullet
-  (`retro/SKILL.md:594`) — same placement pattern 4c uses for its own
+  template, inserted directly after the existing `## Skill quality` block
+  (`retro/SKILL.md:530-534`, current pre-edit location); an
+  `External scan:` bullet in the Phase 6 Slack summary template, inserted
+  directly after the `Skill quality:` bullet (`retro/SKILL.md:596`,
+  current pre-edit location) — same placement pattern 4c uses for its own
   report/summary hooks.
 
 **Alternatives considered and rejected:**
@@ -168,17 +194,19 @@ related: T20260923-986928
   Phase 4e steps (as written) would have surfaced `grilling` as a
   candidate against `grill-me`/`incept`'s description — the concrete case
   that motivated this task
-- [ ] Confirm the new Phase 5 report block and Phase 6 Slack bullet are
-  present and consistent with 4c's own placement (`retro/SKILL.md:530-534`,
-  `retro/SKILL.md:594`)
+- [ ] Confirm the new Phase 5 `## External skillset scan` report block and
+  Phase 6 `External scan:` Slack bullet are present, directly after their
+  respective `## Skill quality` / `Skill quality:` anchors (locate by
+  heading/bullet text, not a line number — see the line-number caveat in
+  Context) — `retro/SKILL.md:530-534`/`596` name the pre-edit anchors
 - [ ] Next real `/retro` run post-merge exercises Phase 4e at least once
   and its `## External skillset scan` section renders (post-merge item —
   can't be verified before this PR merges)
 
 ## Done criteria
 
-- [ ] `retro/SKILL.md:475` — `### Phase 4e: External skillset scan` section exists between Phase 4d and Phase 5
-- [ ] `retro/SKILL.md:475` — Phase 4e documents all 6 steps (enumerate marketplaces, list external skills, scope to this-week's-exercised skills, trigger-overlap judgment, report-not-adopt, guards); verified by the `## Test plan` manual walkthrough below
-- [ ] `retro/SKILL.md:534` — `## External skillset scan` block added to the Phase 5 report template
-- [ ] `retro/SKILL.md:594` — `External scan:` bullet added to the Phase 6 Slack summary template
+- [ ] `retro/SKILL.md:475` (pre-edit anchor — locate by heading, not this number post-edit) — `### Phase 4e: External skillset scan` section exists between Phase 4d and Phase 5
+- [ ] `retro/SKILL.md:475` (pre-edit anchor) — Phase 4e documents all 6 steps (enumerate marketplaces, list external skills, scope to whatever 4c step 1 produced — exact names or domain buckets, trigger-overlap judgment, report-not-adopt, guards); verified by the `## Test plan` manual walkthrough below
+- [ ] `retro/SKILL.md:534` (pre-edit anchor) — `## External skillset scan` block added to the Phase 5 report template
+- [ ] `retro/SKILL.md:596` (pre-edit anchor, corrected from an earlier `:594`) — `External scan:` bullet added to the Phase 6 Slack summary template
 - [ ] `_docs/lint-docs.sh retro/SKILL.md` passes (see Test plan)
