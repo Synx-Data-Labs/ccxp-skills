@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: memory-to-skill 2026-09-24 (synx-data-labs/build-pipeline-repo)
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260924-390953: Amend /rca to post results to Slack automatically, plain text (no tables)
