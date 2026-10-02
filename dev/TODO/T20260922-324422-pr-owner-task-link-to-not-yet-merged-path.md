@@ -10,6 +10,12 @@ claimed_role: interactive
 
 # T20260922-324422: `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
 
+## TLDR
+
+- **Type**: bug
+- **Problem**: `_tc_resolve_task_location` (`_session/task_claim.sh:634-708`) honors *any* `Task:`-prefixed blob link as cross-repo-authoritative without checking it's actually in a different repo, so a same-repo close PR whose `Task:` link points at the file's post-move JOURNAL path (not yet on `main`) 404s and reports `unknown` instead of falling back to the same-repo directory lookup.
+- **Solution**: repo-match-first — compare the `Task:` link's repo against the PR's own repo (`gh repo view --json nameWithOwner`) before treating it as cross-repo; same repo routes into the existing same-repo lookup branch. Apply the identical fix to the sibling gate `_tc_pr_has_cross_repo_task_link`.
+
 ## Problem
 
 - `_session/task_claim.sh pr-owner <pr>` returned `unknown` for PR #85 — a
@@ -19,11 +25,7 @@ claimed_role: interactive
   matched this session's own `claimant-id` (`cc1-9a4074da:94a83ff0e786a885`,
   verified directly via `git show main:dev/TODO/T20260915-315552-*.md` and
   `task_claim.sh claimant-id`).
-- Root cause: `_tc_resolve_task_location` (`_session/task_claim.sh:623-673`)
-  checks the PR body for **any** `Task:`-prefixed line with a GitHub blob
-  link first, and if found, treats resolution as the cross-repo path —
-  fetching that exact path from `main` — regardless of whether the PR is
-  actually same-repo. PR #85's body included
+- PR #85's body included
   `Task: https://github.com/.../blob/main/dev/JOURNAL/2026-09-23-T20260915-315552-....md`
   (the *post-close* JOURNAL location, following the convention this repo
   already uses for cross-repo pointer PRs — `drive/SKILL.md` Phase 4 cross-repo
@@ -31,7 +33,7 @@ claimed_role: interactive
   the PR branch, not merged) — the fetch 404s, `_tc_resolve_task_location`
   returns non-zero, and `pr-owner` reports `unknown` instead of falling back
   to the same-repo `dev/TODO/` directory lookup (which *would* have
-  succeeded — verified manually, see below).
+  succeeded — verified manually, see `## Root cause`).
 - Not unique to this exact task — **any** same-repo PR that both (a) closes
   its task in the same commit (journal-move) and (b) includes a `Task:`
   link in its body pointing at the file's *new* (not-yet-on-`main`)
@@ -39,7 +41,7 @@ claimed_role: interactive
 
 ## Context
 
-- `_tc_pr_owner` (`_session/task_claim.sh:733-757`) already documents this
+- `_tc_pr_owner` (`_session/task_claim.sh:807-853`) already documents this
   general failure shape in a comment: "a stale branch-name-vs-body-Task:-
   link mismatch can also surface as `unknown` on a rescoped PR — see
   T20260718-160579; that's a tooling bug to fix separately, not license to
@@ -62,19 +64,37 @@ claimed_role: interactive
   branch's premature commitment once *any* `Task:` link is present, not a
   broken same-repo lookup itself.
 
-## Design
+## Root cause
 
-Grilled via `/incept` 2026-10-01 — settles the sketch below's open choice
-with code-level facts, not guesswork.
-
-- **Root cause, confirmed by reading `_session/task_claim.sh` directly**
-  (sharper than the sketch's original framing): `_tc_resolve_task_location`
-  extracts whatever repo a `Task:` link names without ever comparing it to
+- `_tc_resolve_task_location` (`_session/task_claim.sh:634-708`) extracts
+  whatever repo a `Task:` link names (the `sed -E` repo-extraction line
+  inside the function's cross-repo branch) without ever comparing it to
   the PR's own repo. For PR #85's exact shape, this means the function
-  **succeeds** with the wrong (not-yet-on-`main`) path — it does not fail.
-  That's why the existing `_tc_resolve_task_location_head` fallback (built
-  for the sibling bug, T20260918-404944) never gets reached here: it only
-  fires on outright failure (`if ! loc=...`), and this case doesn't fail.
+  **succeeds** with the wrong (not-yet-on-`main`) path — it does not
+  fail, so the existing `_tc_resolve_task_location_head` fallback (built
+  for the sibling bug, T20260918-404944, `_session/task_claim.sh:709-738`)
+  never gets reached: it only fires on outright failure (`if ! loc=...`
+  in `_tc_pr_owner`, `_session/task_claim.sh:824`), and this case doesn't
+  fail.
+- **Introduced**: the cross-repo `Task:`-link branch was added for
+  cross-repo PRs (hub-repo task file, target-repo PR) — a deliberate
+  design choice to let an explicit link override the default same-repo
+  lookup. It never anticipated a *same-repo* PR also carrying a `Task:`
+  link (the close-PR convention from `drive/SKILL.md` Phase 4 cross-repo
+  step 3, applied here to a same-repo close) — an oversight in scope, not
+  a regression.
+- `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:739-762`) has
+  the identical repo-blindness — it checks only "is there a `Task:`
+  blob-link at all," never whether its repo differs from the PR's own.
+  No live bug currently exercises it on this reproduction (`_tc_resolve_task_location`
+  succeeds-wrong before this gate is ever consulted), but it shares the
+  exact root cause and the file is already being touched.
+
+## Solution
+
+Grilled via `/incept` 2026-10-01 — settles the open choice below with
+code-level facts, not guesswork.
+
 - **Fix: repo-match-first.** Before honoring a `Task:` link as
   authoritative, compare its extracted repo against the PR's own repo
   (`gh repo view --json nameWithOwner`). Same repo → ignore the link,
@@ -82,64 +102,67 @@ with code-level facts, not guesswork.
   directory-lookup branch (already implemented in
   `_tc_resolve_task_location`, just unreachable today for this shape).
   Different repo → today's cross-repo behavior, unchanged.
+- **Rejected alternative**: when the cross-repo-shaped fetch 404s, fall
+  back to the same-repo directory lookup by id before giving up with
+  `unknown` — cheaper to implement, but changes
+  `_tc_resolve_task_location`'s current "an explicit Task: link is
+  authoritative" contract, which was a live concern until verified below.
+  Rejected once the single-caller check (next bullet) showed there's no
+  other caller whose contract this could break — repo-match-first is
+  strictly more correct (it gets the cross-repo case right too, not just
+  same-repo) for the same implementation cost.
 - **No compatibility risk**: confirmed via repo-wide grep that
   `_tc_resolve_task_location` has exactly **one** caller (`_tc_pr_owner`
-  itself) — the sketch's original concern about "other callers relying on
-  an explicit Task: link being authoritative" doesn't apply; there's no
-  other caller to break.
+  itself, `_session/task_claim.sh:824`) — the rejected alternative's
+  original concern about "other callers relying on an explicit Task:
+  link being authoritative" doesn't apply.
 - **Folded in** (grilled as a separate decision, not originally scoped):
-  `_tc_pr_has_cross_repo_task_link` — the gate for the *other* fallback,
-  built for T20260918-404944 — has the identical repo-blindness (checks
-  only "is there a `Task:` blob-link at all," never whether its repo
-  differs from the PR's own). No live bug currently exercises it (this
-  task's own reproduction never reaches that gate, since
-  `_tc_resolve_task_location` succeeds-wrong before it), but it shares the
-  exact root cause and the file is already being touched — gets the same
-  repo-match fix here rather than a second small PR later.
+  `_tc_pr_has_cross_repo_task_link` gets the identical repo-match fix in
+  the same PR — same root cause, file already touched, cheaper than a
+  second small PR later.
 - **Out of scope**: T20260918-404944's own "new"-PR mechanism and its
-  head-ref fallback stay architecturally unchanged — this only tightens
-  which branch routes into them.
+  head-ref fallback (`_tc_resolve_task_location_head`) stay
+  architecturally unchanged — this only tightens which branch routes
+  into them.
 
 Estimation revised from 1h to 2h: the original estimate covered one
 function's fix; the folded-in scope now covers two functions and two
 independent sets of BATS coverage.
 
-### Test Plan
+## Test plan
 
-- New `tests/task_claim.bats` case: a same-repo PR whose `Task:` link
-  points at the file's post-move JOURNAL path (present only on the PR
-  branch, absent from `main`) resolves via the same-repo directory lookup
-  (`mine`/`free`/`new` as appropriate), not `unknown`.
-- Existing cross-repo and same-repo-without-`Task:`-link cases in
-  `tests/task_claim.bats` unchanged/still green.
-- New case for `_tc_pr_has_cross_repo_task_link`: a same-repo `Task:` link
-  no longer reports "cross-repo link present" — the head-ref fallback
-  gate correctly treats it as same-repo.
-
-## Solution (sketch — not yet designed in full)
-
-- Prefer trying the same-repo `dev/TODO`/`dev/PARKING` directory lookup
-  FIRST when the PR's own repo (from `gh repo view`) matches the `Task:`
-  link's repo — only fall into the cross-repo fetch-by-exact-path branch
-  when the linked repo differs from the PR's own repo (the actual
-  cross-repo signal), or when the same-repo lookup itself fails.
-- Alternative: when the cross-repo-shaped fetch 404s, fall back to the
-  same-repo directory lookup by id before giving up with `unknown` —
-  cheaper to implement, but changes `_tc_resolve_task_location`'s current
-  "an explicit Task: link is authoritative" contract, which other callers
-  may rely on for exactly the opposite reason (trusting an explicit link
-  over a same-repo guess). Needs whoever picks this up to check callers
-  before choosing between the two.
-- Either way needs new `tests/task_claim.bats` coverage: a same-repo PR
-  whose body's `Task:` link points at a path absent from `main` (present
-  only on the PR branch) still resolves via the same-repo directory
-  lookup, not `unknown`.
+- [ ] New `tests/task_claim.bats` case: a same-repo PR whose `Task:` link
+  (`_session/task_claim.sh:653-654` grep) points at the file's post-move
+  JOURNAL path (present only on the PR branch, absent from `main`)
+  resolves via the same-repo directory lookup (`mine`/`free`/`new` as
+  appropriate), not `unknown`.
+- [ ] Existing cross-repo and same-repo-without-`Task:`-link cases in
+  `tests/task_claim.bats` unchanged/still green (`bats tests/task_claim.bats`).
+- [ ] New `tests/task_claim.bats` case for `_tc_pr_has_cross_repo_task_link`
+  (`_session/task_claim.sh:739-762`): a same-repo `Task:` link no longer
+  reports "cross-repo link present" — the head-ref fallback gate
+  correctly treats it as same-repo.
+- [ ] CI (`bats` workflow on the implementation PR) green.
 
 ## Done criteria
 
-- [ ] `pr-owner` (or `_tc_resolve_task_location` directly) resolves `mine`
-  for a same-repo PR shaped like #85 (a `Task:` link to the file's
-  post-move JOURNAL path, task actually still at its pre-move `dev/TODO/`
-  path on `main`) — new `tests/task_claim.bats` case
-- [ ] Existing cross-repo and same-repo-without-a-Task:-link cases in
-  `tests/task_claim.bats` unchanged/still green
+- [ ] `pr-owner` (or `_tc_resolve_task_location` directly,
+  `_session/task_claim.sh:634-708`) resolves `mine` for a same-repo PR
+  shaped like #85 (a `Task:` link to the file's post-move JOURNAL path,
+  task actually still at its pre-move `dev/TODO/` path on `main`) — new
+  `tests/task_claim.bats` case covers this.
+- [ ] `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:739-762`)
+  correctly reports "no cross-repo link" for a same-repo `Task:` link —
+  new `tests/task_claim.bats` case covers this.
+- [ ] Existing cross-repo and same-repo-without-a-`Task:`-link cases in
+  `tests/task_claim.bats` unchanged/still green.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_session/task_claim.sh` | 623–673 | `_tc_resolve_task_location` — the function getting the repo-match-first fix |
+| `_session/task_claim.sh` | 688–710 | `_tc_resolve_task_location_head` — the sibling (T20260918-404944) fallback, unchanged |
+| `_session/task_claim.sh` | 712–725 | `_tc_pr_has_cross_repo_task_link` — gets the identical repo-match fix |
+| `_session/task_claim.sh` | 733–~820 | `_tc_pr_owner` — the sole caller of both functions above |
+| `tests/task_claim.bats` | n/a | new coverage for both fixed functions |
