@@ -1,11 +1,13 @@
 ---
-status: Open
-scheduled: 2026-10-05
+status: Design
+scheduled: 2026-09-28
 estimation: 2
 source: this /autopilot run, discovered when a dispatched /drive sub-agent
   closed T20260919-231319 without the always-immediate journal-move
   (T20260914-422854), then fixed via a follow-up housekeeping PR (#105)
 related: T20260914-422854
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260922-201976: `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
