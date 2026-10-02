@@ -79,9 +79,11 @@ problem description, not a live pointer):
   `dev/TODO/T20260928-115329-*.md` (3 refs) — both open task files citing
   the old numbering as a design precedent.
 - **Left as deliberate historical annotation** (criterion b):
-  `ccxp/SKILL.md:121` (pre-existing "now `/ipm` step 3" note) plus the
-  *new* "formerly ... Phase 2a.N" annotations added to the two TODO files
-  above, following that same pattern.
+  `ccxp/SKILL.md:121` (pre-existing "`/ccxp` Phase 2a.3, now `/ipm` step 3"
+  note) plus two new annotations added to the TODO files above, written
+  in the same "old, now new" order for consistency (an independent review
+  on the implementation PR caught the first draft reversing that order —
+  fixed before merge).
 - **Out of scope, treated like `dev/JOURNAL/`**: `dev/quality/skill-review-2026-09-28/{batch1,batch2,batch3}.md`
   — dated review-snapshot artifacts documenting findings as of that
   review; rewriting them would falsify what was actually found, same
@@ -89,7 +91,7 @@ problem description, not a live pointer):
 - Verification: `grep -rln '2a\.[0-9]' --include='*.md' . | grep -v
   dev/JOURNAL | grep -v dev/quality | grep -v T20260923-553033` returns
   only `ccxp/SKILL.md` (the pre-existing annotation) and the two TODO
-  files with their new, intentional "formerly" annotations.
+  files with their new, intentional "old, now new" annotations.
 
 No follow-up tasks filed — this was a self-contained doc-pointer sweep.
 
@@ -98,4 +100,4 @@ No follow-up tasks filed — this was a self-contained doc-pointer sweep.
 - TDD (`superpowers:test-driven-development`): no — docs-class (Phase 3.0 classifier: `*.md`-only change)
 - Verification (`superpowers:verification-before-completion`): yes — repo-wide re-grep confirming every live reference was either fixed or deliberately annotated, plus `lint-docs.sh` and `lint_tasks.py` on all changed files
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
-- Receiving code review (`superpowers:receiving-code-review`): no — no Copilot/independent-review comments on this doc sweep beyond the claim PR's own clean-bill review
+- Receiving code review (`superpowers:receiving-code-review`): yes — independent review on the implementation PR found two minor phrasing/consistency nits (annotation ordering, one awkward sentence); both fixed before merge, no pushback needed
