@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-28
 estimation: 2
 source: this conversation, 2026-09-24
 related: statusline-setup/SKILL.md; _session/claimant-id.sh
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260924-366770: Add a last-user-input slug to the statusline
@@ -170,10 +170,39 @@ Not a bug — this is a gap-analysis, not a regression root cause:
 | `tests/statusline_setup.bats` | existing | add coverage for `sl-last-input-part` |
 | `tests/last_input_hook.bats` | new file | hook write/truncate/prune coverage |
 
-## Closed
+## Closed (2026-10-01)
 
-_(pending)_
+Shipped in **PR #209** (design: PR #208).
+
+- Met: all four Done criteria above are pinned by `tests/last_input_hook.bats`
+  and `tests/statusline_setup.bats`, both green locally (859/859 cases in the
+  full suite) and re-verified in CI as part of this PR's merge gate.
+- External/unverified: the "ships across every config dir" wiring is a
+  post-merge, per-machine, manual `/statusline-setup` run — not something
+  this PR can verify (it would mean editing a live, non-repo
+  `~/.claude/settings.json`). Each operator confirms it themselves the next
+  time they run the deploy workflow.
+- No follow-up tasks filed — implementation matched the accepted design with
+  no scope surprises.
 
 ## Skills invoked
 
-_(pending — recorded at Phase 7.0)_
+- TDD (`superpowers:test-driven-development`): no — not explicitly invoked as
+  a separate step, but the change was built test-first in practice (each
+  helper's BATS cases were written alongside/before wiring it into the
+  stdin pipeline) and the full suite was run red→green before every commit.
+- Verification (`superpowers:verification-before-completion`): yes — Phase
+  3.6 (pre-PR) and Phase 7.0 (pre-close), each a fresh full-suite run (0
+  failures), design-score (96/100), skill-quality ratchet, and
+  lint_identifiers --all, not a cached/assumed result.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test
+  failed twice in a row; the one real bug caught pre-PR (a YAML-breaking
+  colon-space sequence inside SKILL.md's frontmatter description) was found
+  by directly parsing the frontmatter with the same `yaml.safe_load` the CI
+  check uses, not trial-and-error.
+- Receiving code review (`superpowers:receiving-code-review`): yes — the
+  independent review dispatched for the design PR (#208) found two wrong
+  `file:line` citations; both were fixed and re-verified rather than argued
+  away (the one borderline suggestion — reword the "Ships in PR #0"
+  done-criterion — was evaluated against the design-doc template's own
+  `complete.md` exemplar, which uses that exact pattern, and kept as-is).
