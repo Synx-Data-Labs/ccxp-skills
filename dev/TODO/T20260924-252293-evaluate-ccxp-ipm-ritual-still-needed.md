@@ -70,9 +70,22 @@ scheduled: 2026-09-28
     `queue.md` **is** the priority... a prior free-form
     `Critical/High/.../Low` field... is retired."* `next` walks `queue.md`
     top-to-bottom and explicitly refuses to re-sort by deadline or
-    estimation. So the "deadline/urgency-aware ranking" IPM's Phase 2a.4
-    scoring used to provide is **already gone** from the live picker —
-    nothing left to lose there by retiring the ceremony around it.
+    estimation.
+  - **Direct check against `ipm/SKILL.md:104`** (the line this task's own Q4
+    sub-question echoes): it claims *"The `/todo next` ranking already
+    factors deadlines, urgency ratio, and unblocks-others... Do not
+    second-guess that ordering here; the IPM trusts it."* That claim is
+    **stale relative to `todo/SKILL.md`'s current, authoritative behavior**
+    (previous bullet) — `/todo next` is a flat queue walk today, no scoring.
+    So `ipm/SKILL.md` is *also* describing a ranking mechanism that doesn't
+    exist in the current `/todo next` — meaning IPM isn't even consuming a
+    real deadline/urgency signal today, let alone computing one itself. Q4's
+    answer holds, but via this direct contradiction, not merely the retired
+    `priority:` field: there is no deadline/urgency-aware ranking anywhere in
+    the current system (not in IPM, not in `/todo next`) for retiring IPM to
+    put at risk. (This cross-skill doc drift — `ipm/SKILL.md:104` vs.
+    `todo/SKILL.md`'s `next` — is itself a candidate for the follow-up
+    doc-cleanup task below.)
   - `scheduled:` is already written **outside** any IPM commit: `/drive`'s
     "Important Notes" and Phase 3/Phase 7 call `_ipm/stamp-scheduled.sh`
     directly for every dependency/follow-up task, resolving the Monday via
@@ -161,20 +174,22 @@ follow-ups) — but the decision this task exists to make:
     unused) purpose for any consumer repo that *does* run IPM — deleting
     them is a separate, independently-reviewable change with its own
     blast-radius, not a decision-task's job to bundle in.
-
-## Follow-ups to file at close (mechanical, not decided here)
-
-1. Update `ccxp/SKILL.md` Phase 2a + the Mon/Fri cron table to describe the
-   Monday ceremony as optional/ad-hoc rather than a mandatory cron step.
-2. Note in `retro/SKILL.md` (Phase 1 step 10 / Phase 4b) that the
-   bump-3x/bump-2x detectors and the `priority: High` escalation they drive
-   are dormant by design when no repo runs `/ipm` — and separately flag the
-   `priority: High` field itself as stale per `/todo`'s retired-scoring-field
-   note (pre-existing drift, unrelated to this decision).
-3. `lifecycle.md` (canonical source other repos point back to): add a line
-   noting IPM/`scheduled:` board-mirroring is opt-in, so a consumer repo
-   adopting this repo's conventions doesn't assume the weekly ceremony is
-   required.
+- **Mechanical follow-through, not decided here** — filed as separate
+  task(s) at Phase 7 close (per the template's `## Closed` convention, not a
+  standalone section in this design):
+  1. Update `ccxp/SKILL.md` Phase 2a + the Mon/Fri cron table to describe
+     the Monday ceremony as optional/ad-hoc rather than a mandatory cron
+     step.
+  2. Note in `retro/SKILL.md` (Phase 1 step 10 / Phase 4b) that the
+     bump-3x/bump-2x detectors and the `priority: High` escalation they
+     drive are dormant by design when no repo runs `/ipm`; separately flag
+     the stale `priority: High` field reference and the stale
+     `ipm/SKILL.md:104` claim about `/todo next`'s ranking (both
+     pre-existing drift, unrelated to this decision, surfaced above).
+  3. `lifecycle.md` (canonical source other repos point back to): add a
+     line noting IPM/`scheduled:` board-mirroring is opt-in, so a consumer
+     repo adopting this repo's conventions doesn't assume the weekly
+     ceremony is required.
 
 ## Test plan
 
@@ -185,7 +200,7 @@ follow-ups) — but the decision this task exists to make:
       "next-Monday fallback", cited in Context).
 - [x] Confirm `retro`/`ccxp`'s bump detectors already guard the
       no-ipm-weekly-file case (`ccxp/SKILL.md:359`, cited in Context).
-- N/A automated test — this is a decision record, no code/script changed.
+- [x] N/A automated test — this is a decision record, no code/script changed.
 
 ## Done criteria
 
@@ -197,5 +212,5 @@ follow-ups) — but the decision this task exists to make:
       moot; `/todo next` already dropped the scoring the ceremony used to
       add).
 - [ ] Follow-up mechanical tasks filed for the skill-doc edits (see
-      "Follow-ups to file at close") — done at Phase 7 close, not in this
-      design PR.
+      `## Solution`'s "Mechanical follow-through" list) — done at Phase 7
+      close, not in this design PR.
