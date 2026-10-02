@@ -1,9 +1,11 @@
 ---
-status: Design
-scheduled: 2026-10-05
+status: In Progress
+scheduled: 2026-09-28
 estimation: 2
 source: discovered while /address-pr-ing T20260915-315552's implementation PR (#85)
 related: T20260915-315552, T20260918-404944
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260922-324422: `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
