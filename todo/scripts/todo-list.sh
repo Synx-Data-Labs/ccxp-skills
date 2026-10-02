@@ -24,8 +24,13 @@ function todo-list-main() {
   printf '| # | ID | Title | Status | Est | Deadline | Scheduled | Claimed |\n'
   printf '|---|----|-------|--------|-----|----------|-----------|---------|\n'
 
-  local -A queued_ids=()
-  local -A status_counts=()
+  # Plain newline-delimited strings instead of `local -A` associative
+  # arrays (bash 4+ only) — macOS's stock `/bin/bash` is 3.2, which has no
+  # associative arrays at all (T20260925-407025). `queued_ids` is used purely
+  # as a set (membership test); `all_statuses` collects one entry per task
+  # and is reduced to per-status counts at the end via `sort | uniq -c`,
+  # which is what an associative-array tally would have done anyway.
+  local queued_ids=$'\n' all_statuses=""
   local total=0 claimed_mine=0 claimed_peers=0 committed=0
   local pos=0 line parsed id relpath title task_file status est deadline scheduled claim claimed_col
   local this_monday today
@@ -38,7 +43,7 @@ function todo-list-main() {
     id="$(cut -f1 <<<"$parsed")"
     relpath="$(cut -f2 <<<"$parsed")"
     title="$(cut -f3 <<<"$parsed")"
-    queued_ids["$id"]=1
+    queued_ids="${queued_ids}${id}"$'\n'
     task_file="$TODO_DIR/$relpath"
 
     if [ ! -f "$task_file" ]; then
@@ -48,7 +53,7 @@ function todo-list-main() {
 
     total=$((total+1))
     status="$(todo-fm-get "$task_file" status)"
-    status_counts["$status"]=$(( ${status_counts["$status"]:-0} + 1 ))
+    all_statuses="${all_statuses}${status}"$'\n'
     est="$(todo-fm-get "$task_file" estimation)"
     deadline="$(todo-fm-get "$task_file" deadline)"
     scheduled="$(todo-fm-get "$task_file" scheduled)"
@@ -105,17 +110,23 @@ function todo-list-main() {
     # ID is `T{digits}-{digits}` (two hyphen-delimited numeric groups).
     task_id="$(grep -oE '^T[0-9]+-[0-9]+' <<<"$base" || true)"
     [ -n "$task_id" ] || continue
-    if [ -z "${queued_ids[$task_id]:-}" ]; then
-      untracked=$((untracked+1))
-      printf 'untracked task not in queue.md: %s — run /todo sweep\n' "$base"
-    fi
+    case "$queued_ids" in
+      *$'\n'"$task_id"$'\n'*) : ;;
+      *)
+        untracked=$((untracked+1))
+        printf 'untracked task not in queue.md: %s — run /todo sweep\n' "$base"
+        ;;
+    esac
   done
 
   printf 'total: %d\n' "$total"
-  local s
-  for s in "${!status_counts[@]}"; do
-    printf 'status %s: %d\n' "$s" "${status_counts[$s]}"
-  done
+  if [ -n "$all_statuses" ]; then
+    printf '%s' "$all_statuses" | sort | uniq -c | while IFS= read -r line; do
+      line="${line#"${line%%[![:space:]]*}"}"   # trim leading whitespace from `uniq -c`
+      local count="${line%% *}" s="${line#* }"
+      printf 'status %s: %d\n' "$s" "$count"
+    done
+  fi
   printf '%d committed to active iteration\n' "$committed"
   printf '%d claimed (%d mine, %d by peers)\n' $((claimed_mine+claimed_peers)) "$claimed_mine" "$claimed_peers"
 
