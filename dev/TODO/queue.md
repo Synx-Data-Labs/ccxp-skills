@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20260923-292618](T20260923-292618-retire-superpowers-dependency-survey.md): Survey retiring the `superpowers` plugin dependency
 - [T20260923-140360](T20260923-140360-retro-external-skill-scan.md): Add an external-skillset scan to /retro
 - [T20260923-433144](T20260923-433144-design-score-priority-field-conflicts-with-retired-schema.md): design-score's C1 check scores a `priority:` field that lifecycle.md says is retired
 - [T20260923-343482](T20260923-343482-gh-app-token-script.md): Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
@@ -26,3 +25,6 @@ reprioritize.
 - [T20260929-128287](T20260929-128287-changed-md-unquoted-splitting-not-portable-to-zsh.md): `$CHANGED_MD`-style unquoted word-splitting silently lints zero files under zsh
 - [T20261001-319589](T20261001-319589-replace-slack-mcp-with-bot-token-webapi.md): Retire MCP-based Slack access for ccxp automation — move to a bot-token Web API
 - [T20261001-350662](T20261001-350662-reality-stamp-monday-no-dedicated-helper.md): `lifecycle.md`'s reality-stamp `scheduled:` Monday has no dedicated helper, inviting `stamp-scheduled.sh` misuse
+- [T20261001-289904](T20261001-289904-vendor-mattpocock-tdd-replace-superpowers.md): Vendor `mattpocock/skills` `tdd` to replace the `superpowers:test-driven-development` hard gate
+- [T20261001-334141](T20261001-334141-vendor-mattpocock-diagnosing-bugs-replace-superpowers.md): Vendor `mattpocock/skills` `diagnosing-bugs` to replace the `superpowers:systematic-debugging` soft gate
+- [T20261001-995405](T20261001-995405-scope-native-verification-before-completion-replacement.md): Scope a native replacement for the `superpowers:verification-before-completion` hard gate (no ready mattpocock equivalent)
