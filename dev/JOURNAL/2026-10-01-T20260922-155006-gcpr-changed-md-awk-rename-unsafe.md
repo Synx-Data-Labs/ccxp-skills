@@ -39,3 +39,33 @@ claimed_role:
 
 - `gcpr/SKILL.md:82,97` — the two unfixed call sites.
 - `gcpr/SKILL.md:61-64` — the already-fixed reference implementation.
+
+## Closed (2026-10-01)
+
+- Shipped in [PR #211](https://github.com/Synx-Data-Labs/ccxp-skills/pull/211).
+- Applied the same skip-`D`-status / strip-`.* ->`-prefix awk pattern already
+  landed at `gcpr/SKILL.md:61-64` to both remaining call sites:
+  `CHANGED_TASKS` (`gcpr/SKILL.md:82`, now `:85`) and `CHANGED_REFS`
+  (`gcpr/SKILL.md:97`, now `:100`).
+- Verified by manually running the awk snippet against simulated
+  `git status --porcelain` output covering modify / delete / rename /
+  untracked rows — deletes are skipped, renames resolve to the new path.
+  No bats tests apply — this is a bash snippet embedded in a `.md` doc,
+  docs-class per the Phase 3.0 classifier, not a standalone script.
+- `bash _docs/doc-impact.sh origin/main` reported `docs-only change` —
+  no other doc needed updating.
+- No follow-up tasks filed — the fix is complete and scoped exactly to
+  the two call sites named in the Problem section.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (bash
+  snippet inside `gcpr/SKILL.md`, no standalone script/bats harness)
+- Verification (`superpowers:verification-before-completion`): yes —
+  manually exercised the awk pattern against representative
+  `git status --porcelain` input before opening the PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — the
+  fix was a direct application of an already-proven pattern, no
+  debugging needed
+- Receiving code review (`superpowers:receiving-code-review`): no — no
+  review comments received at close time
