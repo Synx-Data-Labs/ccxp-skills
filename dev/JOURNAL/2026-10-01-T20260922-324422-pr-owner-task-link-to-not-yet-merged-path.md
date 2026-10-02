@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-28
 estimation: 2
 source: discovered while /address-pr-ing T20260915-315552's implementation PR (#85)
 related: T20260915-315552, T20260918-404944
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260922-324422: `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
@@ -132,26 +132,28 @@ independent sets of BATS coverage.
 ## Test plan
 
 - [x] New `tests/task_claim.bats` case: a same-repo PR whose `Task:` link
-  (`_session/task_claim.sh:653-654` grep) points at the file's post-move
+  (`_session/task_claim.sh:657-658` grep) points at the file's post-move
   JOURNAL path (present only on the PR branch, absent from `main`)
   resolves via the same-repo directory lookup (`mine`/`free`/`new` as
   appropriate), not `unknown`.
 - [x] Existing cross-repo and same-repo-without-`Task:`-link cases in
   `tests/task_claim.bats` unchanged/still green (`bats tests/task_claim.bats`).
 - [x] New `tests/task_claim.bats` case for `_tc_pr_has_cross_repo_task_link`
-  (`_session/task_claim.sh:739-762`): a same-repo `Task:` link no longer
+  (`_session/task_claim.sh:765-800`): a same-repo `Task:` link no longer
   reports "cross-repo link present" — the head-ref fallback gate
   correctly treats it as same-repo.
-- [ ] CI (`bats` workflow on the implementation PR) green.
+- [x] Local full suite green pre-push: 823/823 (`bats tests/`, exit 0).
+- [ ] CI (`bats` workflow on the implementation PR) green — check during
+  `/address-pr`, before merge.
 
 ## Done criteria
 
 - [x] `pr-owner` (or `_tc_resolve_task_location` directly,
-  `_session/task_claim.sh:634-708`) resolves `mine` for a same-repo PR
+  `_session/task_claim.sh:634-734`) resolves `mine` for a same-repo PR
   shaped like #85 (a `Task:` link to the file's post-move JOURNAL path,
   task actually still at its pre-move `dev/TODO/` path on `main`) — new
   `tests/task_claim.bats` case covers this.
-- [x] `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:739-762`)
+- [x] `_tc_pr_has_cross_repo_task_link` (`_session/task_claim.sh:765-800`)
   correctly reports "no cross-repo link" for a same-repo `Task:` link —
   new `tests/task_claim.bats` case covers this.
 - [x] Existing cross-repo and same-repo-without-a-`Task:`-link cases in
@@ -159,10 +161,10 @@ independent sets of BATS coverage.
 
 ## Repo file references
 
-| File | Lines | Purpose |
+| File | Lines (post-fix) | Purpose |
 |---|---|---|
-| `_session/task_claim.sh` | 623–673 | `_tc_resolve_task_location` — the function getting the repo-match-first fix |
-| `_session/task_claim.sh` | 688–710 | `_tc_resolve_task_location_head` — the sibling (T20260918-404944) fallback, unchanged |
-| `_session/task_claim.sh` | 712–725 | `_tc_pr_has_cross_repo_task_link` — gets the identical repo-match fix |
-| `_session/task_claim.sh` | 733–~820 | `_tc_pr_owner` — the sole caller of both functions above |
-| `tests/task_claim.bats` | n/a | new coverage for both fixed functions |
+| `_session/task_claim.sh` | 634–734 | `_tc_resolve_task_location` — got the repo-match-first fix |
+| `_session/task_claim.sh` | 735–764 | `_tc_resolve_task_location_head` — the sibling (T20260918-404944) fallback, unchanged |
+| `_session/task_claim.sh` | 765–800 | `_tc_pr_has_cross_repo_task_link` — got the identical repo-match fix |
+| `_session/task_claim.sh` | 845–891 | `_tc_pr_owner` — the sole caller of both functions above |
+| `tests/task_claim.bats` | 920–964, 1068–1088 | new coverage for both fixed functions |
