@@ -47,6 +47,47 @@ setup() {
   [ "$output" = "hello world" ]
 }
 
+@test "li-sanitize strips the ESC/BEL control bytes that drive terminal escape sequences" {
+  # Strips the raw ESC (\x1b) and BEL (\x07) bytes themselves — defusing the
+  # escape sequence so it can never be replayed into the terminal — without
+  # needing to parse/strip the printable text a real sequence would carry
+  # (e.g. "[31m"), which is inert once its driving control byte is gone.
+  run bash -c "source '$SCRIPT'; li-sanitize \$'hello\x1b[31mworld\x07'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "hello[31mworld" ]
+}
+
+# ---------------------------------------------------------------------------
+# li-safe-session-id
+# ---------------------------------------------------------------------------
+
+@test "li-safe-session-id accepts a normal UUID-shaped id" {
+  run bash -c "source '$SCRIPT'; li-safe-session-id 'abc123-def456'"
+  [ "$status" -eq 0 ]
+}
+
+@test "li-safe-session-id rejects a path-traversal-shaped id" {
+  run bash -c "source '$SCRIPT'; li-safe-session-id '../../etc/passwd'"
+  [ "$status" -ne 0 ]
+}
+
+@test "li-safe-session-id rejects a bare slash-containing id" {
+  run bash -c "source '$SCRIPT'; li-safe-session-id 'a/b'"
+  [ "$status" -ne 0 ]
+}
+
+@test "li-safe-session-id rejects '.' and '..'" {
+  run bash -c "source '$SCRIPT'; li-safe-session-id '.'"
+  [ "$status" -ne 0 ]
+  run bash -c "source '$SCRIPT'; li-safe-session-id '..'"
+  [ "$status" -ne 0 ]
+}
+
+@test "li-safe-session-id rejects an empty id" {
+  run bash -c "source '$SCRIPT'; li-safe-session-id ''"
+  [ "$status" -ne 0 ]
+}
+
 # ---------------------------------------------------------------------------
 # li-truncate
 # ---------------------------------------------------------------------------
@@ -81,6 +122,14 @@ setup() {
 @test "last-input-hook exits 0 and writes nothing when session_id is absent" {
   run bash -c "printf '%s' '{\"prompt\":\"no session id here\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
+  [ ! -d "$LAST_INPUT_STATE_DIR" ] || [ -z "$(ls -A "$LAST_INPUT_STATE_DIR" 2>/dev/null)" ]
+}
+
+@test "last-input-hook refuses a path-traversal session_id and writes nothing outside the state dir" {
+  local outside="$BATS_TEST_TMPDIR/outside-marker"
+  run bash -c "printf '%s' '{\"session_id\":\"../outside-marker\",\"prompt\":\"pwned\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ ! -f "$outside" ]
   [ ! -d "$LAST_INPUT_STATE_DIR" ] || [ -z "$(ls -A "$LAST_INPUT_STATE_DIR" 2>/dev/null)" ]
 }
 
