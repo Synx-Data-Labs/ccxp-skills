@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-09-28
 estimation: 2
 source: this /autopilot run, discovered when a dispatched /drive sub-agent
@@ -173,12 +173,15 @@ Candidates 2 and 3 are rejected — reasons below.
 
 ## Test plan
 
-- [ ] `python3 repo-conventions/scripts/test_lint_tasks.py -v` — new
-  `check_not_done_in_todo` cases pass locally
-- [ ] Manual regression per the original Done-criteria ask: create a
-  throwaway `dev/TODO/T00000000-000000-test.md` with `status: Done`, run
-  `python3 repo-conventions/scripts/lint_tasks.py --all .`, confirm it
-  fails; delete the throwaway file, confirm a clean run
+- [x] `python3 repo-conventions/scripts/test_lint_tasks.py -v` — new
+  `check_not_done_in_todo` cases pass locally (50/50 tests OK, 4 new:
+  `test_done_status_in_todo_fails`, `test_done_status_in_parking_passes`,
+  `test_narrated_done_status_in_todo_fails`,
+  `test_non_done_status_in_todo_passes_the_new_check`)
+- [x] Manual regression per the original Done-criteria ask: created a
+  throwaway `dev/TODO/T00000000-000000-test.md` with `status: Done`, ran
+  `python3 repo-conventions/scripts/lint_tasks.py --all .` — failed with
+  the new message; deleted the throwaway file — clean run (22/22 conform)
 - [ ] CI (`tests.yml`'s `lint-tasks` job) green on the PR
 
 ## Done criteria
@@ -186,7 +189,7 @@ Candidates 2 and 3 are rejected — reasons below.
 - [x] A decision recorded on which mitigation(s) from the Solution
   sketch above are worth implementing — Candidate 1 only (see Solution
   above); Candidates 2 and 3 explicitly rejected with reasons
-- [ ] CI guard implemented, tested, and verified to actually catch a
+- [x] CI guard implemented, tested, and verified to actually catch a
   `status: Done` file sitting in `dev/TODO/` — satisfied by
   `check_not_done_in_todo` in `repo-conventions/scripts/lint_tasks.py`
   plus its `test_lint_tasks.py` regression cases (see Test plan)
