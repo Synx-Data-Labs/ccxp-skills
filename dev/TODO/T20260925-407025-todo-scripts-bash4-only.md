@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: /ccxp interactive run, 2026-09-25 — Phase 1.2b top-5 computation on build-pipeline-repo
 related: T20260914-359646 (introduced todo-list.sh/todo-next.sh as local scripts)
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260925-407025: `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
