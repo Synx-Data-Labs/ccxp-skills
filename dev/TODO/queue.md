@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20260922-409644](T20260922-409644-disable-model-invocation-never-used.md): `disable-model-invocation` is never set to `true` anywhere in ccxp-skills
 - [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md): `_tc_pr_owner`/`_tc_resolve_task_location` misreads `unknown` for a same-repo close PR whose body `Task:` link points at a not-yet-merged path
 - [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md): `Skill` tool invocations can serve stale cached skill content that disagrees with the live repo checkout
 - [T20260923-292618](T20260923-292618-retire-superpowers-dependency-survey.md): Survey retiring the `superpowers` plugin dependency
