@@ -82,7 +82,10 @@ non-blocking, print-and-continue policy, surfaced right before the commit so the
 about its own writing:
 
 ```bash
-CHANGED_TASKS=$(git status --porcelain | awk '{print $2}' | grep -E '^dev/(TODO|PARKING)/.*\.md$' || true)
+CHANGED_TASKS=$(git status --porcelain | awk '
+  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
+  { line=substr($0,4); sub(/.* -> /, "", line); print line }
+' | grep -E '^dev/(TODO|PARKING)/.*\.md$' || true)
 if [ -n "$CHANGED_TASKS" ]; then
   python3 ../repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
 fi
@@ -97,7 +100,10 @@ Also auto-link task/issue/PR references in any changed `dev/TODO/`/`dev/JOURNAL/
 `T<id>` refs and typed `PR #N`/`issue #N` refs clickable (T20260616-130977):
 
 ```bash
-CHANGED_REFS=$(git status --porcelain | awk '{print $2}' | grep -E '^dev/(TODO|JOURNAL)/.*\.md$' || true)
+CHANGED_REFS=$(git status --porcelain | awk '
+  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
+  { line=substr($0,4); sub(/.* -> /, "", line); print line }
+' | grep -E '^dev/(TODO|JOURNAL)/.*\.md$' || true)
 if [ -n "$CHANGED_REFS" ]; then
   python3 ../repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
 fi
