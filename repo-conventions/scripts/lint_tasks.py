@@ -178,24 +178,36 @@ def check_scheduled_when_advanced(ctx):
     return []
 
 
+DONE_EQUIVALENT_HEADS = {"done", "closed"}
+
+
 def check_not_done_in_todo(ctx):
-    """A dev/TODO/ file whose status leads with 'done' should already have
-    been journal-moved to dev/JOURNAL/ (T20260914-422854: every close
-    journal-moves immediately — there is no deferred-close path left).
+    """A dev/TODO/ file whose status leads with 'done' or 'closed' should
+    already have been journal-moved to dev/JOURNAL/ (T20260914-422854: every
+    close journal-moves immediately — there is no deferred-close path left).
+
+    'closed' is included alongside 'done': actions/sync-tasks/sync.py's
+    status_to_option_id treats a 'closed'-leading status as Done-equivalent
+    for the Project-board sync (`s.startswith("closed") or
+    s.startswith("done")` -> Done), so a dev/TODO file reading 'status:
+    Closed' already syncs to the board as Done — it must trip this guard the
+    same way 'status: Done' does, or the exact symptom this check exists for
+    (a Done-equivalent file stranded in dev/TODO) slips through via the
+    other spelling. Caught in independent review of PR #219.
 
     Scope is dev/TODO/ only, never dev/PARKING/: a parked task keeps
     whatever status it had when parked, and 'parked' can never collide with
-    the 'done' leading token anyway, so no PARKING case can trip this.
-    Catches the symptom regardless of cause — a stale-skill-cache miss
+    either Done-equivalent leading token anyway, so no PARKING case can trip
+    this. Catches the symptom regardless of cause — a stale-skill-cache miss
     (T20260922-201976), a hand-edited close, or any other path that can
-    produce a dev/TODO/ file with status: Done — not just the one incident
-    that prompted it."""
+    produce a dev/TODO/ file with a Done-equivalent status — not just the
+    one incident that prompted it."""
     if "status" not in ctx.keys:
         return []
     if "TODO" not in ctx.path.parts:
         return []
     head = status_head(ctx.keys["status"])
-    if head != "done":
+    if head not in DONE_EQUIVALENT_HEADS:
         return []
     return [
         f"status '{ctx.keys['status']}': file is still in dev/TODO but "
