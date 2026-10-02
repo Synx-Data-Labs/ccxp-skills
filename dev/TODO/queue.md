@@ -24,3 +24,6 @@ reprioritize.
 - [T20261001-334141](T20261001-334141-vendor-mattpocock-diagnosing-bugs-replace-superpowers.md): Vendor `mattpocock/skills` `diagnosing-bugs` to replace the `superpowers:systematic-debugging` soft gate
 - [T20261001-995405](T20261001-995405-scope-native-verification-before-completion-replacement.md): Scope a native replacement for the `superpowers:verification-before-completion` hard gate (no ready mattpocock equivalent)
 - [T20261002-363468](T20261002-363468-skill-conventions-script-drift-detection.md): Detect drift between a bundled `scripts/` helper and the SKILL.md prose it replaced
+- [T20261002-219904](T20261002-219904-document-ipm-ceremony-as-optional.md): Document `/ccxp`'s Monday IPM ceremony as optional/ad-hoc, not a mandatory cron step
+- [T20261002-245216](T20261002-245216-retro-bump-detector-dormant-note-and-stale-field-cleanup.md): Note retro's bump-3x/2x detectors as dormant-by-design; clean up two stale cross-references
+- [T20261002-359869](T20261002-359869-lifecycle-md-note-ipm-board-mirror-opt-in.md): Note in `lifecycle.md` that IPM / `scheduled:` board-mirroring is opt-in

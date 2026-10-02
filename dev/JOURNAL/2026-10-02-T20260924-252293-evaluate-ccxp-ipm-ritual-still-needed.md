@@ -1,12 +1,12 @@
 ---
-status: Design
+status: Done
 estimation: 2
 source: 2026-09-24 conversation — surfaced while designing T20260924-232855
   (estimation → story points); the human driving this work confirmed the
   weekly IPM/GH-Project-board cadence has been abandoned for a long time
 related: T20260924-232855
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
@@ -211,6 +211,53 @@ follow-ups) — but the decision this task exists to make:
       elsewhere; `scheduled:` and bump-detectors unaffected; 3-line split
       moot; `/todo next` already dropped the scoring the ceremony used to
       add).
-- [ ] Follow-up mechanical tasks filed for the skill-doc edits (see
-      `## Solution`'s "Mechanical follow-through" list) — done at Phase 7
-      close, not in this design PR.
+- [x] Follow-up mechanical tasks filed for the skill-doc edits (see
+      `## Solution`'s "Mechanical follow-through" list) — T20261002-219904,
+      T20261002-245216, T20261002-359869 (below).
+
+## Closed (2026-10-02)
+
+- Design merged in **PR #239** (`t20260924-252293-design`), claim merged in
+  **PR #238** (`t20260924-252293-claim`).
+- Decision: retire `/ccxp`'s mandatory Monday IPM budget-cut ceremony;
+  continuous `/todo next` + `/drive` off `queue.md` is the documented
+  planning loop going forward. `/ipm`/`/incept` remain available as
+  optional, ad-hoc tools. `scheduled:` frontmatter and the GH Project
+  iteration mirror are unaffected — they already work independently of the
+  ceremony.
+- Independent review (dispatched via `Agent` tool) caught one substantive
+  gap (Q4's evidence chain didn't engage `ipm/SKILL.md:104`'s own stale
+  claim about `/todo next`'s ranking) and two minor structural nits — all
+  fixed in a follow-up commit on the design PR before merge.
+- **Follow-up tasks filed** (mechanical skill-doc edits, not decided here,
+  staged into the next iteration):
+  - T20261002-219904 — document the IPM ceremony as optional/ad-hoc in
+    `ccxp/SKILL.md`.
+  - T20261002-245216 — note retro's bump-3x/2x detectors as dormant-by-design,
+    and clean up two stale cross-references (`priority: High`,
+    `ipm/SKILL.md:104`).
+  - T20261002-359869 — note in `lifecycle.md` that IPM/`scheduled:`
+    board-mirroring is opt-in.
+- What's external/unverified: whether any *other* consumer repo's `/ccxp`
+  install still runs a live Monday IPM against a configured GH Project
+  board — out of scope for this clone to confirm; the decision deliberately
+  leaves every mechanic another repo might depend on (`scheduled:`, the
+  Project iteration mirror) unchanged, so this is not a hard blocker on the
+  decision itself.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (decision
+  record, no code/script changed).
+- Verification (`superpowers:verification-before-completion`): yes —
+  evidence re-checked directly against live files (`git log`,
+  `todo/SKILL.md`, `ccxp/SKILL.md:359`, `ipm/SKILL.md:104`) before and after
+  the independent review pass.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get
+  stuck; no test failures or contradictory behavior to diagnose.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  dispatched an independent review agent on the design PR diff; one
+  substantive finding (stale evidence chain on Q4) was fixed rather than
+  argued with, after confirming the finding was correct against
+  `ipm/SKILL.md:104` and `todo/SKILL.md` directly; two minor structural nits
+  fixed alongside.
