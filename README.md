@@ -70,7 +70,7 @@ shares:
     Unset/empty means Phase 4d reports "no scoreboard reachable" and skips.
   - `ROADMAP_TARGET_REPO` — `<owner>/<repo>` of a separate hub repo whose
     `dev/ROADMAP.md` gets the week's IPM commit propagated into it.
-    Required only if `ccxp` Phase 2a.5b actually runs; `update-roadmap.sh`
+    Required only if `/ipm` step 5b actually runs; `update-roadmap.sh`
     exits with a clear error (no clone/PR attempted) if unset when needed.
   - `KNOWN_SIBLING_REPOS` — comma-separated sibling repo names
     `repo-conventions/scripts/lint_refs.py` treats as "foreign" for bare
@@ -103,7 +103,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
 | `eta` | Projected finish time for the current (or an explicit) task — elapsed vs. remaining estimation |
 | `new-task` | File a new task to the `dev/TODO` backlog |
-| `incept` | Adversarial frontier-round interview of a task/plan before implementation; the `/ccxp` Phase 2a.3 pre-IPM design pass |
+| `incept` | Adversarial frontier-round interview of a task/plan before implementation; the `/ipm` step 3 pre-IPM design pass |
 | `gcpr` (alias `land`) | Commit & push uncommitted changes, open a PR, hand off to `address-pr` |
 | `address-pr` | Address PR review comments, verify CI + hard gate, merge or notify |
 | `cleanup-branch` | Post-merge branch cleanup — a specific branch, a PR-merge sweep, or a bulk prune |

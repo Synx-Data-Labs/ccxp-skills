@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-21
 estimation: 1
 source: discovered driving T20260923-584914, 2026-09-23
 related: T20260923-584914
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260923-553033: Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
@@ -59,3 +59,43 @@ claimed_role: interactive
 - Scope is bigger than a single-file grep this time (8 files across the
   repo) — worth timeboxing to ~1h and doing as its own focused sweep
   rather than folding into another task's diff.
+
+## Closed (2026-10-02)
+
+Shipped in this PR (claim landed separately in PR #236). Repo-wide
+`grep -rn '2a\.[0-9]' --include='*.md' .` re-run after the fix, excluding
+`dev/JOURNAL/` and this task's own file (which quotes the pattern as
+problem description, not a live pointer):
+
+- **Fixed** (updated to cite `/ipm`'s plain-number step): `incept/SKILL.md`
+  (6 refs: frontmatter description + lines 19, 108, 116, 124, 133),
+  `retro/SKILL.md` (2 refs), `skill-conventions/SKILL.md` (1 ref,
+  replaced the now-dangling `Phase 2a.5` example with `/ipm step 5`),
+  `lifecycle.md` (4 refs), `README.md` (2 refs), `_session/README.md`
+  (2 refs), `glossary.md` (1 ref).
+- **Also fixed, beyond the original 8-file list** (found live during the
+  verification grep, matching the broader Done-criteria wording "every
+  live file"): `dev/TODO/T20260924-252293-*.md` (1 ref) and
+  `dev/TODO/T20260928-115329-*.md` (3 refs) — both open task files citing
+  the old numbering as a design precedent.
+- **Left as deliberate historical annotation** (criterion b):
+  `ccxp/SKILL.md:121` (pre-existing "now `/ipm` step 3" note) plus the
+  *new* "formerly ... Phase 2a.N" annotations added to the two TODO files
+  above, following that same pattern.
+- **Out of scope, treated like `dev/JOURNAL/`**: `dev/quality/skill-review-2026-09-28/{batch1,batch2,batch3}.md`
+  — dated review-snapshot artifacts documenting findings as of that
+  review; rewriting them would falsify what was actually found, same
+  reasoning that keeps JOURNAL frozen.
+- Verification: `grep -rln '2a\.[0-9]' --include='*.md' . | grep -v
+  dev/JOURNAL | grep -v dev/quality | grep -v T20260923-553033` returns
+  only `ccxp/SKILL.md` (the pre-existing annotation) and the two TODO
+  files with their new, intentional "formerly" annotations.
+
+No follow-up tasks filed — this was a self-contained doc-pointer sweep.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (Phase 3.0 classifier: `*.md`-only change)
+- Verification (`superpowers:verification-before-completion`): yes — repo-wide re-grep confirming every live reference was either fixed or deliberately annotated, plus `lint-docs.sh` and `lint_tasks.py` on all changed files
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no — no Copilot/independent-review comments on this doc sweep beyond the claim PR's own clean-bill review

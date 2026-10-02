@@ -1,6 +1,6 @@
 ---
 name: incept
-description: Use when the user explicitly asks to grill, interview, or stress-test a plan or task before implementation, or when /ccxp Phase 2a.3 runs a pre-IPM design pass on a Tier 2 candidate
+description: Use when the user explicitly asks to grill, interview, or stress-test a plan or task before implementation, or when /ipm step 3 runs a pre-IPM design pass on a Tier 2 candidate
 disable-model-invocation: false
 argument-hint: "[task-id | free-text plan]"
 ---
@@ -16,7 +16,7 @@ Vendors the frontier-round interview mechanics from Matt Pocock's
 `grilling` skill (`mattpocock/skills`) directly into this suite's own
 prose — no runtime dependency on that plugin — with the repo-specific
 wiring layered on top: the output lands in a `dev/TODO/` task file's
-Design section so `/ccxp` Phase 2a.3 and `/drive` Phase 2 can consume it.
+Design section so `/ipm` step 3 and `/drive` Phase 2 can consume it.
 
 ## Argument
 
@@ -105,7 +105,7 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
   level — `dev/guidelines.md` Documentation rules).
 - If the estimate changed, update the `estimation:` frontmatter and append
   to the Design section: `Estimation revised from {old} to {new}: {reason}`
-  (the exact shape `/ccxp` Phase 2a.3 step 3 and `/retro`'s
+  (the exact shape `/ipm` step 3.3 and `/retro`'s
   estimate-vs-actual grading expect).
 - If `status:` is currently `Open`, advance it to `Design` — a completed
   grilling session settling the design is exactly that lifecycle
@@ -113,7 +113,7 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
   `Review`, `Blocked by T{id}`, etc.) untouched — grilling doesn't reopen
   or rewind a task already past `Design`.
 - Do **not** change `claimed_by:` or `scheduled:` — the caller owns claim
-  lifecycle (`/ccxp` 2a.3 step 4 claims; `/drive` Phase 2 does its own).
+  lifecycle (`/ipm` step 3.4 claims; `/drive` Phase 2 does its own).
 - Lint the touched file, scoped, never repo-wide:
 
   ```bash
@@ -121,8 +121,8 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
   bash ../_docs/lint-docs.sh dev/TODO/T<id>-*.md
   ```
 
-Leave the change uncommitted — the caller decides how it lands (`/ccxp`
-2a.3 batches all candidates into one PR; an ad-hoc user runs `/gcpr`).
+Leave the change uncommitted — the caller decides how it lands (`/ipm`
+step 3 batches all candidates into one PR; an ad-hoc user runs `/gcpr`).
 
 ## Important Notes
 
@@ -130,8 +130,8 @@ Leave the change uncommitted — the caller decides how it lands (`/ccxp`
   is `/drive`'s job after an explicit green light.
 - **Do not accept "I don't know" as final.** Offer options, trade-offs, and
   a recommendation; if the user still can't decide, record it under *Open*
-  and, when it blocks implementation, tell the caller so `/ccxp` 2a.3 step
-  2 can escalate via Slack and skip the task this week.
+  and, when it blocks implementation, tell the caller so `/ipm` step
+  3.2 can escalate via Slack and skip the task this week.
 - **Be adversarial.** The job is to find problems. If everything looks
   fine, look harder — a plan that survives zero pushback was not grilled.
 - **One round per message.** Do not batch dependent questions, and do not

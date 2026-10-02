@@ -55,7 +55,7 @@ This is this suite's counterpart to superpowers' subagent pressure-testing; we d
 
 - Sections: `## Argument`, then `## Workflow` (or `## Conventions` for reference skills), then `## Important Notes` — omit any that do not apply.
 - Write instructions **to Claude**, not to a human reader.
-- Use **phase numbers as stable anchors** (e.g. `Phase 2a.5`, `§2.d`) so other skills and journal entries can cite exact steps — see `/ccxp` phase numbering and `/address-pr` §-anchors.
+- Use **phase numbers as stable anchors** (e.g. `/ipm` step 5, `§2.d`) so other skills and journal entries can cite exact steps — see `/ccxp` phase numbering and `/address-pr` §-anchors.
 - Mark **best-effort** semantics explicitly when a step may fail without blocking the workflow — see the `_session` calls in `/address-pr`.
 
 ### 7. Cross-repo dispatch
