@@ -77,6 +77,15 @@ inserts both the blocker and the originally-requested task immediately above
 
 ### 3. Reorder `queue.md`
 
+Branch off `origin/main`, not whatever's checked out — a `/drive` call fires mid-feature-branch and would drag its commits in otherwise:
+
+```bash
+ORIG_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+git fetch origin main -q
+BRANCH="docs/top-$(date +%Y%m%d-%H%M%S)"
+git checkout -b "$BRANCH" origin/main  # fails on conflicting local changes — commit first, retry
+```
+
 **Default mode.** Read `dev/TODO/queue.md`. Process the **expanded** ID list
 from step 2 **in reverse order** — this is what makes first-listed end up
 truly first:
@@ -131,12 +140,8 @@ plain `/top`, which would have pushed them down too.
 ### 4. Commit, push, and merge
 
 ```bash
-BRANCH="docs/top-$(date +%Y%m%d-%H%M%S)"
-git checkout -b "$BRANCH"
 git add dev/TODO/queue.md
-# Also add any newly-untracked T<id> file (e.g. /drive minted it then
-# called /top) so creation + queue-placement land in one commit/PR —
-# same fix as /stage's step 3.
+# Also add any newly-untracked T<id> file (same fix as /stage).
 for id in T<id> [T<id> ...]; do
   f="$(git status --porcelain -- "dev/TODO/${id}-"*.md | awk '/^\?\?/{print $2}')"
   [ -n "$f" ] && git add "$f"
@@ -149,8 +154,11 @@ bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
 Then drive the PR to merge with `/address-pr <number>`. Pure `queue.md`
 reorder — lifecycle bookkeeping, not a code change — auto-merges under the
 pure status-change carve-out in `dev/branch-merge-policy.md` once standard
-gates pass. After merge: `git checkout main && git pull`, delete the local
-branch.
+gates pass.
+
+After merge: `git checkout "$ORIG_BRANCH"` (`git pull` too if that's
+`main`), delete the local `$BRANCH` — back to the caller's actual branch,
+not a hardcoded `main`.
 
 ### 5. Echo confirmation
 
@@ -186,7 +194,6 @@ Landed: PR #<n> merged
 - **Does not give any task permanent protection.** A `/top`'d task can be `/top`'d again by something else later — it's a position, not a lock. If an in-flight task needs to stay protected across the whole week, re-`/top` it if it drifts, or raise it at the IPM.
 - **`--before` mode does not verify the blocking relationship is real.** It trusts the caller (a human, `/stage`, or `/todo sweep`) to have already established that `T<id>` genuinely gates `T<targetId>` — it just performs the reposition. Garbage in, garbage out.
 - **Is not the P0 escalation channel.** `/top` reorders a list; it doesn't page anyone. For production-down / customer-blocked / security incidents, use the Slack escalation protocol (see `/todo`'s P0 escape hatch) — do that first, and `/top` the resulting task as a secondary, non-urgent bookkeeping step if it helps.
-- **Does not bundle unrelated working-tree changes** — step 4 adds only `queue.md` and any newly-untracked `T<id>` file(s) this call promotes, same scope discipline as `/stage`.
 
 ## When NOT to use `/top`
 
