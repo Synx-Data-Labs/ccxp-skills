@@ -1,10 +1,12 @@
 ---
-status: Design
-scheduled: 2026-10-05
+status: In Progress
+scheduled: 2026-09-28
 estimation: 2
 source: T20260914-412750 (research: learn from mattpocock/skills)
 related: T20260914-412750
 description: Adopt disable-model-invocation:true for skills that must be human-typed only, instead of relying on prose-only guardrails
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260922-409644: `disable-model-invocation` is never set to `true` anywhere in ccxp-skills — action-taking skills rely on prose alone to avoid surprise auto-fire
