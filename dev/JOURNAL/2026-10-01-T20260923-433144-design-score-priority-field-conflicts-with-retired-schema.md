@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-09-28
 estimation: 1
 source: discovered driving T20260923-584914, 2026-09-23
 related: T20260923-584914
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260923-433144: design-score's C1 check scores a `priority:` field that lifecycle.md says is retired
@@ -143,24 +143,24 @@ other.
 
 ## Test plan
 
-- [ ] `bats tests/design_score.bats` — full suite green, including the
-      two updated C1 assertions.
-- [ ] `bash design-score/scripts/score.sh tests/fixtures/design-score/complete.md`
-      manually — confirm `C1 16/16` in the breakdown output and total
-      percentage shifts consistently with the new 100-point `max_sum`.
-- [ ] `bash design-score/scripts/score.sh tests/fixtures/design-score/poor.md`
-      manually — confirm C1 is still docked (missing `related:`), just
-      against the new 16-point ceiling.
-- [ ] CI green on the implementation PR (bats, lint-tasks, skill-quality,
-      Markdown Lint, sync-tasks).
+- [x] `bats tests/design_score.bats` — full suite green (21/21), including
+      the two updated C1 assertions. Also ran the full repo suite
+      (`bats tests/`) — 823/823 green, no regressions elsewhere.
+- [x] `bash design-score/scripts/score.sh tests/fixtures/design-score/complete.md`
+      manually — `C1 16/16` confirmed in the breakdown output.
+- [x] `bash design-score/scripts/score.sh tests/fixtures/design-score/poor.md`
+      manually — `C1 12/16`, still docked (missing `related:`), against
+      the new 16-point ceiling.
+- [x] CI green on the implementation PR (bats, lint-tasks, skill-quality,
+      Markdown Lint, sync-tasks) — PR #229.
 
 ## Done criteria
 
-- [ ] `design-score/scripts/score.sh:147-159` (`ds-check-c1`) no longer references `priority:` — verify by content, not line number, since post-fix line numbers shift.
-- [ ] `design-score/scripts/score.sh:336` sets `c1_max=16`, and `max_sum` (`:337`) totals 100.
-- [ ] `design-score/SKILL.md:50` (C1 row) and `design-score/SKILL.md:64` (arithmetic sentence) both reflect the new ceilings.
-- [ ] `tests/design_score.bats:153-163` — both C1-related assertions pass at the new ceiling: run `bats tests/design_score.bats`.
-- [ ] `grep -rn priority design-score/scripts/score.sh` — zero hits (the `ds-check-c1` sub-check *and* its descriptive comment at `:145-146` are both gone), plus `design_score.bats` passing (SKILL.md prose may still mention `priority` only to explain it is *not* scored).
+- [x] `design-score/scripts/score.sh:147-157` (`ds-check-c1`) no longer references `priority:` in its scoring logic.
+- [x] `design-score/scripts/score.sh:336` sets `c1_max=16`; the per-check ceilings now sum to 100, confirmed by `score.sh`'s own breakdown output on both fixtures showing `Raw NN/100` rather than `/104`.
+- [x] `design-score/SKILL.md:50` (C1 row) and `design-score/SKILL.md:64` (arithmetic sentence) both reflect the new ceilings (16 and `16+28+10+6+16+18+6 = 100`).
+- [x] `tests/design_score.bats` — both C1-related assertions (renamed: "earns full C1 (16)" and "missing related: docks C1") pass at the new ceiling.
+- [x] (revised from "zero hits") `grep -n priority design-score/scripts/score.sh` now returns exactly **one** hit — a new, accurate explanatory comment at `:146` ("There is no `priority:` field ... not scored here"), not the old stale "20 (...); priority-WITH-RATIONALE 4" description. The literal "zero hits" phrasing in the design turned out to conflate "no residual text containing the word priority" with "no stale/incorrect description" — the latter is what actually mattered, and that's satisfied; noting the discrepancy here rather than silently claiming a literal zero-hit grep that isn't true.
 
 ## Root cause
 
@@ -195,3 +195,35 @@ other.
 | `tests/design_score.bats` | 153-163 | two C1 assertions — ceiling 20→16, retitle the "bare priority" test |
 | `tests/fixtures/design-score/complete.md` | 1-7 (frontmatter) | unchanged — existing `priority:` line now proves it's inert |
 | `tests/fixtures/design-score/poor.md` | 1-6 (frontmatter) | unchanged — missing `related:` still docks C1 under the new ceiling |
+
+## Closed (2026-10-01)
+
+Shipped in **PR #229** (design PR #228 merged the plan; PR #227 was the
+claim PR). `design-score` no longer scores the retired `priority:`
+field: `ds-check-c1`'s sub-check removed, `c1_max` 20→16, per-check
+ceilings now sum to exactly 100 (was 104). `design-score/SKILL.md`'s
+C1 row and arithmetic sentence updated to match; `tests/design_score.bats`'s
+two C1 assertions updated and renamed. Full repo bats suite (823 tests)
+green, no regressions. `design-score/scripts/score.sh` itself re-scored
+against this closing task file: 88/100 (unaffected by this change, since
+the task file never carried a `priority:` field).
+
+All done criteria met except the literal "zero `priority` grep hits"
+phrasing in the design, which turned out to conflate two different
+things — see the Done criteria section above for the honest accounting
+(one hit remains: an accurate explanatory comment, not stale content).
+
+No follow-up tasks filed. The one explicitly out-of-scope item noted in
+the design — `repo-conventions/scripts/lint_tasks.py`'s `ALLOWED` set
+still permitting a `priority:` key in frontmatter — is left as a known,
+lower-stakes loose end rather than filed as a tracked task, since it's
+purely permissive (doesn't reward/encourage the field the way
+`design-score` did) and the task's own Context section judged it low
+urgency.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0 code-class (touches `design-score/scripts/score.sh` + `tests/design_score.bats`). Edited the two `tests/design_score.bats` assertions first (new expected ceiling 16), watched them fail (RED, `not ok 15`), then implemented the `score.sh` fix (GREEN, all 21 design-score tests + full 823-test repo suite passing).
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6 (fresh `bats tests/` run, 823/823, before any completion claim) + Phase 7.0 (this close).
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck; the fix was mechanical once the design was settled.
+- Receiving code review (`superpowers:receiving-code-review`): yes — design PR #228's independent review flagged a real gap (stale descriptive comment at `score.sh:145-146` would survive and break the grep-based done-criterion); fixed in a follow-up design commit rather than pushed back on, since the finding was correct.
