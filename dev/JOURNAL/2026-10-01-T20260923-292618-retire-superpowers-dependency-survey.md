@@ -167,7 +167,7 @@ scheduled: 2026-09-28
 ## Done criteria
 
 - [x] Every superpowers call site inventoried with a proposed disposition — this file's `## Research findings` table (`T20260923-292618-retire-superpowers-dependency-survey.md:124`)
-- [x] Each concrete swap worth doing filed as its own follow-up task (`T20261001-289904`, `T20261001-334141`, `T20261001-995405`, all `scheduled: next`) — see `## Closed`
+- [x] Each concrete swap worth doing filed as its own follow-up task (`T20261001-289904`, `T20261001-334141`, `T20261001-995405`, each stamped `scheduled: 2026-10-12` via `stamp-scheduled.sh <file> next`) — see `## Closed`
 - [x] `mattpocock-skills` candidate equivalence verified against actual fetched `SKILL.md` content, not name alone — "Notable findings" bullet, this file's `## Research findings` section (`T20260923-292618-retire-superpowers-dependency-survey.md:124`)
 
 ## Closed (2026-10-01)
