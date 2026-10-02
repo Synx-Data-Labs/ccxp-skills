@@ -174,10 +174,13 @@ Candidates 2 and 3 are rejected — reasons below.
 ## Test plan
 
 - [x] `python3 repo-conventions/scripts/test_lint_tasks.py -v` — new
-  `check_not_done_in_todo` cases pass locally (50/50 tests OK, 4 new:
+  `check_not_done_in_todo` cases pass locally (51/51 tests OK, 5 new:
   `test_done_status_in_todo_fails`, `test_done_status_in_parking_passes`,
-  `test_narrated_done_status_in_todo_fails`,
-  `test_non_done_status_in_todo_passes_the_new_check`)
+  `test_closed_status_in_todo_fails`, `test_narrated_done_status_in_todo_fails`,
+  `test_non_done_status_in_todo_passes_the_new_check` — the `closed` case
+  added after independent review on PR #219 found the check originally
+  missed `status: Closed`, which `actions/sync-tasks/sync.py` treats as
+  Done-equivalent for the board sync)
 - [x] Manual regression per the original Done-criteria ask: created a
   throwaway `dev/TODO/T00000000-000000-test.md` with `status: Done`, ran
   `python3 repo-conventions/scripts/lint_tasks.py --all .` — failed with
@@ -213,16 +216,22 @@ Candidates 2 and 3 are rejected — reasons below.
 
 ## Skills invoked
 
-- TDD (`superpowers:test-driven-development`): yes — wrote the 4
-  `test_lint_tasks.py` cases first (confirmed 2 failures), then
-  implemented `check_not_done_in_todo` to green (50/50 pass)
+- TDD (`superpowers:test-driven-development`): yes — wrote the first 4
+  `test_lint_tasks.py` cases before `check_not_done_in_todo` existed
+  (confirmed 2 failures), implemented to green, then added a 5th case
+  (`test_closed_status_in_todo_fails`) test-first for the review finding
+  below before fixing the check itself (red, then green at 51/51)
 - Verification (`superpowers:verification-before-completion`): yes —
   manual throwaway-file regression (fail then clean), full
   `test_lint_tasks.py`/`test_lint_paragraphs.py`/`test_lint_identifiers.py`
   runs, full `bats` suite (872/872), `doc-impact.sh` review
 - Systematic debugging (`superpowers:systematic-debugging`): no — no
-  stuck test, straight TDD red-to-green on the first implementation
-- Receiving code review (`superpowers:receiving-code-review`): yes —
-  design PR #218's independent review found two off-by-a-few-lines
-  citations; fixed in a follow-up commit on that PR, no pushback needed
-  (the finding was correct)
+  stuck test, straight TDD red-to-green both times
+- Receiving code review (`superpowers:receiving-code-review`): yes, twice
+  — design PR #218's independent review found two off-by-a-few-lines
+  citations (fixed, no pushback, finding was correct); implementation
+  PR #219's independent review found a real false-negative (`status:
+  Closed` is Done-equivalent per `actions/sync-tasks/sync.py` but wasn't
+  matched) — verified against `sync.py:519-520` directly, confirmed
+  correct, fixed with a new `DONE_EQUIVALENT_HEADS` set and regression
+  test, no pushback
