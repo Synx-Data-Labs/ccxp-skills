@@ -200,9 +200,14 @@ Shipped in **PR #209** (design: PR #208).
   colon-space sequence inside SKILL.md's frontmatter description) was found
   by directly parsing the frontmatter with the same `yaml.safe_load` the CI
   check uses, not trial-and-error.
-- Receiving code review (`superpowers:receiving-code-review`): yes — the
-  independent review dispatched for the design PR (#208) found two wrong
-  `file:line` citations; both were fixed and re-verified rather than argued
-  away (the one borderline suggestion — reword the "Ships in PR #0"
-  done-criterion — was evaluated against the design-doc template's own
-  `complete.md` exemplar, which uses that exact pattern, and kept as-is).
+- Receiving code review (`superpowers:receiving-code-review`): yes, twice —
+  (1) the design PR (#208) review found two wrong `file:line` citations,
+  both fixed and re-verified; (2) the implementation PR (#209) review found
+  a real path-traversal gap (an unvalidated `session_id` used directly as a
+  filename, both read and write sides) and incomplete control-byte
+  stripping (only `\n`/`\t` were handled, leaving ESC/BEL sequences
+  replayable into the terminal) — both fixed, with new BATS coverage for
+  each, rather than argued away. One minor finding (UTF-8 byte-vs-char
+  truncation) was kept as-is: it's a cosmetic edge case squarely inside the
+  design's own "mechanical truncation only" scope, not a correctness or
+  security issue.
