@@ -143,8 +143,8 @@ independent sets of BATS coverage.
   reports "cross-repo link present" — the head-ref fallback gate
   correctly treats it as same-repo.
 - [x] Local full suite green pre-push: 823/823 (`bats tests/`, exit 0).
-- [ ] CI (`bats` workflow on the implementation PR) green — check during
-  `/address-pr`, before merge.
+- [x] CI (`bats` workflow on PR #215) green — all 5 checks passed
+  (Markdown Lint, bats, lint-tasks, skill-quality, sync-tasks).
 
 ## Done criteria
 
@@ -178,12 +178,17 @@ independent sets of BATS coverage.
   `tests/task_claim.bats` cases cover the same-repo-JOURNAL-link
   reproduction, the genuinely-cross-repo case, and the
   unresolvable-own-repo fail-closed case for both functions.
-- Full local suite green pre-push: 823/823 (`bats tests/`, exit 0). The
-  PR's own CI `bats` run is the one remaining unchecked test-plan item —
-  verified during `/address-pr` before merge, not re-asserted here.
+- Full local suite green pre-push: 823/823 (`bats tests/`, exit 0); PR
+  #215's own CI confirmed the same across all 5 checks. Independent
+  Claude Code review (dispatched during `/address-pr`): clean bill, 4
+  minor non-blocking observations posted as a PR comment, no code
+  changes needed.
 - No follow-up tasks filed — T20260918-404944's own "new"-PR mechanism
   and head-ref fallback were confirmed out of scope and left unchanged
-  (see `## Solution`).
+  (see `## Solution`). The review's 4 minor observations (an extra `gh
+  repo view` call, case-sensitive repo comparison, small `sed`
+  duplication, pre-existing shellcheck info note) were judged not worth
+  separate follow-up tasks — low-likelihood edge cases / cosmetic only.
 
 ## Skills invoked
 
@@ -204,6 +209,10 @@ independent sets of BATS coverage.
   link's date-prefixed basename never token-matches the task id in the
   first place, so the repo-match check needed to run BEFORE that match,
   not after it — corrected the root-cause framing in this doc to match.
-- Receiving code review (`superpowers:receiving-code-review`): TBD — not
-  yet driven through `/address-pr` as of this commit; updated once that
-  loop completes, before merge.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  dispatched an independent Claude Code review of the PR #215 diff during
+  `/address-pr`; it returned a clean bill (control-flow and test-mock
+  correctness both verified) with 4 minor non-blocking observations
+  (one extra `gh repo view` call, a case-sensitive repo-string compare,
+  a small `sed` duplication, and a pre-existing shellcheck info note) —
+  posted verbatim as a PR comment, no code changes needed.
