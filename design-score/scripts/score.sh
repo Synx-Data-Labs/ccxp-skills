@@ -142,8 +142,10 @@ ds-has-anchor() {
 
 # --- the seven checks -------------------------------------------------------
 
-# C1: frontmatter completeness — 20 (estimation/status/source/related 4 each;
-# priority-WITH-RATIONALE 4 — the value must carry text beyond the bare level).
+# C1: frontmatter completeness — 16 (estimation/status/source/related 4 each).
+# There is no `priority:` field (lifecycle.md, todo/SKILL.md,
+# repo-conventions/templates/task.md all agree it's retired) — not scored
+# here (T20260923-433144).
 ds-check-c1() {
   local file="$1" fm pts=0
   fm="$(ds-frontmatter "$file")"
@@ -151,10 +153,6 @@ ds-check-c1() {
   grep -qE '^status:[[:space:]]*\S'     <<<"$fm" && pts=$((pts+4))
   grep -qE '^source:[[:space:]]*\S'     <<<"$fm" && pts=$((pts+4))
   grep -qE '^related:[[:space:]]*\S'    <<<"$fm" && pts=$((pts+4))
-  # priority must have a rationale: a '—' or '-' delimiter followed by words.
-  if grep -qE '^priority:[[:space:]]*\S+.*[—-][[:space:]]*[A-Za-z]' <<<"$fm"; then
-    pts=$((pts+4))
-  fi
   printf '%d' "$pts"
 }
 
@@ -333,7 +331,7 @@ design-score() {
   # rebalancing, because raw/max is normalized to a 0-100 percentage below
   # rather than summed directly. (Plain scalars, not an associative array —
   # keeps this bash-3.2-compatible like the rest of the script.)
-  local c1_max=20 c2_max=28 c3_max=10 c4_max=6 c5_max=16 c6_max=18 c7_max=6
+  local c1_max=16 c2_max=28 c3_max=10 c4_max=6 c5_max=16 c6_max=18 c7_max=6
   local max_sum=$(( c1_max + c2_max + c3_max + c4_max + c5_max + c6_max + c7_max ))
 
   local c1 c2 c3 c4 c5 c6 c7 pen raw pct total
