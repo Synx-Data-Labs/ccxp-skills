@@ -50,7 +50,7 @@ Collect data from the last 7 days (or N*7 days if argument given). Do all reads 
 9. **This week's IPM commit**: Read `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` — the focus list to grade. If the file is missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
 10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
 
-    Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by ccxp Phase 2a.5; codified in T20260513-393048). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
+    Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by `/ipm` step 5; codified in T20260513-393048). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
 
 11. **Cron utilization** (T20260605-862341 — the feedback loop for tuning cron frequency without extra tokens): locate the ccxp cron clone's log dir — `crontab -l` names the `daily-ccxp.sh` path; its repo root contains `.claude-ccxp-logs/`. Fall back to `<current-repo-root>/.claude-ccxp-logs` if crontab is unreadable; if neither exists, report "no cron logs reachable from this clone" and skip the Phase 3 cron rows. For each `ccxp-YYYYMMDD.log` in the window (gunzip `.log.gz` archives as needed):
 
@@ -597,7 +597,7 @@ Creation safety-net — process-looking docs with no matching `dev/chore.md` row
 
 Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`.
 
-**Webhook fallback on MCP send failure (T20260910-872316, same pattern as `ccxp/SKILL.md` Phase 1.4 / 2a.6, T20260717-433409).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result. Don't let a failed send silently drop the week's retro from Slack:
+**Webhook fallback on MCP send failure (T20260910-872316, same pattern as `ccxp/SKILL.md` Phase 1.4 / `ipm/SKILL.md` step 6, T20260717-433409).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result. Don't let a failed send silently drop the week's retro from Slack:
 
 1. Attempt `slack_send_message` once, then one retry on error — 2 attempts total, no further looping (same policy as T20260717-433409/Phase 1.4).
 2. If both attempts error, capture the retro summary text into a variable and fall back to the same underlying script the `/slack` skill's `dev` channel uses:

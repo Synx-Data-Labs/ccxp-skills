@@ -83,7 +83,7 @@ Resolution reads the **authoritative `main` value** over the GitHub API (`conten
 | `/gcpr` | Step 6.6 (after `gh pr create`) | `pr_task_id.sh` → `set-pr-ref.sh <task_id> <pr-url>` |
 | `/address-pr` | Start (after PR identified via `pr_task_id.sh`) | `status.sh <task_id> Review` + `set-pr-ref.sh <task_id> <pr-url>` |
 | `/address-pr` | End (post-merge) | `status.sh <task_id> Done` |
-| `/ccxp` | Phase 2a.3 (design pass produces Design section) | `status.sh <task_id> Design` |
+| `/ipm` | Step 3 (design pass produces Design section) | `status.sh <task_id> Design` |
 | `/address-pr` | §1.6 (start, before any PR work) | `task_claim.sh pr-owner <pr>` → `mine`/`free`/`untracked` proceed; `owned:*`/`unknown` defer |
 | `/drive` | Phase 1 (claim PR, peer mode) | `task_claim.sh read\|reclaimable\|release-others\|acquire <id>` (release-others before acquire = release-on-pickup); Phase 7 `task_claim.sh release <id> <status>` |
 | `/ccxp` | Phase 0 tick | `reclaim_sweep.sh --apply` → free foreign dead-agent claims (incl. abandoned open-PR tasks) |
@@ -104,7 +104,7 @@ Resolving the identity **fails closed**. If `~/.claude/state/` cannot be written
 
 **Migrating an existing claim** needs no operator step: `_tc_acquire` re-stamps a legacy `<host>:<path>` claim whose path half is this clone, instead of refusing it. See `_tc_is_legacy_self_claim` for how narrow that carve-out is and the residual risk it knowingly accepts.
 
-**Convention: claim before flipping status.** Any path that moves a task's `status:` out of `Open` — `/drive`'s Phase 1, `/ccxp`'s Phase 2a.3 design pass, or a session acting on a direct maintainer prompt outside either — should call `task_claim.sh acquire` (with `release-others` first, for release-on-pickup) before or alongside the status change. `status.sh` alone is visualization-only and takes no lock (T20260610-248248); a status flip with no claim is invisible to a peer session's `/todo next` and can race. `_session/claim_gap.sh` (below) detects the gap when this convention is missed.
+**Convention: claim before flipping status.** Any path that moves a task's `status:` out of `Open` — `/drive`'s Phase 1, `/ipm`'s step 3 design pass, or a session acting on a direct maintainer prompt outside either — should call `task_claim.sh acquire` (with `release-others` first, for release-on-pickup) before or alongside the status change. `status.sh` alone is visualization-only and takes no lock (T20260610-248248); a status flip with no claim is invisible to a peer session's `/todo next` and can race. `_session/claim_gap.sh` (below) detects the gap when this convention is missed.
 
 Verbs (`task_claim.sh <verb> <id> [...]`): `read` (echo current `claimed_by`), `claimant-id` (this session's id), `pr-owner <pr>` (derive PR ownership from the PR's task — see [PR ownership](#pr-ownership-derived-from-the-task-claim)), `reclaimable <id>` (is the claim stale — see below), `acquire <id>` (write `claimed_by` / `status: In Progress`), `release <id> <final-status>` (clear the lock on close), `release-others [except-id]` (**release-on-pickup** — clear *every* task held by this identity so a session holds ≤1 active claim; the pick step calls this before `acquire`, keeping the optional about-to-be-acquired `except-id`). Pure logic is unit-tested in `tests/task_claim.bats`. See `/drive` Phase 1 ("Peer mode — cross-session claim lock") for the full claim-PR flow.
 

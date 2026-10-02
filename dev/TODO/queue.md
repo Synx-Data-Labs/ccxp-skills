@@ -7,7 +7,6 @@ front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
 - [T20260923-343482](T20260923-343482-gh-app-token-script.md): Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
-- [T20260923-553033](T20260923-553033-repo-wide-2a-N-reference-sweep-after-ipm-extraction.md): Sweep repo-wide stale `2a.N` references left after the `/ipm` extraction
 - [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
 - [T20260925-407025](T20260925-407025-todo-scripts-bash4-only.md): `todo/scripts/todo-list.sh` (and friends) require bash 4+, but macOS's default `/bin/bash` is 3.2
 - [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
