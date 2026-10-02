@@ -150,6 +150,30 @@ class LintTasksTest(unittest.TestCase):
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("missing H1" in m for m in out), out)
 
+    def test_done_status_in_todo_fails(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Done\nestimation: 2\nscheduled: 2026-06-09"), sub="TODO")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(
+            any("still in dev/TODO" in m and "T20260914-422854" in m
+                for m in out), out)
+
+    def test_done_status_in_parking_passes(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Done\nestimation: 2\nscheduled: 2026-06-09"), sub="PARKING")
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
+    def test_narrated_done_status_in_todo_fails(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Done — superseded by T20260914-422854\n"
+            "estimation: 2\nscheduled: 2026-06-09"), sub="TODO")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("still in dev/TODO" in m for m in out), out)
+
+    def test_non_done_status_in_todo_passes_the_new_check(self):
+        f = write_task(self.root, sub="TODO")  # default status: Open
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
     def test_all_lints_todo_and_parking_skips_journal(self):
         write_task(self.root, name="T20260611-000001-good.md", sub="TODO")
         write_task(self.root, name="T20260611-000002-park.md",

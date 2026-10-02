@@ -178,8 +178,35 @@ def check_scheduled_when_advanced(ctx):
     return []
 
 
+def check_not_done_in_todo(ctx):
+    """A dev/TODO/ file whose status leads with 'done' should already have
+    been journal-moved to dev/JOURNAL/ (T20260914-422854: every close
+    journal-moves immediately — there is no deferred-close path left).
+
+    Scope is dev/TODO/ only, never dev/PARKING/: a parked task keeps
+    whatever status it had when parked, and 'parked' can never collide with
+    the 'done' leading token anyway, so no PARKING case can trip this.
+    Catches the symptom regardless of cause — a stale-skill-cache miss
+    (T20260922-201976), a hand-edited close, or any other path that can
+    produce a dev/TODO/ file with status: Done — not just the one incident
+    that prompted it."""
+    if "status" not in ctx.keys:
+        return []
+    if "TODO" not in ctx.path.parts:
+        return []
+    head = status_head(ctx.keys["status"])
+    if head != "done":
+        return []
+    return [
+        f"status '{ctx.keys['status']}': file is still in dev/TODO but "
+        f"should have been journal-moved to dev/JOURNAL (T20260914-422854 — "
+        f"every close journal-moves immediately)"
+    ]
+
+
 CHECKS = (check_required, check_status, check_estimation,
-          check_allowlist, check_h1_id, check_scheduled_when_advanced)
+          check_allowlist, check_h1_id, check_scheduled_when_advanced,
+          check_not_done_in_todo)
 
 
 def lint_file(path):
