@@ -20,10 +20,10 @@ related: T20260610-248248
   done yet) gets silently flipped to `In Progress` the moment
   `/address-pr` claims it — misrepresenting the task as actively being
   coded.
-- `ccxp/SKILL.md` Phase 2a.3 step 4 already hit this exact issue
-  (T20260610-248248) and has the fix in place: `acquire` then
-  `bash <skills-root>/_session/status.sh <task-id> Design` to correct the
-  status back. `address-pr/SKILL.md` §1.6's `free` procedure has no
+- `/ipm` step 3.4 (formerly `ccxp/SKILL.md` Phase 2a.3 step 4) already hit
+  this exact issue (T20260610-248248) and has the fix in place: `acquire`
+  then `bash <skills-root>/_session/status.sh <task-id> Design` to correct
+  the status back. `address-pr/SKILL.md` §1.6's `free` procedure has no
   equivalent step.
 - Surfaced via an independent review on [PR #164](https://github.com/Synx-Data-Labs/ccxp-skills/pull/164) (`incept/SKILL.md`'s own
   Open→Design fix), which correctly noted that fix alone doesn't close
@@ -37,7 +37,7 @@ related: T20260610-248248
   `task_claim.sh acquire <id>` succeeds, read the task's status as it was
   *before* the acquire call; if it was `Design` (or anything other than
   `Open`/empty), correct it back via `status.sh <id> <original-status>` —
-  mirroring `ccxp/SKILL.md` Phase 2a.3 step 4's existing pattern.
+  mirroring `/ipm` step 3.4's existing pattern.
 - Consider whether `new` (T20260918-404944's claim-on-PR-branch
   procedure) has the same gap, since it also calls `acquire` directly.
 
@@ -46,8 +46,8 @@ related: T20260610-248248
 - [ ] `address-pr/SKILL.md` §1.6's `free` (and `new`, if applicable)
   procedure preserves a pre-existing `Design` status across the claim
   instead of overwriting it to `In Progress`
-- [ ] Cross-referenced against `ccxp/SKILL.md` Phase 2a.3 step 4's
-  existing correction pattern for consistency
+- [ ] Cross-referenced against `/ipm` step 3.4's existing correction
+  pattern for consistency
 
 ## Out of scope
 
