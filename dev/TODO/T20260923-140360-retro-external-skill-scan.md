@@ -1,6 +1,9 @@
 ---
-status: Open
+status: Design
 estimation: 3
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-09-28
 ---
 
 # T20260923-140360: Add an external-skillset scan to /retro
