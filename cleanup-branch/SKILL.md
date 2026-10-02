@@ -1,7 +1,7 @@
 ---
 name: cleanup-branch
 description: Use when the user explicitly asks to clean up local branches after merged PRs — a specific just-merged branch, a full PR-merge sweep, or a bulk prune of branches whose upstream is gone
-disable-model-invocation: false
+disable-model-invocation: true
 argument-hint: "[branch-name | prune [--dry-run]]"
 ---
 
