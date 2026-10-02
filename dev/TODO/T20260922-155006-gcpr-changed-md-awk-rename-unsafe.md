@@ -1,9 +1,11 @@
 ---
-status: Open
-scheduled: 2026-10-05
+status: In Progress
+scheduled: 2026-09-28
 estimation: 1
 source: PR #64's independent review, 2026-09-22 — the same `awk '{print $2}'` pattern this PR fixed for `CHANGED_MD` also exists at two other call sites in the same file
 related: T20260910-919422
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260922-155006: `gcpr/SKILL.md`'s `CHANGED_TASKS`/`CHANGED_REFS` extraction is rename/delete-unsafe, same bug as the fixed `CHANGED_MD` one
