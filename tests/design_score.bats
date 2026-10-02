@@ -150,17 +150,21 @@ json_score() {
   [ "$(jq -r '.checks.placeholder' <<<"$output")" -eq 0 ]
 }
 
-@test "frontmatter completeness: complete fixture earns full C1 (20)" {
+@test "frontmatter completeness: complete fixture earns full C1 (16)" {
+  # priority: is no longer scored (retired field, T20260923-433144) — the
+  # complete.md fixture's existing priority: line is now inert, proving it
+  # doesn't accidentally re-award points.
   run bash "$SCORE" "$FIX/complete.md" --json
-  [ "$(jq -r '.checks.C1' <<<"$output")" -eq 20 ]
+  [ "$(jq -r '.checks.C1' <<<"$output")" -eq 16 ]
 }
 
-@test "frontmatter: bare priority (no rationale) and missing related dock C1" {
-  # poor.md has a bare 'P2' priority and no 'related:' field.
+@test "frontmatter: missing related: docks C1" {
+  # poor.md has a bare 'P2' priority (now irrelevant/unscored) and no
+  # 'related:' field — the missing required field is what docks C1.
   run bash "$SCORE" "$FIX/poor.md" --json
   local c1
   c1="$(jq -r '.checks.C1' <<<"$output")"
-  [ "$c1" -lt 20 ]
+  [ "$c1" -lt 16 ]
 }
 
 @test "done-criteria mapping: complete fixture maps all items (C5 = 16)" {

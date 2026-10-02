@@ -47,7 +47,7 @@ bash ../design-score/scripts/score.sh <task-file>
 
 | # | Check | Max | What it measures |
 |---|-------|-----|------------------|
-| C1 | Frontmatter completeness | 20 | `estimation` · `status` · `source` · `related` (4 each) + `priority` **with a rationale** (4 — the value must carry text beyond the bare level, e.g. `P2 — <why>`). `scheduled` is set by the IPM and is **not** scored. |
+| C1 | Frontmatter completeness | 16 | `estimation` · `status` · `source` · `related` (4 each). `scheduled` is set by the IPM and is **not** scored; `priority` is a retired field (see `lifecycle.md`/`todo/SKILL.md`) and is likewise **not** scored. |
 | C2 | §Common section presence | 28 | The 7 body sections — `TLDR`, `Problem`, `Plan`/`Scope`/`Solution`, `Test plan`, `Done criteria`, `Closed`, `Skills invoked` — 4 each. `TLDR` is mandatory, not a bonus: a design a maintainer can't skim in 10 seconds fails its primary job. |
 | C3 | §Code-only handling | 10 | **code-class:** `Root cause` (5) + `Repo file references` (5). **docs-class:** full 10, **but −5** if stubbed code-only sections are present (padding). |
 | C4 | Test-plan checkbox | 6 | The Test-plan section has ≥1 `- [ ]` / `- [x]`. |
@@ -61,7 +61,7 @@ section — pick whichever fits the task (see the template). `Context` and
 separately scored — adding or omitting them doesn't move C1–C7. `TLDR` *is*
 scored, as part of C2 above — it's required, not optional.
 
-**The checks' maxes (20+28+10+6+16+18+6 = 104) don't need to sum to 100.**
+**The checks' maxes (16+28+10+6+16+18+6 = 100) don't need to sum to 100.**
 `design-score` sums the earned points (`raw`), sums the checks' own ceilings
 (`max_sum`), and normalizes: `pct = round(100 * raw / max_sum)`. Adding an 8th
 check later is one new function plus one new `max_sum` term — no hand-trimming
