@@ -105,7 +105,7 @@ Candidates 2 and 3 are rejected — reasons below.
   equals `done`. Violation message references T20260914-422854 (every
   close journal-moves immediately) and tells the reader to move the file
   into `dev/JOURNAL`. Reuses
-  the existing `status_head()` helper (`repo-conventions/scripts/lint_tasks.py:71-79`)
+  the existing `status_head()` helper (`repo-conventions/scripts/lint_tasks.py:67-78`)
   for the same leading-token tolerance every other status check already
   gets (a narrated `Done — superseded by T…` still matches).
   - `Ctx` doesn't currently carry which directory a file came from —
@@ -166,7 +166,7 @@ Candidates 2 and 3 are rejected — reasons below.
 
 | File | Lines | Purpose |
 |---|---|---|
-| `repo-conventions/scripts/lint_tasks.py` | 71-79 (`status_head`), 107-114 (`check_status`, model for the new check), 181-182 (`CHECKS` tuple) | add `check_not_done_in_todo` here, register it in `CHECKS` |
+| `repo-conventions/scripts/lint_tasks.py` | 67-78 (`status_head`), 109-116 (`check_status`, model for the new check), 181-182 (`CHECKS` tuple) | add `check_not_done_in_todo` here, register it in `CHECKS` |
 | `repo-conventions/scripts/test_lint_tasks.py` | (new cases, mirroring existing per-check test shape) | regression coverage for the new check |
 | `.github/workflows/tests.yml` | 60-68 (`lint-tasks` job) | already runs `test_lint_tasks.py -v` — no workflow change needed |
 | `actions/lint-tasks/action.yml` | 18 | consumer-repo entry point that calls `lint_tasks.py --changed`/`--all` — picks up the new check automatically once this PR merges |
