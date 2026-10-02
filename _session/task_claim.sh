@@ -631,6 +631,46 @@ _tc_reclaimable() {
 
 # --- PR ownership, DERIVED from the task claim (T20260622-404636) ------------
 
+_tc_filter_task_filename() {
+  # $1 id; reads candidate filenames on stdin (one per line), prints only
+  # those matching "$id-*.md" or "$id.md".
+  #
+  # Pulled out into its own top-level function rather than inlined as
+  # `... | while IFS= read -r nm; do case "$nm" in ...; esac; done` directly
+  # inside a `$(...)` command substitution: macOS's stock `/bin/bash`
+  # (3.2.57 — the last GPLv2 release Apple ships, still the default `bash`
+  # on `$PATH` ahead of a Homebrew install) cannot parse a `case` statement
+  # embedded inside a `$()` command substitution at all — it misparses the
+  # pattern-terminating `)` as closing the substitution early, regardless of
+  # whether the pattern uses `|` alternation (reproduced and confirmed for
+  # T20260925-407025: even a bare single-pattern `case` inside `$()` fails
+  # under that build; backtick substitutions are unaffected). Defining the
+  # `case` in a separately-parsed function and only *calling* it from within
+  # the `$()` pipeline keeps the literal "case" text out of the substitution
+  # bash is scanning, which sidesteps the bug entirely.
+  local id="$1" nm
+  while IFS= read -r nm; do
+    case "$nm" in
+      "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;;
+    esac
+  done
+}
+
+_tc_filter_url_by_task_basename() {
+  # $1 id; reads candidate URLs on stdin (one per line), prints only those
+  # whose basename matches "$id-*.md" or "$id.md". Same bash-3.2 `case`-
+  # inside-`$()` rationale as `_tc_filter_task_filename` above — kept as a
+  # separate function (rather than reused) because this one matches on
+  # `basename "$u"` while printing the full `$u`, not the matched name.
+  local id="$1" u
+  while IFS= read -r u; do
+    [ -n "$u" ] || continue
+    case "$(basename "$u")" in
+      "$id"-*.md|"$id".md) printf '%s\n' "$u" ;;
+    esac
+  done
+}
+
 _tc_resolve_task_location() {
   # $1 pr  $2 task-id → echo "<owner/repo>\t<path-to-task-file>" or empty (+ nonzero).
   #
@@ -684,10 +724,7 @@ _tc_resolve_task_location() {
     # longer colliding id through (T…404636 vs T…4046369) — then dedupe. Resolve
     # only if EXACTLY ONE distinct hub link remains: zero (all mislinks) or >1
     # (ambiguous / a same-id decoy line in another repo) → fail closed → defer.
-    matched="$(printf '%s\n' "$links" | while IFS= read -r u; do
-      [ -n "$u" ] || continue
-      case "$(basename "$u")" in "$id"-*.md|"$id".md) printf '%s\n' "$u" ;; esac
-    done | sort -u)"
+    matched="$(printf '%s\n' "$links" | _tc_filter_url_by_task_basename "$id" | sort -u)"
     n="$(printf '%s' "$matched" | grep -c .)"
     [ "$n" -eq 1 ] || return 1
     url="$matched"
@@ -709,7 +746,7 @@ _tc_resolve_task_location() {
   for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
     name="$(_session_gh api "/repos/$repo/contents/$dir?ref=main" \
             --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
-            | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
+            | _tc_filter_task_filename "$id" \
             | head -1)"
     [ -n "$name" ] && { printf '%s\t%s/%s' "$repo" "$dir" "$name"; return 0; }
   done
@@ -755,7 +792,7 @@ _tc_resolve_task_location_head() {
   for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
     name="$(_session_gh api "/repos/$repo/contents/$dir?ref=$head" \
             --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
-            | while IFS= read -r nm; do case "$nm" in "$id"-*.md|"$id".md) printf '%s\n' "$nm" ;; esac; done \
+            | _tc_filter_task_filename "$id" \
             | head -1)"
     [ -n "$name" ] && { printf '%s\t%s/%s\t%s' "$repo" "$dir" "$name" "$head"; return 0; }
   done
