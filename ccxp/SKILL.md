@@ -238,19 +238,31 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 `.github/workflows/slack-notify.yml` fires an immediate, unclassified alert to `#acme-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note). Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in `#acme-dev-notifications`, a different channel. **Design rationale (T20260726-296410)**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2, check whether it has a matching alert and reply on it:
 
+**Uses `_slack/webapi.sh` (bot token via the Slack Web API, no MCP) — see T20261001-319589.** The old `mcp__claude_ai_Slack__*` OAuth-connector tools (`slack_search_public_and_private`, `slack_read_thread`, `slack_send_message`) are unavailable in cron/headless sessions, which is every ccxp tick — that gap is exactly why the two misses this step exists to catch went unreplied. Requires `SLACK_BOT_TOKEN` and `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` (the alerts channel's Slack channel ID, e.g. `C0ALGAPRCA3` — see README Prerequisites), resolved via the same three-tier lookup every other var in this suite uses (already-exported, then `~/.claude/.env`, then `$(pwd)/.env`). If either is unresolvable, skip all of 1.2.2a with a one-line note (`1.2.2a skipped: SLACK_BOT_TOKEN/SLACK_AUTOMATION_ALERTS_CHANNEL_ID not configured`) recorded next to the per-failure line — this is the expected state until the manual Slack-app step in T20261001-319589 is done, and it doesn't fail the tick.
+
 1. **Find the alert message.** `slack-notify.yml` posts via a bare webhook, whose response carries no usable `ts` — nothing stashes the alert's `channel_id`/`message_ts` for a later tick to look up directly, so this is a **search**, not a lookup (same shape as `/slack-check-reply` Step 4's fallback):
 
+   ```bash
+   bash <skills-root>/_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"
    ```
-   slack_search_public_and_private: "actions/runs/<run-id>" in:#acme-automation-alerts
+
+   Returns a JSON array, newest-first (`conversations.history` order — a bot token can't call `search.messages`, that's user-token-only). Take `.[0]`; its `.ts` is the message to reply on. If `[]` — no alert posted for this workflow, the run predates the webhook, or the channel/format changed — skip to step 4 and note the miss.
+
+2. **Dedup.**
+
+   ```bash
+   bash <skills-root>/_slack/webapi.sh thread-replies "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<matched .ts>"
    ```
 
-   Sort by `timestamp` descending, take the first match. If nothing comes back — no alert posted for this workflow, the run predates the webhook, or the channel/format changed — skip to step 4 and note the miss.
+   Check `.messages[]` for one whose `.text` already starts with `*RCA —` (this automation's own marker, shared with `/labrun-rca`). If found, don't post again — either an earlier tick or a manually-run `/labrun-rca` on the same permalink already covered it.
 
-2. **Dedup.** `slack_read_thread` the matched message and check its replies. If one already starts with `*RCA —` (this automation's own marker, shared with `/labrun-rca`), don't post again — either an earlier tick or a manually-run `/labrun-rca` on the same permalink already covered it.
+3. **Post the reply.** Reuse `labrun-rca`'s Step 5 format exactly (error / root cause / classification / impact / action / log link). Don't invent a second format here — this automated path and a manually-pasted permalink through `/labrun-rca` are two entry points to the same behavior, and should read identically to whoever's watching the thread:
 
-3. **Post the reply.** Reuse `labrun-rca`'s Step 5 format exactly (error / root cause / classification / impact / action / log link) via `slack_send_message` with `thread_ts` = the matched message's `ts`. Don't invent a second format here — this automated path and a manually-pasted permalink through `/labrun-rca` are two entry points to the same behavior, and should read identically to whoever's watching the thread.
+   ```bash
+   bash <skills-root>/_slack/webapi.sh post "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<RCA text>" "<matched .ts>"
+   ```
 
-4. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `already replied`) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
+4. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `already replied` / `skipped — bot token not configured`) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
 
 ##### 1.2.3 PR new tasks
 

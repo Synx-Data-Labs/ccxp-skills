@@ -146,6 +146,11 @@ doesn't block landing the implementation.
       PR, then the rest as a second pass — not one giant rewrite, so each
       piece can be verified against the real API independently once the
       manual step below is done.
+      **Progress**: 1.2.2a done (this PR) — rewired to `_slack/webapi.sh`
+      with a new `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` env var (documented
+      in README Prerequisites), graceful no-op when `SLACK_BOT_TOKEN`/the
+      channel ID are unset. L142, L162/L175, L453–496, L721 remain for a
+      follow-up pass.
 - [ ] `labrun-rca/SKILL.md` steps 2–5 rewritten the same way.
 - [ ] `slack-check-reply/SKILL.md`'s maintainer-reply search + standup-thread
       discovery (step 1a) rewritten the same way — note its `from:me` search
