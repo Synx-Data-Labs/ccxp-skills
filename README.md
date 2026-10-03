@@ -51,6 +51,13 @@ shares:
     (uppercased). See `slack/SKILL.md`.
   - `SLACK_STANDUP_CHANNEL` — channel `slack-check-reply` polls for standup
     replies. Unset degrades to a one-line skip note.
+  - `SLACK_BOT_TOKEN` / `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` — bot-token
+    Slack Web API access (`_slack/webapi.sh`, no MCP) for `ccxp`'s 1.2.2a
+    RCA-in-thread reply and `labrun-rca`/`slack-check-reply`'s read/reply
+    needs; `_CHANNEL_ID` is the raw channel ID (e.g. `C0ALGAPRCA3`), not a
+    name — a bot token can't resolve names the way the retired MCP search
+    could. Unset degrades to a one-line skip note (see `ccxp/SKILL.md`
+    1.2.2a, `_slack/README.md`). See T20261001-319589.
   - `PROJECT_OWNER` / `PROJECT_NUMBER` — the org login + Project V2 number
     that `_session/_lib.sh` mirrors task status onto. Unset means the
     Project-board mirror is a silent no-op — the task file's own `status:`
