@@ -262,7 +262,7 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
    bash <skills-root>/_slack/webapi.sh post "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<RCA text>" "<matched .ts>"
    ```
 
-4. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `already replied` / `skipped — bot token not configured`) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
+4. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `already replied` / `1.2.2a skipped: SLACK_BOT_TOKEN/SLACK_AUTOMATION_ALERTS_CHANNEL_ID not configured`) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
 
 ##### 1.2.3 PR new tasks
 
