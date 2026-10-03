@@ -149,8 +149,12 @@ doesn't block landing the implementation.
       **Progress**: 1.2.2a done (this PR) — rewired to `_slack/webapi.sh`
       with a new `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` env var (documented
       in README Prerequisites), graceful no-op when `SLACK_BOT_TOKEN`/the
-      channel ID are unset. L142, L162/L175, L453–496, L721 remain for a
-      follow-up pass.
+      channel ID are unset. Remaining for a follow-up pass (by section, not
+      line number — this PR's own edit already shifted every line after
+      1.2.2a, so a pinned number would drift again on the next edit): 1.1#5b
+      maintainer-reply check, 1.1a's hold-tick note, 1.4's standup post +
+      its `find-by-text` discovery, and the `/drive`-inherited escalation
+      protocol line.
 - [ ] `labrun-rca/SKILL.md` steps 2–5 rewritten the same way.
 - [ ] `slack-check-reply/SKILL.md`'s maintainer-reply search + standup-thread
       discovery (step 1a) rewritten the same way — note its `from:me` search
