@@ -27,3 +27,4 @@ reprioritize.
 - [T20261002-245216](T20261002-245216-retro-bump-detector-dormant-note-and-stale-field-cleanup.md): Note retro's bump-3x/2x detectors as dormant-by-design; clean up two stale cross-references
 - [T20261002-359869](T20261002-359869-lifecycle-md-note-ipm-board-mirror-opt-in.md): Note in `lifecycle.md` that IPM / `scheduled:` board-mirroring is opt-in
 - [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
+- [T20261005-554581](T20261005-554581-drain-gate-reads-retired-project-board.md): `ipm-iteration-drain-check.sh` hard-requires a Project board, so a board-less consumer's IPM gate is permanently red
