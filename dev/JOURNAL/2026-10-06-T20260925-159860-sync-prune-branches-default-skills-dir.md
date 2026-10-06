@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: /ccxp interactive run, 2026-09-25 — Phase 0 sync on build-pipeline-repo
 related: T20260925-427007
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-05
 ---
 
@@ -47,17 +47,17 @@ below instead of a separate design PR; claimed via `t20260925-159860-claim`.
 
 ## Test plan
 
-- [ ] BATS: default `skills_dir` resolves to the repo containing the script itself (no `--skills-dir` passed), verified against a throwaway copy of the script tree.
-- [ ] BATS: explicit `--skills-dir DIR` still overrides the default.
-- [ ] BATS: a `skills_dir` whose `origin` remote doesn't match `*/ccxp-skills(.git)?$` fails loudly with a clear message, before attempting `git checkout`.
-- [ ] BATS: a `skills_dir` with a matching `ccxp-skills` remote proceeds as before (no regression to the existing fetch/checkout/pull/prune behavior).
-- [ ] Manual/local: run the modified script end-to-end against this very clone with no `--skills-dir` flag — confirms the self-relative default actually resolves to this checkout.
+- [x] BATS: default `skills_dir` resolves to the repo containing the script itself (no `--skills-dir` passed), verified against a throwaway copy of the script tree. (`tests/sync_and_prune_branches.bats`, tests 1-2)
+- [x] BATS: explicit `--skills-dir DIR` still overrides the default. (test 3)
+- [x] BATS: a `skills_dir` whose `origin` remote doesn't match `*/ccxp-skills(.git)?$` fails loudly with a clear message, before attempting `git checkout`. (tests 4-5)
+- [x] BATS: a `skills_dir` with a matching `ccxp-skills` remote proceeds as before (no regression to the existing fetch/checkout/pull/prune behavior). (test 6)
+- [ ] Manual/local: run the modified script end-to-end against this very clone with no `--skills-dir` flag. **Not run live** — doing so would `git checkout main`/`git pull --ff-only` in this very working tree mid-task (the script's own Phase 1, on `cwd`), switching away from the feature branch. Test plan item 1 above exercises the identical mechanism hermetically (a throwaway copy of the script inside a real, disposable git repo, invoked with no `--skills-dir`) and is the safe equivalent; honest substitution, not a silent skip.
 
 ## Done criteria
 
-- [ ] Default `--skills-dir` resolution no longer depends on `~/.claude/skills` existing or being the right repo — satisfied by `ccxp/scripts/sync-and-prune-branches.sh`'s new `$BASH_SOURCE`-relative default (test plan item 1).
-- [ ] A wrong/unrelated `skills_dir` (explicit or default) fails with a clear, actionable message instead of a raw git error — satisfied by the remote-shape guard (test plan item 3).
-- [ ] No regression to the script's existing behavior when `skills_dir` is already correct — satisfied by test plan item 4.
+- [x] Default `--skills-dir` resolution no longer depends on `~/.claude/skills` existing or being the right repo — satisfied by `ccxp/scripts/sync-and-prune-branches.sh`'s new `$BASH_SOURCE`-relative default (test plan item 1; `bats tests/sync_and_prune_branches.bats` — 6/6 pass).
+- [x] A wrong/unrelated `skills_dir` (explicit or default) fails with a clear, actionable message instead of a raw git error — satisfied by the remote-shape guard (test plan item 3).
+- [x] No regression to the script's existing behavior when `skills_dir` is already correct — satisfied by test plan item 4, plus the full project suite (`bats tests/*.bats _docs/*.bats _slack/*.bats` — 878/878 pass).
 
 ## Root cause
 
@@ -71,3 +71,18 @@ below instead of a separate design PR; claimed via `t20260925-159860-claim`.
 | `ccxp/scripts/sync-and-prune-branches.sh` | 19-38 | the script being fixed — default `skills_dir`, CLI parsing, and the `git -C "$skills_dir"` checkout/pull calls |
 | `tests/git.bats` | 1-203 | style reference for a bash-wrapper BATS test in this repo (hermetic fixture pattern, `run bash <script>`) |
 | `dev/TODO/T20260925-427007-dead-legacy-gh-wrapper-path.md` | 40-44 | sibling bug class — the `$BASH_SOURCE`-relative resolution pattern this task reuses |
+
+## Closed (2026-10-06)
+
+- Shipped in **PR #TBD** (claim/design landed separately in PR #253).
+- Met: all four `## Done criteria` items — `$BASH_SOURCE`-relative default, explicit-flag override preserved, remote-shape fail-loud guard, no regression (6/6 new BATS + 878/878 full suite).
+- External/unverified: the one "manual/local" test-plan item was not run live against this working clone (would have checked out `main` mid-task); substituted with the hermetic BATS equivalent (test 1) — see that item's note.
+- No follow-up tasks filed — scope was fully covered by this fix.
+- **Incident note (self-caught, fully remediated):** while debugging the test fixtures' bare-repo setup, a throwaway script with a pre-fix bug (and run without first `cd`-ing into the intended working tree) briefly produced a bogus local-only `init` commit in two places: the maintainer's primary `ccxp-skills` clone (`/Users/<user>/workspace/synx-data-labs/ccxp-skills`) and this very task's feature branch in the dedicated autopilot clone. Neither ever reached `origin` (GitHub rejected the one push attempt as non-fast-forward). Both were caught immediately and fully reverted: `git reset --hard` to the pre-incident commit in the primary clone (confirmed `README.md` back to 316 lines, working tree clean, matching `origin/main`), and `git reset --mixed` + restoring `README.md` in this clone (preserving the real in-progress work, which was all still-uncommitted at the time). No data loss, no corrupted remote state.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0 (code-class). RED confirmed (6/6 failing, then narrowed to the real default/guard logic after two fixture bugs of my own were found and fixed — a stale `local a=$1 b=...$a` word-expansion gotcha and a missing bare-repo HEAD symref — neither in the script under test), then GREEN (6/6 passing) after the implementation.
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6, fresh full-suite run (878/878) plus shellcheck (clean) captured in this same session before the PR.
+- Systematic debugging (`superpowers:systematic-debugging`): not formally invoked, but applied in spirit — RED-phase failures were hypothesis-driven traced (minimal reproduction scripts, isolating `local` word-expansion semantics and bare-repo `HEAD` default-branch behavior) rather than trial-and-error.
+- Receiving code review (`superpowers:receiving-code-review`): yes — on the companion claim/design PR #253, one real finding (an off-by-one in the self-relative path arithmetic) was accepted and fixed, not argued away.

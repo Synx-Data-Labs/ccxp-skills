@@ -16,16 +16,33 @@
 # caller is expected to report and decide, not silently override.
 #
 # Options:
-#   --skills-dir DIR   Path to the shared skills repo clone (default: ~/.claude/skills).
+#   --skills-dir DIR   Path to the shared skills repo clone (default: this
+#                       script's own containing repo — see below).
 set -euo pipefail
 
-skills_dir="${HOME}/.claude/skills"
+# Default: the shared ccxp-skills checkout containing this very script.
+# This script physically lives at <ccxp-skills>/ccxp/scripts/, so two levels
+# up from its own directory ($BASH_SOURCE) is always the repo root —
+# regardless of $HOME, how this repo was installed (plain clone, plugin
+# cache, cron box, interactive clone), or whether ~/.claude/skills exists or
+# points somewhere unrelated (T20260925-159860).
+skills_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 while [ $# -gt 0 ]; do
   case "$1" in
     --skills-dir) skills_dir="$2"; shift 2 ;;
     *) echo "sync-and-prune-branches: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
+
+# Guard: whichever way skills_dir was resolved (default or explicit flag),
+# verify it actually looks like the ccxp-skills checkout before touching it
+# with `git checkout`/`git pull` — fail loudly with a clear message instead
+# of a confusing raw git error (T20260925-159860).
+skills_remote="$(git -C "$skills_dir" remote get-url origin 2>/dev/null || true)"
+if ! [[ "$skills_remote" =~ /ccxp-skills(\.git)?$ ]]; then
+  echo "sync-and-prune-branches: '$skills_dir' doesn't look like the ccxp-skills checkout (origin remote: ${skills_remote:-<none/not a git repo>}) — pass --skills-dir explicitly." >&2
+  exit 1
+fi
 
 # 1. Refresh the project repo: prune dead remote refs, fast-forward main
 git fetch --prune --tags
