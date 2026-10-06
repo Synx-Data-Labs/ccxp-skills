@@ -148,6 +148,34 @@ print('ok')
   [ "$output" = "ok" ]
 }
 
+@test "_tc_fm_set consumes a BLANK line inside the folded continuation (not just indented ones)" {
+  # A whitespace-only skip test (/^[ \t]/) stops skipping on the first
+  # completely blank line inside a multi-line value's fold, leaking every
+  # continuation line AFTER it. A continuation line can legitimately be
+  # blank (a plain scalar's fold can contain one), so the skip condition
+  # must treat "indented OR blank" as still-continuing, not just indented.
+  f="$BATS_TEST_TMPDIR/t.md"
+  printf -- '%s\n' \
+    '---' \
+    'status: Review — SUPERVISED (needs a human' \
+    '  with real access' \
+    '' \
+    '  continues here after a blank line)' \
+    'claimed_by: x@h' \
+    '---' \
+    '' \
+    'body' \
+    > "$f"
+  _tc_fm_set "$f" status "In Progress"
+  [ "$(_tc_fm_get "$f" status)" = "In Progress" ]
+  run grep -q "continues here after a blank line" "$f"
+  [ "$status" -ne 0 ]
+  run grep -q "with real access" "$f"
+  [ "$status" -ne 0 ]
+  [ "$(grep -c -- '^---$' "$f")" -eq 2 ]
+  [ "$(_tc_fm_get "$f" claimed_by)" = "x@h" ]
+}
+
 # --- own-or-defer decision (the anti-steal core) ----------------------------
 
 @test "_tc_decide: empty or 'none' -> none (free to take)" {

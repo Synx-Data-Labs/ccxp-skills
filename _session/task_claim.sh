@@ -166,14 +166,17 @@ _tc_fm_set() {
   # T20260925-383305: a plain YAML scalar can fold across multiple lines when
   # continuation lines are indented more than the key (e.g. a narrated
   # `status: Review — SUPERVISED (needs a human\n  with real access...)`).
-  # Once the matched field's FIRST line is replaced, every indented line
-  # immediately following it is a continuation of the OLD value and must be
-  # consumed (not printed), or it survives as orphaned garbage under the new
-  # value. The `skipping` state below does exactly that: it stays 1 across
-  # every line starting with whitespace right after a replace, and clears on
-  # the first non-indented line (a new "key:" at column 0, or the closing
-  # fence — neither of which is ever indented), which then falls through to
-  # the normal per-line handling for that line.
+  # Once the matched field's FIRST line is replaced, every line immediately
+  # following it that is EITHER indented OR blank is a continuation of the
+  # OLD value and must be consumed (not printed), or it survives as orphaned
+  # garbage under the new value. The `skipping` state below does exactly
+  # that; it clears on the first non-blank, non-indented line — a new
+  # "key:" at column 0, or the closing fence, neither of which is ever
+  # indented or blank — which then falls through to the normal per-line
+  # handling for that line. The blank-line case matters: a plain scalar's
+  # folded value can legitimately contain a blank line mid-fold, and a
+  # whitespace-only skip test (`/^[ \t]/`) would wrongly stop skipping right
+  # there, leaking every continuation line AFTER the blank one.
   local file="$1" field="$2" value="$3" line tmp
   [ -w "$file" ] || { _session_log "task_claim: not writable: $file"; return 1; }
   if [ -n "$value" ]; then line="$field: $value"; else line="$field:"; fi
@@ -183,8 +186,8 @@ _tc_fm_set() {
     NR==1 && $0=="---" { infm = 1; opened = 1; print; next }
     {
       if (skipping) {
-        if ($0 ~ /^[ \t]/) { next }         # continuation of the old value — consume
-        skipping = 0                        # first non-indented line — stop skipping
+        if ($0 == "" || $0 ~ /^[ \t]/) { next }  # continuation (indented OR blank) — consume
+        skipping = 0                             # first non-blank, non-indented line — stop
       }
       if (infm && $0=="---") {              # closing fence
         if (!done) { print repl; done = 1 }
