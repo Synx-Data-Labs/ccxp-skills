@@ -172,3 +172,32 @@ scheduled: 2026-10-05
 | `_session/task_claim.sh` | 291–293 | `_tc_reclaim_decide` — the buggy exact-match `case`, fixed here |
 | `tests/task_claim.bats` | ~221–225 | existing `"In Progress"` bare-status coverage; new narrated-status case added alongside |
 | `todo/SKILL.md` | frontmatter §Task metadata | documents the narrated-status convention this bug silently defeats |
+
+## Closed (2026-10-06)
+
+- Shipped in **PR #267** (`t20260925-244717-impl`,
+  `https://github.com/Synx-Data-Labs/ccxp-skills/pull/267`) — a one-line
+  `case` pattern fix in `_session/task_claim.sh:291-293` (prefix match
+  instead of exact match), plus a new BATS case in `tests/task_claim.bats`
+  covering narrated-vs-bare parity.
+- **Met**: full `tests/task_claim.bats` suite (110/110, no regressions);
+  `design-score` gate 92/100; `quality-probe` shellcheck clean.
+- **External/unverified at write time**: CI `bats` check on PR #267 — left
+  unchecked in Test plan above, to be verified/ticked by `/address-pr`
+  before merge.
+- **Claim PR**: #265 (merged as `eca4999`) — also fixed an incidental,
+  independent-review-caught issue: an unquoted `": "` inside the claim
+  commit's `status:` frontmatter value broke strict YAML parsing (tooling
+  fallback masked it in CI); reworded to avoid the colon.
+- **No follow-up tasks filed by this session** for the bug itself. (A
+  separate, pre-existing open item, T20261006-105476 — `/address-pr` §2.d's
+  review-agent dispatch prompt doesn't forbid write actions — surfaced in
+  the shared clone during this session's work but was filed by another
+  process, not this one; see this session's own report for details.)
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class. Wrote the narrated-status BATS case first, watched it fail (`not ok` against the pre-fix exact-match `case`), then made the minimal one-line `case`-pattern fix, then verified green (110/110).
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6 pre-PR (full suite run) + this Phase 7.0 pass.
+- Systematic debugging (`superpowers:systematic-debugging`): no — root cause was already isolated in the task's own Problem section; no repeated-failure trigger hit.
+- Receiving code review (`superpowers:receiving-code-review`): yes — on claim PR #265, an independent review agent flagged the unquoted-colon YAML issue; steelmanned it, verified independently with `yaml.safe_load`, confirmed real, fixed rather than pushed back.
