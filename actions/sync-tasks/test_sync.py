@@ -451,13 +451,13 @@ class StatusToOptionIdTests(unittest.TestCase):
         self.assertEqual(sync.status_to_option_id("Done already", options), "opt_done")
 
     def test_prose_suffixed_status_matches_leading_option(self):
-        # Real-world: T20260320-000029 carries "Coding — UNBLOCKED 2026-06-06:
-        # maintainer picked Option B". The leading known option ("Coding") must
+        # Real-world: a task can carry "Review — UNBLOCKED 2026-06-06:
+        # maintainer picked Option B". The leading known option ("Review") must
         # map even with a free-text suffix, the same way "Blocked by ..." does.
-        options = {"Coding": "opt_coding", "Design": "opt_design"}
+        options = {"Review": "opt_review", "Design": "opt_design"}
         self.assertEqual(
-            sync.status_to_option_id("Coding — UNBLOCKED 2026-06-06: picked B", options),
-            "opt_coding",
+            sync.status_to_option_id("Review — UNBLOCKED 2026-06-06: picked B", options),
+            "opt_review",
         )
 
     def test_prose_suffixed_status_with_colon(self):
@@ -516,13 +516,13 @@ class StatusForLocationTests(unittest.TestCase):
         self.assertEqual(sync.status_for_location("dev/JOURNAL/T123.md", "Open"), "Done")
 
     def test_todo_returns_frontmatter_status(self):
-        self.assertEqual(sync.status_for_location("dev/TODO/T123.md", "Coding"), "Coding")
+        self.assertEqual(sync.status_for_location("dev/TODO/T123.md", "In Progress"), "In Progress")
 
     def test_todo_returns_none_when_no_frontmatter_status(self):
         self.assertIsNone(sync.status_for_location("dev/TODO/T123.md", None))
 
     def test_parking_ignores_frontmatter_status(self):
-        self.assertEqual(sync.status_for_location("dev/PARKING/T123.md", "Coding"), "Parked")
+        self.assertEqual(sync.status_for_location("dev/PARKING/T123.md", "In Progress"), "Parked")
 
 
 class GetFrontmatterTests(unittest.TestCase):
@@ -569,7 +569,7 @@ class GetFrontmatterTests(unittest.TestCase):
         content = (
             "---\n"
             "estimation: 3d (plumbing) — revised up: blast radius now spans more\n"
-            "status: Coding — UNBLOCKED 2026-06-06: maintainer picked Option B\n"
+            "status: In Progress — UNBLOCKED 2026-06-06: maintainer picked Option B\n"
             "scheduled: 2026-06-01\n"
             "deadline: 2026-05-08 (set by maintainer)\n"
             "priority: High — latent release-blocker: next eviction breaks it\n"
@@ -579,7 +579,7 @@ class GetFrontmatterTests(unittest.TestCase):
         try:
             meta = sync.get_frontmatter(path)
             self.assertEqual(meta.get("scheduled"), "2026-06-01")
-            self.assertTrue(meta.get("status", "").startswith("Coding"))
+            self.assertTrue(meta.get("status", "").startswith("In Progress"))
             self.assertTrue(meta.get("estimation", "").startswith("3d"))
             self.assertTrue(meta.get("deadline", "").startswith("2026-05-08"))
             self.assertTrue(meta.get("priority", "").startswith("High"))
@@ -593,7 +593,7 @@ class GetFrontmatterTests(unittest.TestCase):
         # silently drops the claim from the board.
         content = (
             "---\n"
-            "status: Coding — UNBLOCKED 2026-06-06: maintainer picked Option B\n"
+            "status: In Progress — UNBLOCKED 2026-06-06: maintainer picked Option B\n"
             "claimed_by: cdw:/home/ci/focus/some-repo\n"
             "---\n# Task\n"
         )
@@ -625,12 +625,12 @@ class GetFrontmatterTests(unittest.TestCase):
         # the fallback only kicks in on an actual error, so structured fields
         # (lists, nested maps) are preserved for well-formed files.
         path = self._write_tmp(
-            '---\nstatus: "Coding: in progress"\nscheduled: 2026-06-01\n'
+            '---\nstatus: "Custom: in progress"\nscheduled: 2026-06-01\n'
             "blocks: [T20260101-000001, T20260101-000002]\n---\n# Task\n"
         )
         try:
             meta = sync.get_frontmatter(path)
-            self.assertEqual(meta["status"], "Coding: in progress")
+            self.assertEqual(meta["status"], "Custom: in progress")
             # PyYAML auto-types an unquoted ISO date to datetime.date; both that
             # and the lenient string form feed _parse_date the same way.
             self.assertEqual(str(meta["scheduled"]), "2026-06-01")
@@ -645,8 +645,8 @@ class StatusFromTextTests(unittest.TestCase):
         self.assertEqual(sync._status_from_text(text), "Design")
 
     def test_legacy_bullet_status(self):
-        text = "# Task\n\n- **Status**: Coding\n"
-        self.assertEqual(sync._status_from_text(text), "Coding")
+        text = "# Task\n\n- **Status**: In Progress\n"
+        self.assertEqual(sync._status_from_text(text), "In Progress")
 
     def test_no_status_returns_none(self):
         text = "# Task\n\nSome content.\n"
@@ -666,10 +666,10 @@ class StatusFromTextTests(unittest.TestCase):
         text = (
             "---\n"
             "estimation: 3d — revised up: bigger now\n"
-            "status: Coding — UNBLOCKED 2026-06-06: picked Option B\n"
+            "status: In Progress — UNBLOCKED 2026-06-06: picked Option B\n"
             "---\n# Task\n"
         )
-        self.assertTrue(sync._status_from_text(text).startswith("Coding"))
+        self.assertTrue(sync._status_from_text(text).startswith("In Progress"))
 
 
 class GetStartDateTests(unittest.TestCase):
@@ -861,7 +861,7 @@ class SyncFieldsTests(unittest.TestCase):
             "claimed_by": {"id": "fld_claimed"},
         }
         meta = {
-            "status": "Coding",
+            "status": "In Progress",
             "claimed_by": "cdw:/home/ci/focus/some-repo",
         }
         with patch.object(sync, "get_frontmatter", return_value=meta), \
@@ -883,7 +883,7 @@ class SyncFieldsTests(unittest.TestCase):
             "claimed_by": {"id": "fld_claimed"},
         }
         meta = {
-            "status": "Coding",
+            "status": "In Progress",
             "claimed_by": "cc1-a1b2c3d4:9f8e7d6c5b4a3210",
             "claimed_role": "ccxp",
         }
@@ -951,7 +951,7 @@ class SyncFieldsTests(unittest.TestCase):
         # If the Project has no claimed_by column, projection is a no-op (same
         # tolerance as every other optional field), never an error.
         # self._FIELDS has no claim column, so no claim writes happen.
-        meta = {"status": "Coding",
+        meta = {"status": "In Progress",
                 "claimed_by": "cdw:/home/ci/x"}
         with patch.object(sync, "get_frontmatter", return_value=meta), \
              patch.object(sync, "update_single_select", return_value=True), \

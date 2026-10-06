@@ -23,7 +23,7 @@ ALLOWED = REQUIRED | {
     # runtime (tooling-written: /stage, IPM, /focus)
     "scheduled", "claimed_by", "claimed_role", "iteration",
 }
-STATUS_TOKENS = {"open", "design", "coding", "in progress", "review",
+STATUS_TOKENS = {"open", "design", "in progress", "review",
                  "blocked", "parked", "done", "closed"}
 FILENAME_RE = re.compile(r"^T\d{8}-\d{6}-.+\.md$")
 # Known non-task index files that legitimately live under dev/TODO/ — not
@@ -158,9 +158,9 @@ def check_scheduled_when_advanced(ctx):
     Mirrors the lifecycle.md § 'Iteration assignment' invariant: a task whose
     status has left Open/Parked MUST carry a valid scheduled: so sync maps it
     to the correct iteration. Leading-token tolerance mirrors sync.py — a
-    prose-suffixed status like 'Coding — UNBLOCKED …' still triggers the check
-    on its leading token 'Coding'. Scope is TODO/PARKING only (JOURNAL is out
-    of lint scope per the design non-goal)."""
+    prose-suffixed status like 'In Progress — UNBLOCKED …' still triggers the
+    check on its leading token 'In Progress'. Scope is TODO/PARKING only
+    (JOURNAL is out of lint scope per the design non-goal)."""
     if "status" not in ctx.keys:
         return []
     head = status_head(ctx.keys["status"])

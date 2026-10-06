@@ -107,8 +107,8 @@ _mk_git_dev() {
 # --- frontmatter read -------------------------------------------------------
 
 @test "fm_get reads a frontmatter field and ignores body lines" {
-  f="$BATS_TEST_TMPDIR/t.md"; _mk_task "$f" Coding "host:/p"
-  [ "$(attribution_fm_get "$f" status)" = "Coding" ]
+  f="$BATS_TEST_TMPDIR/t.md"; _mk_task "$f" "In Progress" "host:/p"
+  [ "$(attribution_fm_get "$f" status)" = "In Progress" ]
   [ "$(attribution_fm_get "$f" claimed_by)" = "host:/p" ]
 }
 
@@ -120,7 +120,7 @@ _mk_git_dev() {
 # --- last_claimed_by --------------------------------------------------------
 
 @test "last_claimed_by: current frontmatter wins when non-empty" {
-  f="$BATS_TEST_TMPDIR/t.md"; _mk_task "$f" Coding "cdw:/live/claim"
+  f="$BATS_TEST_TMPDIR/t.md"; _mk_task "$f" "In Progress" "cdw:/live/claim"
   [ "$(attribution_last_claimed_by "$f")" = "cdw:/live/claim" ]
 }
 
@@ -160,9 +160,9 @@ _mk_git_dev() {
 
 # --- collect ----------------------------------------------------------------
 
-@test "collect: TODO claimed + Coding/Review count as in-flight; unclaimed Open is skipped" {
+@test "collect: TODO claimed + In Progress/Review count as in-flight; unclaimed Open is skipped" {
   d="$BATS_TEST_TMPDIR/dev"; mkdir -p "$d/TODO"
-  _mk_task "$d/TODO/T1.md" Coding ""                 # in-flight by status (loc empty)
+  _mk_task "$d/TODO/T1.md" "In Progress" ""          # in-flight by status (loc empty)
   _mk_task "$d/TODO/T2.md" Design "cdw:/peer"        # in-flight by claim
   _mk_task "$d/TODO/T3.md" Open ""                   # skipped (Open + unclaimed)
   run attribution_collect "$d" "2026-01-01" "2026-12-31"
@@ -170,14 +170,6 @@ _mk_git_dev() {
   # two in-flight rows, none shipped
   [ "$(printf '%s\n' "$output" | grep -c 'in-flight')" -eq 2 ]
   [ "$(printf '%s\n' "$output" | grep -c 'shipped')" -eq 0 ]
-}
-
-@test "collect: \"In Progress\" status counts as in-flight identically to the legacy Coding alias (T20260809-355059)" {
-  d="$BATS_TEST_TMPDIR/dev"; mkdir -p "$d/TODO"
-  _mk_task "$d/TODO/T1.md" "In Progress" ""          # in-flight by status (loc empty)
-  run attribution_collect "$d" "2026-01-01" "2026-12-31"
-  [ "$status" -eq 0 ]
-  [ "$(printf '%s\n' "$output" | grep -c 'in-flight')" -eq 1 ]
 }
 
 @test "collect: shipped JOURNAL only when the filename date is in [since,until); non-task docs skipped" {
@@ -203,8 +195,8 @@ _mk_git_dev() {
 
 @test "table: aggregates per location with ccxp/interactive classes and a Total" {
   d="$BATS_TEST_TMPDIR/dev"; mkdir -p "$d/TODO"
-  _mk_task "$d/TODO/T1.md" Coding "cdw:/home/ci/focus/some-repo"   # ccxp in-flight
-  _mk_task "$d/TODO/T2.md" Coding "cdw:/home/ci/some-repo"         # interactive in-flight
+  _mk_task "$d/TODO/T1.md" "In Progress" "cdw:/home/ci/focus/some-repo"   # ccxp in-flight
+  _mk_task "$d/TODO/T2.md" "In Progress" "cdw:/home/ci/some-repo"         # interactive in-flight
   run attribution_table "$d" "2026-06-28" "2026-06-29"
   [ "$status" -eq 0 ]
   printf '%s\n' "$output" | grep -qE '^\| Location \| Class \| Shipped \| In-flight \| Total \|'

@@ -49,13 +49,7 @@ EOF
   [[ "$output" != *"T20260101-111111"* ]]
 }
 
-@test "flags a Coding task with no claimed_by" {
-  _mk_task T20260101-222222 Coding ""
-  run claim_gap
-  [[ "$output" == *"unclaimed T20260101-222222"* ]]
-}
-
-@test "flags an \"In Progress\" task with no claimed_by identically to the legacy Coding alias (T20260809-355059)" {
+@test "flags an In Progress task with no claimed_by" {
   _mk_task T20260101-234567 "In Progress" ""
   run claim_gap
   [[ "$output" == *"unclaimed T20260101-234567"* ]]
@@ -68,7 +62,7 @@ EOF
 }
 
 @test "silent on a claimed active task" {
-  _mk_task T20260101-444444 Coding cdw:/home/ci/repo
+  _mk_task T20260101-444444 "In Progress" cdw:/home/ci/repo
   run claim_gap
   [ "$status" -eq 0 ]
   [ -z "$output" ]
@@ -95,9 +89,9 @@ EOF
   [ "$before" = "$after" ]
 }
 
-@test "handles multiple gaps in one pass, only flagging Coding" {
+@test "handles multiple gaps in one pass, only flagging In Progress" {
   _mk_task T20260101-888888 Design ""
-  _mk_task T20260101-999999 Coding ""
+  _mk_task T20260101-999999 "In Progress" ""
   run claim_gap
   [[ "$output" != *"T20260101-888888"* ]]
   [[ "$output" == *"unclaimed T20260101-999999"* ]]
@@ -106,7 +100,7 @@ EOF
 # --- claim_gap_changed (dedup wrapper, T20260809-310724 root cause C) ------
 
 @test "claim_gap_changed posts on the first call (no prior state)" {
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   run claim_gap_changed
   [ "$status" -eq 0 ]
   [[ "$output" == *"unclaimed T20260101-101010"* ]]
@@ -121,7 +115,7 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
   # Slack-post signal) goes quiet on a repeat, so check stdout specifically.
   # Redirect stderr inside a plain shell function (not via `run`'s own
   # flags) to stay portable across bats versions.
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   claim_gap_changed >/dev/null 2>/dev/null   # first call records state
   run _cgc_stdout_only
   [ "$status" -eq 0 ]
@@ -129,9 +123,9 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
 }
 
 @test "claim_gap_changed posts again once the flagged list actually changes" {
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   claim_gap_changed >/dev/null           # records {T20260101-101010}
-  _mk_task T20260101-202020 Coding ""    # a second gap appears
+  _mk_task T20260101-202020 "In Progress" ""    # a second gap appears
   run claim_gap_changed
   [ "$status" -eq 0 ]
   [[ "$output" == *"unclaimed T20260101-101010"* ]]
@@ -139,7 +133,7 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
 }
 
 @test "claim_gap_changed posts again once the list shrinks back to empty" {
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   claim_gap_changed >/dev/null                       # records {T20260101-101010}
   rm "$TASK_CLAIM_DIR/T20260101-101010-demo.md"       # the gap is resolved
   run claim_gap_changed
@@ -153,11 +147,11 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
   # Not just "did output change" -- clearing state on the clean tick means a
   # later reappearance of the exact same task is reported again, rather than
   # silently matching the stale pre-clean hash still sitting on disk.
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   claim_gap_changed >/dev/null                        # records {T20260101-101010}
   rm "$TASK_CLAIM_DIR/T20260101-101010-demo.md"
   claim_gap_changed >/dev/null                        # clean tick -- clears state
-  _mk_task T20260101-101010 Coding ""                 # the SAME gap reappears
+  _mk_task T20260101-101010 "In Progress" ""                 # the SAME gap reappears
   run claim_gap_changed
   [ "$status" -eq 0 ]
   [[ "$output" == *"unclaimed T20260101-101010"* ]]
@@ -165,7 +159,7 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
 
 @test "claim_gap_changed treats a missing state file as no prior state" {
   [ ! -e "$CLAIM_GAP_STATE_FILE" ]
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   run claim_gap_changed
   [ "$status" -eq 0 ]
   [[ "$output" == *"unclaimed T20260101-101010"* ]]
@@ -174,7 +168,7 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
 @test "claim_gap_changed treats a corrupt state file as no prior state" {
   mkdir -p "$(dirname "$CLAIM_GAP_STATE_FILE")"
   echo "not valid json" > "$CLAIM_GAP_STATE_FILE"
-  _mk_task T20260101-101010 Coding ""
+  _mk_task T20260101-101010 "In Progress" ""
   run claim_gap_changed
   [ "$status" -eq 0 ]
   [[ "$output" == *"unclaimed T20260101-101010"* ]]

@@ -48,8 +48,8 @@ EOF
 # --- frontmatter read (pure) --------------------------------------------------
 
 @test "ts_fm_get reads a frontmatter field and returns empty for an unset one" {
-  f="$BATS_TEST_TMPDIR/t.md"; _mk_task_file "$f" Coding "me:here"
-  [ "$(ts_fm_get "$f" status)" = "Coding" ]
+  f="$BATS_TEST_TMPDIR/t.md"; _mk_task_file "$f" "In Progress" "me:here"
+  [ "$(ts_fm_get "$f" status)" = "In Progress" ]
   [ "$(ts_fm_get "$f" claimed_by)" = "me:here" ]
   [ -z "$(ts_fm_get "$f" priority)" ]
 }
@@ -87,10 +87,10 @@ EOF
 
 @test "ts_one_line_status reports a found task's status and claimant" {
   mkdir -p dev/TODO
-  _mk_task_file dev/TODO/T20260718-300856-demo.md Coding "host:/clone"
+  _mk_task_file dev/TODO/T20260718-300856-demo.md "In Progress" "host:/clone"
   run ts_one_line_status T20260718-300856
   [ "$status" -eq 0 ]
-  [[ "$output" == "T20260718-300856: Coding (claimed_by host:/clone)"* ]]
+  [[ "$output" == "T20260718-300856: In Progress (claimed_by host:/clone)"* ]]
 }
 
 @test "ts_one_line_status reports unclaimed without a claimed_by suffix" {
@@ -160,11 +160,11 @@ STUB
 
 @test "ts_main text output includes file, status, claimed_by, and no-PR/no-branch markers" {
   mkdir -p dev/TODO
-  _mk_task_file dev/TODO/T20260629-281129-demo.md Coding "me:here"
+  _mk_task_file dev/TODO/T20260629-281129-demo.md "In Progress" "me:here"
   git commit -q --allow-empty -m init
   run ts_main T20260629-281129
   [ "$status" -eq 0 ]
-  [[ "$output" == *"status:     Coding"* ]]
+  [[ "$output" == *"status:     In Progress"* ]]
   [[ "$output" == *"claimed_by: me:here"* ]]
   [[ "$output" == *"branches:   (none)"* ]]
   [[ "$output" == *"PRs:        (none)"* ]]
@@ -173,17 +173,17 @@ STUB
 @test "ts_main renders the 1-level blocking chain for a Blocked-by status" {
   mkdir -p dev/TODO
   _mk_task_file dev/TODO/T20260629-281129-demo.md "Blocked by T20260718-300856" "" "" "" ""
-  _mk_task_file dev/TODO/T20260718-300856-blocker.md Coding "me:here"
+  _mk_task_file dev/TODO/T20260718-300856-blocker.md "In Progress" "me:here"
   git commit -q --allow-empty -m init
   run ts_main T20260629-281129
   [ "$status" -eq 0 ]
   [[ "$output" == *"blocking chain (1 level):"* ]]
-  [[ "$output" == *"T20260718-300856: Coding (claimed_by me:here)"* ]]
+  [[ "$output" == *"T20260718-300856: In Progress (claimed_by me:here)"* ]]
 }
 
 @test "ts_main --json emits valid JSON with the expected keys" {
   mkdir -p dev/TODO
-  _mk_task_file dev/TODO/T20260629-281129-demo.md Coding "me:here"
+  _mk_task_file dev/TODO/T20260629-281129-demo.md "In Progress" "me:here"
   git commit -q --allow-empty -m init
   run ts_main T20260629-281129 --json
   [ "$status" -eq 0 ]
@@ -191,7 +191,7 @@ STUB
 import json, sys
 d = json.load(sys.stdin)
 assert d["id"] == "T20260629-281129"
-assert d["status"] == "Coding"
+assert d["status"] == "In Progress"
 assert d["claimed_by"] == "me:here"
 assert d["branches"] == []
 assert d["prs"] == []

@@ -1,11 +1,11 @@
 ---
 estimation: 1h
-status: Coding
+status: In Progress
 source: fixture
-description: fixture task, status Coding
+description: fixture task, status In Progress
 ---
 
-# T20260101-000003: Fixture Coding task
+# T20260101-000003: Fixture In Progress task
 
 ## Notes
 

@@ -55,7 +55,7 @@ Every `dev/TODO/` and `dev/PARKING/` file is linted against a strict allowlist (
 - **Authored-optional:** `priority`, `deadline`, `blocks`, `blocked-by`, `source`, `target-repo`, `target-path`, `related`, `owner`, `description`.
 - **Runtime (tooling-written):** `scheduled`, `claimed_by`, `iteration`.
 
-Any other top-level key is a violation. `status` must lead with a known value (Open/Design/In Progress [or legacy Coding]/Review/Blocked/Parked/Done; prose suffix allowed) and `estimation` one of `{1, 2, 3, 5, 8}` (points). `dev/JOURNAL/` is exempt (archival).
+Any other top-level key is a violation. `status` must lead with a known value (Open/Design/In Progress/Review/Blocked/Parked/Done; prose suffix allowed) and `estimation` one of `{1, 2, 3, 5, 8}` (points). `dev/JOURNAL/` is exempt (archival).
 
 ### Reference linking (`lint_refs.py`)
 
