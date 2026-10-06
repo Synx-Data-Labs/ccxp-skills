@@ -29,3 +29,4 @@ reprioritize.
 - [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
 - [T20261005-554581](T20261005-554581-drain-gate-reads-retired-project-board.md): `ipm-iteration-drain-check.sh` hard-requires a Project board, so a board-less consumer's IPM gate is permanently red
 - [T20261005-639913](T20261005-639913-remove-roadmap-target-repo-per-repo-roadmap.md): Remove `ROADMAP_TARGET_REPO` — each repo owns its own `dev/ROADMAP.md` / `dev/EPICS.md`
+- [T20261006-391349](T20261006-391349-autopilot-pause-resume-stop.md): Add /autopilot pause/resume and an explicit user-invoked stop
