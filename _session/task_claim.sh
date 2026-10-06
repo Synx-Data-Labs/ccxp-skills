@@ -162,20 +162,36 @@ _tc_fm_set() {
   # $1 file  $2 field  $3 value → set/insert "field: value" within the first
   # fence (replace if present, else insert before the closing ---). An empty
   # value writes a bare "field:" (no trailing space). Atomic.
+  #
+  # T20260925-383305: a plain YAML scalar can fold across multiple lines when
+  # continuation lines are indented more than the key (e.g. a narrated
+  # `status: Review — SUPERVISED (needs a human\n  with real access...)`).
+  # Once the matched field's FIRST line is replaced, every indented line
+  # immediately following it is a continuation of the OLD value and must be
+  # consumed (not printed), or it survives as orphaned garbage under the new
+  # value. The `skipping` state below does exactly that: it stays 1 across
+  # every line starting with whitespace right after a replace, and clears on
+  # the first non-indented line (a new "key:" at column 0, or the closing
+  # fence — neither of which is ever indented), which then falls through to
+  # the normal per-line handling for that line.
   local file="$1" field="$2" value="$3" line tmp
   [ -w "$file" ] || { _session_log "task_claim: not writable: $file"; return 1; }
   if [ -n "$value" ]; then line="$field: $value"; else line="$field:"; fi
   tmp="$(mktemp "${file}.tc.XXXXXX")" || return 1
   awk -v f="$field" -v repl="$line" '
-    BEGIN { infm = 0; done = 0; opened = 0 }
+    BEGIN { infm = 0; done = 0; opened = 0; skipping = 0 }
     NR==1 && $0=="---" { infm = 1; opened = 1; print; next }
     {
+      if (skipping) {
+        if ($0 ~ /^[ \t]/) { next }         # continuation of the old value — consume
+        skipping = 0                        # first non-indented line — stop skipping
+      }
       if (infm && $0=="---") {              # closing fence
         if (!done) { print repl; done = 1 }
         infm = 0; print; next
       }
       if (infm && !done && index($0, f":") == 1) {
-        print repl; done = 1; next          # replace existing
+        print repl; done = 1; skipping = 1; next   # replace existing; consume its continuation lines
       }
       print
     }
