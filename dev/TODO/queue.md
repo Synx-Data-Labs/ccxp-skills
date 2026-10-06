@@ -25,3 +25,4 @@ reprioritize.
 - [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
 - [T20261005-554581](T20261005-554581-drain-gate-reads-retired-project-board.md): `ipm-iteration-drain-check.sh` hard-requires a Project board, so a board-less consumer's IPM gate is permanently red
 - [T20261005-639913](T20261005-639913-remove-roadmap-target-repo-per-repo-roadmap.md): Remove `ROADMAP_TARGET_REPO` — each repo owns its own `dev/ROADMAP.md` / `dev/EPICS.md`
+- [T20261006-105476](T20261006-105476-address-pr-review-agent-dispatch-prompt-should-forbid-writes.md): `/address-pr` §2.d review-agent dispatch prompt doesn't forbid write actions, so a `general-purpose` reviewer can push to the PR branch unasked
