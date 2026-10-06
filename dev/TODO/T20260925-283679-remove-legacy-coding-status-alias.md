@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-10-05
 estimation: 2
 source: T20260809-355059's Phase A/B implementation (2026-09-25) — follow-up
@@ -8,6 +8,8 @@ related: T20260809-355059
 blocked-by: T20260925-244717 — both touch the identical `_tc_reclaim_decide`
   case-arm in `_session/task_claim.sh`; also depends informationally on the
   external hub-repo/build-pipeline-repo migration (see Problem/Design)
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260925-283679: Remove the legacy `Coding` status alias once external repos migrate
