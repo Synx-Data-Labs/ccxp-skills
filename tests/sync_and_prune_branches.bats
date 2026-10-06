@@ -33,7 +33,8 @@ setup() {
 }
 
 # mk_bare NAME -> creates a bare repo at $BATS_TEST_TMPDIR/remotes/NAME.git
-# and prints its path. NAME may contain slashes are not supported; keep flat.
+# and prints its path. NAME may contain slashes (e.g. "alt-location/ccxp-skills")
+# to simulate a second, differently-located clone of the same repo.
 mk_bare() {
   local name="$1"
   local bare="$BATS_TEST_TMPDIR/remotes/$name.git"
