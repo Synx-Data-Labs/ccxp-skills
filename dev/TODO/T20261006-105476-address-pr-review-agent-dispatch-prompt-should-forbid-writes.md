@@ -3,7 +3,7 @@ status: Open
 scheduled: 2026-10-19
 estimation: 1
 source: Surfaced live during /drive on T20260925-244717 — the §2.d review
-  dispatch agent for claim PR #265 committed and pushed a fix commit to the
+  dispatch agent for claim PR 265 committed and pushed a fix commit to the
   PR branch (`3cd8300ca6ad01738921b82e3048dc224c0da081`, "remove unquoted
   colon from status narration") despite being asked only to "review...and
   report back" — never to edit or push.
