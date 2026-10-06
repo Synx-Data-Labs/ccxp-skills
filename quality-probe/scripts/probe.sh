@@ -41,8 +41,15 @@
 
 set -euo pipefail
 
-# Path to the gh wrapper used for the code-scanning probe (overridable for tests).
-QP_GH="${QP_GH:-$HOME/.claude/skills/_gh/gh.sh}"
+# Path to the gh wrapper used for the code-scanning probe (overridable for
+# tests), resolved relative to this file — quality-probe/scripts/ and _gh/
+# are both two levels under the repo root, so this works under both a
+# same-repo checkout and a plugin-cache install layout (T20260925-427007;
+# the dead pre-plugin wrapper path this replaces, under the retired manual
+# symlink-under-home-dir install layout, can never exist again). Resolution
+# is a plain default value, not a function — qp-run-code-scanning's existing
+# "skip the check cleanly" behavior on a still-missing wrapper is unchanged.
+QP_GH="${QP_GH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/_gh/gh.sh}"
 
 # --- usage ------------------------------------------------------------------
 
