@@ -3,11 +3,24 @@ status: In Progress — Design approved in-conversation 2026-10-06
 scheduled: 2026-10-05
 estimation: 5
 source: this conversation, 2026-10-06
+related: dev/JOURNAL/2026-09-18-T20260918-174226-autopilot-status.md,
+  dev/JOURNAL/2026-09-29-T20260929-210013-statusline-autopilot-status-segment.md,
+  dev/JOURNAL/2026-09-30-T20260930-132964-autopilot-dispatch-own-clone.md
 claimed_by: cc1-50ac6891:bf6b098f35f88e3b
 claimed_role: interactive
 ---
 
 # T20261006-391349: Add /autopilot pause/resume and an explicit user-invoked stop
+
+## TLDR
+
+- **Type**: feature
+- **Problem**: `/autopilot` (`autopilot/SKILL.md:37`) has no user-invoked way
+  to pause, resume, or explicitly stop a running loop mid-window.
+- **Solution**: add `pause [--now]` / `resume` / `stop [--now]` as new
+  special-cased arguments (Phase 0-style), with a graceful
+  `SendMessage`-and-timeout default and a hard `TaskStop` escape hatch for
+  the in-flight dispatched `/drive` subagent.
 
 ## Problem
 
@@ -42,9 +55,20 @@ claimed_role: interactive
     scheduled `ScheduleWakeup` (Phase 4) so the loop doesn't silently
     continue dispatching cycles while "paused".
 
-## Design
+## Context
 
-### Decisions
+- `/autopilot` has zero automated tests today (no `tests/*autopilot*` file
+  exists) — verification here is manual dry-run, matching existing
+  precedent, not a gap introduced by this task.
+- The loop's only existing stop paths are internal: Phase 2's
+  `now >= end_time` check (`autopilot/SKILL.md:54`) and Phase 4's
+  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:100-102`) —
+  nothing a user can trigger mid-run today.
+- `/autopilot` is deliberately the interactive-only duration-boxed loop
+  (`/ccxp` owns the cron/ritual cadence) — this feature is scoped to that
+  interactive use case only.
+
+## Solution
 
 - **Trigger**: `pause [--now]`, `resume`, `stop [--now]` are new
   special-cased `/autopilot` arguments (Phase 0-style, alongside `status`)
@@ -111,39 +135,91 @@ claimed_role: interactive
   from the `running` branch — reporting elapsed-so-far, when it was
   paused, and the (already-shifted) remaining budget on resume.
 
-### Open
+**Alternatives considered and rejected:**
+
+- Cross-session/flag-file pause signaling — rejected: can't interrupt
+  mid-cycle instantly while a `/drive` subagent is dispatched (only a
+  message into the same session the harness is already waiting on can); a
+  flag only takes effect at the next phase boundary.
+- Cutting one of graceful/`--now` entirely — rejected: they serve
+  different needs (preserve WIP vs. reclaim instantly); kept both,
+  graceful default.
+- Resume always bare-picking (`/todo next`, never the exact interrupted
+  task) — rejected: can silently strand a WIP'd task if something now
+  outranks it in the queue.
+- Reusing `dispatch_clone_path` for the priority task after `--now` —
+  rejected: needs an `rm -rf` + reclone ceremony for no benefit when the
+  user's own interactive clone is free and untouched.
+- Waiting indefinitely on the graceful wrap-up with no timeout —
+  rejected: could hang pause/stop indefinitely against a subagent deep in
+  a blocking wait.
+- Treating a failed `last_task` redispatch (already Done/claimed
+  elsewhere) as Stuck — rejected: that's a benign, expected outcome, not
+  a backoff-worthy failure.
+- A "paused N times" report line — rejected (explicit maintainer call):
+  the existing elapsed/requested report already answers what matters.
+
+## Test plan
+
+- [ ] Manual dry-run (matches `/autopilot`'s existing zero-automated-test
+  precedent — no new scripts introduced): pause mid-cycle while a
+  `/drive` subagent is dispatched, verify graceful wrap-up pushes a
+  branch and the subagent ends within the timeout.
+- [ ] Force the 2-minute graceful timeout to elapse (or simulate via a
+  non-responsive subagent) and verify auto-escalation to `TaskStop`.
+- [ ] `resume` after a graceful pause: verify it redispatches
+  `/drive T<last_task>` first, then falls through to bare `/todo next` if
+  that task is already Done/claimed-elsewhere.
+- [ ] `stop`/`stop --now` from both the inter-cycle wait and mid-cycle
+  states: verify `dev/.autopilot-state.json` ends with `stop_reason:
+  "user-requested"` and Phase 5's elapsed-vs-requested report reflects
+  only active (non-paused) time.
+- [ ] `/autopilot status` while paused: verify the distinct "paused"
+  header.
+
+## Done criteria
+
+- [ ] `autopilot/SKILL.md:37` (Phase 0) gains `pause [--now]` / `resume` /
+  `stop [--now]` argument branches alongside the existing `status`
+  check — verified by the Test plan's manual dry-run.
+- [ ] `autopilot/SKILL.md:100`/`autopilot/SKILL.md:102`'s unconditional
+  reschedule calls are preceded by `ScheduleWakeup(stop: true)` on
+  pause/stop — verified against `dev/.autopilot-state.json`'s `status`
+  field.
+- [ ] `autopilot/SKILL.md:58`'s Phase 3 dispatch gains the graceful
+  `SendMessage` + 2-minute timeout + `TaskStop` escalation — verified via
+  the Test plan's dry-run above.
+- [ ] Test plan item 3 (`resume` redispatch) passes: `/drive T<last_task>`
+  is tried explicitly before falling back to bare `/todo next`.
+- [ ] `autopilot/SKILL.md:37`'s Phase 0 `status` report shows a distinct
+  "paused" header, not reused from the `running` branch — verified
+  visually.
+
+## Appendix
+
+**Open** (deferred to implementation, not design-blocking):
 
 - Exact wording of the "wrap up" instruction text in the dispatch prompt
   (don't fabricate a commit if there's nothing to commit, don't
-  force-push mid-rebase, etc.) — left to implementation, not
-  design-blocking.
+  force-push mid-rebase, etc.).
 
-### Out of scope
+**Out of scope:**
 
 - Cross-session/flag-file pause signaling.
 - A "paused N times" reporting line.
 - Any change to `/ccxp`'s cron cadence or to `/drive`'s canonical
   `SKILL.md`.
 
-### Test Plan
-
-- Manual dry-run (matches autopilot's existing zero-automated-test
-  precedent — no new scripts introduced): pause mid-cycle while a `/drive`
-  subagent is dispatched, verify graceful wrap-up pushes a branch and the
-  subagent ends within the timeout.
-- Force the 2-minute graceful timeout to elapse (or simulate via a
-  non-responsive subagent) and verify auto-escalation to `TaskStop`.
-- `resume` after a graceful pause: verify it redispatches
-  `/drive T<last_task>` first, then falls through to bare `/todo next` if
-  that task is already Done/claimed-elsewhere.
-- `stop`/`stop --now` from both the inter-cycle wait and mid-cycle states:
-  verify `dev/.autopilot-state.json` ends with `stop_reason:
-  "user-requested"` and Phase 5's elapsed-vs-requested report reflects
-  only active (non-paused) time.
-- `/autopilot status` while paused: verify the distinct "paused" header.
-
-Estimation revised from 1 to 5: new state schema, three new argument
+**Estimation revised from 1 to 5**: new state schema, three new argument
 branches each touching Phase 2–5, a subagent-interrupt protocol
 (`SendMessage` + timeout + `TaskStop` escalation) threaded through two
 commands, and a new Phase-4 fallback classification — confined to one
 skill file's prose, but materially larger than a 1–3 point task.
+
+## Closed
+
+_(pending)_
+
+## Skills invoked
+
+_(pending — recorded at Phase 7.0)_
