@@ -50,7 +50,7 @@ claimed_role:
      you still use the same dispatch clone (`dispatch_clone_path`) to work
      the priority task, given `/drive`'s claimant identity is hashed from
      that clone's own toplevel path (`_session/claimant-id.sh`, referenced
-     at `autopilot/SKILL.md:109`)?
+     at `autopilot/SKILL.md:107`)?
   - Also unresolved: a pause must suppress/cancel the next cycle's already
     scheduled `ScheduleWakeup` (Phase 4) so the loop doesn't silently
     continue dispatching cycles while "paused".
@@ -61,8 +61,8 @@ claimed_role:
   exists) — verification here is manual dry-run, matching existing
   precedent, not a gap introduced by this task.
 - The loop's only existing stop paths are internal: Phase 2's
-  `now >= end_time` check (`autopilot/SKILL.md:93`) and Phase 4's
-  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:140-141`) —
+  `now >= end_time` check (`autopilot/SKILL.md:91`) and Phase 4's
+  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:142-143`) —
   nothing a user can trigger mid-run today.
 - `/autopilot` is deliberately the interactive-only duration-boxed loop
   (`/ccxp` owns the cron/ritual cadence) — this feature is scoped to that
@@ -182,11 +182,11 @@ claimed_role:
 - [ ] `autopilot/SKILL.md:45` (Phase 0) gains `pause [--now]` / `resume` /
   `stop [--now]` argument branches alongside the existing `status`
   check — verified by the Test plan's manual dry-run.
-- [ ] `autopilot/SKILL.md:140`/`autopilot/SKILL.md:141`'s unconditional
+- [ ] `autopilot/SKILL.md:142`/`autopilot/SKILL.md:143`'s unconditional
   reschedule calls are preceded by `ScheduleWakeup(stop: true)` on
   pause/stop — verified against `dev/.autopilot-state.json`'s `status`
   field.
-- [ ] `autopilot/SKILL.md:111`'s dispatch call captures the subagent's
+- [ ] `autopilot/SKILL.md:109`'s dispatch call captures the subagent's
   `agentId`, and `autopilot/SKILL.md:133`'s wait-for-completion point gains
   the graceful `SendMessage` + 2-minute timeout + `TaskStop` escalation —
   verified via the Test plan's dry-run above.
