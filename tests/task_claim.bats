@@ -58,8 +58,8 @@ EOF
 
 @test "_tc_fm_set replaces an existing field and leaves the body untouched" {
   f="$BATS_TEST_TMPDIR/t.md"; _mk_task_file "$f"
-  _tc_fm_set "$f" status Coding
-  [ "$(_tc_fm_get "$f" status)" = "Coding" ]
+  _tc_fm_set "$f" status "In Progress"
+  [ "$(_tc_fm_get "$f" status)" = "In Progress" ]
   grep -qx 'status: this BODY line must never be touched' "$f"
   grep -qx 'claimed_by: nor this BODY line' "$f"
 }
@@ -203,25 +203,19 @@ print('ok')
 }
 
 @test "_tc_reclaim_decide: active but unclaimed -> live" {
-  [ "$(_tc_reclaim_decide Coding '' 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" '' 99 99 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: no-PR task, recent commit on main -> live" {
   # pr_days large (no open PR); commit on main is recent -> live.
   # claimed_by is session-shaped ("h:/p") so the T20260724-312324 format
   # pre-check doesn't short-circuit these staleness-window cases.
-  [ "$(_tc_reclaim_decide Coding h:/p 0 99999 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 0 99999 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: no-PR task, stale commit -> reclaimable" {
-  [ "$(_tc_reclaim_decide Coding h:/p 3 99999 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 3 99999 2)" = "reclaimable" ]
   [ "$(_tc_reclaim_decide Review h:/p 2 99999 2)" = "reclaimable" ]
-}
-
-@test "_tc_reclaim_decide: \"In Progress\" status is recognized exactly like the legacy Coding alias (T20260809-355059)" {
-  [ "$(_tc_reclaim_decide "In Progress" '' 99 99 2)" = "live" ]                 # unclaimed -> live
-  [ "$(_tc_reclaim_decide "In Progress" h:/p 0 99999 2)" = "live" ]             # fresh commit -> live
-  [ "$(_tc_reclaim_decide "In Progress" h:/p 3 99999 2)" = "reclaimable" ]      # stale commit -> reclaimable
 }
 
 @test "_tc_reclaim_decide: a NARRATED status (documented /todo convention) is matched like its bare token (T20260925-244717)" {
@@ -230,7 +224,7 @@ print('ok')
   # `case` match missed every one of these and returned "live" regardless of
   # how stale commit_days/pr_days were.
   [ "$(_tc_reclaim_decide "Review — implementation complete, PR #3416 open" h:/p 3 99999 2)" = "reclaimable" ]
-  [ "$(_tc_reclaim_decide "Coding — SUPERVISED (needs VPN)" h:/p 3 99999 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress — SUPERVISED (needs VPN)" h:/p 3 99999 2)" = "reclaimable" ]
   [ "$(_tc_reclaim_decide "In Progress — design PR skipped (self-evident fix)" h:/p 3 99999 2)" = "reclaimable" ]
   # A fresh signal still protects a narrated status, same as a bare one.
   [ "$(_tc_reclaim_decide "Review — implementation complete, PR #3416 open" h:/p 0 99999 2)" = "live" ]
@@ -239,20 +233,20 @@ print('ok')
 @test "_tc_reclaim_decide: open-PR task, RECENT PR activity -> live (no longer auto-blocked, but live work protected)" {
   # commit_days large (work sits on the unmerged PR branch, invisible on main);
   # the PR was touched recently (push/comment/review) -> live, NOT reclaimed.
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 0 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 0 2)" = "live" ]
   [ "$(_tc_reclaim_decide Review h:/p 99999 1 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: open-PR task, ABANDONED PR -> reclaimable (the T20260622-404636 fix)" {
   # The case the old has_pr=1->live rule leaked forever: an open PR under a dead
   # owner, untouched past the window, is now reclaimable.
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 3 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 3 2)" = "reclaimable" ]
   [ "$(_tc_reclaim_decide Review h:/p 99999 5 2)" = "reclaimable" ]
 }
 
 @test "_tc_reclaim_decide: BOTH signals must be stale (AND) -> live if either is fresh" {
-  [ "$(_tc_reclaim_decide Coding h:/p 0 9 2)" = "live" ]   # fresh commit, stale PR
-  [ "$(_tc_reclaim_decide Coding h:/p 9 0 2)" = "live" ]   # stale commit, fresh PR
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 0 9 2)" = "live" ]   # fresh commit, stale PR
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 9 0 2)" = "live" ]   # stale commit, fresh PR
 }
 
 # --- T20260724-312324: non-session claimant format pre-check ---------------
@@ -263,14 +257,14 @@ print('ok')
 # the git/PR activity signals are.
 
 @test "_tc_reclaim_decide: non-session claimant (bare name, no colon) -> live even with fully stale signals" {
-  [ "$(_tc_reclaim_decide Coding Alex 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" Alex 99 99 2)" = "live" ]
   [ "$(_tc_reclaim_decide Review Alex 99999 99999 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: non-session claimant (colon but no absolute-path shape) -> live" {
   # Guards against a loose "has a colon" check matching non-claimant-shaped
   # values that happen to contain ':' (e.g. a time-of-day or ratio string).
-  [ "$(_tc_reclaim_decide Coding notahost:notapath 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" notahost:notapath 99 99 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: human email/mention override ('@' but not legacy sid shape) -> live" {
@@ -278,14 +272,14 @@ print('ok')
   # override that happens to contain '@' (an email address, or an
   # '@'-mention) — must still be treated as human-assigned and NEVER
   # auto-reclaimed, not misread as the legacy "<sid>@<machine>" shape.
-  [ "$(_tc_reclaim_decide Coding alex@example.com 99 99 2)" = "live" ]
-  [ "$(_tc_reclaim_decide Coding @Alex 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" alex@example.com 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" @Alex 99 99 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: session-shaped claimant ('h:/p') is NOT caught by the format pre-check" {
   # Sanity check that the format pre-check doesn't over-fire on the normal
   # shape — reclaimability still falls through to the staleness window.
-  [ "$(_tc_reclaim_decide Coding h:/p 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99 99 2)" = "reclaimable" ]
 }
 
 @test "_tc_reclaim_decide: LEGACY '<sid>@<machine>' claimant is also session-shaped, not human-assigned" {
@@ -293,7 +287,7 @@ print('ok')
   # still age out via this staleness window ("ages out via the reclaim sweep",
   # per the "legacy <sid>@<machine> claim" test above) — the format pre-check
   # must not conflate "not the CURRENT shape" with "human-assigned".
-  [ "$(_tc_reclaim_decide Coding deadbeef@cdw 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" deadbeef@cdw 99 99 2)" = "reclaimable" ]
 }
 
 # --- T20260911-698434: cc1- claimant shape (reader, landed before the writer) -
@@ -303,12 +297,12 @@ print('ok')
   # matches neither the "<host>:<path>" nor the legacy "<sid>@<machine>"
   # shape, falls to the human-override branch, and becomes permanently
   # unreclaimable.
-  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
   [ "$(_tc_reclaim_decide Review cc1-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "reclaimable" ]
 }
 
 @test "_tc_reclaim_decide: cc1- claimant still respects a fresh signal -> live" {
-  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e7d6c5b4a3210 0 99999 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" cc1-a1b2c3d4:9f8e7d6c5b4a3210 0 99999 2)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: a LEGACY plaintext claim whose host begins 'cc1-' is not confused for the new shape" {
@@ -317,17 +311,17 @@ print('ok')
   # Both are session-shaped, so the observable outcome is the same — the
   # test pins that neither arm ordering nor the anchor lets it fall through
   # to the human-override branch.
-  [ "$(_tc_reclaim_decide Coding cc1-box:/home/x 99 99 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" cc1-box:/home/x 99 99 2)" = "reclaimable" ]
 }
 
 @test "_tc_reclaim_decide: cc1--prefixed values that are NOT the exact shape stay human-assigned" {
   # The anchor is what makes this hold: a bare "cc1-" glob would have
   # swallowed all of these and silently made hand-assigned tasks reclaimable.
-  [ "$(_tc_reclaim_decide Coding cc1-Alex 99 99 2)" = "live" ]
-  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4 99 99 2)" = "live" ]                      # no path-hash
-  [ "$(_tc_reclaim_decide Coding cc1-a1b2c3d4:9f8e 99 99 2)" = "live" ]                 # hash too short
-  [ "$(_tc_reclaim_decide Coding cc1-A1B2C3D4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # uppercase, not our emitter
-  [ "$(_tc_reclaim_decide Coding cc2-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # unknown version
+  [ "$(_tc_reclaim_decide "In Progress" cc1-Alex 99 99 2)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" cc1-a1b2c3d4 99 99 2)" = "live" ]                      # no path-hash
+  [ "$(_tc_reclaim_decide "In Progress" cc1-a1b2c3d4:9f8e 99 99 2)" = "live" ]                 # hash too short
+  [ "$(_tc_reclaim_decide "In Progress" cc1-A1B2C3D4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # uppercase, not our emitter
+  [ "$(_tc_reclaim_decide "In Progress" cc2-a1b2c3d4:9f8e7d6c5b4a3210 99 99 2)" = "live" ]     # unknown version
 }
 
 # --- T20260724-312324: live-run/PID liveness pre-check ----------------------
@@ -337,16 +331,16 @@ print('ok')
 # means "no live signal observed".
 
 @test "_tc_reclaim_decide: live_signal=1 -> live even with fully stale git/PR activity" {
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 99999 2 1)" = "live" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 99999 2 1)" = "live" ]
 }
 
 @test "_tc_reclaim_decide: live_signal omitted (back-compat) -> unchanged staleness-window behavior" {
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 99999 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 99999 2)" = "reclaimable" ]
 }
 
 @test "_tc_reclaim_decide: live_signal explicitly empty/0 -> unchanged staleness-window behavior" {
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 99999 2 '')" = "reclaimable" ]
-  [ "$(_tc_reclaim_decide Coding h:/p 99999 99999 2 0)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 99999 2 '')" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress" h:/p 99999 99999 2 0)" = "reclaimable" ]
 }
 
 # --- claimant-id format (working-dir identity; T20260615-169917) ------------
@@ -486,7 +480,7 @@ print('ok')
   _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
   # a claim written by pre-upgrade code
   _tc_fm_set "$TASK_CLAIM_DIR/T1-demo.md" claimed_by "abc12345@oldbox"
-  _tc_fm_set "$TASK_CLAIM_DIR/T1-demo.md" status Coding
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-demo.md" status "In Progress"
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)" = "abc12345@oldbox" ]   # parses
   # a new-format session sees it as someone else's → defers, never steals
   _tc_claimant_id() { printf 'box:/clone'; }
@@ -501,9 +495,9 @@ print('ok')
   [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)" ]
 }
 
-@test "release-others preserves Blocked/Review/terminal status, frees only Coding/Design" {
+@test "release-others preserves Blocked/Review/terminal status, frees only In Progress/Design" {
   TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
-  _mk_task_file "$TASK_CLAIM_DIR/T1-coding.md"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-in-progress.md"
   _mk_task_file "$TASK_CLAIM_DIR/T2-blocked.md"
   _mk_task_file "$TASK_CLAIM_DIR/T3-review.md"
   _mk_task_file "$TASK_CLAIM_DIR/T4-done.md"
@@ -516,29 +510,14 @@ print('ok')
   run _tc_release_others
   [ "$status" -eq 0 ]
   # every task loses the claim ...
-  for f in T1-coding T2-blocked T3-review T4-done; do
+  for f in T1-in-progress T2-blocked T3-review T4-done; do
     [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/$f.md" claimed_by)" ]
   done
-  # ... but only Coding/Design return to the pool; the rest keep their status
-  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-coding.md" status)"  = "Open" ]
+  # ... but only In Progress/Design return to the pool; the rest keep their status
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-in-progress.md" status)"  = "Open" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T2-blocked.md" status)" = "Blocked by T20251111-999999" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T3-review.md" status)"  = "Review" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T4-done.md" status)"    = "Done" ]
-}
-
-@test "release-others returns a legacy Coding-status claim to Open too (dual-accept, T20260809-355059)" {
-  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
-  _mk_task_file "$TASK_CLAIM_DIR/T1-legacy.md"
-  _tc_claimant_id() { printf 'box:/clone'; }
-  # simulate a pre-migration claim written before acquire started writing
-  # "In Progress" — the legacy literal must still be recognized as equivalent.
-  _tc_fm_set "$TASK_CLAIM_DIR/T1-legacy.md" claimed_by "box:/clone"
-  _tc_fm_set "$TASK_CLAIM_DIR/T1-legacy.md" status "Coding"
-  run _tc_release_others
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q '^released:T1-legacy$'
-  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-legacy.md" claimed_by)" ]
-  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-legacy.md" status)" = "Open" ]
 }
 
 @test "release-others scans PARKING: frees a self-held parked task (status preserved)" {
@@ -613,7 +592,7 @@ print('ok')
   run _tc_acquire T1
   [ "$status" -eq 0 ]; [ "$output" = "acquired" ]
   run _tc_read T1
-  # T20260809-355059: acquire now writes "In Progress", not the legacy "Coding"
+  # acquire writes "In Progress" (T20260809-355059)
   [ "$output" = "$(printf 'In Progress\tsidA@h')" ]
   # human owner: is preserved across acquire
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" owner)" = "Alex" ]

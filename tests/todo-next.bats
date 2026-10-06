@@ -144,7 +144,7 @@ append_queue_line() {
 
 @test "CCXP_PEER_MODE=0 disables claim filtering" {
   echo "# TODO Queue" > dev/TODO/queue.md
-  write_task T1 "peer-claimed" "Coding" "claimed_by: cc1-deadbeef:1234567890abcdef"
+  write_task T1 "peer-claimed" "In Progress" "claimed_by: cc1-deadbeef:1234567890abcdef"
   append_queue_line T1 "peer-claimed"
 
   CCXP_PEER_MODE=0 run bash "$SCRIPT"
@@ -160,7 +160,7 @@ append_queue_line() {
   # activity") while still exercising the genuine default-peer-mode path.
   git init -q .
   echo "# TODO Queue" > dev/TODO/queue.md
-  write_task T1 "live peer claim" "Coding" "claimed_by: Alex"
+  write_task T1 "live peer claim" "In Progress" "claimed_by: Alex"
   write_task T2 "open one" "Open"
   append_queue_line T1 "live peer claim"
   append_queue_line T2 "open one"
@@ -178,7 +178,7 @@ append_queue_line() {
   # absent) — hermetic, no mocking needed.
   git init -q .
   echo "# TODO Queue" > dev/TODO/queue.md
-  write_task T1 "reclaimable" "Coding" "claimed_by: cc1-deadbeef:1234567890abcdef"
+  write_task T1 "reclaimable" "In Progress" "claimed_by: cc1-deadbeef:1234567890abcdef"
   append_queue_line T1 "reclaimable"
 
   run bash "$SCRIPT"

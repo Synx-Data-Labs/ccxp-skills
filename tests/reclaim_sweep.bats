@@ -84,17 +84,7 @@ EOF
 
 # --- Reclaim path ------------------------------------------------------------
 
-@test "--apply reclaims a Coding task with a dead claim (emits + frees the file)" {
-  _mk_claimed_task T20260101-111111 Coding deadbeef@cdw
-  run reclaim_sweep --apply
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"reclaimed T20260101-111111"* ]]
-  # File freed: claimed_by cleared, status back to Open.
-  [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T20260101-111111-demo.md" claimed_by)" ]
-  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T20260101-111111-demo.md" status)" = "Open" ]
-}
-
-@test "--apply reclaims an \"In Progress\" task identically to the legacy Coding alias (T20260809-355059)" {
+@test "--apply reclaims an In Progress task with a dead claim (emits + frees the file)" {
   _mk_claimed_task T20260101-444444 "In Progress" deadbeef@cdw
   run reclaim_sweep --apply
   [ "$status" -eq 0 ]
@@ -117,7 +107,7 @@ EOF
 
 @test "leaves a live claim (recent PR activity) untouched" {
   _stub_live_owner
-  _mk_claimed_task T20260101-333333 Coding somebody@cdw
+  _mk_claimed_task T20260101-333333 "In Progress" somebody@cdw
   run reclaim_sweep --apply
   [ "$status" -eq 0 ]
   [[ "$output" != *"reclaimed"* ]]
@@ -151,7 +141,7 @@ EOF
 
 @test "never reclaims THIS session's own active claim" {
   mine="$(_tc_claimant_id)"
-  _mk_claimed_task T20260101-666666 Coding "$mine"
+  _mk_claimed_task T20260101-666666 "In Progress" "$mine"
   run reclaim_sweep --apply
   [ "$status" -eq 0 ]
   [[ "$output" != *"reclaimed"* ]]
@@ -163,7 +153,7 @@ EOF
 
 @test "no-op when peer mode is off (CCXP_PEER_MODE=0), even when reclaimable" {
   export CCXP_PEER_MODE=0
-  _mk_claimed_task T20260101-777777 Coding deadbeef@cdw
+  _mk_claimed_task T20260101-777777 "In Progress" deadbeef@cdw
   run reclaim_sweep --apply
   [ "$status" -eq 0 ]
   [[ "$output" != *"reclaimed"* ]]
@@ -173,7 +163,7 @@ EOF
 
 @test "active by default when CCXP_PEER_MODE is unset (default-on, matches the lock)" {
   unset CCXP_PEER_MODE
-  _mk_claimed_task T20260101-888888 Coding deadbeef@cdw
+  _mk_claimed_task T20260101-888888 "In Progress" deadbeef@cdw
   run reclaim_sweep --apply
   [ "$status" -eq 0 ]
   [[ "$output" == *"reclaimed T20260101-888888"* ]]
@@ -182,7 +172,7 @@ EOF
 # --- Logging (best-effort, loud) ---------------------------------------------
 
 @test "logs each reclaim to stderr (never silent)" {
-  _mk_claimed_task T20260101-999999 Coding deadbeef@cdw
+  _mk_claimed_task T20260101-999999 "In Progress" deadbeef@cdw
   run reclaim_sweep --apply
   [[ "$output" == *"freed T20260101-999999"* ]]   # _session_log line on stderr; run merges 2>&1
 }

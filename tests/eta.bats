@@ -28,7 +28,7 @@ commit_dated() {
 mk_task() {
   {
     echo '---'
-    echo 'status: Coding'
+    echo 'status: In Progress'
     echo "estimation: $2"
     echo "claimed_by: $3"
     echo '---'

@@ -43,7 +43,7 @@ setup() {
     git remote add origin git@github.com:local-org/local-repo.git
     cp "$FIXTURES/task-open.md"    dev/TODO/T20260101-000001-open.md
     cp "$FIXTURES/task-design.md"  dev/TODO/T20260101-000002-design.md
-    cp "$FIXTURES/task-coding.md"  dev/TODO/T20260101-000003-coding.md
+    cp "$FIXTURES/task-in-progress.md"  dev/TODO/T20260101-000003-in-progress.md
     cp "$FIXTURES/task-review.md"  dev/TODO/T20260101-000004-review.md
     cp "$FIXTURES/task-done.md"    dev/JOURNAL/T20260101-000005-done.md
     cp "$FIXTURES/task-blocked.md" dev/TODO/T20260101-000006-blocked.md
@@ -308,20 +308,18 @@ EOF
 
 @test "_epic_status_bucket: all 7 lifecycle statuses map to distinct buckets" {
   run env bash -c "source '$SCRIPT'
-    for s in Open Design Coding Review 'Blocked by T20260101-000099' Parked Done; do
+    for s in Open Design 'In Progress' Review 'Blocked by T20260101-000099' Parked Done; do
       _epic_status_bucket \"\$s\"; echo
     done"
   [ "$status" -eq 0 ]
-  expected=$'Open\nDesign\nCoding\nReview\nBlocked\nParked\nDone'
+  expected=$'Open\nDesign\nIn Progress\nReview\nBlocked\nParked\nDone'
   [ "$output" = "$expected" ]
 }
 
-@test "_epic_status_bucket + _epic_status_rank: \"In Progress\" maps identically to the legacy Coding alias (T20260809-355059)" {
+@test "_epic_status_bucket + _epic_status_rank: \"In Progress\" buckets and ranks correctly" {
   run bash -c "source '$SCRIPT'; _epic_status_bucket 'In Progress'; _epic_status_rank 'In Progress'"
   [ "$status" -eq 0 ]
-  [ "$output" = $'Coding4' ]
-  run bash -c "source '$SCRIPT'; _epic_status_bucket 'Coding'; _epic_status_rank 'Coding'"
-  [ "$output" = $'Coding4' ]
+  [ "$output" = $'In Progress4' ]
 }
 
 @test "_epic_status_bucket: empty or garbage status maps to unknown, never silently into Open" {
@@ -338,7 +336,7 @@ EOF
   run bash -c "source '$SCRIPT'; epic_render"
   [ "$status" -eq 0 ]
   [[ "$output" == "### E1 — Ship the pgrx bump"* ]]
-  [[ "$output" == *"8 tasks: 1 Done"*"1 Review"*"1 Coding"*"1 Design"*"2 Blocked/Parked"*"1 Open"* ]]
+  [[ "$output" == *"8 tasks: 1 Done"*"1 Review"*"1 In Progress"*"1 Design"*"2 Blocked/Parked"*"1 Open"* ]]
   [[ "$output" == *"⚠ T20260101-999999 unresolved"* ]]
 }
 
@@ -398,7 +396,7 @@ EOF
   line2="$(printf '%s\n' "$output" | sed -n 2p)"
   line3="$(printf '%s\n' "$output" | sed -n 3p)"
   [[ "$line1" == *"E1 — Ship the pgrx bump"* ]]
-  [[ "$line1" == *"1D/1R/1C/1Dsg/2B·P/1O"* ]]
+  [[ "$line1" == *"1D/1R/1I/1Dsg/2B·P/1O"* ]]
   [[ "$line2" == *"E2 — Cross-repo compliance audit"* ]]
   [[ "$line2" == *"⚠ stale"* ]]
   [[ "$line3" == *"E3 — Keep vendor egress under budget"* ]]
@@ -417,7 +415,7 @@ EOF
     source '$SCRIPT'; epic_render --slack"
   [ "$status" -eq 0 ]
   [[ "$output" == *'Ship \cool feature'* ]]
-  [[ "$output" == *"0D/0R/0C/0Dsg/0B·P/1O"* ]]
+  [[ "$output" == *"0D/0R/0I/0Dsg/0B·P/1O"* ]]
 }
 
 @test "epic_render --slack: zero epics -> emits nothing, exit 0" {

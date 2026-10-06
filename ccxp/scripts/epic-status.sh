@@ -291,14 +291,13 @@ _epic_status_bucket() {
   # All 7 lifecycle.md statuses get a distinct case arm (Blocked* prefix-
   # matches "Blocked by T…") — empty/anything-else is "unknown", never
   # silently folded into "Open" (the bug this task exists to fix: a
-  # Done/Coding/Blocked/Open-only enumeration would mis-bucket a Design task).
+  # Done/In Progress/Blocked/Open-only enumeration would mis-bucket a Design
+  # task).
   local status="$1"
   case "$status" in
     Done)      printf 'Done' ;;
     Review)    printf 'Review' ;;
-    # "In Progress" is the T20260809-355059 rename of Coding — dual-accept:
-    # bucketed under the same "Coding" key (display-text rename is Phase B).
-    Coding|"In Progress") printf 'Coding' ;;
+    "In Progress") printf 'In Progress' ;;
     Design)    printf 'Design' ;;
     Blocked*)  printf 'Blocked' ;;
     Parked)    printf 'Parked' ;;
@@ -314,7 +313,7 @@ _epic_status_rank() {
   case "$status" in
     Done)      printf '6' ;;
     Review)    printf '5' ;;
-    Coding|"In Progress") printf '4' ;;
+    "In Progress") printf '4' ;;
     Design)    printf '3' ;;
     Blocked*)  printf '2' ;;
     Parked)    printf '2' ;;
@@ -443,8 +442,8 @@ epic_render() {
       first_block=0
       printf '### %s — %s\n' "$eid" "$title"
       printf 'Goal: %s\n' "$goal"
-      printf '%d tasks: %d Done \xc2\xb7 %d Review \xc2\xb7 %d Coding \xc2\xb7 %d Design \xc2\xb7 %d Blocked/Parked \xc2\xb7 %d Open\n' \
-        "$n_tasks" "${counts[Done]:-0}" "${counts[Review]:-0}" "${counts[Coding]:-0}" \
+      printf '%d tasks: %d Done \xc2\xb7 %d Review \xc2\xb7 %d In Progress \xc2\xb7 %d Design \xc2\xb7 %d Blocked/Parked \xc2\xb7 %d Open\n' \
+        "$n_tasks" "${counts[Done]:-0}" "${counts[Review]:-0}" "${counts[In Progress]:-0}" \
         "${counts[Design]:-0}" "$(( ${counts[Blocked]:-0} + ${counts[Parked]:-0} ))" "${counts[Open]:-0}"
       [ -n "$leading_id" ] && printf 'Leading: %s %s (%s)\n' "$leading_id" "$leading_status" "$pr_line"
       if [ -n "$deadline" ]; then
@@ -472,7 +471,7 @@ epic_render() {
       # content.
       local em=$'\xe2\x80\x94' dot=$'\xc2\xb7' warn=$'\xe2\x9a\xa0'
       local line
-      line="*${eid} ${em} ${title}*: ${counts[Done]:-0}D/${counts[Review]:-0}R/${counts[Coding]:-0}C/${counts[Design]:-0}Dsg/$(( ${counts[Blocked]:-0} + ${counts[Parked]:-0} ))B${dot}P/${counts[Open]:-0}O"
+      line="*${eid} ${em} ${title}*: ${counts[Done]:-0}D/${counts[Review]:-0}R/${counts[In Progress]:-0}I/${counts[Design]:-0}Dsg/$(( ${counts[Blocked]:-0} + ${counts[Parked]:-0} ))B${dot}P/${counts[Open]:-0}O"
       if [ -n "$leading_id" ]; then
         line="${line} ${em} leading ${leading_id} (${leading_status}"
         [ "$pr_line" != "no PR" ] && line="${line}, ${pr_line}"

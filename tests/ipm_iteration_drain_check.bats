@@ -31,7 +31,7 @@ setup() {
 _board_clean() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":2,"title":"prev-done"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
 ] }
@@ -42,9 +42,9 @@ JSON
 _board_offender() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":2,"title":"prev-done"} },
-  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"stranded-task"} },
+  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"stranded-task"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
 ] }
 JSON
@@ -55,8 +55,8 @@ JSON
 _board_crossrepo() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
-  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Coding", "content": {"repository":"your-org/hub-repo","number":95,"title":"cross-repo-compliance"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"In Progress", "content": {"repository":"your-org/hub-repo","number":95,"title":"cross-repo-compliance"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
 ] }
 JSON
@@ -69,7 +69,7 @@ JSON
 _board_two_taskid() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Open",   "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"T20260529-269038 — frozen offender"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Open",   "content": {"repository":"your-org/build-pipeline-repo","number":43,"title":"T20260615-296902 — clean offender"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
@@ -81,7 +81,7 @@ JSON
 _board_frozen_plus_cross() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Open",   "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"T20260529-269038 — frozen offender"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Open",   "content": {"repository":"your-org/hub-repo","number":95,"title":"cross-repo-compliance"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
@@ -93,8 +93,8 @@ JSON
 _board_mixed() {
   cat <<'JSON'
 { "items": [
-  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
-  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"home-stranded"} },
+  { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current-wip"} },
+  { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":42,"title":"home-stranded"} },
   { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Open",   "content": {"repository":"your-org/hub-repo","number":95,"title":"cross-stranded"} },
   { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
 ] }
@@ -153,7 +153,7 @@ JSON
 
 @test "Parked item on the previous iteration is terminal (not an offender)" {
   export IPM_DRAIN_BOARD_JSON='{ "items": [
-    { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current"} },
+    { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current"} },
     { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Parked", "content": {"repository":"your-org/build-pipeline-repo","number":7,"title":"set-aside"} },
     { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
   ] }'
@@ -164,7 +164,7 @@ JSON
 
 @test "--terminal override can make Parked an offender (strict mode)" {
   export IPM_DRAIN_BOARD_JSON='{ "items": [
-    { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"Coding", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current"} },
+    { "iteration": {"startDate":"2026-06-22","title":"Cur"},  "status":"In Progress", "content": {"repository":"your-org/build-pipeline-repo","number":1,"title":"current"} },
     { "iteration": {"startDate":"2026-06-15","title":"Prev"}, "status":"Parked", "content": {"repository":"your-org/build-pipeline-repo","number":7,"title":"set-aside"} },
     { "iteration": {"startDate":"2026-06-08","title":"Old"},  "status":"Done",   "content": {"repository":"your-org/build-pipeline-repo","number":3,"title":"old-done"} }
   ] }'
