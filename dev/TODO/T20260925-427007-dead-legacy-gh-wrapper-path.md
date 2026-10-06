@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-10-05
 estimation: 2
 source: lsc-pa PR #159 follow-up, 2026-09-25
@@ -143,57 +143,56 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `tests/taskid_url.bats`: add a case with a fake sibling `_gh/gh.sh`
+- [x] `tests/taskid_url.bats`: added a case with a fake sibling `_gh/gh.sh`
       present (relative to a temp copy of `url.sh`) asserting `taskid-gh`
-      invokes it, and a case with no wrapper present asserting fallback to
+      invokes it, a case with no wrapper present asserting fallback to
       bare `gh` (stubbed) — unchanged fallback semantics, only the checked
-      path moves.
-- [ ] `tests/ci-triage.bats`: same two cases for `ci_triage_gh` (same-dir
-      sibling) — same unchanged bare-`gh`-fallback semantics.
-- [ ] `tests/quality_probe.bats`: case with a fake sibling `_gh/gh.sh`
-      present asserting `QP_GH` resolves to it and the code-scanning check
-      runs; case with it absent asserting the **existing** skip-cleanly
-      behavior is preserved (`qp-log-skip code-scanning unavailable`,
-      `null` result) — explicitly **not** a new bare-`gh` fallback, per the
-      per-site asymmetry noted in `## Solution`.
-- [ ] `repo-conventions/scripts/test_lint_refs.py` (unit test, not bats —
-      `gh_argv()`'s path-resolution/plugin-cache-search logic is pure
-      Python; `tests/lint_refs.bats`'s own header documents its scope as
-      CLI-level/gh-stubbed integration coverage, with pure logic
-      unit-tested in `test_lint_refs.py` instead, mirroring the existing
-      `known_sibling_repos()` env-seam tests there): case with the sibling
-      `_gh/gh.sh` present (same-repo checkout), case with it absent but a
-      fake `plugins/cache/<marketplace>/ccxp-skills/<version>/_gh/gh.sh`
-      present under a temp `CLAUDE_CONFIG_DIR` (asserts the cache search
-      wins), and a case with neither present (bare `gh`).
-- [ ] Local: `bats tests/taskid_url.bats tests/ci-triage.bats tests/quality_probe.bats`
-      and `python3 repo-conventions/scripts/test_lint_refs.py -v` (same
-      direct-invocation style as its sibling test files, e.g.
-      `python3 repo-conventions/scripts/test_lint_tasks.py -v` in
-      `.github/workflows/tests.yml:66`) all green. **Note**:
+      path moves — and a `git grep` regression guard against the dead path
+      string. 3 new cases, all green.
+- [x] `tests/ci-triage.bats`: same three cases for `ci_triage_gh` (same-dir
+      sibling) — same unchanged bare-`gh`-fallback semantics. All green.
+- [x] `tests/quality_probe.bats`: added a case asserting `QP_GH`'s *default
+      value* resolves relative to `probe.sh` (not via `$HOME`), plus a
+      `git grep` regression guard. The existing "logs 'unavailable'" case
+      already covers the **unchanged** skip-cleanly behavior when `QP_GH`
+      is missing (it sets `QP_GH` explicitly, independent of the default) —
+      per the per-site asymmetry noted in `## Solution`, no new bare-`gh`
+      fallback was added. 2 new cases, all green; whole file still 33/33.
+- [x] `repo-conventions/scripts/test_lint_refs.py` (unit test, not bats —
+      see rationale in `## Repo file references`): 4 new cases covering env
+      override, own-sibling-present, plugin-cache-fallback (including
+      lexicographically-last-version selection), and bare-`gh` when
+      nothing resolves. All green; whole file 37/37.
+- [x] Local: `bats tests/taskid_url.bats tests/ci-triage.bats
+      tests/quality_probe.bats` (77/77) and
+      `python3 repo-conventions/scripts/test_lint_refs.py -v` (37/37) all
+      green. Full suite re-run for regressions: `bats tests/*.bats`
+      (837/837) and every `test_*.py` in the repo, all exit 0. **Note**:
       `test_lint_refs.py` is not currently wired into `tests.yml` at all
       (verified: `grep -n test_lint_refs .github/workflows/tests.yml`
-      returns nothing) — out of scope to fix here, but flagged as a
-      candidate follow-up so the new cases this task adds don't silently
-      stop running in CI the moment this PR merges.
-- [ ] `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py' ':!tests/'`
-      returns empty (post-merge confirmation, included in Done when).
+      returns nothing) — out of scope to fix here, flagged as a candidate
+      follow-up so the new cases this task adds don't silently stop running
+      in CI.
+- [x] `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py'
+      ':!tests/'` returns empty — verified locally post-implementation
+      (required rewording two in-code comments that would otherwise have
+      matched the same dead-path string they were describing).
 
 ## Done criteria
 
-- [ ] The three plugin-internal scripts resolve their sibling wrapper
+- [x] The three plugin-internal scripts resolve their sibling wrapper
       relative to themselves, each keeping its own pre-existing fallback
       behavior unchanged when the sibling is missing (bare `gh` for
       `taskid-gh`/`ci_triage_gh`; skip-the-check for `QP_GH` — see
       `## Solution`'s asymmetry note) — verified by `tests/taskid_url.bats`,
       `tests/ci-triage.bats`, `tests/quality_probe.bats` new cases above.
-- [ ] `lint_refs.py` tries its own plugin-relative location first, then the
+- [x] `lint_refs.py` tries its own plugin-relative location first, then the
       plugin-cache search for vendored copies — verified by
       `repo-conventions/scripts/test_lint_refs.py` new cases above.
-- [ ] Test cases (bats for the three bash sites, a Python unittest for
+- [x] Test cases (bats for the three bash sites, a Python unittest for
       `lint_refs.py`) cover wrapper resolution with a fake plugin layout
       and with no wrapper at all — same four test files above.
-- [ ] None of the four call sites references the legacy path any more —
+- [x] None of the four call sites references the legacy path any more —
       verified by `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' --
       '*.sh' '*.py' ':!tests/'` returning empty.
 

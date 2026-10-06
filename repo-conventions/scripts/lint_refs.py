@@ -93,6 +93,11 @@ def known_sibling_repos():
     return {name for name in re.split(r"[,\s]+", raw.strip()) if name}
 
 URL_SH = Path(__file__).resolve().parent.parent.parent / "_taskid" / "url.sh"
+# Sibling _gh/gh.sh, resolved relative to this file -- works under both a
+# same-repo checkout and a plugin-cache install layout (T20260925-427007).
+# Patchable (see test_lint_refs.py's GhArgvTest) so a vendored copy's
+# missing-sibling case can be simulated without touching the real repo tree.
+GH_SH = Path(__file__).resolve().parent.parent.parent / "_gh" / "gh.sh"
 
 
 def _protected_spans(line):
@@ -281,15 +286,37 @@ def repo_slug(repo_root="."):
     return parse_repo_slug(out.stdout)
 
 
+def _plugin_cache_gh_wrapper():
+    """Best-effort search of $CLAUDE_CONFIG_DIR/plugins/cache (falling back
+    to ~/.claude when unset) for an installed ccxp-skills plugin's
+    _gh/gh.sh -- the fallback for a vendored copy of this script that has
+    no _gh/ sibling of its own (gh_argv() tries GH_SH first). Returns the
+    lexicographically-last match (an approximation of "newest version", not
+    full semver-aware -- acceptable for this fallback path) or None."""
+    config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude"))
+    cache_root = config_dir / "plugins" / "cache"
+    try:
+        candidates = sorted(cache_root.glob("*/ccxp-skills/*/_gh/gh.sh"))
+    except OSError:
+        return None
+    return candidates[-1] if candidates else None
+
+
 def gh_argv():
-    """Account-aware gh command, mirroring _taskid/url.sh's taskid-gh chain:
-    env override -> the repo's account wrapper -> raw gh."""
+    """Account-aware gh command: env override -> this file's own sibling
+    _gh/gh.sh (plugin-internal / same-repo checkout, GH_SH) -> a
+    plugin-cache search (vendored copies with no _gh/ sibling of their
+    own) -> raw gh. The pre-plugin wrapper path this replaces -- under the
+    retired manual symlink-under-home-dir install layout -- is gone for
+    good; it can never exist again (T20260925-427007)."""
     override = os.environ.get("LINT_REFS_GH")
     if override:
         return [override]
-    wrapper = Path.home() / ".claude" / "skills" / "_gh" / "gh.sh"
-    if wrapper.is_file() and os.access(wrapper, os.X_OK):
-        return ["bash", str(wrapper)]
+    if GH_SH.is_file() and os.access(GH_SH, os.X_OK):
+        return ["bash", str(GH_SH)]
+    cache_wrapper = _plugin_cache_gh_wrapper()
+    if cache_wrapper is not None:
+        return ["bash", str(cache_wrapper)]
     return ["gh"]
 
 

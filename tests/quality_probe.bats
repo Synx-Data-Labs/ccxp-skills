@@ -193,6 +193,16 @@ _last_record() { tail -n 1 "$TARGET/dev/quality/metrics.jsonl"; }
   [[ "$output" == *"jscpd"* ]]
 }
 
+@test "QP_GH defaults to the gh wrapper resolved relative to probe.sh (T20260925-427007)" {
+  # The dead pre-plugin wrapper path this replaces (the retired manual
+  # symlink-under-home-dir install layout) depended on $HOME; the sibling-
+  # relative default below does not -- probe.sh and _gh/gh.sh are both
+  # two levels under the repo root (quality-probe/scripts/../../_gh/gh.sh).
+  run env -u QP_GH bash -c "source '$PROBE'; printf '%s' \"\$QP_GH\""
+  [ "$status" -eq 0 ]
+  [ "$output" = "$REPO_ROOT/_gh/gh.sh" ]
+}
+
 @test "qp-run-code-scanning logs 'unavailable' (not 'not installed') when the gh wrapper is absent" {
   _load
   # Code scanning is an API, not a local tool — its skip paths (wrapper absent,
@@ -413,4 +423,9 @@ _mk_git_repo() {
   [ "$status" -eq 0 ]
   local board="$repo/dev/quality/metrics.jsonl"
   [ "$(jq -r '.files | length' "$board")" -eq 0 ]
+}
+
+@test "probe.sh never references the dead legacy _gh path (T20260925-427007)" {
+  run grep -c '\.claude/skills/_gh' "$PROBE"
+  [ "$status" -ne 0 ]
 }

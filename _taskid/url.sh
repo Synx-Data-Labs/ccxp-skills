@@ -37,11 +37,18 @@ TASKID_URL_BRANCH="${TASKID_URL_BRANCH:-main}"
 # _gh wrapper when installed (handles multi-account auth), else raw gh.
 TASKID_GH="${TASKID_GH:-}"
 
+# Sibling _gh/gh.sh, resolved relative to this file — _taskid/ and _gh/ are
+# both direct children of the repo root, so this works under both a same-repo
+# checkout and a plugin-cache install layout (T20260925-427007; the dead
+# pre-plugin wrapper path this replaces, under the retired manual
+# symlink-under-home-dir install layout, can never exist again).
+_TASKID_URL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 function taskid-gh() {
   if [ -n "$TASKID_GH" ]; then
     "$TASKID_GH" "$@"
-  elif [ -x "$HOME/.claude/skills/_gh/gh.sh" ]; then
-    bash "$HOME/.claude/skills/_gh/gh.sh" "$@"
+  elif [ -x "$_TASKID_URL_DIR/../_gh/gh.sh" ]; then
+    bash "$_TASKID_URL_DIR/../_gh/gh.sh" "$@"
   else
     gh "$@"
   fi
