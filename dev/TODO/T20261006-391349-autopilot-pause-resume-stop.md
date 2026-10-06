@@ -62,7 +62,7 @@ claimed_role: interactive
   precedent, not a gap introduced by this task.
 - The loop's only existing stop paths are internal: Phase 2's
   `now >= end_time` check (`autopilot/SKILL.md:54`) and Phase 4's
-  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:100-102`) —
+  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:101-102`) —
   nothing a user can trigger mid-run today.
 - `/autopilot` is deliberately the interactive-only duration-boxed loop
   (`/ccxp` owns the cron/ritual cadence) — this feature is scoped to that
@@ -186,9 +186,10 @@ claimed_role: interactive
   reschedule calls are preceded by `ScheduleWakeup(stop: true)` on
   pause/stop — verified against `dev/.autopilot-state.json`'s `status`
   field.
-- [ ] `autopilot/SKILL.md:58`'s Phase 3 dispatch gains the graceful
-  `SendMessage` + 2-minute timeout + `TaskStop` escalation — verified via
-  the Test plan's dry-run above.
+- [ ] `autopilot/SKILL.md:72`'s dispatch call captures the subagent's
+  `agentId`, and `autopilot/SKILL.md:94`'s wait-for-completion point gains
+  the graceful `SendMessage` + 2-minute timeout + `TaskStop` escalation —
+  verified via the Test plan's dry-run above.
 - [ ] Test plan item 3 (`resume` redispatch) passes: `/drive T<last_task>`
   is tried explicitly before falling back to bare `/todo next`.
 - [ ] `autopilot/SKILL.md:37`'s Phase 0 `status` report shows a distinct
