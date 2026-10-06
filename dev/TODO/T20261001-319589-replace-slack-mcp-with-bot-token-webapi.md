@@ -1,5 +1,5 @@
 ---
-status: In Progress
+status: Open
 estimation: 3
 source: User report 2026-10-01 — two labrun Slack alerts (synxdb-build-pipeline
   #C0ALGAPRCA3/p1790829253605319, p1790860307828209) never got an RCA thread
@@ -9,8 +9,8 @@ related: T20260724-176269 (prior, "corrected" occurrence of this exact symptom,
   that closure doesn't explain the current recurrence)
 blocked-by: none (code-side work is NOT blocked; final activation is — see
   "Manual step" below)
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-09-28
 ---
 
