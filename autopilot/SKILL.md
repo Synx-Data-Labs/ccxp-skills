@@ -106,9 +106,10 @@ If a prior cycle left it dirty or mid-rebase (crashed before Phase 7 cleanup), j
 - **Full clone (own `.git`), not a worktree, not shallow.** A worktree shares `.git` with the parent — git refuses a branch already checked out elsewhere, and `/drive` checks out `main` constantly while the parent session normally sits there at rest, so a worktree would collide almost every cycle. `--dispatch-blockers` gets away with `isolation: "worktree"` only because it's one-off, not reused. Non-shallow since this clone lives for potentially hours.
 - **Reused, never recreated, for the run's life.** Same path every cycle → same `claimant_id` (`_session/claimant-id.sh` hashes the clone's toplevel path) → claims behave like a normal peer clone (`_session/task_claim.sh` peer-mode already supports this). A fresh clone/worktree per dispatch would instead give every cycle a different identity, breaking "same clone = same claimant".
 
-Dispatch `/drive` (bare auto-pick) via the `Agent` tool — `subagent_type: general-purpose`, **no `isolation` parameter** (the clone above already provides it; the tool's own worktree isolation would be a different, non-reused worktree per call). This is also what bounds a multi-hour run's own context growth — no `/clear`/`/compact` exists for this skill to call.
+Dispatch `/drive` (bare auto-pick) via the `Agent` tool — `subagent_type: general-purpose`, no `isolation` (the clone above already provides it; the tool's own worktree isolation would instead be a fresh, non-reused worktree per call). Note the returned `agentId` every time — Phase 0.1's graceful pause/stop `SendMessage`s it to interrupt the subagent.
 
-- A `resume`'s first cycle (Phase 0.1) dispatches `/drive T<last_task.id>` instead. Note the returned `agentId` — Phase 0.1's graceful pause/stop `SendMessage`s this subagent to interrupt it.
+- A `resume`'s first cycle (Phase 0.1) dispatches `/drive T<last_task.id>` instead.
+- This dispatch is also what bounds a multi-hour run's own context growth — no `/clear`/`/compact` exists for this skill to call.
 
 The prompt must be self-contained: this is `/autopilot` invoking `/drive` for its next cycle (bare, auto-pick); name `$CLONE_PATH`; require `/drive` run to completion. Give it Phase 4's classification criteria too, not just the report shape (a commit alone is not advancement — only a merge or a self-resolving wait counts as Progress).
 
