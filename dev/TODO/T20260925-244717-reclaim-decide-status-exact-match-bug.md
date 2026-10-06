@@ -12,6 +12,12 @@ scheduled: 2026-10-05
 
 # T20260925-244717: `_tc_reclaim_decide` exact-matches `status` against `Coding`/`Review`, so any narrated status always reads `live`
 
+## TLDR
+
+- **Type**: bug
+- **Problem**: `_tc_reclaim_decide` (`_session/task_claim.sh:292`) exact-matches `status` against `Coding`/`"In Progress"`/`Review`; any documented-convention narrated status (e.g. `Review — implementation complete, PR #3416 open`) misses the match and returns `live` unconditionally, before the staleness-window logic ever runs.
+- **Solution**: match on the leading status token (prefix check), not the whole string, so a narrated status still enters the staleness window. Add a BATS case covering narrated-vs-bare parity.
+
 ## Problem
 
 - **Type**: bug
@@ -68,3 +74,101 @@ scheduled: 2026-10-05
   status still enters the staleness-window logic. Add a BATS case
   mirroring the isolation above: same `commit_days`/`pr_days`/`stale`,
   narrated vs. bare status, asserting both return the same verdict.
+
+## Context
+
+- `_tc_reclaim_decide` is the pure decision core behind `task_claim.sh reclaimable`
+  and `reclaim_sweep.sh`'s stale-claim sweep — the safety net that frees a
+  peer-mode claim when the owning session has gone dark (`_session/README.md`).
+- The `/todo` skill's frontmatter convention (`todo/SKILL.md` §Task metadata)
+  explicitly documents narrated statuses (`SUPERVISED`, `BLOCKED`, or any
+  free-form note) as expected, common usage — not an edge case.
+- No existing tests exercise a *narrated* `Coding`/`In Progress`/`Review` status
+  through `_tc_reclaim_decide` — `tests/task_claim.bats:200-244` only use bare
+  tokens.
+
+## Root cause
+
+- `_session/task_claim.sh:291-293`:
+
+  ```bash
+  case "$status" in
+    Coding|"In Progress"|Review) : ;;
+    *) printf 'live'; return 0 ;;
+  esac
+  ```
+
+  A `case` pattern here is an exact (glob) match against the full `$status`
+  string, not a prefix test — so `"Review — implementation complete, PR #3416
+  open"` doesn't match the `Review` arm and falls straight to `*)`.
+- Git archaeology: this exact-match form predates this repo's own history —
+  `ccxp-skills` begins at `5051a9e` ("Initial public release", 2026-09-28), a
+  squashed import from a private source repo, and the `Coding|Review`
+  exact-match pattern (later extended to include `"In Progress"` per
+  T20260809-355059, also pre-squash) is already present at that first commit.
+  *Verified*: no narrower origin commit exists in this repo's own history.
+  *Assumed*: whether the original author deliberately chose exact-match or
+  simply didn't anticipate narrated statuses — unrecoverable from the
+  squashed history, but the documented frontmatter convention (narrated
+  statuses are expected, common usage) existing independently of this
+  function makes "oversight" the more likely read.
+- Why it went unnoticed: `tests/task_claim.bats`'s existing `_tc_reclaim_decide`
+  cases all pass bare status tokens (`Coding`, `Review`, `"In Progress"`), so
+  the exact-match bug has no failing test to surface it — it was only caught
+  live, via the `T20260914-175513` reproduction in the Problem section above.
+
+## Solution
+
+- Replace the exact-match `case` arms with prefix-aware patterns — glob
+  patterns that match either the bare token or the token followed by a space
+  (the universal separator for narration, per the `/todo` convention's
+  `status: Coding — SUPERVISED (needs VPN)` example):
+
+  ```bash
+  case "$status" in
+    Coding|Coding\ *|"In Progress"|"In Progress "*|Review|Review\ *) : ;;
+    *) printf 'live'; return 0 ;;
+  esac
+  ```
+
+- **Alternatives considered and rejected**:
+  - *Regex/parameter-expansion prefix check* (e.g. `[[ "$status" == Coding* ]]`)
+    — functionally equivalent, but the codebase's own `status_head()` helper
+    (`repo-conventions/scripts/lint_tasks.py`) already establishes `case`-glob
+    as the idiomatic pattern for this exact problem in this repo; switching to
+    `[[ ]]` here would be a gratuitous style departure for no behavioral gain.
+  - *Split on first whitespace, then exact-match the token* — correct, but
+    adds a variable and a second step for no benefit over inline glob
+    alternation; the one-line fix is simpler to review and test.
+  - *Loosen to a bare prefix glob (e.g. `Coding*`)* — rejected: `Coding` is
+    itself a prefix of nothing else in the active-status vocabulary, but
+    `Review*` would also match a hypothetical future status literally named
+    `Reviewed` (not a current status, but the explicit `Review|Review\ *`
+    form stays correct even if one is added later, at zero extra cost).
+
+## Test plan
+
+- [ ] BATS: narrated vs. bare status, identical `commit_days`/`pr_days`/`stale`,
+      assert identical verdict — mirrors the task's own reproduction
+      (`tests/task_claim.bats`, new case near the existing
+      `_tc_reclaim_decide: "In Progress" status is recognized...` test at
+      line 221).
+  - [ ] `Review — implementation complete, PR #3416 open` + stale signals → `reclaimable`
+  - [ ] `Coding — SUPERVISED (needs VPN)` + stale signals → `reclaimable`
+  - [ ] `In Progress — design PR skipped (...)` + stale signals → `reclaimable`
+- [ ] `bats tests/task_claim.bats` passes locally, full suite (no regressions
+      in the existing bare-status cases).
+- [ ] CI `bats` check green on the PR.
+
+## Done criteria
+
+- [ ] `_session/task_claim.sh:291-293` returns `reclaimable` for a narrated status with stale signals, matching its bare-token counterpart — verified by the new BATS case(s) in `tests/task_claim.bats`.
+- [ ] No existing case in `tests/task_claim.bats` regresses — full `bats` run, all green.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_session/task_claim.sh` | 291–293 | `_tc_reclaim_decide` — the buggy exact-match `case`, fixed here |
+| `tests/task_claim.bats` | ~221–225 | existing `"In Progress"` bare-status coverage; new narrated-status case added alongside |
+| `todo/SKILL.md` | frontmatter §Task metadata | documents the narrated-status convention this bug silently defeats |
