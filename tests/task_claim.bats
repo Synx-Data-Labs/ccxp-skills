@@ -86,6 +86,68 @@ EOF
   [ "$(grep -c -- '^---$' "$f")" -eq 2 ]
 }
 
+@test "_tc_fm_set consumes continuation lines of a multi-line value it overwrites" {
+  # T20260925-383305: a plain YAML scalar folds across lines when continuation
+  # lines are indented more than the key. _tc_fm_set must consume ALL of the
+  # old value's continuation lines when it replaces the field, not just its
+  # first line — mirrors the live repro from T20260916-232402.
+  f="$BATS_TEST_TMPDIR/t.md"
+  printf -- '%s\n' \
+    '---' \
+    'status: Review — SUPERVISED (needs a human' \
+    '  with real access; some detail' \
+    '  continues here)' \
+    'claimed_by: x@h' \
+    '---' \
+    '' \
+    'body' \
+    > "$f"
+  _tc_fm_set "$f" status "In Progress"
+  [ "$(_tc_fm_get "$f" status)" = "In Progress" ]
+  # no leftover continuation-line text survives anywhere in the file.
+  # NOTE: "! grep ..." as a bare statement is exempt from bats'/bash's
+  # errexit (POSIX: a command whose status is inverted via ! never
+  # triggers `set -e`), so a bare negated grep here would silently pass
+  # even when the match IS found — use `run` to capture the real status.
+  run grep -q "continues here" "$f"
+  [ "$status" -ne 0 ]
+  run grep -q "with real access" "$f"
+  [ "$status" -ne 0 ]
+  # frontmatter wasn't corrupted/widened — still exactly 2 fence lines
+  [ "$(grep -c -- '^---$' "$f")" -eq 2 ]
+  # the field immediately after the multi-line value is untouched
+  [ "$(_tc_fm_get "$f" claimed_by)" = "x@h" ]
+}
+
+@test "_tc_fm_set: frontmatter re-parses cleanly as YAML after overwriting a multi-line value" {
+  command -v python3 >/dev/null 2>&1 || skip "python3 unavailable"
+  python3 -c 'import yaml' 2>/dev/null || skip "pyyaml unavailable"
+  f="$BATS_TEST_TMPDIR/t.md"
+  printf -- '%s\n' \
+    '---' \
+    'status: Review — SUPERVISED (needs a human' \
+    '  with real access; some detail' \
+    '  continues here)' \
+    'claimed_by: x@h' \
+    '---' \
+    '' \
+    'body' \
+    > "$f"
+  _tc_fm_set "$f" status "In Progress"
+  run python3 -c "
+import sys, yaml
+with open(sys.argv[1]) as fh:
+    text = fh.read()
+fm = text.split('---', 2)[1]
+doc = yaml.safe_load(fm)
+assert doc['status'] == 'In Progress', doc['status']
+assert doc['claimed_by'] == 'x@h', doc['claimed_by']
+print('ok')
+" "$f"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ok" ]
+}
+
 # --- own-or-defer decision (the anti-steal core) ----------------------------
 
 @test "_tc_decide: empty or 'none' -> none (free to take)" {
