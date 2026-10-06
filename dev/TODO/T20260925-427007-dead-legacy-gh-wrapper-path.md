@@ -1,9 +1,11 @@
 ---
-status: Open
+status: Design
 scheduled: 2026-10-05
 estimation: 2
 source: lsc-pa PR #159 follow-up, 2026-09-25
 related: T20260925-219021
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
 ---
 
 # T20260925-427007: Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
