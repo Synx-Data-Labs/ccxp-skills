@@ -15,7 +15,7 @@ claimed_role: interactive
 ## TLDR
 
 - **Type**: feature
-- **Problem**: `/autopilot` (`autopilot/SKILL.md:37`) has no user-invoked way
+- **Problem**: `/autopilot` (`autopilot/SKILL.md:45`) has no user-invoked way
   to pause, resume, or explicitly stop a running loop mid-window.
 - **Solution**: add `pause [--now]` / `resume` / `stop [--now]` as new
   special-cased arguments (Phase 0-style), with a graceful
@@ -50,7 +50,7 @@ claimed_role: interactive
      you still use the same dispatch clone (`dispatch_clone_path`) to work
      the priority task, given `/drive`'s claimant identity is hashed from
      that clone's own toplevel path (`_session/claimant-id.sh`, referenced
-     at `autopilot/SKILL.md:70`)?
+     at `autopilot/SKILL.md:109`)?
   - Also unresolved: a pause must suppress/cancel the next cycle's already
     scheduled `ScheduleWakeup` (Phase 4) so the loop doesn't silently
     continue dispatching cycles while "paused".
@@ -61,8 +61,8 @@ claimed_role: interactive
   exists) — verification here is manual dry-run, matching existing
   precedent, not a gap introduced by this task.
 - The loop's only existing stop paths are internal: Phase 2's
-  `now >= end_time` check (`autopilot/SKILL.md:54`) and Phase 4's
-  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:101-102`) —
+  `now >= end_time` check (`autopilot/SKILL.md:93`) and Phase 4's
+  queue-empty/stuck-exhausted branches (`autopilot/SKILL.md:140-141`) —
   nothing a user can trigger mid-run today.
 - `/autopilot` is deliberately the interactive-only duration-boxed loop
   (`/ccxp` owns the cron/ritual cadence) — this feature is scoped to that
@@ -179,20 +179,20 @@ claimed_role: interactive
 
 ## Done criteria
 
-- [ ] `autopilot/SKILL.md:37` (Phase 0) gains `pause [--now]` / `resume` /
+- [ ] `autopilot/SKILL.md:45` (Phase 0) gains `pause [--now]` / `resume` /
   `stop [--now]` argument branches alongside the existing `status`
   check — verified by the Test plan's manual dry-run.
-- [ ] `autopilot/SKILL.md:100`/`autopilot/SKILL.md:102`'s unconditional
+- [ ] `autopilot/SKILL.md:140`/`autopilot/SKILL.md:141`'s unconditional
   reschedule calls are preceded by `ScheduleWakeup(stop: true)` on
   pause/stop — verified against `dev/.autopilot-state.json`'s `status`
   field.
-- [ ] `autopilot/SKILL.md:72`'s dispatch call captures the subagent's
-  `agentId`, and `autopilot/SKILL.md:94`'s wait-for-completion point gains
+- [ ] `autopilot/SKILL.md:111`'s dispatch call captures the subagent's
+  `agentId`, and `autopilot/SKILL.md:133`'s wait-for-completion point gains
   the graceful `SendMessage` + 2-minute timeout + `TaskStop` escalation —
   verified via the Test plan's dry-run above.
 - [ ] Test plan item 3 (`resume` redispatch) passes: `/drive T<last_task>`
   is tried explicitly before falling back to bare `/todo next`.
-- [ ] `autopilot/SKILL.md:37`'s Phase 0 `status` report shows a distinct
+- [ ] `autopilot/SKILL.md:45`'s Phase 0 `status` report shows a distinct
   "paused" header, not reused from the `running` branch — verified
   visually.
 
