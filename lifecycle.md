@@ -72,7 +72,7 @@ Open → Design → In Progress → Review → Done
     Blocked by T{id}                  Parked
 ```
 
-`Coding` is a still-recognized legacy alias of `In Progress` for scripts and existing task files (T20260809-355059) — a domain-generic rename, since many tasks this system tracks aren't code at all (legal filings, marketing audits, research write-ups). New task files should be written with `In Progress`.
+`In Progress` is a domain-generic name (T20260809-355059, superseding the earlier `Coding`) since many tasks this system tracks aren't code at all (legal filings, marketing audits, research write-ups).
 
 > **Done** means the file is **moved** from `dev/TODO/` to `dev/JOURNAL/`.
 > **Parked** means the file is **moved** from `dev/TODO/` to `dev/PARKING/` — not actionable now, reviewed periodically by `/drive`.
@@ -81,7 +81,7 @@ Open → Design → In Progress → Review → Done
 |--------|---------|
 | Open | Not yet started — queued for future work |
 | **Design** | Research, planning, writing the design journal entry |
-| **In Progress** | Implementation is underway — code, a design doc, a filing, whatever "doing the work" means for this task (`Coding` is a still-recognized legacy alias) |
+| **In Progress** | Implementation is underway — code, a design doc, a filing, whatever "doing the work" means for this task |
 | **Review** | PR open or awaiting verification/sign-off |
 | Blocked by T{id} | Cannot proceed until dependency is resolved (list all blockers) |
 | Parked | Moved to `dev/PARKING/` — valid but not actionable now. Use `/todo sweep` to park tasks. |

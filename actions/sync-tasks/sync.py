@@ -518,7 +518,7 @@ def status_to_option_id(status_text, options):
         return lower_opts.get("blocked")
     if s.startswith("closed") or s.startswith("done"):
         return lower_opts.get("done")
-    # Prose-suffixed status (e.g. "Coding — UNBLOCKED 2026-06-06: picked B"):
+    # Prose-suffixed status (e.g. "In Progress — UNBLOCKED 2026-06-06: picked B"):
     # match the leading word against a known option, the same tolerance the
     # "blocked"/"closed" prefixes already get. Split on the first separator
     # (whitespace, em-dash, hyphen, colon, paren). "In Progress"
@@ -539,8 +539,7 @@ def status_to_option_id(status_text, options):
 def status_for_location(file_path, frontmatter_status):
     """Derive the Project Status from file location, falling back to
     frontmatter status. PARKING and JOURNAL override frontmatter; TODO
-    respects frontmatter (Open/Design/In Progress [or legacy Coding]/Review/
-    Blocked)."""
+    respects frontmatter (Open/Design/In Progress/Review/Blocked)."""
     kind = file_dir_kind(file_path)
     if kind == "PARKING":
         return "Parked"

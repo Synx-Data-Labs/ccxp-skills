@@ -48,7 +48,7 @@ class LintTasksTest(unittest.TestCase):
 
     def test_prose_suffixed_status_passes(self):
         f = write_task(self.root, frontmatter=(
-            "status: Coding — UNBLOCKED 2026-06-06: maintainer picked B\n"
+            "status: In Progress — UNBLOCKED 2026-06-06: maintainer picked B\n"
             "estimation: 2\n"
             "scheduled: 2026-06-09"))
         self.assertEqual(lint_tasks.lint_file(f), [])
@@ -251,7 +251,7 @@ class LintTasksTest(unittest.TestCase):
         # (only `status: Blocked by …` triggers the cross-reference).
         write_journal(self.root, "2026-06-17-T20260611-000010-done.md")
         write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
-            "status: Coding — superseded T20260611-000010\nestimation: 2"))
+            "status: In Progress — superseded T20260611-000010\nestimation: 2"))
         self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
 
     def test_blocked_by_missing_blocker_fails(self):
@@ -321,9 +321,9 @@ class LintTasksTest(unittest.TestCase):
 
     # --- scheduled: when-advanced rule ----------------------------------------
 
-    def test_coding_without_scheduled_fails(self):
+    def test_in_progress_without_scheduled_fails(self):
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 3")
+                       frontmatter="status: In Progress\nestimation: 3")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m and "missing" in m for m in out), out)
 
@@ -345,25 +345,26 @@ class LintTasksTest(unittest.TestCase):
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m for m in out), out)
 
-    def test_prose_suffixed_coding_without_scheduled_fails(self):
-        # 'Coding — UNBLOCKED …' has leading token 'Coding' → still must carry
-        # scheduled: (sync-agreement guard: this status syncs as Coding).
+    def test_prose_suffixed_in_progress_without_scheduled_fails(self):
+        # 'In Progress — UNBLOCKED …' has leading token 'In Progress' → still
+        # must carry scheduled: (sync-agreement guard: this status syncs as
+        # In Progress).
         f = write_task(self.root,
                        frontmatter=(
-                           "status: Coding — UNBLOCKED 2026-06-06: pick B\n"
+                           "status: In Progress — UNBLOCKED 2026-06-06: pick B\n"
                            "estimation: 2"))
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m for m in out), out)
 
-    def test_coding_with_valid_scheduled_passes(self):
+    def test_in_progress_with_valid_scheduled_passes(self):
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 3\nscheduled: 2026-06-09")
+                       frontmatter="status: In Progress\nestimation: 3\nscheduled: 2026-06-09")
         self.assertEqual(lint_tasks.lint_file(f), [])
 
-    def test_coding_with_invalid_scheduled_fails(self):
+    def test_in_progress_with_invalid_scheduled_fails(self):
         # scheduled: present but not YYYY-MM-DD → still a violation.
         f = write_task(self.root,
-                       frontmatter="status: Coding\nestimation: 3\nscheduled: next-monday")
+                       frontmatter="status: In Progress\nestimation: 3\nscheduled: next-monday")
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("scheduled:" in m and "not a valid" in m for m in out), out)
 
