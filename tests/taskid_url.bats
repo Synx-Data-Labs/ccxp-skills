@@ -208,3 +208,45 @@ STUB
   run taskid-mdlink
   [ "$status" -eq 2 ]
 }
+
+# --- gh wrapper resolution (T20260925-427007) --------------------------------
+# taskid-gh used to check the dead pre-plugin symlink path
+# ~/.claude/skills/_gh/gh.sh, which never exists under a plugin install, so it
+# silently fell back to bare gh. It now resolves _gh/gh.sh relative to its own
+# file (_taskid/ and _gh/ are both direct children of the repo root), falling
+# back to bare gh only when that sibling is genuinely missing. These two
+# fixtures copy url.sh to an isolated layout (with / without a _gh sibling) so
+# both branches are exercised without touching the real repo tree.
+
+@test "taskid-gh invokes the sibling _gh/gh.sh resolved relative to its own file" {
+  local fixture="$BATS_TEST_TMPDIR/fixture-sibling"
+  mkdir -p "$fixture/_taskid" "$fixture/_gh"
+  cp "$REPO_ROOT/_taskid/url.sh" "$fixture/_taskid/url.sh"
+  cat > "$fixture/_gh/gh.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "sibling-gh-sh-called: $*"
+STUB
+  chmod +x "$fixture/_gh/gh.sh"
+  run env -u TASKID_GH bash -c "source '$fixture/_taskid/url.sh'; taskid-gh foo bar"
+  [ "$status" -eq 0 ]
+  [ "$output" = "sibling-gh-sh-called: foo bar" ]
+}
+
+@test "taskid-gh falls back to bare gh when no sibling _gh/gh.sh exists" {
+  local fixture="$BATS_TEST_TMPDIR/fixture-nosibling"
+  mkdir -p "$fixture/_taskid"
+  cp "$REPO_ROOT/_taskid/url.sh" "$fixture/_taskid/url.sh"
+  cat > bin/gh <<'STUB'
+#!/usr/bin/env bash
+echo "bare-gh-called: $*"
+STUB
+  chmod +x bin/gh
+  run env -u TASKID_GH PATH="$BATS_TEST_TMPDIR/bin:$PATH" bash -c "source '$fixture/_taskid/url.sh'; taskid-gh foo bar"
+  [ "$status" -eq 0 ]
+  [ "$output" = "bare-gh-called: foo bar" ]
+}
+
+@test "taskid-gh never references the dead ~/.claude/skills/_gh path" {
+  run grep -c '\.claude/skills/_gh' "$REPO_ROOT/_taskid/url.sh"
+  [ "$status" -ne 0 ]
+}

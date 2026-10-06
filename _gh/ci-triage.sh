@@ -26,14 +26,20 @@
 set -uo pipefail
 
 # gh wrapper — DI seam via CI_TRIAGE_GH (tests inject a stub here), mirroring
-# _taskid/url.sh's taskid-gh; defaults to the account-aware wrapper.
+# _taskid/url.sh's taskid-gh; defaults to the account-aware wrapper, resolved
+# relative to this file's own directory (gh.sh is a same-dir sibling under
+# _gh/) so it's found under both a same-repo checkout and a plugin-cache
+# install layout (T20260925-427007; the dead pre-plugin wrapper path this
+# replaces, under the retired manual symlink-under-home-dir install layout,
+# can never exist again).
 CI_TRIAGE_GH="${CI_TRIAGE_GH:-}"
+_CI_TRIAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ci_triage_gh() {
   if [ -n "$CI_TRIAGE_GH" ]; then
     "$CI_TRIAGE_GH" "$@"
-  elif [ -x "$HOME/.claude/skills/_gh/gh.sh" ]; then
-    bash "$HOME/.claude/skills/_gh/gh.sh" "$@"
+  elif [ -x "$_CI_TRIAGE_DIR/gh.sh" ]; then
+    bash "$_CI_TRIAGE_DIR/gh.sh" "$@"
   else
     gh "$@"
   fi

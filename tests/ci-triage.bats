@@ -163,3 +163,46 @@ STUB
   run ci_triage_main "not-a-run-id"
   [ "$status" -ne 0 ]
 }
+
+# --- gh wrapper resolution (T20260925-427007) --------------------------------
+# ci_triage_gh used to check the dead pre-plugin symlink path
+# ~/.claude/skills/_gh/gh.sh, which never exists under a plugin install, so it
+# silently fell back to bare gh. It now resolves gh.sh in its OWN directory
+# (ci-triage.sh and gh.sh are both direct children of _gh/), falling back to
+# bare gh only when that sibling is genuinely missing. These two fixtures
+# copy ci-triage.sh to an isolated layout (with / without a gh.sh sibling) so
+# both branches are exercised without touching the real repo tree.
+
+@test "ci_triage_gh invokes the gh.sh resolved relative to its own directory" {
+  local fixture="$BATS_TEST_TMPDIR/fixture-sibling"
+  mkdir -p "$fixture"
+  cp "$REPO_ROOT/_gh/ci-triage.sh" "$fixture/ci-triage.sh"
+  cat > "$fixture/gh.sh" <<'STUB'
+#!/usr/bin/env bash
+echo "sibling-gh-sh-called: $*"
+STUB
+  chmod +x "$fixture/gh.sh"
+  run env -u CI_TRIAGE_GH bash -c "source '$fixture/ci-triage.sh'; ci_triage_gh foo bar"
+  [ "$status" -eq 0 ]
+  [ "$output" = "sibling-gh-sh-called: foo bar" ]
+}
+
+@test "ci_triage_gh falls back to bare gh when no sibling gh.sh exists" {
+  local fixture="$BATS_TEST_TMPDIR/fixture-nosibling"
+  mkdir -p "$fixture"
+  cp "$REPO_ROOT/_gh/ci-triage.sh" "$fixture/ci-triage.sh"
+  mkdir -p bin
+  cat > bin/gh <<'STUB'
+#!/usr/bin/env bash
+echo "bare-gh-called: $*"
+STUB
+  chmod +x bin/gh
+  run env -u CI_TRIAGE_GH PATH="$BATS_TEST_TMPDIR/bin:$PATH" bash -c "source '$fixture/ci-triage.sh'; ci_triage_gh foo bar"
+  [ "$status" -eq 0 ]
+  [ "$output" = "bare-gh-called: foo bar" ]
+}
+
+@test "ci_triage_gh never references the dead legacy _gh path" {
+  run grep -c '\.claude/skills/_gh' "$REPO_ROOT/_gh/ci-triage.sh"
+  [ "$status" -ne 0 ]
+}

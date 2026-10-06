@@ -394,5 +394,65 @@ class IterRefFilesTest(unittest.TestCase):
         self.assertEqual(found, {"a.md", "b.md"})
 
 
+class GhArgvTest(unittest.TestCase):
+    """gh_argv()'s resolution chain (T20260925-427007): env override -> this
+    file's own sibling _gh/gh.sh (plugin-internal / same-repo checkout) ->
+    a plugin-cache search (vendored copies with no _gh/ sibling of their
+    own) -> raw gh. The dead pre-plugin wrapper lookup (the retired manual
+    symlink-under-home-dir install layout) this replaces is gone entirely --
+    there is no second fallback step for it."""
+
+    def setUp(self):
+        self._saved_override = os.environ.pop("LINT_REFS_GH", None)
+        self._saved_config_dir = os.environ.pop("CLAUDE_CONFIG_DIR", None)
+        self.addCleanup(self._restore)
+
+    def _restore(self):
+        for name, val in (("LINT_REFS_GH", self._saved_override),
+                           ("CLAUDE_CONFIG_DIR", self._saved_config_dir)):
+            if val is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = val
+
+    def test_env_override_wins_over_everything(self):
+        os.environ["LINT_REFS_GH"] = "/custom/gh-wrapper"
+        self.assertEqual(lint_refs.gh_argv(), ["/custom/gh-wrapper"])
+
+    def test_own_sibling_gh_sh_used_when_present(self):
+        with tempfile.TemporaryDirectory() as root:
+            own = Path(root) / "_gh" / "gh.sh"
+            own.parent.mkdir(parents=True)
+            own.write_text("#!/usr/bin/env bash\n")
+            own.chmod(0o755)
+            with patch.object(lint_refs, "GH_SH", own):
+                self.assertEqual(lint_refs.gh_argv(), ["bash", str(own)])
+
+    def test_falls_back_to_plugin_cache_when_own_sibling_missing(self):
+        with tempfile.TemporaryDirectory() as root:
+            missing_own = Path(root) / "nowhere" / "_gh" / "gh.sh"
+            config_dir = Path(root) / "claude-config"
+            older = config_dir / "plugins" / "cache" / "ccxp-skills" / "ccxp-skills" / "1.0.0" / "_gh" / "gh.sh"
+            newer = config_dir / "plugins" / "cache" / "ccxp-skills" / "ccxp-skills" / "1.0.1" / "_gh" / "gh.sh"
+            for p in (older, newer):
+                p.parent.mkdir(parents=True)
+                p.write_text("#!/usr/bin/env bash\n")
+                p.chmod(0o755)
+            os.environ["CLAUDE_CONFIG_DIR"] = str(config_dir)
+            with patch.object(lint_refs, "GH_SH", missing_own):
+                # lexicographically-last match ("1.0.1" > "1.0.0") -- the
+                # documented best-effort "newest version" heuristic.
+                self.assertEqual(lint_refs.gh_argv(), ["bash", str(newer)])
+
+    def test_falls_back_to_bare_gh_when_nothing_resolves(self):
+        with tempfile.TemporaryDirectory() as root:
+            missing_own = Path(root) / "nowhere" / "_gh" / "gh.sh"
+            empty_config_dir = Path(root) / "claude-config"
+            empty_config_dir.mkdir()
+            os.environ["CLAUDE_CONFIG_DIR"] = str(empty_config_dir)
+            with patch.object(lint_refs, "GH_SH", missing_own):
+                self.assertEqual(lint_refs.gh_argv(), ["gh"])
+
+
 if __name__ == "__main__":
     unittest.main()
