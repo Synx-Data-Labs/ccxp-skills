@@ -111,33 +111,46 @@ scheduled: 2026-10-05
 
 ## Test plan
 
-- [ ] Unit: new BATS case in `tests/task_claim.bats` — set a multi-line
+- [x] Unit: new BATS case in `tests/task_claim.bats` — set a multi-line
   `status:` value (3-line fold, mirroring the live repro), call
   `_tc_fm_set ... status "In Progress"`, assert:
-  - [ ] no leftover continuation-line text survives anywhere in the file
-  - [ ] exactly 2 `---` fence lines (frontmatter wasn't corrupted/widened)
-  - [ ] `_tc_fm_get` round-trips the new value
-  - [ ] an adjacent field (`claimed_by`) directly after the multi-line value
+  - [x] no leftover continuation-line text survives anywhere in the file
+  - [x] exactly 2 `---` fence lines (frontmatter wasn't corrupted/widened)
+  - [x] `_tc_fm_get` round-trips the new value
+  - [x] an adjacent field (`claimed_by`) directly after the multi-line value
         is untouched
-- [ ] Unit: the resulting frontmatter re-parses cleanly via
+- [x] Unit: the resulting frontmatter re-parses cleanly via
   `python3 -c 'import yaml; yaml.safe_load(...)'` (same pattern as
   `tests/claimant_id.bats`'s YAML round-trip test; skips gracefully if
   `pyyaml` is unavailable).
-- [ ] Regression: existing `_tc_fm_set` BATS cases (replace, never-touch-owner,
-  empty-value, insert-absent-field) still pass unmodified.
+- [x] Regression: existing `_tc_fm_set` BATS cases (replace, never-touch-owner,
+  empty-value, insert-absent-field) still pass unmodified — full suite:
+  `bats tests/task_claim.bats` 108/108, `bats tests/` 839/839.
 - [ ] Post-merge: next live multi-line-status claim/release in any consumer
   repo produces no orphaned lines (observational — no dedicated CI for this,
   covered going forward by the new unit test instead).
 
+**Doc-impact review** (`_docs/doc-impact.sh`): flagged ~10 `*/SKILL.md` files
+that mention `task_claim.sh` by filename. Reviewed — no change needed: this
+fix is an internal correctness fix to `_tc_fm_set`'s write path (no new verb,
+no changed call signature, no documented-behavior change), so none of those
+SKILL.md references need updating.
+
+**Quality probe**: `bash quality-probe/scripts/probe.sh --task T20260925-383305`
+— 0 errors/warnings (shellcheck), 1 pre-existing SC1091 info (unrelated line
+534, `source "$HOME/.claude/.env"`) counted as a delta against an empty
+baseline (first probe run for this file) — record+warn only, no regression
+introduced by this change.
+
 ## Done criteria
 
-- [ ] `_tc_fm_set` consumes continuation lines of the field it overwrites —
+- [x] `_tc_fm_set` consumes continuation lines of the field it overwrites —
   `tests/task_claim.bats::"_tc_fm_set consumes continuation lines of a
   multi-line value it overwrites"`.
-- [ ] Fix is minimal and scoped to `_session/task_claim.sh`'s `_tc_fm_set`
+- [x] Fix is minimal and scoped to `_session/task_claim.sh`'s `_tc_fm_set`
   function (`_session/task_claim.sh:161-192`) — no behavior change to
   `_tc_fm_get` or any caller's call signature.
-- [ ] All pre-existing `_tc_fm_set`/`task_claim.sh` BATS cases still pass —
+- [x] All pre-existing `_tc_fm_set`/`task_claim.sh` BATS cases still pass —
   `bats tests/task_claim.bats`.
 
 ## Root cause
