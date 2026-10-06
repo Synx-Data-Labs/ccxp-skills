@@ -14,18 +14,27 @@ scheduled: 2026-10-05
 
 # T20260925-383305: `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
 
-## Problem
+## TLDR
 
 - **Type**: bug
-- `_session/task_claim.sh:157-185` (`_tc_fm_set`, called from `acquire` at
-  line 544 to set `status: Coding`) replaces frontmatter fields with a
-  single-line awk match: `index($0, f":") == 1` finds the line starting
-  `field:` and swaps it for the new `field: value` line — but a plain YAML
-  scalar can fold across multiple lines when subsequent lines are more
-  indented. The awk script never detects or consumes those continuation
-  lines, so they fall through to the unconditional `print` at line 176 and
-  survive as orphaned garbage under the new value.
-- Reproduced live: `T20260916-232402` in `build-pipeline-repo` had
+- **Problem**: `_tc_fm_set` (`_session/task_claim.sh`) replaces a frontmatter field's
+  first line but leaves its folded continuation lines behind as garbage.
+- **Solution**: track a `skipping` state in the existing awk script — once the
+  matched `field:` line is replaced, consume every subsequent indented
+  (continuation) line until a non-indented line or the closing fence appears.
+
+## Problem
+
+- `_session/task_claim.sh:157-189` (`_tc_fm_set`, called from `acquire` to set
+  `status: In Progress`, and elsewhere for `claimed_by`/`claimed_role`/
+  `scheduled`) matches a field with a single-line awk test —
+  `index($0, f":") == 1` finds the line starting `field:` and swaps it for
+  the new `field: value` line — but a plain YAML scalar can fold across
+  multiple lines when continuation lines are indented more than the key.
+  The awk script never detects or consumes those continuation lines, so they
+  fall through to the unconditional `print` and survive as orphaned garbage
+  under the new value.
+- Reproduced live: `T20260916-232402` in `build-pipeline-repo` had:
 
   ```
   status: Review — SUPERVISED (PR merged, hashdata-docmind#1; needs a human
@@ -42,23 +51,114 @@ scheduled: 2026-10-05
   ```
 
   — the two continuation lines from the old value are now dangling under
-  `status: Coding`, technically still valid YAML (plain-scalar folding
-  makes them part of the same value again), but garbled content: the
-  effective `status` becomes `"Coding with a real DocMind deployment to
-  spot-check the zh-TW UI before this task can close — no live backend in
-  any sandbox we control)"`. Had to hand-fix by deleting the two orphaned
-  lines before the file was usable.
-- Any multi-line frontmatter value is at risk, not just `status` — `_tc_fm_set`
-  is generic and is also called for `claimed_by`/`claimed_role`/`scheduled`
-  (line 213, 534-535, 542) and elsewhere in the codebase; those happen to
-  usually be single-line in practice, but nothing in the function prevents
-  the same corruption if one of them ever wraps.
-- What "done" looks like: `_tc_fm_set` detects the full span of the field
-  it's replacing — the matched `field:` line plus every following line that
-  is a continuation (more-indented, not itself `key:`-shaped, not the
-  closing `---` fence) — and replaces the whole span with the single new
-  `repl` line, consuming (not printing) the old continuation lines. Add a
-  BATS case in whichever suite covers `task_claim.sh`/`_tc_fm_set` that sets
-  a multi-line `status:` then calls `acquire`, asserting no leftover
-  continuation lines and that the resulting frontmatter re-parses cleanly
-  as YAML.
+  `status: Coding`, technically still valid YAML (plain-scalar folding makes
+  them part of the same value again), but garbled content. Had to hand-fix
+  by deleting the two orphaned lines before the file was usable.
+- Impact: any multi-line frontmatter value is at risk, not just `status` —
+  `_tc_fm_set` is generic and is also called for `claimed_by`/`claimed_role`/
+  `scheduled`; those happen to usually be single-line in practice, but
+  nothing in the function prevents the same corruption the moment one wraps.
+  This task file's own `source:`/`related:` fields are multi-line and were
+  — by luck, not by guarantee — never the field `_tc_fm_set` was asked to
+  overwrite.
+
+## Context
+
+- `_tc_fm_set` is a pure, idempotent frontmatter setter used everywhere a
+  claim/status/schedule write happens: `acquire`, `release`,
+  `release-others`, `_tc_stamp_scheduled_if_needed`, and the legacy-claim
+  migration path (`_session/task_claim.sh:536-551, 561-568, 608-611, 217`).
+  A single shared bug surfaces at every one of those call sites.
+- Reproduction environment: any task file whose targeted field's *existing*
+  value folds onto a second line (common for narrated statuses like
+  `Review — SUPERVISED (...)` or `Blocked by T{id} — waiting on ...` that
+  wrap past typical line-length conventions).
+- No repo lint currently catches this — `lint_tasks.py` validates frontmatter
+  shape, not that a `_tc_fm_set` call left the file well-formed; the only
+  reason it's been caught at all is a human noticing garbled status text.
+
+## Solution
+
+- Add a `skipping` state to the existing `_tc_fm_set` awk script
+  (`_session/task_claim.sh:169-187`):
+  - When the matched `field:` line is found and replaced, set `skipping=1`
+    instead of immediately resuming normal `print`.
+  - While `skipping`, consume (do not print) every line that starts with
+    whitespace (`^[ \t]`) — a continuation line of the old value — leaving
+    `skipping=1`.
+  - The first line that does **not** start with whitespace (a new `key:` at
+    column 0, or the closing `---` fence, neither of which is ever indented)
+    clears `skipping` and falls through to the normal per-line handling for
+    that line (so a new field or the closing fence is still processed
+    exactly as before).
+- Alternatives considered and rejected:
+  - **Full YAML parse (e.g. `python3 -c 'import yaml; ...'`) instead of
+    awk** — rejected: `_tc_fm_set` is called from a hot path (every
+    `acquire`/`release`) in pure bash/awk with no external interpreter
+    dependency today; adding a hard `python3`+`pyyaml` runtime dependency to
+    a core claim-lock primitive is a bigger blast radius than fixing the
+    8-line awk script that already does the job for the single-line case.
+  - **Reject/refuse to overwrite a multi-line value** (fail loud instead of
+    silently corrupting) — rejected: every real call site (`status`,
+    `claimed_by`, `scheduled`) legitimately needs to overwrite whatever was
+    there before, multi-line or not; refusing would just move the breakage
+    from "silent corruption" to "claim acquisition hard-fails," which is
+    worse for the claim-lock's core job.
+  - **Strip continuation lines at read time instead of write time** — 
+    rejected: `_tc_fm_get` already returns only the first line correctly
+    (never a bug there); the corruption is purely a write-side leftover, so
+    fixing the write path is the minimal, root-cause fix.
+
+## Test plan
+
+- [ ] Unit: new BATS case in `tests/task_claim.bats` — set a multi-line
+  `status:` value (3-line fold, mirroring the live repro), call
+  `_tc_fm_set ... status "In Progress"`, assert:
+  - [ ] no leftover continuation-line text survives anywhere in the file
+  - [ ] exactly 2 `---` fence lines (frontmatter wasn't corrupted/widened)
+  - [ ] `_tc_fm_get` round-trips the new value
+  - [ ] an adjacent field (`claimed_by`) directly after the multi-line value
+        is untouched
+- [ ] Unit: the resulting frontmatter re-parses cleanly via
+  `python3 -c 'import yaml; yaml.safe_load(...)'` (same pattern as
+  `tests/claimant_id.bats`'s YAML round-trip test; skips gracefully if
+  `pyyaml` is unavailable).
+- [ ] Regression: existing `_tc_fm_set` BATS cases (replace, never-touch-owner,
+  empty-value, insert-absent-field) still pass unmodified.
+- [ ] Post-merge: next live multi-line-status claim/release in any consumer
+  repo produces no orphaned lines (observational — no dedicated CI for this,
+  covered going forward by the new unit test instead).
+
+## Done criteria
+
+- [ ] `_tc_fm_set` consumes continuation lines of the field it overwrites —
+  `tests/task_claim.bats::"_tc_fm_set consumes continuation lines of a
+  multi-line value it overwrites"`.
+- [ ] Fix is minimal and scoped to `_session/task_claim.sh`'s `_tc_fm_set`
+  function (`_session/task_claim.sh:161-192`) — no behavior change to
+  `_tc_fm_get` or any caller's call signature.
+- [ ] All pre-existing `_tc_fm_set`/`task_claim.sh` BATS cases still pass —
+  `bats tests/task_claim.bats`.
+
+## Root cause
+
+- `_session/task_claim.sh:161-189` (`_tc_fm_set`) was written assuming every
+  frontmatter value is single-line — introduced in the original
+  `task_claim.sh` design (build-pipeline-repo T20260611-104067, ported to
+  ccxp-skills). The awk match (`index($0, f":") == 1`) correctly finds and
+  replaces the *first* line of a field, but the function has no concept of
+  "the rest of this value" — it was never extended when narrated,
+  multi-sentence `status:`/other values (e.g. `Review — SUPERVISED (...)`)
+  started being written in practice, which is what let a plain scalar value
+  fold across lines in the first place.
+- This is an **oversight**, not a deliberate trade-off: no commit or review
+  comment discusses the multi-line case; the single-line assumption was
+  simply never revisited as narrated-status values grew longer over time.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_session/task_claim.sh` | `161-189` | `_tc_fm_set` — the function being fixed |
+| `_session/task_claim.sh` | `143-159` | `_tc_fm_get` — unaffected; confirms read-side is already correct |
+| `tests/task_claim.bats` | `59-87` | existing `_tc_fm_set` coverage; new continuation-line case added alongside |
