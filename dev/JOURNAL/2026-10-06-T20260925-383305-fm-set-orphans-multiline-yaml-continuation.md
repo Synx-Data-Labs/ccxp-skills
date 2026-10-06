@@ -175,3 +175,24 @@ introduced by this change.
 | `_session/task_claim.sh` | `161-189` | `_tc_fm_set` — the function being fixed |
 | `_session/task_claim.sh` | `143-159` | `_tc_fm_get` — unaffected; confirms read-side is already correct |
 | `tests/task_claim.bats` | `59-87` | existing `_tc_fm_set` coverage; new continuation-line case added alongside |
+
+## Closed (2026-10-06)
+
+- Shipped in three PRs, per `/drive`'s Claim PR → Design PR → Implementation PR sequence:
+  - Claim: [#261](https://github.com/Synx-Data-Labs/ccxp-skills/pull/261)
+  - Design: [#262](https://github.com/Synx-Data-Labs/ccxp-skills/pull/262) — design-score 87/100 (PASS, threshold 70); one independent review round, clean bill (no findings — every `file:line` citation verified exact against the actual source).
+  - Implementation: [#263](https://github.com/Synx-Data-Labs/ccxp-skills/pull/263)
+- All Done criteria met — see the checked boxes above:
+  - `_tc_fm_set` now consumes continuation lines via an awk `skipping` state — proven by the new BATS case and the YAML-round-trip case.
+  - Fix scoped entirely to `_tc_fm_set`; `_tc_fm_get` and every caller's signature unchanged.
+  - Full regression stayed green throughout: `bats tests/task_claim.bats` 108/108, `bats tests/` 839/839.
+- A real TDD gotcha surfaced and was fixed mid-task: the first draft of the new BATS assertions used a bare `! grep -q ...` line, which — per POSIX/bash `set -e` semantics — never aborts the test even when the underlying `grep` finds the orphaned text (a `!`-negated command's failure is specifically exempted from triggering `errexit`). That silently turned a would-be RED assertion into a false "ok". Caught during the RED-phase verification step (the test passed against KNOWN-buggy code, which should never happen) and fixed by switching to `run grep ...; [ "$status" -ne 0 ]`, which does propagate correctly.
+- External/unverified: the Test plan's one post-merge item (observational — no dedicated CI for a multi-line-status claim/release in a consumer repo) stays unchecked by design; the new unit tests are the durable regression guard going forward.
+- No follow-up tasks filed — this was a fully self-contained single-function fix.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class. Both new BATS cases were written first and verified RED against the unfixed code (see the `! grep` gotcha above — the RED-phase verification step is what caught that the initial assertion form was not actually testing anything), then GREEN after the awk fix.
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6 (fresh full-suite run: `bats tests/` 839/839, `bats tests/task_claim.bats` 108/108, shellcheck clean) immediately before the PR, and this Phase 7.0 block.
+- Systematic debugging (`superpowers:systematic-debugging`): no — root cause was already clear from the live repro recorded at design time; the one debugging-flavored moment (the `! grep` false-pass) was resolved by inspection of bash's documented `set -e` exemption for negated commands, not an extended hypothesis-driven session.
+- Receiving code review (`superpowers:receiving-code-review`): no — the design PR's independent review returned a clean bill (no findings to respond to); the implementation PR's review (run during `/address-pr`) is recorded on that PR.
