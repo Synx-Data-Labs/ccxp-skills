@@ -1,12 +1,12 @@
 ---
-status: In Progress — design PR skipped (self-evident one-line fix; root cause + exact fix already in Problem section) (2026-10-06)
+status: Done
 estimation: 1
 source: 2026-09-25 conversation — surfaced live while taking over a stale
   claim on T20260914-175513 in build-pipeline-repo
 related: T20260925-383305 (same file, `_tc_fm_set` — a different bug in the
   same function-neighborhood; this one is in `_tc_reclaim_decide`)
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-05
 ---
 
@@ -148,22 +148,22 @@ scheduled: 2026-10-05
 
 ## Test plan
 
-- [ ] BATS: narrated vs. bare status, identical `commit_days`/`pr_days`/`stale`,
+- [x] BATS: narrated vs. bare status, identical `commit_days`/`pr_days`/`stale`,
       assert identical verdict — mirrors the task's own reproduction
       (`tests/task_claim.bats`, new case near the existing
       `_tc_reclaim_decide: "In Progress" status is recognized...` test at
       line 221).
-  - [ ] `Review — implementation complete, PR #3416 open` + stale signals → `reclaimable`
-  - [ ] `Coding — SUPERVISED (needs VPN)` + stale signals → `reclaimable`
-  - [ ] `In Progress — design PR skipped (...)` + stale signals → `reclaimable`
-- [ ] `bats tests/task_claim.bats` passes locally, full suite (no regressions
-      in the existing bare-status cases).
-- [ ] CI `bats` check green on the PR.
+  - [x] `Review — implementation complete, PR #3416 open` + stale signals → `reclaimable`
+  - [x] `Coding — SUPERVISED (needs VPN)` + stale signals → `reclaimable`
+  - [x] `In Progress — design PR skipped (...)` + stale signals → `reclaimable`
+- [x] `bats tests/task_claim.bats` passes locally, full suite — 110/110, no regressions
+      in the existing bare-status cases.
+- [ ] CI `bats` check green on the PR. (post-merge item — verified by `/address-pr` before merge)
 
 ## Done criteria
 
-- [ ] `_session/task_claim.sh:291-293` returns `reclaimable` for a narrated status with stale signals, matching its bare-token counterpart — verified by the new BATS case(s) in `tests/task_claim.bats`.
-- [ ] No existing case in `tests/task_claim.bats` regresses — full `bats` run, all green.
+- [x] `_session/task_claim.sh:291-293` returns `reclaimable` for a narrated status with stale signals, matching its bare-token counterpart — verified by the new BATS case(s) in `tests/task_claim.bats`.
+- [x] No existing case in `tests/task_claim.bats` regresses — full `bats` run, all green (110/110).
 
 ## Repo file references
 
