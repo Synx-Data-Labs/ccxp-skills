@@ -1,13 +1,13 @@
 ---
-status: In Progress — Design approved in-conversation 2026-10-06
+status: Done
 scheduled: 2026-10-05
 estimation: 5
 source: this conversation, 2026-10-06
 related: dev/JOURNAL/2026-09-18-T20260918-174226-autopilot-status.md,
   dev/JOURNAL/2026-09-29-T20260929-210013-statusline-autopilot-status-segment.md,
   dev/JOURNAL/2026-09-30-T20260930-132964-autopilot-dispatch-own-clone.md
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261006-391349: Add /autopilot pause/resume and an explicit user-invoked stop
@@ -217,10 +217,40 @@ branches each touching Phase 2–5, a subagent-interrupt protocol
 commands, and a new Phase-4 fallback classification — confined to one
 skill file's prose, but materially larger than a 1–3 point task.
 
-## Closed
+## Closed (2026-10-06)
 
-_(pending)_
+- Shipped in **PR #252** (`autopilot/SKILL.md` — Phase 0.1 pause/resume/stop,
+  state-schema additions, Phase 0/3/5 cross-references).
+- **Met**: all 5 Done-criteria items are implemented and anchored at the
+  cited `autopilot/SKILL.md:<line>`s; `design-score --kind docs` scores
+  100/100; the elapsed/`end_time`-shift arithmetic (Decisions, § State
+  schema) was independently traced by hand against synthetic timestamps —
+  shifting both `started_at` and `end_time` by the pause duration
+  preserves both the elapsed-math formula and the full requested budget
+  width exactly, confirming the one piece of this design with real
+  arithmetic risk.
+- **External/unverified**: the Test plan's five dry-run items all require
+  a live, multi-hour `/autopilot` run with a real dispatched `/drive`
+  subagent to interrupt — impractical to exercise synchronously while
+  driving this task. Left unchecked rather than green-washed; recommend
+  exercising `pause`/`resume`/`stop [--now]` on the next real `/autopilot`
+  invocation and filing a follow-up if any of the five surface a gap.
+- No follow-up tasks filed — the one `Open` item (exact wrap-up-prompt
+  wording) was resolved inline during implementation
+  (`autopilot/SKILL.md:81`'s graceful bullet), not deferred.
 
 ## Skills invoked
 
-_(pending — recorded at Phase 7.0)_
+- TDD (`superpowers:test-driven-development`): no — docs-class (Phase 3.0
+  classifier: pure `autopilot/SKILL.md` prose, no code).
+- Verification (`superpowers:verification-before-completion`): yes — Phase
+  3.6, caught a real gap (mid-cycle interrupt losing track of `last_task`)
+  and six stale self-referential line citations; fixed both before this
+  close.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `/address-pr` §2.d, independent review on the claim PR (#250, 1 real
+  finding: a dropped `ScheduleWakeup`-suppression decision) and the
+  design-rescore PR (#251, 1 real finding: 2 wrong `autopilot/SKILL.md`
+  line citations). Both fixed, not pushed back on.
