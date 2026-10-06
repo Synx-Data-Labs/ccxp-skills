@@ -224,6 +224,18 @@ print('ok')
   [ "$(_tc_reclaim_decide "In Progress" h:/p 3 99999 2)" = "reclaimable" ]      # stale commit -> reclaimable
 }
 
+@test "_tc_reclaim_decide: a NARRATED status (documented /todo convention) is matched like its bare token (T20260925-244717)" {
+  # Identical commit_days/pr_days/stale as the bare-token cases above — only
+  # the status string gains a narration suffix. Before the fix, the exact
+  # `case` match missed every one of these and returned "live" regardless of
+  # how stale commit_days/pr_days were.
+  [ "$(_tc_reclaim_decide "Review — implementation complete, PR #3416 open" h:/p 3 99999 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "Coding — SUPERVISED (needs VPN)" h:/p 3 99999 2)" = "reclaimable" ]
+  [ "$(_tc_reclaim_decide "In Progress — design PR skipped (self-evident fix)" h:/p 3 99999 2)" = "reclaimable" ]
+  # A fresh signal still protects a narrated status, same as a bare one.
+  [ "$(_tc_reclaim_decide "Review — implementation complete, PR #3416 open" h:/p 0 99999 2)" = "live" ]
+}
+
 @test "_tc_reclaim_decide: open-PR task, RECENT PR activity -> live (no longer auto-blocked, but live work protected)" {
   # commit_days large (work sits on the unmerged PR branch, invisible on main);
   # the PR was touched recently (push/comment/review) -> live, NOT reclaimed.
