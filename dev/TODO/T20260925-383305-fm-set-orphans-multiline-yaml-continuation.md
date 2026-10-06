@@ -104,7 +104,7 @@ scheduled: 2026-10-05
     there before, multi-line or not; refusing would just move the breakage
     from "silent corruption" to "claim acquisition hard-fails," which is
     worse for the claim-lock's core job.
-  - **Strip continuation lines at read time instead of write time** — 
+  - **Strip continuation lines at read time instead of write time** —
     rejected: `_tc_fm_get` already returns only the first line correctly
     (never a bug there); the corruption is purely a write-side leftover, so
     fixing the write path is the minimal, root-cause fix.
