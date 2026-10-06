@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Design
 estimation: 2
 source: 2026-09-25 conversation — surfaced live while /address-pr claiming
   T20260916-232402 in build-pipeline-repo
@@ -7,6 +7,9 @@ related: T20260809-355059 (same file, same `status:` field, different bug —
   that one is about the `Coding` literal being domain-inappropriate; this
   one is about _tc_fm_set corrupting any multi-line frontmatter value it
   overwrites, `Coding` or otherwise)
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-10-05
 ---
 
 # T20260925-383305: `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
