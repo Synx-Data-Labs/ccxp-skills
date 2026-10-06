@@ -10,11 +10,25 @@ claimed_role: interactive
 
 # T20260925-427007: Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
 
+## TLDR
+
+- **Type**: bug
+- **Problem**: four callers hardcode the pre-plugin symlink path
+  `~/.claude/skills/_gh/gh.sh` to find the account-aware `gh` wrapper; under
+  a plugin install that path never exists, so they silently fall back to
+  bare `gh` (wrong-account auth, or a skipped check).
+- **Solution**: resolve the wrapper relative to each caller's own file
+  location (siblings under the same repo root) instead of a hardcoded
+  absolute path, falling back to bare `gh` only when the sibling is
+  genuinely missing; `lint_refs.py` additionally searches the plugin cache
+  for vendored copies that have no `_gh/` sibling of their own.
+
 ## Problem
 
 - **Type**: bug
 - Under a plugin install, `_gh/gh.sh` lives at
-  `$CLAUDE_CONFIG_DIR/plugins/cache/ccxp-skills/ccxp-skills/<version>/_gh/gh.sh`.
+  `$CLAUDE_CONFIG_DIR/plugins/cache/ccxp-skills/ccxp-skills/<version>/_gh/gh.sh`
+  (verified locally: `ls ~/.claude/plugins/cache/ccxp-skills/ccxp-skills/1.0.1/_gh/gh.sh`).
   The legacy symlink path `~/.claude/skills/_gh/gh.sh` doesn't exist, so
   these callers silently fall back to bare `gh`. That can authenticate as
   the wrong account on multi-account machines, or skip work outright:
@@ -32,26 +46,151 @@ claimed_role: interactive
   - lsc-pa fixed its vendored `lint_refs.py` in <consumer-account>/lsc-pa#159
     (`find_gh_wrapper()`: newest plugin-cache version, then the legacy
     path).
+  - This clone confirms the dead path: `~/.claude/skills/_gh/gh.sh` does not
+    exist, only `~/.claude/plugins/cache/ccxp-skills/ccxp-skills/1.0.1/_gh/gh.sh`
+    (assumed representative of other plugin-install machines; verified on
+    this one).
 - T20260925-219021 lists `_taskid/url.sh` as one caller in its much larger
   "retire `auto-switch.sh`" scope. This task is just the dead-path lookup at
   all four sites, so it can ship on its own. Tick that bullet there when
   this one lands.
 
-## Done when
+## Context
 
-- The three plugin-internal scripts resolve their sibling wrapper relative
-  to themselves (`$(dirname "${BASH_SOURCE[0]}")/../_gh/gh.sh`, or
-  `$CLAUDE_PLUGIN_ROOT/_gh/gh.sh`), falling back to bare `gh` only when
-  that's missing. The existing DI seams (`TASKID_GH`, `CI_TRIAGE_GH`,
-  `QP_GH`) still win.
-- `lint_refs.py` tries its own plugin location first. For vendored copies
-  run outside the plugin, it then searches the plugin cache (port lsc-pa
-  #159's `find_gh_wrapper()`).
-- bats/pytest cases cover wrapper resolution with a fake plugin layout and
-  with no wrapper at all.
-- None of the four call sites above references the legacy path any more,
-  in either spelling: the literal `~/.claude/skills/_gh` (shell) or the
-  `".claude" / "skills" / "_gh"` pieces (`lint_refs.py`). Check with
-  `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py' ':!tests/'`,
-  which should come back empty (task/journal prose and test comments that
-  describe the old path are expected hits outside that scope).
+- **Bug** — repro environment: any machine where ccxp-skills is installed
+  as a Claude Code plugin (the now-standard install path) rather than the
+  old manual `~/.claude/skills/` symlink layout. `_gh/gh.sh` itself (the
+  account-aware wrapper, unaffected by this bug) picks the GitHub account
+  that can read the repo's `origin` remote and runs `gh` with a
+  process-scoped `GH_TOKEN` — see `dev/JOURNAL/2026-09-29-T20260925-219021-retire-auto-switch-gh-wrapper-only.md`.
+  Each of the four call sites is supposed to reach that same wrapper but
+  checks a path that only existed under the retired layout.
+- This repo has **no precedent yet** for resolving `$CLAUDE_CONFIG_DIR`
+  (verified: `git grep -n CLAUDE_CONFIG_DIR` outside this task file returns
+  nothing) — that gap is tracked separately in `T20261002-303999` and is
+  out of scope here. This task only needs `$CLAUDE_CONFIG_DIR` for the
+  plugin-cache *search fallback* (vendored `lint_refs.py` copies), so it
+  reads the env var inline with a `~/.claude` default, the same fallback
+  `T20261002-303999` will eventually centralize — this task does not block
+  on that one landing first.
+- An established sibling-relative pattern already exists in this repo:
+  `cleanup-branch/scripts/cleanup-branch.sh:17` resolves
+  `"$(dirname "${BASH_SOURCE[0]}")/../../_gh/gh.sh"` rather than a
+  hardcoded home-dir path — this task generalizes that same idea to the
+  four sites above (plus a DI-seam-aware fallback chain, since three of the
+  four already have one).
+
+## Solution
+
+- Each of the three bash call sites resolves `_gh/gh.sh` **relative to its
+  own file**, computed once from `${BASH_SOURCE[0]}`, keeping the existing
+  DI-seam-first / bare-`gh`-last fallback order:
+  1. `_taskid/url.sh` (`taskid-gh`, sibling-of-parent: `_taskid/` and `_gh/`
+     are both direct children of the repo root) →
+     `$(dirname "${BASH_SOURCE[0]}")/../_gh/gh.sh`
+  2. `_gh/ci-triage.sh` (`ci_triage_gh`, **same directory** as `gh.sh`) →
+     `$(dirname "${BASH_SOURCE[0]}")/gh.sh`
+  3. `quality-probe/scripts/probe.sh` (`QP_GH`, two levels under root) →
+     `$(dirname "${BASH_SOURCE[0]}")/../../_gh/gh.sh`
+  - All three keep "fall back to bare `gh` only when the sibling path is
+    missing/non-executable" — unaffected behavior for anyone who already
+    lacks the wrapper for a legitimate reason.
+- `repo-conventions/scripts/lint_refs.py` (`gh_argv()`) gets a two-step
+  resolution, since it is the one call site with vendored copies that
+  physically move outside this repo (lsc-pa vendors a standalone copy, per
+  the Problem section):
+  1. Try the **sibling-relative** path first (`Path(__file__).resolve()
+     .parent.parent.parent / "_gh" / "gh.sh"`), mirroring the existing
+     `URL_SH` constant two lines above `gh_argv()` in the same file — this
+     covers the plugin-internal / same-repo-checkout case with zero
+     filesystem search.
+  2. If that's missing (a vendored copy with no `_gh/` sibling), search
+     `${CLAUDE_CONFIG_DIR:-~/.claude}/plugins/cache/*/ccxp-skills/*/_gh/gh.sh`
+     and take the lexicographically-last match (best-effort "newest
+     version" — not full semver-aware, acceptable for this fallback path).
+  3. Else, bare `gh` (unchanged final fallback).
+- **Alternatives considered and rejected**:
+  - *Keep the legacy path as a second fallback, add the plugin-cache search
+    as a third* — rejected: the legacy path can never exist again (the
+    symlink layout it pointed at is retired), so keeping it is dead weight
+    the Done-when's `git grep` check would have to special-case instead of
+    just asserting "gone."
+  - *Introduce `$CLAUDE_PLUGIN_ROOT` as the primary resolution mechanism*
+    (the Problem section's evidence / T20260925-219021 both mention it) —
+    rejected for the three bash call sites: confirmed empty in this
+    session's shell (`env | grep CLAUDE_PLUGIN_ROOT` → nothing), so it's
+    only populated for hook-invoked contexts, not for a script someone runs
+    directly or that another skill shells out to. Sibling-relative
+    resolution via `${BASH_SOURCE[0]}` works in every invocation context
+    and needs no environment plumbing.
+  - *Centralize all four into one shared `find_gh_wrapper()` helper
+    (bash+python)* — rejected for this task's scope: the three bash sites
+    already have divergent, independent DI seams (`TASKID_GH`,
+    `CI_TRIAGE_GH`, `QP_GH`) that predate this bug and are out of scope to
+    consolidate; a shared-lib extraction is a separate, larger refactor
+    (candidate follow-up, not required to fix the dead path).
+
+## Test plan
+
+- [ ] `tests/taskid_url.bats`: add a case with a fake sibling `_gh/gh.sh`
+      present (relative to a temp copy of `url.sh`) asserting `taskid-gh`
+      invokes it, and a case with no wrapper present asserting fallback to
+      bare `gh` (stubbed).
+- [ ] `tests/ci-triage.bats`: same two cases for `ci_triage_gh` (same-dir
+      sibling).
+- [ ] `tests/quality_probe.bats`: same two cases for `QP_GH`'s default
+      resolution.
+- [ ] `tests/lint_refs.bats`: case with the sibling `_gh/gh.sh` present
+      (same-repo checkout), case with it absent but a fake
+      `plugins/cache/<marketplace>/ccxp-skills/<version>/_gh/gh.sh` present
+      under a temp `CLAUDE_CONFIG_DIR` (asserts the cache search wins), and
+      a case with neither present (bare `gh`).
+- [ ] Local: `bats tests/taskid_url.bats tests/ci-triage.bats tests/quality_probe.bats tests/lint_refs.bats`
+      all green.
+- [ ] `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py' ':!tests/'`
+      returns empty (post-merge confirmation, included in Done when).
+
+## Done criteria
+
+- [ ] The three plugin-internal scripts resolve their sibling wrapper
+      relative to themselves, falling back to bare `gh` only when that's
+      missing — verified by `tests/taskid_url.bats`, `tests/ci-triage.bats`,
+      `tests/quality_probe.bats` new cases above.
+- [ ] `lint_refs.py` tries its own plugin-relative location first, then the
+      plugin-cache search for vendored copies — verified by
+      `tests/lint_refs.bats` new cases above.
+- [ ] bats cases cover wrapper resolution with a fake plugin layout and
+      with no wrapper at all — same four test files above.
+- [ ] None of the four call sites references the legacy path any more —
+      verified by `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' --
+      '*.sh' '*.py' ':!tests/'` returning empty.
+
+## Root cause
+
+- The hardcoded `~/.claude/skills/_gh/gh.sh` path dates to a pre-plugin
+  install layout where `ccxp-skills` was checked out and manually
+  symlinked under `~/.claude/skills/`. This repo's single squashed history
+  (`git log --follow` on all four call sites bottoms out at `5051a9e
+  "Initial public release"`, 2026-09-28 — the split from the private
+  source repo) means the exact original-introduction commit isn't
+  recoverable here; the mechanism is confirmed by T20260925-219021's own
+  Problem section, filed the same week, independently describing the same
+  dead path at `_taskid/url.sh:43` (*verified* cross-reference, not
+  speculation).
+- It reads as an **oversight**, not a deliberate choice: three of the four
+  sites (`taskid-gh`, `ci_triage_gh`, `QP_GH`) already carry a DI-seam +
+  "wrapper-then-bare-gh" fallback chain, i.e. the authors intended the
+  wrapper to always be found when present — the bug is that the literal
+  path stoped resolving once the plugin-cache layout replaced the symlink
+  layout, and nothing flagged the now-permanent fallback-to-bare-gh branch.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_taskid/url.sh` | 36–45 | `taskid-gh()` — dead-path lookup, fix site #1 |
+| `_gh/ci-triage.sh` | 28–38 | `ci_triage_gh()` — dead-path lookup, fix site #2 |
+| `quality-probe/scripts/probe.sh` | 45 | `QP_GH` default — dead-path lookup, fix site #3 |
+| `repo-conventions/scripts/lint_refs.py` | 95, 284–293 | `URL_SH` (existing sibling-relative pattern to mirror) and `gh_argv()` — dead-path lookup, fix site #4 |
+| `cleanup-branch/scripts/cleanup-branch.sh` | 17 | existing sibling-relative precedent (`GH_SCRIPT=`) this task generalizes |
+| `tests/taskid_url.bats`, `tests/ci-triage.bats`, `tests/quality_probe.bats`, `tests/lint_refs.bats` | — | new wrapper-resolution test cases |
