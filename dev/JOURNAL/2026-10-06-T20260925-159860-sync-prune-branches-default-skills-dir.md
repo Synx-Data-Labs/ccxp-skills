@@ -74,7 +74,7 @@ below instead of a separate design PR; claimed via `t20260925-159860-claim`.
 
 ## Closed (2026-10-06)
 
-- Shipped in **PR #TBD** (claim/design landed separately in PR #253).
+- Shipped in **PR #254** (claim/design landed separately in PR #253).
 - Met: all four `## Done criteria` items — `$BASH_SOURCE`-relative default, explicit-flag override preserved, remote-shape fail-loud guard, no regression (6/6 new BATS + 878/878 full suite).
 - External/unverified: the one "manual/local" test-plan item was not run live against this working clone (would have checked out `main` mid-task); substituted with the hermetic BATS equivalent (test 1) — see that item's note.
 - No follow-up tasks filed — scope was fully covered by this fix.
