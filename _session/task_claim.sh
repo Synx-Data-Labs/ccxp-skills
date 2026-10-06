@@ -288,8 +288,13 @@ _tc_reclaim_decide() {
   #      (gh/ps I/O), so the caller (_tc_reclaimable) computes it and passes
   #      the verdict in as $6, keeping this function pure/unit-testable.
   local status="$1" claimed_by="$2" commit_days="$3" pr_days="$4" stale="$5" live_signal="${6:-}"
+  # Prefix match, not exact match (T20260925-244717): a narrated status
+  # (e.g. "Review — implementation complete, PR #3416 open", per the /todo
+  # convention of appending free-form narration after the leading token)
+  # must still enter the staleness window below, not fall straight to the
+  # "live" default the way an unrecognized status does.
   case "$status" in
-    Coding|"In Progress"|Review) : ;;
+    Coding|Coding\ *|"In Progress"|"In Progress "*|Review|Review\ *) : ;;
     *) printf 'live'; return 0 ;;
   esac
   if [ -z "$claimed_by" ] || [ "$claimed_by" = "none" ]; then printf 'live'; return 0; fi
