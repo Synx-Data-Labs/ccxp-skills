@@ -37,7 +37,7 @@ below instead of a separate design PR; claimed via `t20260925-159860-claim`.
 
 ## Solution
 
-- Change the default so `skills_dir` resolves relative to the script's own path when `--skills-dir` isn't passed: `skills_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"` (the script lives at `<ccxp-skills>/ccxp/scripts/`, so one level up from its own dir's parent is `<ccxp-skills>/`).
+- Change the default so `skills_dir` resolves relative to the script's own path when `--skills-dir` isn't passed: `skills_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"` — the script lives at `<ccxp-skills>/ccxp/scripts/sync-and-prune-branches.sh`, so it takes **two** levels up (`ccxp/scripts/` → `ccxp/` → `<ccxp-skills>/`) to reach the repo root, not one. (Caught by independent PR review on the first draft of this design, which had a single `..` — confirmed by direct `dirname`/path-resolution check that one `..` lands at `<ccxp-skills>/ccxp`, short of the root.)
 - Keep the explicit `--skills-dir DIR` CLI flag as the override — unchanged precedence, still wins over the default.
 - Before running `git -C "$skills_dir" checkout main` (whichever way `skills_dir` was resolved — default or explicit flag), verify `$skills_dir` is a git repo with a `ccxp-skills`-shaped `origin` remote (`git -C "$skills_dir" remote get-url origin` matching `*/ccxp-skills(.git)?$`); if not, fail loudly with a clear message instead of attempting the checkout and surfacing a confusing raw git error. This covers the explicit-flag case too (a user could still pass a wrong `--skills-dir`), not just the default path.
 - **Alternatives rejected**:
