@@ -1,5 +1,5 @@
 ---
-status: In Progress — design PR skipped: self-evident one-line fix, root cause + exact fix already in Problem section (2026-10-06)
+status: In Progress — design PR skipped (self-evident one-line fix; root cause + exact fix already in Problem section) (2026-10-06)
 estimation: 1
 source: 2026-09-25 conversation — surfaced live while taking over a stale
   claim on T20260914-175513 in build-pipeline-repo
