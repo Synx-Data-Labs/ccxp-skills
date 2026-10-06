@@ -53,6 +53,17 @@ claimed_role: interactive
   own `ScheduleWakeup` and that receives a new message even mid-cycle,
   while waiting on a dispatched `/drive` subagent's completion
   notification. No cross-session/flag-file signaling.
+- **`ScheduleWakeup` suppression** (resolves the Problem section's
+  explicitly-flagged open question): the very first action on `pause` or
+  `stop`, before touching any in-flight subagent, is
+  `ScheduleWakeup(stop: true)` to cancel the next cycle's already-scheduled
+  wakeup. This is what actually stops the loop from silently continuing —
+  without it, a `pause` only records state while the pending wakeup still
+  fires and dispatches another cycle. Applies identically whether the
+  session is between cycles (nothing else to do) or mid-cycle waiting on a
+  dispatched subagent (the graceful/`--now` handling below still applies
+  to that subagent). `resume` re-establishes a fresh `ScheduleWakeup` as
+  part of re-entering Phase 3 normally.
 - **`--now` is symmetric** across `pause` and `stop`: forces an immediate
   `TaskStop` kill of any in-flight dispatched `/drive` subagent instead of
   asking it to wrap up.
