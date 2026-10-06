@@ -7,7 +7,6 @@ front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
 - [T20260923-343482](T20260923-343482-gh-app-token-script.md): Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
-- [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md): Decide whether `/ccxp`'s weekly IPM ritual should be simplified or retired
 - [T20260925-159860](T20260925-159860-sync-prune-branches-default-skills-dir.md): `sync-and-prune-branches.sh`'s default `--skills-dir` doesn't point at the shared skills repo on every clone
 - [T20260925-427007](T20260925-427007-dead-legacy-gh-wrapper-path.md): Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
 - [T20260925-383305](T20260925-383305-fm-set-orphans-multiline-yaml-continuation.md): `_tc_fm_set` leaves orphaned continuation lines when overwriting a multi-line YAML frontmatter value
@@ -29,4 +28,3 @@ reprioritize.
 - [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
 - [T20261005-554581](T20261005-554581-drain-gate-reads-retired-project-board.md): `ipm-iteration-drain-check.sh` hard-requires a Project board, so a board-less consumer's IPM gate is permanently red
 - [T20261005-639913](T20261005-639913-remove-roadmap-target-repo-per-repo-roadmap.md): Remove `ROADMAP_TARGET_REPO` — each repo owns its own `dev/ROADMAP.md` / `dev/EPICS.md`
-- [T20261006-391349](T20261006-391349-autopilot-pause-resume-stop.md): Add /autopilot pause/resume and an explicit user-invoked stop
