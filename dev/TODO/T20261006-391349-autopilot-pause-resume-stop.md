@@ -67,10 +67,14 @@ claimed_role: interactive
   hasn't, auto-escalate to a hard `TaskStop` kill (same as `--now`) —
   pause/stop must never hang indefinitely.
 - **State schema** (`dev/.autopilot-state.json`): `status` gains
-  `"paused"`; new `paused_at` field. At resume, `end_time` is shifted
-  forward by `now - paused_at`, keeping Phase 2's `now >= end_time` check
-  unchanged across any number of pauses. `stuck_count` is untouched by
-  pause/resume.
+  `"paused"`; new `paused_at` field. At resume, **both** `started_at` and
+  `end_time` are shifted forward by `now - paused_at` — not `end_time`
+  alone. Phase 0/5's existing elapsed math (`last_cycle_at - started_at`)
+  has no separate pause-duration bookkeeping to subtract, so `started_at`
+  itself must move or paused time silently counts as elapsed; shifting it
+  keeps that formula, and Phase 2's `now >= end_time` check, both correct
+  across any number of pauses with no new report-side logic. `stuck_count`
+  is untouched by pause/resume.
 - **Clone handling**: pause/stop's hard-kill path never auto-cleans
   `dispatch_clone_path` — left exactly as today's existing
   "dirty/mid-rebase" fallback already handles it (cleaned up lazily on the
@@ -86,10 +90,12 @@ claimed_role: interactive
 - **New `stop_reason`**: `"user-requested"`, covering both an immediate
   `stop` and a pause that's never resumed.
 - **Report format unchanged** — no new pause-stats line; the existing
-  `<requested> requested, <elapsed> elapsed` math stays correct under the
-  end_time-shift approach.
+  `<requested> requested, <elapsed> elapsed` math stays correct because
+  `started_at` itself is shifted (see State schema above), not because the
+  report gains new logic.
 - **Idempotency**: pause-while-paused / resume-while-not-paused are plain
-  no-ops, mirroring Phase 0's existing "never run" handling.
+  no-ops — report the current state (e.g. "already paused since <time>")
+  and do nothing further.
 - **`/autopilot status` shows a distinct "paused" header** — not reused
   from the `running` branch — reporting elapsed-so-far, when it was
   paused, and the (already-shifted) remaining budget on resume.
