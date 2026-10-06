@@ -20,7 +20,7 @@ claimed_role: interactive
 
 - **Type**: chore
 - **Problem**: T20260809-355059 renamed the lifecycle status `Coding` →
-  `In Progress` as a **dual-accept** transition — ~20 files across
+  `In Progress` as a **dual-accept** transition — 23 files across
   `_session/`, `_ipm/`, `ccxp/scripts/`, `repo-conventions/scripts/`,
   `actions/sync-tasks/`, and `tests/` still pattern-match the literal
   `Coding` as an equivalent alias.
@@ -42,7 +42,7 @@ claimed_role: interactive
   `In Progress`.
 - Verified footprint (2026-10-06):
   `grep -rln "Coding" _session _ipm ccxp/scripts repo-conventions/scripts actions/sync-tasks tests`
-  hits 20 files, including case-arms (e.g. `_session/task_claim.sh:297`,
+  hits 23 files, including case-arms (e.g. `_session/task_claim.sh:297`,
   `:632`; `ccxp/scripts/epic-status.sh:301`, `:317`, `:446`, `:475`) and test
   fixtures (`tests/task_claim.bats`, `tests/epic-status.bats`,
   `tests/attribution.bats`, `tests/claim_gap.bats`, `tests/reclaim_sweep.bats`,
@@ -81,7 +81,7 @@ claimed_role: interactive
    a human confirming it, not on this implementation pass.
 2. Remove the `Coding` case-arms from the full verified file list (see
    `## Repo file references` below) — not just the 8 originally named; the
-   actual footprint is ~20 files once comment-only mentions, fixtures, and
+   actual footprint is 23 files once comment-only mentions, fixtures, and
    the three extra bats files (`tests/task-state.bats`, `tests/eta.bats`,
    `tests/todo-next.bats`) are included.
 3. Remove or repurpose the now-obsolete bats/unittest cases that
@@ -160,7 +160,7 @@ claimed_role: interactive
   `In Progress` parallel (unlike most other alias tests). Add the missing
   parallels rather than just deleting, so the scheduled-guard behavior stays
   covered.
-- Estimation revised from 1h to 2h: actual footprint is ~20 files (vs. the 8
+- Estimation revised from 1h to 2h: actual footprint is 23 files (vs. the 8
   originally named), plus `epic-status.sh`'s display-text rename touches
   format strings and a bats assertion, plus adding missing
   `lint_tasks.py` test parallels rather than pure deletion.
@@ -196,7 +196,7 @@ claimed_role: interactive
 | `_session/reclaim_sweep.sh` | `9`, `80`, `82` | Reclaim-eligibility case-arm for `Coding`/`In Progress`/`Review` |
 | `_session/README.md` | `17`, `25`, `123` | Docs narrating the legacy alias |
 | `_ipm/ipm-iteration-drain-check.sh` | `11`, `29` | Drain-check in-flight status list includes the alias |
-| `ccxp/scripts/epic-status.sh` | `294`, `299-301`, `317`, `446`, `475` | Bucket key/display text `Coding`, to be renamed to `In Progress` |
+| `ccxp/scripts/epic-status.sh` | `294`, `299-301`, `317`, `446`, `475` | Bucket key/display text `Coding` (incl. the compact `D/R/C/Dsg/B/P/O` per-epic `C` short-line marker at `475`), to be renamed to `In Progress` |
 | `repo-conventions/scripts/lint_tasks.py` | `161-162` | Prose-suffix status check recognizes `Coding` |
 | `repo-conventions/scripts/test_lint_tasks.py` | `51`, `254`, `326`, `349-366` | Tests asserting `Coding` lint behavior, incl. scheduled-guard tests with no `In Progress` parallel |
 | `actions/sync-tasks/sync.py` | `521`, `542` | Prose-suffixed status parsing + doc comment |
