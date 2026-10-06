@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-05
 estimation: 2
 source: lsc-pa PR #159 follow-up, 2026-09-25
 related: T20260925-219021
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260925-427007: Four scripts look for `gh.sh` at the dead `~/.claude/skills/_gh/` path
@@ -228,3 +228,24 @@ claimed_role: interactive
 | `cleanup-branch/scripts/cleanup-branch.sh` | 17 | existing sibling-relative precedent (`GH_SCRIPT=`) this task generalizes |
 | `tests/taskid_url.bats`, `tests/ci-triage.bats`, `tests/quality_probe.bats` | — | new wrapper-resolution test cases (bash sites) |
 | `repo-conventions/scripts/test_lint_refs.py` | — | new `gh_argv()` resolution test cases (Python unit test, not bats) |
+
+## Closed (2026-10-06)
+
+- Shipped in two PRs, after a design-only PR per `/drive` Phase 2:
+  - Claim: [#256](https://github.com/Synx-Data-Labs/ccxp-skills/pull/256)
+  - Design: [#257](https://github.com/Synx-Data-Labs/ccxp-skills/pull/257) — design-score 84/100 (PASS, threshold 70); one independent review round fixed two inaccuracies (a false "all three bash sites fall back to bare `gh`" claim — `QP_GH` actually skips the check cleanly; and a misassigned test-file location) before merge.
+  - Implementation: [#258](https://github.com/Synx-Data-Labs/ccxp-skills/pull/258) — one independent review round, clean bill (no findings).
+- All Done criteria met — see the checked boxes above:
+  - All four call sites (`_taskid/url.sh`, `_gh/ci-triage.sh`, `quality-probe/scripts/probe.sh`, `repo-conventions/scripts/lint_refs.py`) resolve the `gh` wrapper relative to their own file location instead of the dead symlink-era path.
+  - Each site's pre-existing fallback behavior is unchanged (bare `gh` for `taskid-gh`/`ci_triage_gh`, skip-the-check for `QP_GH`); `lint_refs.py` additionally gained a plugin-cache search step for vendored copies, documented as new (not "unchanged").
+  - New test coverage: `tests/taskid_url.bats`, `tests/ci-triage.bats`, `tests/quality_probe.bats` (bats, 77/77 across the three files) and `repo-conventions/scripts/test_lint_refs.py` (Python unittest, 37/37). Full regression sweep (`bats tests/*.bats`, 837/837; every `test_*.py` in the repo) stayed green throughout.
+  - `git grep -nE '\.claude/skills/_gh|"skills" / "_gh"' -- '*.sh' '*.py' ':!tests/'` returns empty.
+- External/unverified: none — every Done criterion mapped to a test or command that was actually run (see Test plan above), not just asserted.
+- Follow-up noted, not filed as a separate task (low-stakes, judgment call not to add backlog churn for it): `repo-conventions/scripts/test_lint_refs.py` is not wired into `.github/workflows/tests.yml` at all (pre-existing gap, confirmed still true post-merge) — the new `GhArgvTest` cases this task added only run when invoked manually or via a future fix to that gap.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — Phase 3.0, code-class. Each of the 4 fix sites had its test written first and verified RED (failing for the right reason — missing `GH_SH` attribute, bare-`gh`/dead-path still active, wrong default value) before the corresponding implementation commit, per the red-green cycle.
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6 (fresh re-run of the full bats suite, every `test_*.py`, shellcheck, and the Done-criteria `git grep` check immediately before the PR) and Phase 7.0 (this block). No Claude Code review iteration needed a re-verification pass (both PRs' reviews landed clean after at most one fix round).
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test took more than one attempt to turn green; the one design-time correction (the `QP_GH` fallback-behavior claim) was caught by the independent design review, not by a debugging session.
+- Receiving code review (`superpowers:receiving-code-review`): yes — design PR #257's independent review found two real inaccuracies (steelmanned, both accepted and fixed, no pushback needed since both findings were correct on inspection against the actual code). Implementation PR #258's review was a clean bill, no findings to respond to.
