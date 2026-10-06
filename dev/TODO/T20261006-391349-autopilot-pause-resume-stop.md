@@ -10,7 +10,7 @@ source: this conversation, 2026-10-06
 
 - **Type**: feature
 - `/autopilot` (`autopilot/SKILL.md`) only special-cases the `status` argument
-  (Phase 1) — there is no user-invoked way to pause, resume, or explicitly
+  (Phase 0) — there is no user-invoked way to pause, resume, or explicitly
   stop a running loop mid-window. Today a run only ends itself, via Phase 2
   (`elapsed`) or Phase 4 (`queue-empty`/exhausted stuck backoff).
 - Need: when a higher-priority task shows up mid-run, pause the loop so its
