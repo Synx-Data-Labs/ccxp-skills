@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress — design PR skipped: self-evident one-line fix, root cause + exact fix already in Problem section (2026-10-06)
 estimation: 1
 source: 2026-09-25 conversation — surfaced live while taking over a stale
   claim on T20260914-175513 in build-pipeline-repo
 related: T20260925-383305 (same file, `_tc_fm_set` — a different bug in the
   same function-neighborhood; this one is in `_tc_reclaim_decide`)
+claimed_by: cc1-50ac6891:ed6da7ef699fc33b
+claimed_role: interactive
+scheduled: 2026-10-05
 ---
 
 # T20260925-244717: `_tc_reclaim_decide` exact-matches `status` against `Coding`/`Review`, so any narrated status always reads `live`
