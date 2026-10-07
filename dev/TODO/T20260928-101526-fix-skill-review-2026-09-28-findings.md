@@ -2,11 +2,15 @@
 status: Open
 estimation: 8
 source: Skill quality review, this conversation, 2026-09-28 (dev/quality/skill-review-2026-09-28/)
-related: [T20260922-155006, T20260925-159860, T20260923-584914, T20260922-409644, T20260923-292618]
+related: [T20260922-155006, T20260925-159860, T20260923-584914, T20260922-409644, T20260923-292618, T20261006-138216]
 description: Fix the correctness bugs, script-path breakage and concision debt found by the 2026-09-28 review of all 47 skills
 ---
 
 # T20260928-101526: Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
+
+## Split-off tasks
+
+- **T20261006-138216** (Done, see `dev/JOURNAL/`) — the `migrate-task`/`statusline-setup` invalid-YAML-frontmatter bug (one of the README §1 bullets below) was driven to merge as its own task. `/drive`'s own design-score gate failed on *this* task's full scope (56/100 — a 8-point mega-task doesn't score well against a gate designed for a focused design doc), which is itself a signal this task should be decomposed phase-by-phase rather than designed as one unit. Recommend filing the remaining README §1 bugs, the script-path convention, concision pass, shared-helper extraction, and Cloudflare-family work each as their own task before resuming (per this file's own "Split any phase into its own task if it outgrows this one").
 
 ## Problem
 
@@ -14,7 +18,7 @@ description: Fix the correctness bugs, script-path breakage and concision debt f
 - The 2026-09-28 review ([README](../quality/skill-review-2026-09-28/README.md), per-skill detail in `batch1.md`–`batch5.md`) found real correctness and safety bugs. Severe ones were spot-checked by hand:
   - `cleanup-branch/scripts/cleanup-branch.sh:89-92` falls back to `git branch -D` for any branch with a merged PR, so it deletes local commits made after the merge.
   - `drive/SKILL.md:151` sets `trap 'rm -rf "$TARGET"' EXIT` inside one Bash tool call, which deletes the cross-repo clone when that call ends.
-  - `migrate-task/SKILL.md:3` and `statusline-setup/SKILL.md:3` have invalid YAML frontmatter (an unquoted colon-space in the description), so their triggers may never load.
+  - ~~`migrate-task/SKILL.md:3` and `statusline-setup/SKILL.md:3` have invalid YAML frontmatter (an unquoted colon-space in the description), so their triggers may never load.~~ ✅ Fixed — see **T20261006-138216**.
   - `slack/SKILL.md:64`: `SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO"` expands to empty when the var lives only in `~/.claude/.env`, so the message goes to the default channel.
   - The rest are in the README's §1 table: `autopilot` re-dispatches `/address-pr` every 60 s on WAITING, `top --before` reverses blocker order, `incept` lints repo-wide, `gcpr` hardcodes the trailer, `rca` + `labrun-rca` double-post, `email-triage` claims to be read-only.
 - Script paths only resolve from the ccxp-skills root. A live eval confirmed it: `bash todo/scripts/todo-next.sh` exits 127 from a consumer repo. `todo/evals/evals.json` case `next-skips-done-and-is-read-only` (`command_succeeded`) is red until this is fixed.
