@@ -2,7 +2,7 @@
 status: Open
 estimation: 8
 source: Skill quality review, this conversation, 2026-09-28 (dev/quality/skill-review-2026-09-28/)
-related: [T20260922-155006, T20260925-159860, T20260923-584914, T20260922-409644, T20260923-292618, T20261006-138216]
+related: [T20260922-155006, T20260925-159860, T20260923-584914, T20260922-409644, T20260923-292618, T20261006-138216, T20261006-579135]
 description: Fix the correctness bugs, script-path breakage and concision debt found by the 2026-09-28 review of all 47 skills
 ---
 
@@ -11,6 +11,7 @@ description: Fix the correctness bugs, script-path breakage and concision debt f
 ## Split-off tasks
 
 - **T20261006-138216** (Done, see `dev/JOURNAL/`) — the `migrate-task`/`statusline-setup` invalid-YAML-frontmatter bug (one of the README §1 bullets below) was driven to merge as its own task. `/drive`'s own design-score gate failed on *this* task's full scope (56/100 — a 8-point mega-task doesn't score well against a gate designed for a focused design doc), which is itself a signal this task should be decomposed phase-by-phase rather than designed as one unit. Recommend filing the remaining README §1 bugs, the script-path convention, concision pass, shared-helper extraction, and Cloudflare-family work each as their own task before resuming (per this file's own "Split any phase into its own task if it outgrows this one").
+- **T20261006-579135** (in progress, see `dev/TODO/`) — the `cleanup-branch` merged-PR force-delete-discards-post-merge-commits bug (another README §1 bullet) is being split off and driven to merge the same way.
 
 ## Problem
 
