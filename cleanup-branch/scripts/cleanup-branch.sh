@@ -88,6 +88,15 @@ run_pr_verified() {
     url="$(echo "$res" | jq -r '.url')"
     if git branch -d "$b" >/dev/null 2>&1; then
       printf '%s\tdeleted\t#%s %s\n' "$b" "$num" "$url"
+    elif ! git diff --quiet main "$b" -- 2>/dev/null; then
+      # `-d` refused (branch isn't a fast-forward ancestor of main — the
+      # normal case after a squash or rebase merge, where the PR's content
+      # landed on main under a different commit SHA) AND the branch's tree
+      # still differs from main's. That difference means the branch carries
+      # content beyond what its merged PR shipped — most likely commits made
+      # on the branch AFTER the PR merged. Force-deleting here would discard
+      # them silently, so stop and let a human decide instead (T20260928-101526).
+      printf '%s\tSKIPPED: diverges from main since PR merge — needs human review\t#%s %s\n' "$b" "$num" "$url"
     elif git branch -D "$b" >/dev/null 2>&1; then
       printf '%s\tdeleted (force, rebased/squash merge)\t#%s %s\n' "$b" "$num" "$url"
     else
