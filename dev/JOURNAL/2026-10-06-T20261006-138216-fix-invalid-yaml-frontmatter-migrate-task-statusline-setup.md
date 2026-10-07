@@ -1,12 +1,12 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-05
 estimation: 1
 source: Split off T20260928-101526 (2026-09-28 skill-review findings, README §1) — the design-score gate failed on the parent 8-point task (56/100), so this first, self-contained bug is being driven to merge on its own per /drive's "break into subtasks" guidance.
 related: T20260928-101526
 description: Quote two SKILL.md descriptions whose unquoted ": " breaks YAML frontmatter parsing
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261006-138216: Fix invalid YAML frontmatter in migrate-task and statusline-setup SKILL.md
@@ -82,9 +82,16 @@ claimed_role: interactive
 | `dev/quality/skill-scores.json` | `migrate-task`, `statusline-setup` entries | baseline re-locked to the post-fix scores |
 | `skill-conventions/scripts/skill_score.py` | `42-52` (`split_frontmatter`), `231-236` (`iter_skills`) | reused, unmodified, by the new test |
 
+## Closed (2026-10-06)
+
+- Shipped in **PR #273** (`t20261006-138216-fix-yaml-frontmatter`): https://github.com/Synx-Data-Labs/ccxp-skills/pull/273
+- Met: both YAML parse errors fixed (verified unchanged description content), new repo-wide regression test added and confirmed red→green, baseline re-locked for the two affected skills, full `bats` (836/836) and python unittest (19/19) suites green, parent task T20260928-101526 updated with a link back here.
+- External/unverified: none — this task's scope was fully self-contained and verified pre-merge.
+- Follow-up tasks filed: none new. The parent, **T20260928-101526**, remains open and now carries a recommendation (in its own body) to decompose its remaining phases into further split-off tasks before resuming.
+
 ## Skills invoked
 
 - TDD (`superpowers:test-driven-development`): yes — wrote `RepoFrontmatterTest`, confirmed it failed against the unmodified files (`git stash` isolation), then fixed and confirmed green.
-- Verification (`superpowers:verification-before-completion`): yes — full `bats tests/` (836/836), full python unittest suite (19/19), `skill_score.py --check`, and `lint-docs.sh` all run and confirmed passing before PR.
+- Verification (`superpowers:verification-before-completion`): yes — full `bats tests/` (836/836), full python unittest suite (19/19), `skill_score.py --check`, and `lint-docs.sh` all run and confirmed passing before PR, and again at close.
 - Systematic debugging (`superpowers:systematic-debugging`): no — root cause was already identified by the 2026-09-28 review; this was confirm-and-fix, not open-ended debugging.
-- Receiving code review (`superpowers:receiving-code-review`): no Copilot/Claude Code review comments yet at file-authoring time — see `/address-pr` run for this PR.
+- Receiving code review (`superpowers:receiving-code-review`): no pushback needed — the independent review agent returned a clean bill on PR #273 with no findings to contest.
