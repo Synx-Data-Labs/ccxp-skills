@@ -30,8 +30,13 @@ check for §1, `[gone]` upstream state for §2) is already applied and reported
 inside the script, so there is no per-branch judgment call left to make.
 
 - §1 tries `git branch -d` first, and only force-deletes with `-D` when
-  GitHub already confirmed the PR merged — handles rebase/squash-merged
-  branches, where local SHAs never match `main`.
+  GitHub already confirmed the PR merged **and** the branch's tree still
+  matches `main`'s (`git diff --quiet main "$b"`) — handles rebase/squash-
+  merged branches, where local SHAs never match `main` even though the
+  content landed. If the branch's tree *differs* from `main` (most likely
+  commits added after the PR merged), §1 reports `SKIPPED: diverges from
+  main since PR merge — needs human review` instead of force-deleting, so
+  that work is never silently discarded (T20261006-579135).
 - §2 always force-deletes (no merge confirmation to justify the safe path
   first), and never touches the default branch or the one currently checked
   out.

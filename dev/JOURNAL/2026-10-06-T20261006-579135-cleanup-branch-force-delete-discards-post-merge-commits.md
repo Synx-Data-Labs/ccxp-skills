@@ -1,12 +1,12 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-05
 estimation: 1
 source: Split off T20260928-101526 (2026-09-28 skill-review findings, README §1) — the design-score gate failed on the parent 8-point task (56/100), so this next self-contained bug is being driven to merge on its own per /drive's "break into subtasks" guidance, same pattern as T20261006-138216.
 related: T20260928-101526
 description: cleanup-branch's merged-PR sweep force-deletes (`git branch -D`) any branch with a merged PR, discarding local commits made after the merge
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261006-579135: `cleanup-branch` force-delete fallback discards commits made after a branch's PR merged
@@ -40,17 +40,17 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] New `tests/cleanup_branch.bats`, hermetic (local bare repo + fake `_gh/gh.sh`, no network/real GitHub — same pattern as `tests/sync_and_prune_branches.bats`):
-  - [ ] "SKIPS (does not force-delete) a merged-PR branch that has commits made after the merge" — must be confirmed **red** against the unmodified script (`git stash` isolation), **green** after the fix.
-  - [ ] "force-deletes a merged-PR branch whose tree matches main (squash/rebase merge, no drift)" — regression guard for the pre-existing, common case.
-  - [ ] "still soft-deletes normally when the branch is a true ancestor of main (regular merge)" — regression guard for the `-d` fast path.
-- [ ] `bats tests/` full suite green with the new file included.
+- [x] New `tests/cleanup_branch.bats`, hermetic (local bare repo + fake `_gh/gh.sh`, no network/real GitHub — same pattern as `tests/sync_and_prune_branches.bats`):
+  - [x] "SKIPS (does not force-delete) a merged-PR branch that has commits made after the merge" — confirmed **red** against the unmodified script (`git stash` isolation), **green** after the fix.
+  - [x] "force-deletes a merged-PR branch whose tree matches main (squash/rebase merge, no drift)" — regression guard for the pre-existing, common case.
+  - [x] "still soft-deletes normally when the branch is a true ancestor of main (regular merge)" — regression guard for the `-d` fast path.
+- [x] `bats tests/` — 839/839 pass (836 pre-existing + 3 new).
 
 ## Done criteria
 
-- [ ] The merged-PR sweep no longer force-deletes a branch whose content diverges from `main` — `tests/cleanup_branch.bats::"SKIPS (does not force-delete)…"`.
-- [ ] The common squash/rebase-merge case (no drift) still force-deletes as before — `tests/cleanup_branch.bats::"force-deletes a merged-PR branch whose tree matches main…"`.
-- [ ] The true-ancestor case still soft-deletes via `-d` — `tests/cleanup_branch.bats::"still soft-deletes normally…"`.
+- [x] The merged-PR sweep no longer force-deletes a branch whose content diverges from `main` — `tests/cleanup_branch.bats::"SKIPS (does not force-delete)…"`.
+- [x] The common squash/rebase-merge case (no drift) still force-deletes as before — `tests/cleanup_branch.bats::"force-deletes a merged-PR branch whose tree matches main…"`.
+- [x] The true-ancestor case still soft-deletes via `-d` — `tests/cleanup_branch.bats::"still soft-deletes normally…"`.
 - [x] Parent task `T20260928-101526` updated to record this split-off and link back here.
 
 ## Root cause
@@ -65,3 +65,18 @@ claimed_role: interactive
 |---|---|---|
 | `cleanup-branch/scripts/cleanup-branch.sh` | `89-100` | `run_pr_verified`'s delete logic — new diff-based guard added before the `-D` fallback |
 | `tests/cleanup_branch.bats` | all (new) | hermetic regression coverage, red→green confirmed |
+| `cleanup-branch/SKILL.md` | §1 bullet list | documents the new `SKIPPED: diverges from main since PR merge` outcome |
+
+## Closed (2026-10-06)
+
+- Shipped in **PR #275** (`t20261006-579135-cleanup-branch-force-delete-fix`).
+- Met: force-delete no longer discards post-merge commits (new regression test, confirmed red pre-fix / green post-fix); the common squash/rebase case and the true-ancestor case both still behave as before (regression guards); full `bats tests/` suite green (839/839); `cleanup-branch/SKILL.md` updated to describe the new outcome; parent task `T20260928-101526` updated with a link back here; claim PR #274 landed the claim/queue-staging first, and was itself independently reviewed (a premature `## Closed`/checked-box inconsistency was caught and fixed before merge).
+- External/unverified: none — fully self-contained, hermetic test coverage.
+- Follow-up tasks filed: none new. The parent, **T20260928-101526**, remains open with further README §1 bugs still to split off.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — wrote `tests/cleanup_branch.bats`, confirmed the first case failed against the unmodified script (`git stash` isolation), then implemented the fix and confirmed all three cases green.
+- Verification (`superpowers:verification-before-completion`): yes — full `bats tests/` (839/839) run and confirmed passing before each PR, and again at close.
+- Systematic debugging (`superpowers:systematic-debugging`): no — root cause was already identified by the 2026-09-28 review; this was confirm-and-fix, not open-ended debugging.
+- Receiving code review (`superpowers:receiving-code-review`): yes — PR #274's independent review flagged a real lifecycle-convention violation (premature `## Closed` section + checked boxes on an `In Progress` task file); agreed it was a real issue (not a style nitpick) and fixed it in a follow-up commit rather than arguing it away.

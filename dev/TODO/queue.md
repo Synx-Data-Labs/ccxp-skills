@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20261006-579135](T20261006-579135-cleanup-branch-force-delete-discards-post-merge-commits.md): `cleanup-branch` force-delete fallback discards commits made after a branch's PR merged
 - [T20260923-343482](T20260923-343482-app-auth-merge-workflow-synx-merge-bot.md): Build App-auth merge workflow using synx-merge-bot, so required-review branch protection needs no bypass list
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
