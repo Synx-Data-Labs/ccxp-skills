@@ -40,17 +40,17 @@ claimed_role: interactive
 
 ## Test plan
 
-- [x] New `tests/cleanup_branch.bats`, hermetic (local bare repo + fake `_gh/gh.sh`, no network/real GitHub — same pattern as `tests/sync_and_prune_branches.bats`):
-  - [x] "SKIPS (does not force-delete) a merged-PR branch that has commits made after the merge" — confirmed **red** against the unmodified script (`git stash` isolation), **green** after the fix.
-  - [x] "force-deletes a merged-PR branch whose tree matches main (squash/rebase merge, no drift)" — regression guard for the pre-existing, common case.
-  - [x] "still soft-deletes normally when the branch is a true ancestor of main (regular merge)" — regression guard for the `-d` fast path.
-- [x] `bats tests/` — 839/839 pass (836 pre-existing + 3 new).
+- [ ] New `tests/cleanup_branch.bats`, hermetic (local bare repo + fake `_gh/gh.sh`, no network/real GitHub — same pattern as `tests/sync_and_prune_branches.bats`):
+  - [ ] "SKIPS (does not force-delete) a merged-PR branch that has commits made after the merge" — must be confirmed **red** against the unmodified script (`git stash` isolation), **green** after the fix.
+  - [ ] "force-deletes a merged-PR branch whose tree matches main (squash/rebase merge, no drift)" — regression guard for the pre-existing, common case.
+  - [ ] "still soft-deletes normally when the branch is a true ancestor of main (regular merge)" — regression guard for the `-d` fast path.
+- [ ] `bats tests/` full suite green with the new file included.
 
 ## Done criteria
 
-- [x] The merged-PR sweep no longer force-deletes a branch whose content diverges from `main` — `tests/cleanup_branch.bats::"SKIPS (does not force-delete)…"`.
-- [x] The common squash/rebase-merge case (no drift) still force-deletes as before — `tests/cleanup_branch.bats::"force-deletes a merged-PR branch whose tree matches main…"`.
-- [x] The true-ancestor case still soft-deletes via `-d` — `tests/cleanup_branch.bats::"still soft-deletes normally…"`.
+- [ ] The merged-PR sweep no longer force-deletes a branch whose content diverges from `main` — `tests/cleanup_branch.bats::"SKIPS (does not force-delete)…"`.
+- [ ] The common squash/rebase-merge case (no drift) still force-deletes as before — `tests/cleanup_branch.bats::"force-deletes a merged-PR branch whose tree matches main…"`.
+- [ ] The true-ancestor case still soft-deletes via `-d` — `tests/cleanup_branch.bats::"still soft-deletes normally…"`.
 - [x] Parent task `T20260928-101526` updated to record this split-off and link back here.
 
 ## Root cause
@@ -65,17 +65,3 @@ claimed_role: interactive
 |---|---|---|
 | `cleanup-branch/scripts/cleanup-branch.sh` | `89-100` | `run_pr_verified`'s delete logic — new diff-based guard added before the `-D` fallback |
 | `tests/cleanup_branch.bats` | all (new) | hermetic regression coverage, red→green confirmed |
-
-## Closed (2026-10-06)
-
-- Shipped in **PR #TBD** (filled in before merge).
-- Met: force-delete no longer discards post-merge commits (new regression test, confirmed red pre-fix / green post-fix); the common squash/rebase case and the true-ancestor case both still behave as before (regression guards); full `bats tests/` suite green (839/839); parent task updated with a link back here.
-- External/unverified: none — fully self-contained, hermetic test coverage.
-- Follow-up tasks filed: none new. The parent, **T20260928-101526**, remains open with further README §1 bugs still to split off.
-
-## Skills invoked
-
-- TDD (`superpowers:test-driven-development`): yes — wrote `tests/cleanup_branch.bats`, confirmed the first case failed against the unmodified script (`git stash` isolation), then implemented the fix and confirmed all three cases green.
-- Verification (`superpowers:verification-before-completion`): yes — full `bats tests/` (839/839) run and confirmed passing before PR, and again at close.
-- Systematic debugging (`superpowers:systematic-debugging`): no — root cause was already identified by the 2026-09-28 review; this was confirm-and-fix, not open-ended debugging.
-- Receiving code review (`superpowers:receiving-code-review`): TBD — filled in once `/address-pr` runs.
