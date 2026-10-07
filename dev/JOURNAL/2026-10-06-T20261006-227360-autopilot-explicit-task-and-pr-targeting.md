@@ -125,8 +125,7 @@ claimed_role:
 
 ## Closed (2026-10-06)
 
-Shipped in **PR #TBD** (implementation PR; design in PR #277, claim in PR #276) — filled in a
-follow-up commit on this same branch once `gh pr create` returns the number.
+Shipped in **PR #278** (implementation PR; design in PR #277, claim in PR #276).
 
 - All three done criteria met — see `file:line` anchors above, verified against the committed
   diff (not just the edited-in-memory draft) before opening the PR.
