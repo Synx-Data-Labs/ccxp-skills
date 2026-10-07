@@ -1,6 +1,6 @@
 ---
 name: migrate-task
-description: Use when the user explicitly asks to move a task file from one repo's dev/TODO/ to another repo's — e.g. a mis-scoped target-repo: task, or a task filed in the wrong hub before a repo split
+description: "Use when the user explicitly asks to move a task file from one repo's dev/TODO/ to another repo's — e.g. a mis-scoped target-repo: task, or a task filed in the wrong hub before a repo split"
 disable-model-invocation: false
 argument-hint: "T<id> <target-repo> [--dry-run]"
 ---
