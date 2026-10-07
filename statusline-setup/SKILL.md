@@ -1,6 +1,6 @@
 ---
 name: statusline-setup
-description: Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>" segment leads it while /autopilot is running or after it last stopped; an optional trailing "last=<slug>" segment is fed by a companion UserPromptSubmit hook), driven by settings.json's statusLine.command
+description: 'Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>" segment leads it while /autopilot is running or after it last stopped; an optional trailing "last=<slug>" segment is fed by a companion UserPromptSubmit hook), driven by settings.json''s statusLine.command'
 disable-model-invocation: false
 argument-hint: "[edit|test]"
 ---

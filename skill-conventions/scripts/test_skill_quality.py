@@ -126,6 +126,28 @@ class ScoreTest(unittest.TestCase):
                          "L3 Practitioner")
 
 
+class RepoFrontmatterTest(unittest.TestCase):
+    """Regression coverage for the 2026-09-28 skill-review finding: an
+    unquoted ': ' inside a plain-scalar `description:` value is invalid
+    YAML (it reads as a nested mapping key), so `yaml.safe_load` raises and
+    skill_score.split_frontmatter() silently returns fm=None — the skill's
+    trigger may then never load. This walks every real SKILL.md in the repo
+    (not a synthetic fixture) so a future skill with the same mistake fails
+    here before it ships. Failed on migrate-task/SKILL.md and
+    statusline-setup/SKILL.md prior to T20260928-101526's frontmatter fix.
+    """
+
+    def test_every_skill_frontmatter_is_valid_yaml(self):
+        repo = Path(__file__).resolve().parents[2]
+        bad = []
+        for skill_dir in skill_score.iter_skills(repo):
+            text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+            fm, _ = skill_score.split_frontmatter(text)
+            if fm is None:
+                bad.append(skill_dir.name)
+        self.assertEqual(bad, [], f"invalid/missing YAML frontmatter in: {bad}")
+
+
 TRANSCRIPT = [
     json.dumps({"type": "assistant", "message": {"content": [
         {"type": "tool_use", "name": "Skill",
