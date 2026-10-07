@@ -63,6 +63,13 @@ claimed_role: interactive
   own claim mechanics — `/drive` Phase 1 still does the actual status flip + claim-PR, and its
   existing "claim-PR conflict = you lost the race" handling (`drive/SKILL.md:115`) already covers
   a peer grabbing the same task between `/autopilot`'s read and the dispatched `/drive`'s claim.
+  `/todo sweep` is **not** read-only — its Step B (park recommendation, `todo/SKILL.md:194-209`)
+  "always gets user sign-off first" before moving anything to `dev/PARKING/`. This is a
+  **pre-existing** hazard, not introduced here: bare `/drive`'s own Phase 1 auto-pick already runs
+  `/todo sweep` unconditionally today, including from an unattended dispatched sub-agent
+  (`/autopilot`'s current bare-dispatch cycle, or a `/ccxp` cron run) — this task does not change
+  who runs `sweep` or when, only which caller's turn computes the #1 pick. Out of scope here;
+  worth its own follow-up if it proves to actually stall an unattended run in practice.
 
 ## Solution
 
@@ -98,9 +105,10 @@ claimed_role: interactive
 
 - [ ] `drive/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh drive/SKILL.md`)
 - [ ] `autopilot/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh autopilot/SKILL.md`)
-- [ ] Manual re-read of all 13 `/address-pr` mentions in `drive/SKILL.md` (grep count unchanged)
-      confirming the 3 ambiguous sites now name an explicit number and the already-correct ones
-      (Phase 0's intentional bare call, Phase 5's `<PR number>`) are untouched
+- [ ] Manual re-read of all 14 lines mentioning `/address-pr` in `drive/SKILL.md`
+      (`grep -c /address-pr drive/SKILL.md` → 14, unchanged by this PR) confirming the 3 ambiguous
+      sites now name an explicit number and the already-correct ones (Phase 0's intentional bare
+      call, Phase 5's `<PR number>`) are untouched
 - [ ] Manual re-read confirming the Phase 0 skip-rule wording is unambiguous for both the
       pre-existing human-explicit-id caller and the new `--auto-selected` orchestrator caller
 - [ ] CI green on the implementation PR (`skill-quality`, `Markdown Lint`, `lint-tasks`)
