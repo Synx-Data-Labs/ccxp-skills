@@ -28,7 +28,7 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
 - `--auto-selected` (combinable with the explicit-task-id form only — meaningless with bare
   `/drive`, which already auto-picks) — marks the given id as resolved by an **orchestrating
   skill** via the same `/todo sweep` + `/todo next` logic Phase 1's own auto-pick runs, not a
-  human's deliberate single-task request. The only effect: Phase 0's skip rule does not apply
+  human's deliberate single-task request. Only effect: Phase 0's skip rule does not apply
   (see Phase 0 below) — nothing else about Phase 1 onward changes (T20261006-227360).
 
 ## Workflow
@@ -44,7 +44,7 @@ Call `/address-pr` with no args once. It auto-picks the first open PR authored b
 - **PRs owned by another session, or blocked on CI / external review / approval / pipeline** → `/address-pr` defers, fixes, or exits without an unsafe merge as appropriate. The §1.6 ownership guard (the anti-steal protection against a concurrent-session-drives-the-same-PR failure mode — a PR lives on GitHub, reachable from every clone, so nothing local stops two sessions from driving it at once without an explicit lock) and the hard merge gate live inside `/address-pr`, so no separate per-PR pre-classification is needed here.
 - **PR's task is unclaimed (`free`)** → `/address-pr` §1.6 now claims the task itself (same mechanism as this skill's Phase 1 Claim PR) before driving the PR further — don't just proceed against an unclaimed task (an unclaimed task's PR can sit open, unnoticed, for weeks before this gets caught).
 
-**Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag only tells Phase 1 to skip re-deriving the task-selection logic itself; Phase 0's PR-drain is an unrelated step and still runs every cycle, the same as bare `/drive` (T20261006-227360).
+**Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag's only effect is on this skip rule; Phase 0's PR-drain still runs every cycle, the same as bare `/drive` (T20261006-227360).
 
 ### Phase 0.5: Check escalation replies
 
