@@ -1,5 +1,5 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-05
 estimation: 2
 source: T20260809-355059's Phase A/B implementation (2026-09-25) — follow-up
@@ -10,8 +10,8 @@ blocked-by: T20260925-244717 — resolved, merged (see
   Both tasks touched the identical `_tc_reclaim_decide` case-arm in
   `_session/task_claim.sh:297`; no reorder was needed since queue order already
   had 244717 ahead of this task.
-claimed_by: cc1-50ac6891:ed6da7ef699fc33b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260925-283679: Remove the legacy `Coding` status alias once external repos migrate
@@ -130,21 +130,22 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `grep -rn "Coding" _session _ipm ccxp/scripts repo-conventions/scripts actions/sync-tasks tests` returns zero status-enum hits (Copilot Coding Agent / Cloudflare false positives excluded)
-- [ ] Full bats suite green (`bats tests/`), including the updated `tests/epic-status.bats`, `tests/task-state.bats`, `tests/eta.bats`, `tests/todo-next.bats`, `tests/task_claim.bats`, `tests/attribution.bats`, `tests/claim_gap.bats`, `tests/reclaim_sweep.bats`, `tests/ipm_iteration_drain_check.bats`
-- [ ] Both Python unittest suites green: `python3 -m unittest repo_conventions.scripts.test_lint_tasks` and `python3 -m unittest actions.sync_tasks.test_sync` (or repo-equivalent invocation), including the new `In Progress` scheduled-guard parallels in `test_lint_tasks.py`
+- [x] `grep -rn "Coding" _session _ipm ccxp/scripts repo-conventions/scripts actions/sync-tasks tests` returns zero status-enum hits (Copilot Coding Agent / Cloudflare false positives excluded) — verified 2026-10-06, exit 1 (no match)
+- [x] Full bats suite green (`bats tests/`), including the updated `tests/epic-status.bats`, `tests/task-state.bats`, `tests/eta.bats`, `tests/todo-next.bats`, `tests/task_claim.bats`, `tests/attribution.bats`, `tests/claim_gap.bats`, `tests/reclaim_sweep.bats`, `tests/ipm_iteration_drain_check.bats` — 836/836
+- [x] Both Python unittest suites green: `python3 -m unittest discover -s repo-conventions/scripts -p test_lint_tasks.py` (51/51) and `python3 -m unittest discover -s actions/sync-tasks -p test_sync.py` (156/156), including the new `In Progress` scheduled-guard parallels in `test_lint_tasks.py`
 - [ ] Post-merge (external, human-confirmed): no `dev/TODO/*.md` in `hub-repo`/`build-pipeline-repo` still carries `status: Coding`
 
 ## Done criteria
 
-- [ ] No known task file anywhere (accessible repos) carries literal
-  `status: Coding` — verified by the `grep` in Test plan item 1
-- [ ] `grep -rn "Coding" _session _ipm ccxp/scripts repo-conventions/scripts
+- [x] No known task file anywhere (accessible repos) carries literal
+  `status: Coding` — verified by the `grep` in Test plan item 1 (this repo);
+  `hub-repo`/`build-pipeline-repo` remain unverified (Test plan item 4, see Closed below)
+- [x] `grep -rn "Coding" _session _ipm ccxp/scripts repo-conventions/scripts
   actions/sync-tasks tests` returns zero status-enum hits (Copilot Coding
   Agent / Cloudflare false positives excluded) — same grep, Test plan item 1
-- [ ] Full bats + both Python unittest suites still green after removal —
-  `bats tests/*.bats` and the two `unittest` invocations in Test plan
-  items 2-3
+- [x] Full bats + both Python unittest suites still green after removal —
+  `bats tests/*.bats` (836/836) and the two `unittest` invocations in Test plan
+  items 2-3 (51/51, 156/156)
 
 ## Design
 
@@ -216,3 +217,58 @@ claimed_role: interactive
 ## Out of scope
 
 - Renaming any other lifecycle status — same boundary T20260809-355059 set.
+
+## Closed (2026-10-06)
+
+- Shipped in **PR #(filled in below)** — implementation: removed the `Coding`
+  case-arms, fixtures, and generic-example literals from the full 23-file
+  verified footprint; dropped the alias caveat from `lifecycle.md`,
+  `todo/SKILL.md`, `repo-conventions/SKILL.md`, `_session/README.md`.
+- **Met**: all Done criteria except the external hub-repo/build-pipeline-repo
+  precondition (see below). `grep -rn "Coding" _session _ipm ccxp/scripts
+  repo-conventions/scripts actions/sync-tasks tests` returns zero hits. Full
+  bats suite green (836/836, down from 841 — 5 now-redundant Coding-alias
+  duplicate tests removed, each with an existing `In Progress` parallel kept).
+  Both Python unittest suites green (51/51, 156/156).
+- **External/unverified**: whether any `dev/TODO/*.md` in `hub-repo` or
+  `build-pipeline-repo` still carries literal `status: Coding` — this clone
+  has no access to either repo. Per the task's own Design, this was
+  deliberately not gated on; a human should confirm at or shortly after merge
+  and migrate any straggler to `In Progress` by hand (dual-accept logic is
+  now gone from this repo's scripts, so an unmigrated straggler would stop
+  being recognized as an equivalent alias — a worse failure mode than a
+  silent one, since `lint_tasks.py` will now flag it as "not a known status").
+- **Doc-impact review**: `_docs/doc-impact.sh origin/main` flagged 19
+  additional docs (`CLAUDE.md`, `README.md`, several `*/SKILL.md`,
+  `dev/guidelines.md`) as citing a changed filename (e.g. `task_claim.sh`,
+  `status.sh`, `lifecycle.md`). Manually grepped each for `"Coding"` — none
+  mention the alias; all 19 flags are filename citations unaffected by this
+  change (reviewed, no change needed).
+- No follow-up tasks filed — this closes the scope T20260925-283679 set out
+  to cover; the external precondition above is a merge-time human check
+  per the task's own Design, not a new task.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): invoked at Phase 3.0 per the
+  code-class gate; applied as a removal/characterization discipline (full
+  bats + both unittest suites run green before AND after each file's edit,
+  one file/group at a time) rather than classic red-green, since the
+  "feature" here is deleting dead case-arms whose removal is proven by the
+  existing `"In Progress"` parallel tests already passing, not a new
+  behavior needing a fresh failing test.
+- Verification (`superpowers:verification-before-completion`): yes — ran at
+  Phase 3.6 (fresh full-suite run: 836/836 bats, 51/51 + 156/156 unittest;
+  `bash -n`/`ast.parse` syntax checks on every touched script) and again
+  here at Phase 7.0.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no test
+  got stuck; each file's removal was mechanical once the design's Repo file
+  references table was in hand.
+- Receiving code review (`superpowers:receiving-code-review`): yes — the
+  design-doc restructure PR (#269) got an independent review flagging a
+  file-count claim (23 vs the doc's "~20") and dropped specificity (the
+  `epic-status.sh` "C" marker detail); both accepted and fixed. Two other
+  findings (task_claim.sh line numbers, T20260925-244717 status) were
+  steelmanned, independently re-verified against this clone and
+  `origin/main` directly, and found to not reproduce — recorded as a PR
+  comment with the verification evidence rather than silently dropped.
