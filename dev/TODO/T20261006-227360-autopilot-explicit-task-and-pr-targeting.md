@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: conversation with Shine Zhang, 2026-10-06
 related: T20260919-266165
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-10-05
 ---
 
 # T20261006-227360: /autopilot must dispatch /drive at an explicit task, and /drive's own PR must always be addressed by explicit PR number
