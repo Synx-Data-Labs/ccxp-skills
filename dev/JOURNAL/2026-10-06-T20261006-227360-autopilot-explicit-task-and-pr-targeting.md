@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: conversation with Shine Zhang, 2026-10-06
 related: T20260919-266165
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261006-227360: /autopilot must dispatch /drive at an explicit task, and /drive's own PR must always be addressed by explicit PR number
@@ -103,22 +103,51 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `drive/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh drive/SKILL.md`)
-- [ ] `autopilot/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh autopilot/SKILL.md`)
-- [ ] Manual re-read of all 14 lines mentioning `/address-pr` in `drive/SKILL.md`
+- [x] `drive/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh drive/SKILL.md`)
+- [x] `autopilot/SKILL.md` renders clean (`bash ../_docs/lint-docs.sh autopilot/SKILL.md`)
+- [x] Manual re-read of all 14 lines mentioning `/address-pr` in `drive/SKILL.md`
       (`grep -c /address-pr drive/SKILL.md` → 14, unchanged by this PR) confirming the 3 ambiguous
       sites now name an explicit number and the already-correct ones (Phase 0's intentional bare
       call, Phase 5's `<PR number>`) are untouched
-- [ ] Manual re-read confirming the Phase 0 skip-rule wording is unambiguous for both the
+- [x] Manual re-read confirming the Phase 0 skip-rule wording is unambiguous for both the
       pre-existing human-explicit-id caller and the new `--auto-selected` orchestrator caller
-- [ ] CI green on the implementation PR (`skill-quality`, `Markdown Lint`, `lint-tasks`)
+- [x] CI green on the implementation PR (`skill-quality`, `Markdown Lint`, `lint-tasks`)
 
 ## Done criteria
 
-- [ ] `autopilot/SKILL.md` Phase 3 resolves and passes an explicit `T<id>` (with
+- [x] `autopilot/SKILL.md` Phase 3 resolves and passes an explicit `T<id>` (with
       `--auto-selected`) to every dispatched `/drive` cycle, not just on resume —
-      `autopilot/SKILL.md` Phase 3 text
-- [ ] `drive/SKILL.md` Phase 0 cannot be silently skipped by an orchestrator-resolved id —
-      `drive/SKILL.md` Phase 0's skip-rule wording + Argument section's `--auto-selected` entry
-- [ ] None of the three audited `/address-pr` call sites in `drive/SKILL.md` can be read as a bare
-      (unscoped) call for `/drive`'s own just-created PR — `drive/SKILL.md:104,195,566` reworded
+      `autopilot/SKILL.md:109-122`
+- [x] `drive/SKILL.md` Phase 0 cannot be silently skipped by an orchestrator-resolved id —
+      `drive/SKILL.md:28-31` (Argument section) + `:47` (skip-rule wording)
+- [x] None of the three audited `/address-pr` call sites in `drive/SKILL.md` can be read as a bare
+      (unscoped) call for `/drive`'s own just-created PR — `drive/SKILL.md:109,200,572` reworded
+
+## Closed (2026-10-06)
+
+Shipped in **PR #TBD** (implementation PR; design in PR #277, claim in PR #276) — filled in a
+follow-up commit on this same branch once `gh pr create` returns the number.
+
+- All three done criteria met — see `file:line` anchors above, verified against the committed
+  diff (not just the edited-in-memory draft) before opening the PR.
+- Independent review (dispatched agent, `superpowers:receiving-code-review`) on the design PR
+  caught two real issues before implementation: a mischaracterization of `/todo sweep` as
+  read-only (fixed — it has an interactive park-approval step, called out as a pre-existing,
+  out-of-scope hazard) and a stale grep-count in the test plan (13 → 14 lines). Both fixed in
+  PR #277 before merge.
+- While implementing, found and fixed two stale `drive/SKILL.md:426,636` line-number citations in
+  `autopilot/SKILL.md` that this change's own line-count shift would have broken — replaced with
+  phase-name anchors (Phase 5's wait instruction + its "Background waits are not blockers" note)
+  so they don't rot on the next `drive/SKILL.md` edit.
+- No follow-up tasks filed — the `/todo sweep` interactive-gate hazard noted in Context is
+  pre-existing (not introduced by this change) and only worth a follow-up if it's actually
+  observed to stall an unattended run in practice.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class (SKILL.md prose only, no code)
+- Verification (`superpowers:verification-before-completion`): yes — Phase 3.6, re-grepped the
+  committed diff for all three done-criteria before opening the PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes — design PR #277's independent
+  review surfaced 2 real findings (see Closed above), both fixed before merge
