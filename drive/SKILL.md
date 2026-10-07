@@ -25,6 +25,11 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
   blocker via a fresh dispatched sub-agent instead of inline in this conversation. See Phase 6
   step 3 for the mechanics. **Opt-in only** — omitting this flag keeps the default, fully-inline
   behavior unchanged (T20260719-204917).
+- `--auto-selected` (combinable with the explicit-task-id form only — meaningless with bare
+  `/drive`, which already auto-picks) — marks the given id as resolved by an **orchestrating
+  skill** via the same `/todo sweep` + `/todo next` logic Phase 1's own auto-pick runs, not a
+  human's deliberate single-task request. The only effect: Phase 0's skip rule does not apply
+  (see Phase 0 below) — nothing else about Phase 1 onward changes (T20261006-227360).
 
 ## Workflow
 
@@ -39,7 +44,7 @@ Call `/address-pr` with no args once. It auto-picks the first open PR authored b
 - **PRs owned by another session, or blocked on CI / external review / approval / pipeline** → `/address-pr` defers, fixes, or exits without an unsafe merge as appropriate. The §1.6 ownership guard (the anti-steal protection against a concurrent-session-drives-the-same-PR failure mode — a PR lives on GitHub, reachable from every clone, so nothing local stops two sessions from driving it at once without an explicit lock) and the hard merge gate live inside `/address-pr`, so no separate per-PR pre-classification is needed here.
 - **PR's task is unclaimed (`free`)** → `/address-pr` §1.6 now claims the task itself (same mechanism as this skill's Phase 1 Claim PR) before driving the PR further — don't just proceed against an unclaimed task (an unclaimed task's PR can sit open, unnoticed, for weeks before this gets caught).
 
-**Skip Phase 0 when:** the user gave an explicit task ID (`/drive T254701`) — they want that specific task worked on, not a PR sweep.
+**Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag only tells Phase 1 to skip re-deriving the task-selection logic itself; Phase 0's PR-drain is an unrelated step and still runs every cycle, the same as bare `/drive` (T20261006-227360).
 
 ### Phase 0.5: Check escalation replies
 
@@ -101,7 +106,7 @@ Close that gap by landing a tiny **claim PR as the very first thing**, before an
 
 1. Branch `t<id>-claim` off `main`.
 2. Edit **only** the task file's `status:` frontmatter line: `Open` → `In Progress` (or `Open` → `Design` when a design PR will follow in Phase 2). A short prose note is fine (`claimed YYYY-MM-DD`). Change nothing else — keep it a **pure status-change** so it auto-merges under the carve-out in `dev/branch-merge-policy.md`.
-3. Commit, push, `gh pr create`, then run `/address-pr` on it. It auto-merges on the pure-status-change tier once CI is green (no manual approval needed). (No doc-lint guard here — the claim PR is a pure frontmatter `status:`/`claimed_by:` change and cannot trip MD032, a body-list rule; the guard runs on the body-doc paths — Phase 4 via `/gcpr` Step 1.5 and the Phase 7 journal-move. T20260627-192311.)
+3. Commit, push, `gh pr create` (its stdout is the new PR's URL — `<claim-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`), then run `/address-pr <claim-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR. It auto-merges on the pure-status-change tier once CI is green (no manual approval needed). (No doc-lint guard here — the claim PR is a pure frontmatter `status:`/`claimed_by:` change and cannot trip MD032, a body-list rule; the guard runs on the body-doc paths — Phase 4 via `/gcpr` Step 1.5 and the Phase 7 journal-move. T20260627-192311.)
 4. After it merges, `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), then continue to Phase 2/3 on a fresh implementation branch.
 
 This makes "somebody is working on T<id>" true **on `main`** at claim time — durable, and visible to every other session and the Project board — instead of only after the implementation PR lands, for the price of one fast docs-only PR. **Same-repo / hub-side only**: the claim PR touches the hub task file; in cross-repo mode it still lands in the hub repo and is independent of the Phase 1.5 target clone.
@@ -192,7 +197,7 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 1. Read the task file fully — understand problem, existing design, test plan.
 2. If the task has no design section (or only a stub): research the codebase and write the design by filling out [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md). It is **kind-scaled** (reuse the Phase 3.0 docs/code classifier): every task gets the §Common sections — TLDR *(mandatory, scored — 3-5 skimmable bullets)*, Problem *with reproduction evidence*, Context, Solution *(or `Plan`/`Scope` — same section) with alternatives-rejected*, Test plan, Done criteria *each mapped to a test or `file:line`*, Closed, Skills invoked; code/bug tasks additionally get §Code-only — Root cause *with git archaeology* (introduced-in `<SHA>`, deliberate-vs-oversight) and a Repo file references table. Anchor every claim to a `file:line` / SHA / command output and label *verified* vs *assumed*. **Scale to the task** — a docs chore omits the code-only sections; the target is the right sections completed, not a line count. **One-pager discipline**: most tasks read top-to-bottom on one scrolled screen — a `1`/`2`/`3`-point task earns a few bullets per section, only a `5`/`8`-point or Critical/RCA task earns real length.
 3. Update task status: `Open` → `Design`.
-4. **Create the design PR** — branch `t<id>-design`, commit ONLY the task-file changes, push, open PR. PR body: 1-paragraph summary of the design + "Design-only PR — implementation lands in a follow-up after this merges." Run `/address-pr` on it (CI will be green for docs-only; Copilot reviews the design itself; maintainer reviews and approves).
+4. **Create the design PR** — branch `t<id>-design`, commit ONLY the task-file changes, push, `gh pr create` (its stdout is the new PR's URL — `<design-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`). PR body: 1-paragraph summary of the design + "Design-only PR — implementation lands in a follow-up after this merges." Run `/address-pr <design-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR (CI will be green for docs-only; the independent review covers the design itself; the maintainer reviews and approves).
 5. **Wait for the design PR to merge.** This is a checkpoint — do NOT proceed to Phase 3 until the design PR is on `main`.
 6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `In Progress` (in a follow-up commit on the implementation branch — see Phase 3).
 7. **Design-score gate (hard gate — Phase 2 → Phase 3, per T20260609-204303 D3).** Before any code, score the merged design deterministically:
@@ -560,10 +565,11 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    git add dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
    git show --stat HEAD   # must show insertions, NOT "100% rename / 0 insertions"
-   bash ../_gh/gh.sh pr create ...
+   JOURNAL_PR_URL=$(bash ../_gh/gh.sh pr create ...)   # gh pr create prints the new PR's URL
+   JOURNAL_PR_NUMBER=${JOURNAL_PR_URL##*/}
    ```
 
-   This PR is docs-only, typically auto-mergeable (pure status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr` on it as usual.
+   This PR is docs-only, typically auto-mergeable (pure status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr $JOURNAL_PR_NUMBER` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR.
 4. Close the source GitHub issue (same as same-repo).
 5. Pop back to parent goal if recursed; otherwise exit (same as same-repo).
 6. **Remove the ephemeral target clone**: `rm -rf "$TARGET"`. The `trap EXIT` from Phase 1.5 also handles this on abort, but doing it explicitly at normal close-up keeps `/tmp/` tidy without waiting for shell exit. Skip this step if Phase 1.5 used the `Target path` override (the path is user-owned).
