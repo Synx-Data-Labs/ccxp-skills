@@ -1,15 +1,16 @@
 ---
 name: ipm
-description: Use when the user explicitly asks to run or re-run the Monday Iteration Planning Meeting — carry over WIP, budget-cut Tier 1/2 picks into ipm-weekly.md, drain the previous iteration, sync the ROADMAP — or when /ccxp Phase 2a calls into this on Mondays
+description: Use when the user explicitly asks to run or re-run the Iteration Planning Meeting — carry over in-flight work, commit queue-ordered picks into ipm-weekly.md, drain the previous iteration, sync the ROADMAP
 disable-model-invocation: false
 ---
 
 # IPM
 
-The Iteration Planning Meeting commits the week's focused work: Tier 1 (in-flight) WIP carries over automatically, Tier 2 (not-started) picks are designed-and-estimated before the cut. Output is a single `ipm-weekly.md` file that the daily standup grades against and the Friday retro grades final on.
+The Iteration Planning Meeting commits a slice of the week's focused work. `dev/TODO/queue.md` is already the single ordered priority list (see `/todo`) — this skill does not re-rank it or run a separate scoring pass; it walks that one order top to bottom, auto-including in-flight work and budget-cutting whatever candidates are left. Output is a single `ipm-weekly.md` file that the daily standup grades against and the Friday retro grades final on.
 
-- **Callable ad hoc, not just Mondays** — re-scope after a design changes, or re-budget-cut after a priority shift. `/ccxp` Phase 2a owns the Monday cron trigger; this skill has no day-of-week check of its own.
-- **Missed Monday** — the next Monday's IPM covers the gap by default (no automatic mid-week catch-up); invoke `/ipm` directly for a deliberate ad-hoc re-plan.
+- **Optional, ad-hoc tool — not an automatic step.** T20260924-252293 retired the mandatory Monday budget-cut ceremony: continuous `/todo next` + `/drive` off `queue.md` is the documented day-to-day planning loop, and `/ccxp` no longer invokes this skill automatically (neither cron nor interactive mode day-of-week-triggers it — see `ccxp/SKILL.md` Phase 2a). `/ipm` stays available for a deliberate iteration re-plan — e.g. a repo running a configured GH Project board that wants an explicit weekly commit — invoked directly, any day.
+- **Callable ad hoc, any day** — re-scope after a design changes, or re-budget-cut after a priority shift. This skill has no day-of-week check of its own; "Monday" below just names the conventional cadence for a repo that chooses to run it weekly.
+- **Missed Monday** (for a repo that does run it weekly) — the next Monday's IPM covers the gap by default (no automatic mid-week catch-up); invoke `/ipm` directly for a deliberate ad-hoc re-plan.
 - **Cron vs. interactive mode** — reads `CCXP_CRON_MODE` from the environment (inherited, no argument needed), same branching `/ccxp`'s own "Cron mode vs. interactive mode" section describes. Step 3 (pre-IPM design pass) is interactive-only, skipped when `CCXP_CRON_MODE=1`.
 
 ## Workflow
@@ -40,14 +41,14 @@ SCHEDULED=$(date -d 'monday' +%Y-%m-%d 2>/dev/null || date -v-Mon +%Y-%m-%d)
 echo "This IPM is Scheduled = ${SCHEDULED}"
 ```
 
-Every Tier 1 / Tier 2 / Tier 3 task added (or re-committed) to this IPM gets `scheduled: ${SCHEDULED}` written into its task-file YAML frontmatter (handled in step 5). The IPM file header (prose document, not a task file) also records `**Scheduled**: ${SCHEDULED}`.
+Every task added (or re-committed) to this IPM — carry-over, new pick, infra/tooling, or mid-week addition — gets `scheduled: ${SCHEDULED}` written into its task-file YAML frontmatter (handled in step 5). The IPM file header (prose document, not a task file) also records `**Scheduled**: ${SCHEDULED}`.
 
 **Source of truth for iteration**: the GH Project (your-org/projects/1) defines iterations with explicit start/end dates.
 
 - The Scheduled date on each task file maps to whichever iteration contains it. A separate mirror workflow — the per-repo `.github/scripts/sync-tasks-to-issues.py` (push-triggered `sync`, plus `reconcile`/`backfill` dispatch modes) — reads `scheduled` and sets the matching Iteration on add, move, **and in-place edit** (an IPM carry-over is a `scheduled:` rewrite on a file that stays in `dev/TODO/`, and in-place edits are honored).
 - The skill never computes an iteration integer client-side — `ls | wc -l` would silently desync if a Monday IPM is ever skipped or backfilled.
 
-For mid-week Tier 3 additions, the Scheduled date is the current iteration's Monday (i.e. this week's IPM commit).
+For mid-week additions, the Scheduled date is the current iteration's Monday (i.e. this week's IPM commit).
 
 ### 0.1 Sweep stale tasks before scoping
 
@@ -61,7 +62,7 @@ For mid-week Tier 3 additions, the Scheduled date is the current iteration's Mon
 
 Append the sweep summary (counts of struck-blockers, auto-closed, parked) to the standup `## Housekeeping` section (via `/ccxp` Phase 1) so the maintainer sees what changed each day.
 
-### 1 Carry over WIP (Tier 1)
+### 1 Carry over WIP
 
 Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are **automatic carry-overs** — they are already in flight and the WIP discipline keeps them in this week's commit until they ship. List them and sum their (revised, if previously estimated) Estimations.
 
@@ -71,13 +72,13 @@ Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are 
 - **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in step 5).
 - What it must never do is leave a claimed task's `scheduled:` untouched and let the board drift from the IPM's intent.
 
-**Bump-2x reassessment — force a decision before the third commit.** An unconditionally-carried Tier-1 task becomes a "we'll get to it" comfort blanket that absorbs accountability without shipping. `/retro`'s bump-3x detector catches this, but only retrospectively, after the third wasted week — catch it here, one step earlier.
+**Bump-2x reassessment — force a decision before the third commit.** An unconditionally-carried task becomes a "we'll get to it" comfort blanket that absorbs accountability without shipping. `/retro`'s bump-3x detector catches this, but only retrospectively, after the third wasted week — catch it here, one step earlier. (Both detectors only fire for a repo that actually runs this ceremony — dormant by design, not broken, wherever `/ipm` is never invoked.)
 
 - **Detection** (same file-date join key `/retro` uses, no Project-side iteration mapping): read the last 2 committed `*-ipm-weekly.md` files (`PREV_IPM=$(bash <skills-root>/_ipm/current.sh)` gives the newest; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date).
-- For each task in this week's Tier-1 carry-over set, check whether it appears in the Tier-1 table of **both** prior IPMs — if so, committing it now would be its 3rd consecutive Tier-1 commit: flag it **"Bumped 2x — reassess"**.
+- For each task in this week's carry-over set, check whether it appears as a carried/in-flight row in the committed list of **both** prior IPMs — if so, committing it now would be its 3rd consecutive carry: flag it **"Bumped 2x — reassess"**.
 - For each flagged task, force an explicit disposition below — never a silent re-carry.
 
-- **Re-commit** — keep it in Tier 1, but record a one-line "still the right call" reason in the IPM `## Notes` (e.g. "blocker cleared this week, finishing now").
+- **Re-commit** — keep it as a carry-over, but record a one-line "still the right call" reason in the IPM `## Notes` (e.g. "blocker cleared this week, finishing now").
 - **Won't fix** — close it (journal-move stub), exactly as a task was after its third bump in a real observed case.
 - **Defer** — move it out of this iteration: advance its `scheduled:` to a future Monday and pre-append it to that Monday's stub, identical to the step 5 "Cut candidates — advance, never clear" mechanics.
 
@@ -92,26 +93,26 @@ Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are 
 Cuts must not vanish. Read the previous IPM file — `PREV_IPM=$(bash <skills-root>/_ipm/current.sh)`.
 
 - This resolves to **last week's** IPM: step 1.5 runs before step 5, so this week's file still only exists as the pre-IPM staging stub, which the helper excludes (header-sniff) — the newest *committed* IPM is last week's, not a naive `ls -t … | head -1` (which would grab the future-dated staging stub instead).
-- Collect the task IDs from its `## Considered but cut` table. Drop any whose task file is no longer in `dev/TODO/` (closed/parked since), and any already captured as Tier 1 in step 1 (dedupe — in-flight auto-carry wins).
+- Collect the task IDs from its `## Considered but cut` table. Drop any whose task file is no longer in `dev/TODO/` (closed/parked since), and any already captured as a carry-over in step 1 (dedupe — in-flight auto-carry wins).
 
-The survivors are **carry-over candidates** — tasks a prior IPM deliberately deferred. They enter this IPM's Tier 2 candidate pool alongside `/todo next` (step 2), but are **not** auto-committed and their `scheduled:` is **not** advanced by being a candidate.
+The survivors are **carry-over candidates** — tasks a prior IPM deliberately deferred. They enter this IPM's candidate pool alongside `/todo next` (step 2), but are **not** auto-committed and their `scheduled:` is **not** advanced by being a candidate.
 
-- The IPM still decides per task in step 4: **accept** (place in a Tier → gets `scheduled` in step 5) or **re-cut** (re-list under `## Considered but cut` with a reason).
+- The IPM still decides per task in step 4: **accept** (place in the committed list → gets `scheduled` in step 5) or **re-cut** (re-list under `## Considered but cut` with a reason).
 - No silent drops — a perpetually-deferred task recurring across consecutive IPM files is exactly the chronic-deferral signal `/retro`'s bump-counter surfaces.
 
-### 2 Pick candidates (Tier 2)
+### 2 Pick candidates
 
-Run `/todo next` to get the top 5 ranked Tier 2 tasks (`Design` or `Open`). The `/todo next` ranking already factors deadlines, urgency ratio, and unblocks-others — see `../todo/SKILL.md` Workflow: `next`. Do not second-guess that ordering here; the IPM trusts it.
+Run `/todo next` to get the top 5 ranked tasks (`Design` or `Open`) off `dev/TODO/queue.md`. **There is no separate scoring here** — `queue.md`'s position *is* the priority, and `/todo next` is a flat top-to-bottom walk of it (skipping only `Done`/peer-claimed/legacy-`Revisit` entries); it does not compute deadline, urgency, or unblocks-others weighting itself (see `../todo/SKILL.md` Workflow: `next`). Do not second-guess that ordering here, and do not re-derive a ranking the queue already encodes — if the order is wrong, that's a `/top`/`/stage`/hand-edit fix to `queue.md`, not something to work around in this step.
 
 **Also fold in the staged candidates.** Look for this week's pre-IPM stub directly at `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` — not via `_ipm/current.sh`, which deliberately skips it (the selector returns the last *committed* IPM, never the still-`Pre-IPM staging` stub).
 
-- If it exists, read its `## Candidates` section — each entry was appended via `/stage` through the week and carries its own one-line rationale ("Why this iteration"), a signal `/todo next`'s mechanical ranking can't reconstruct.
-- Merge these into the Tier 2 candidate pool alongside the `/todo next` top-5, dedupe by task ID.
+- If it exists, read its `## Candidates` section — each entry was appended via `/stage` through the week and carries its own one-line rationale ("Why this iteration"), a signal the plain queue walk doesn't carry on its own.
+- Merge these into the candidate pool alongside the `/todo next` top-5, dedupe by task ID.
 - A staged candidate is a deliberate human/skill nomination, so weight its rationale when ordering — but it still passes through the step 4 budget cut like any other pick.
 
 **Cron-mode eligibility filter.**
 
-- When `CCXP_CRON_MODE=1`, drop any candidate whose `status:` is still `Open` (it hasn't been through an interactive pre-IPM design pass — step 3 is skipped this run). Only `status: Design` candidates with a non-empty `estimation` are eligible for this week's Tier 2.
+- When `CCXP_CRON_MODE=1`, drop any candidate whose `status:` is still `Open` (it hasn't been through an interactive pre-IPM design pass — step 3 is skipped this run). Only `status: Design` candidates with a non-empty `estimation` are eligible for this week's commit.
 - If the filtered pool is thinner than the product budget line can absorb, record it under `## Notes` (e.g. "3 candidates skipped — still `Open`, awaiting a pre-IPM pass") rather than reaching into `Open` tasks to fill the gap.
 - Interactive runs (`CCXP_CRON_MODE` unset/`0`) skip this filter and proceed straight to step 3.
 
@@ -122,7 +123,7 @@ Run `/todo next` to get the top 5 ranked Tier 2 tasks (`Design` or `Open`). The 
 - `CCXP_CRON_MODE=1` → skip straight to step 4 with whatever step 2 left in the pool.
 - Otherwise, the rest of this step describes the interactive pairing-session flow:
 
-For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`** — run `/incept T<id>` (see `incept/SKILL.md`), which interviews the human in frontier rounds and, on confirmation, writes the Design section + Test Plan and any estimation revision into the task file. This phase wraps that call with the lifecycle bookkeeping `/incept` deliberately does not touch:
+For each candidate, time-box ~10–15 min. **The design pass is `/incept`** — run `/incept T<id>` (see `incept/SKILL.md`), which interviews the human in frontier rounds and, on confirmation, writes the Design section + Test Plan and any estimation revision into the task file. This phase wraps that call with the lifecycle bookkeeping `/incept` deliberately does not touch:
 
 1. **Grill it.** `/incept T<id>`. It reads the task's Problem (and any existing Design section — a refresh re-validates the assumptions rather than starting cold), asks the frontier rounds, and stops at its synthesis for a go/no-go. Do not run the rounds yourself or summarize on the user's behalf — the whole point is the human answering.
 2. **Escalate and skip when a decision can't be made here.** If the synthesis leaves an *Open* item that blocks implementation and needs someone not at the keyboard, file a Slack escalation via the existing protocol (`#acme-dev-notifications`) and **skip this task for this week** — do not claim it. It re-enters the candidate pool next IPM. (Non-blocking *Open* items are fine — they stay recorded in the Design section and get resolved in `/drive` Phase 2.)
@@ -145,32 +146,32 @@ For each Tier 2 candidate, time-box ~10–15 min. **The design pass is `/incept`
    ```
 
    Both calls are best-effort; the frontmatter is the source of truth.
-5. Tier 1 carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If implementation has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
+5. Carry-overs do **not** get a re-grill — once a task is In Progress, the design is presumed adequate. If implementation has revealed the design is wrong, that's a separate "stop and re-scope" event handled outside the IPM ritual.
 
 The grilled task files (Design sections, estimation revisions, claims) are left uncommitted by `/incept`; they land together with the IPM file in step 5's commit PR, not one PR per candidate.
 
 ### 4 Budget cut
 
 1. Set the weekly budget — start with **20h** of focused-work capacity (≈ half of a 40h week; the other half is PR review, CI watching, RCA, Slack, standup, IPM/retro overhead). **Split it into three explicit lines** so the trade-off is visible instead of absorbed silently:
-   - **~12h product** (Tier 1 carry-over + Tier 2 new picks) — the feature/bug/release work below.
-   - **~4h infrastructure / tooling** — internal `/drive` + `/ccxp` skill iteration, task-mirror / Project-board plumbing, CI / test scaffolding, and other process work that ships no product artifact but recurs nearly every week. Budgeting it as a first-class line surfaces the trade-off rather than letting it eat slack or preempt Tier 2 invisibly.
-   - **~4h slack** — nightly RCA churn, Slack escalations, and the unexpected. This line **is** the ~20% buffer; Tier 3 mid-week additions eat from it.
+   - **~12h product** (carry-over + new picks) — the feature/bug/release work below.
+   - **~4h infrastructure / tooling** — internal `/drive` + `/ccxp` skill iteration, task-mirror / Project-board plumbing, CI / test scaffolding, and other process work that ships no product artifact but recurs nearly every week. Budgeting it as a first-class line surfaces the trade-off rather than letting it eat slack or preempt the product line invisibly.
+   - **~4h slack** — nightly RCA churn, Slack escalations, and the unexpected. This line **is** the ~20% buffer; mid-week additions eat from it.
 
    The retro grades estimate-vs-actual across all three lines and feeds back into next week's budget.
-2. Subtract Tier 1 carry-over from the **~12h product** line first.
-3. Walk Tier 2 candidates top-down (with revised estimations), accumulating against the remaining product budget. The cut line is: "next task would exceed the ~12h product line."
-4. **Pick the infrastructure / tooling line explicitly** — treat it like Tier 2: name the commitments (task file IDs, estimation, "why now") in the IPM file's `## Infrastructure / tooling` table, rather than letting them happen invisibly. Skill-iteration / plumbing / CI-scaffolding tasks tracked in `dev/TODO/` are eligible; if the foreseeable work isn't filed as tasks, file it so it enters the board. Don't pre-commit the full ~4h — leave part open for the week's emergent tooling needs, but record what you *do* foresee so it's planned, not preemptive.
+2. Subtract step 1's carry-over set from the **~12h product** line first — it's unconditional, not subject to the walk below.
+3. Walk the candidate pool from step 2 top-down, in its existing queue order (with revised estimations), accumulating against the remaining product budget. The cut line is: "next task would exceed the ~12h product line."
+4. **Pick the infrastructure / tooling line explicitly** — treat it the same as the product-line walk above: name the commitments (task file IDs, estimation, "why now") in the IPM file's `## Infrastructure / tooling` table, rather than letting them happen invisibly. Skill-iteration / plumbing / CI-scaffolding tasks tracked in `dev/TODO/` are eligible; if the foreseeable work isn't filed as tasks, file it so it enters the board. Don't pre-commit the full ~4h — leave part open for the week's emergent tooling needs, but record what you *do* foresee so it's planned, not preemptive.
 5. If after all candidates fit the product line still has ≥ 10h headroom, expand the candidate pool (re-run `/todo next` excluding already-picked tasks) and keep packing until the product line is reasonably committed.
 6. Don't pad to 100% — the **~4h slack line is the buffer (≈20%)**. Aim for ~80% commit (product + infra/tooling = ~16h), ~20% slack.
 
-### 5 Write ipm-weekly.md + tag Tier-1/2 task files with Scheduled
+### 5 Write ipm-weekly.md + tag committed task files with Scheduled
 
 Write `dev/JOURNAL/YYYY-MM-DD-ipm-weekly.md`.
 
-- **Revise-in-place if a `/stage` stub already exists at this path** — `/stage` may have already created `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` during the prior week, header `**Status**: Pre-IPM staging` plus a populated `## Candidates` section. Don't create cold (it'd clobber the staged rationale): edit in place, populate the Tier tables, and **drop the `**Status**: Pre-IPM staging` marker line** so `_ipm/current.sh` starts selecting it as committed. Create cold only when no stub exists.
-- Deliverables: (a) Tier 1/2 commit, (b) cuts with reasons, (c) recommended execution order interleaving the two tiers, (d) notes/escalations, (e) a disposition for every carry-over candidate from step 1.5 (accepted into a Tier, or re-cut under `## Considered but cut`). The execution order is what `/drive` consumes day-to-day; without it, the IPM is just a wishlist.
+- **Revise-in-place if a `/stage` stub already exists at this path** — `/stage` may have already created `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` during the prior week, header `**Status**: Pre-IPM staging` plus a populated `## Candidates` section. Don't create cold (it'd clobber the staged rationale): edit in place, populate the Committed table, and **drop the `**Status**: Pre-IPM staging` marker line** so `_ipm/current.sh` starts selecting it as committed. Create cold only when no stub exists.
+- Deliverables: (a) the committed list — carry-over + new picks + infra/tooling, one table, in `queue.md` order (see template below), (b) cuts with reasons, (c) recommended execution order, (d) notes/escalations, (e) a disposition for every carry-over candidate from step 1.5 (accepted into the committed list, or re-cut under `## Considered but cut`). The execution order is what `/drive` consumes day-to-day; without it, the IPM is just a wishlist.
 
-**Render every task reference as a clickable markdown link.** In every table below (Carry-over, Carry-over candidates, New picks, Infrastructure/tooling, Tier 3, Considered but cut, Recommended execution order), the `Task` column is a link, not bare text — `[T<id>](<issue-url>)`, built via the same map-free resolver the daily standup uses (`/ccxp` Phase 1.4):
+**Render every task reference as a clickable markdown link.** In every table below (Committed this iteration, Carry-over candidates, Mid-week additions, Considered but cut, Recommended execution order), the `Task` column is a link, not bare text — `[T<id>](<issue-url>)`, built via the same map-free resolver the daily standup uses (`/ccxp` Phase 1.4):
 
 ```bash
 source <skills-root>/_taskid/url.sh
@@ -179,9 +180,9 @@ taskid-mdlink T<id>      # -> [T<id>](https://github.com/…/issues/…)
 
 `taskid-mdlink` defaults to `--issue` mode (unlike `taskid-slacklink`'s blob-mode default): an IPM file is written once and never regenerated, so an issue URL is the right choice — a blob-mode link baked in at write time can rot if the referenced task later moves (`dev/TODO/` → `dev/JOURNAL/` on close), the issue URL never does.
 
-In the same step, for each Tier 1 / Tier 2 task picked, edit the task file in `dev/TODO/` to set `scheduled: ${SCHEDULED}` in its YAML frontmatter.
+In the same step, for each task in the committed list (carry-over, new pick, or infra/tooling), edit the task file in `dev/TODO/` to set `scheduled: ${SCHEDULED}` in its YAML frontmatter.
 
-- **Always overwrite**, never skip — when a task moves between IPMs (Tier 1 carry-over, or a business-priority shift pulling it from a later iteration), the new IPM's Monday becomes the authoritative scheduled date. The task file's git log preserves the full `scheduled` history; retro's bump-counter walks the IPM files themselves rather than the task file's current value.
+- **Always overwrite**, never skip — when a task moves between IPMs (carried over, or a business-priority shift pulling it from a later iteration), the new IPM's Monday becomes the authoritative scheduled date. The task file's git log preserves the full `scheduled` history; retro's bump-counter walks the IPM files themselves rather than the task file's current value.
 - **Applies to claimed / peer-owned tasks too** — being claimed does not exempt a task from `scheduled:` advancement. Editing only that field is an IPM planning action (re-tracking the iteration), not a touch on the peer's branch/PR/work — not a collective-ownership violation.
 - The board's Iteration field is *derived* from `scheduled:` (via the per-repo `sync-tasks-to-issues.py`) — a carry-over whose `scheduled:` is left stale stays pinned to the old iteration on the board even though the IPM prose "carried" it. Carrying a task in the prose and advancing its `scheduled:` are one action, not two: do both, every claimed task included.
 
@@ -204,38 +205,30 @@ Then **pre-append** each cut task to next-Monday's pre-IPM stub `dev/JOURNAL/${N
 **Budget**: 20h focused-work
 **IPM duration**: ~{N} min ({start time}–{end time})
 
-## Carry-over (Tier 1 — finish first)
+## Committed this iteration
 
-| # | Task | Status | Est | Cumulative | Deadline |
-|---|------|--------|-----|------------|----------|
-| 1 | T... | In Progress | 2h  | 2h         | 2026-04-30 |
+*One list, in `queue.md` order — no separate carry-over/new-pick tables. `Status` shows what's auto-carried (`In Progress`/`Review`/claimed — never cut by the budget walk) vs. a new pick (`Design`/`Open` — went through the step 4 budget cut). `Line` shows which budget line it counts against (step 4).*
+
+| # | Task | Status | Line | Est | Cumulative | Deadline | Why |
+|---|------|--------|------|-----|------------|----------|-----|
+| 1 | T... | In Progress | Product | 2h | 2h | 2026-04-30 | Carry-over |
+| 2 | T... | Open | Product | 1h | 3h | — | Unblocks T... |
+| 3 | T... | Design | Product | 8h (1d) | 11h | 2026-05-08 | ARM deadline next week |
+| i1 | T... | Design | Infra/tooling | 2h | 13h | — | `/ccxp` Phase-X fix surfaced by last retro |
+
+**Cut line at 11h product** — leaves the ~12h product line ~1h spare; the infra/tooling + slack lines (step 4) make up the rest of the 20h.
+
+*Infra/tooling rows (step 4 item 4) are named here explicitly at IPM commit so they're planned, not preemptive — leave part of the ~4h open for emergent needs rather than pre-committing all of it. Empty is fine on a light week — but record it as a deliberate `(none foreseen)` row, not a silent omission.*
 
 ## Carry-over candidates (deferred at {prev IPM date})
 
-*Seeded in step 1.5 from last IPM's `Considered but cut`. Each must be dispositioned: accepted into a Tier above (gets `scheduled`) or re-cut below. Omit the section if there were no prior cuts.*
+*Seeded in step 1.5 from last IPM's `Considered but cut`. Each must be dispositioned: accepted into the committed list above (gets `scheduled`) or re-cut below. Omit the section if there were no prior cuts.*
 
 | Task | Prior cut reason | Disposition this IPM |
 |------|------------------|----------------------|
-| T... | {reason from last IPM} | Tier 2 / re-cut: {reason} |
+| T... | {reason from last IPM} | Committed / re-cut: {reason} |
 
-## New picks (Tier 2)
-
-| # | Task | Original est | Revised est | Cumulative | Deadline | Why |
-|---|------|--------------|-------------|------------|----------|-----|
-| 2 | T... | 1h | 1h     | 3h  | —          | Unblocks T... |
-| 3 | T... | 4h | 8h (1d)| 11h | 2026-05-08 | ARM deadline next week |
-
-**Cut line at 11h** — leaves the ~12h product line ~1h spare; the rest of the 20h is the infra/tooling + slack lines below.
-
-## Infrastructure / tooling (~4h line)
-
-*The explicit budget line for skill iteration / plumbing / CI-scaffolding work (step 4 item 4). Named here at IPM commit so it's planned, not preemptive. Leave part open for emergent needs; don't pre-commit the full ~4h. Empty is fine on a light week — but record it as a deliberate `(none foreseen)`, not a silent omission.*
-
-| # | Task | Est | Why this iteration |
-|---|------|-----|--------------------|
-| i1 | T... | 2h | `/ccxp` Phase-X fix surfaced by last retro |
-
-## Tier 3 — Mid-week additions (appended after IPM commit)
+## Mid-week additions (appended after IPM commit)
 
 *Initialize empty at IPM commit. Tasks added throughout the week — via `/rca` red-pipeline auto-promotion (see `/rca` Step 6), `/stage` skill, or manual append — land here.*
 
@@ -243,14 +236,14 @@ Then **pre-append** each cut task to next-Monday's pre-IPM stub `dev/JOURNAL/${N
 |---|------|-----|-------|--------------------|
 | (none yet) | | | | |
 
-**Tier 3 budget rules**:
-- No fixed budget — Tier 3 eats from the slack reserved at IPM (typical: 4h of slack on a 20h budget after ~80% commit across Tier 1 + Tier 2 + the infra/tooling line).
-- Hard cap: if cumulative Tier 3 hours exceed the slack reserve, the additions are stretch goals — flag in retro that they pushed Tier 1/Tier 2 work into next week.
+**Mid-week addition budget rules**:
+- No fixed budget — these eat from the slack reserved at IPM (typical: 4h of slack on a 20h budget after ~80% commit across the committed list + the infra/tooling line).
+- Hard cap: if cumulative mid-week hours exceed the slack reserve, the additions are stretch goals — flag in retro that they pushed committed work into next week.
 - Red-pipeline auto-promotions (from `/rca` Step 6) are exempt from the cap — recurring pipeline failures compound; they always belong in the current iteration regardless of budget.
 
 ## Recommended execution order
 
-Sequenced by **dependency unblock + business priority + parallelism (labrun async ↔ foreground)**. Tier 1 and Tier 2 are interleaved so customer-facing / high-business-priority work starts early; tech-debt items land after the high-priority track is moving. List the tasks 1..N across the week, day-by-day, with a one-line "why this slot" each.
+Sequenced by **dependency unblock + business priority + parallelism (labrun async ↔ foreground)**. Carry-over and new picks are interleaved so customer-facing / high-business-priority work starts early; tech-debt items land after the high-priority track is moving. List the tasks 1..N across the week, day-by-day, with a one-line "why this slot" each.
 
 ### Mon (Day 1) — {theme} (~Xh focused)
 
@@ -294,7 +287,7 @@ Sequenced by **dependency unblock + business priority + parallelism (labrun asyn
 
 ### 5a Drain the previous iteration (HARD GATE — the IPM commit is not final until this is green)
 
-Step 5 advances `scheduled:` for the Tier-1/2 picks (carry-overs) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut.
+Step 5 advances `scheduled:` for the committed list (carry-overs + new picks) and for cut candidates. But a third class slips through **both** paths: an `Open`/`Design` task with an **empty** claim that was scheduled into the *previous* iteration and neither got picked this IPM nor cut.
 
 - Step 1's carry covers in-flight (`In Progress`/`Review`) + `claimed_by` tasks; step 5's cut-advance covers what this IPM explicitly cuts.
 - An unclaimed not-started task that nobody touched is caught by **neither** and silently strands on the now-closed iteration on the board.
@@ -306,7 +299,7 @@ The maintainer rule: **at IPM end, every previous-iteration board item that is n
    - The gate **partitions** offenders by repo: **same-repo** offenders (the `--home-repo`, auto-detected from this clone's `git remote get-url origin`) are **blocking** (exit 1 — the IPM can drain them by editing their task files); **cross-repo** offenders (e.g. `hub-repo` items the build-pipeline clone cannot edit) are printed as **non-blocking `⚠` warnings** so the unattended commit is never deadlocked on items it has no way to drain.
    - **Lint-frozen sub-partition:** a same-repo offender whose task file fails the changed-mode `Lint task frontmatter` check (pre-existing non-allowlisted fields) can't have `scheduled:` advanced without an unrelated lint red. The gate probes each with `lint_tasks.py --changed` and downgrades lint-frozen ones to the same non-blocking `⚠` (fail-safe: unclassifiable stays blocking). An IPM whose only remaining same-repo offenders are lint-frozen reaches exit 0 instead of deadlocking.
 2. **Drain each offender** — applies to the **clean** same-repo (blocking) offenders; cross-repo and lint-frozen warnings are surfaced for the maintainer, not drained here. For every listed same-repo task, decide and act exactly like step 5's per-task disposition:
-   - **carry** it (advance its task-file `scheduled:` to this IPM's `${SCHEDULED}` and place it in a Tier), or
+   - **carry** it (advance its task-file `scheduled:` to this IPM's `${SCHEDULED}` and add it to the committed list), or
    - **defer** it (advance `scheduled:` to a future Monday and pre-append it to that Monday's `## Candidates` stub, per step 5's "Cut candidates — advance, never clear").
    - Either way `scheduled:` moves **forward** — never deleted. The board's Iteration field is *derived* from `scheduled:` via the per-repo `sync-tasks-to-issues.py`, so bumping `scheduled:` is what actually re-tracks the item off the closed iteration.
 3. **Gate the commit.** Re-run the check; the IPM is **not committed** until it exits **0**:
@@ -341,7 +334,7 @@ cd "$TARGET"
 
 If `dev/ROADMAP.md` doesn't yet exist (first run, before the ROADMAP doc exists), create it from the template in the task file's "Initial content shape" section, then proceed. Otherwise, apply these updates in place:
 
-1. **Promote this week's commitments** from "Deferred / on watch" → "Near-term" (or shift them within the near-term table if already there). Pull the task list from step 4's budget cut output (Tier 1 + Tier 2 picks).
+1. **Promote this week's commitments** from "Deferred / on watch" → "Near-term" (or shift them within the near-term table if already there). Pull the task list from step 4's budget cut output (the committed list — carry-over + new picks).
 2. **Demote anything cut** in step 4 → "Deferred / on watch" with a 1-line "why cut" reason (mirrors the "Considered but cut" section of the IPM file).
 3. **Advance the "Last updated" line** to today's date + link to this IPM's commit PR (resolve the PR URL after step 5's IPM file is pushed and PR'd in build-pipeline).
 4. **Archive shipped entries**: near-term entries whose week is past AND whose tasks shipped (per `dev/JOURNAL/<date>-T<id>-*.md` evidence) move to a `## Recently shipped` section at the bottom of ROADMAP.md. Keep only the last 4 weeks there — older entries roll off the live table; git blame plus the unchanged per-week JOURNAL entries preserve the rest. A display budget, not a data-loss window.
