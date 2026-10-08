@@ -123,7 +123,7 @@ Immediately post the report to Slack via `slack_send_message` — don't ask "wan
 
 If 3.5 flagged an open task: invoke `/top <id>` here instead of any task-creation gate below (Infrastructure's retry still always runs; Transient's 3+ check no longer applies).
 
-**If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same mid-week-addition auto-promote + `scheduled:` stamp as the paths below.
+**If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same mid-week auto-promote + `scheduled:` stamp as below.
 
 If classification is **Our code**, **Upstream**, or **Configuration**:
 
@@ -134,7 +134,7 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
    ```
 
 2. Create `dev/TODO/<id>-<slug>.md` with the RCA findings
-3. **Auto-promote to the current iteration's mid-week additions** (red-pipeline rule, codified in T20260513-155615). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes; see T20260604-194697):
+3. **Auto-promote to this iteration's mid-week additions** (red-pipeline rule — T20260513-155615). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes; see T20260604-194697):
 
    ```bash
    IPM_FILE=$(bash ../_ipm/current.sh)
@@ -150,24 +150,24 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
    If the `| (none yet) |` placeholder row is still present, replace it with this row; otherwise append after the last data row.
 
    If `$IPM_FILE` is empty, no committed IPM exists this week — note "no current IPM; mid-week auto-promote skipped" in the RCA report and continue (the `scheduled:` stamp in the next step still runs, defaulting the task to the next iteration).
-4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this the task sits on the IPM file but is mapped to no board iteration — the gap T20260626-190842 fixed). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
+4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this it's mapped to no board iteration — the gap T20260626-190842 fixed). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
 
    ```bash
    bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
    ```
 
-5. Report the task ID, the `scheduled:` date the stamper printed, and that it was auto-promoted to the current iteration's mid-week additions (or, if no committed IPM, deferred to the next iteration).
+5. Report the task ID, the `scheduled:` date the stamper printed, and that it was auto-promoted to the mid-week additions (or, if no committed IPM, deferred to the next iteration).
 
 If classification is **Transient**:
 
 - Check if it's happened 3+ times in the last week
-- If yes: create task (pattern indicates a real problem) — and apply the same mid-week-addition auto-promote + `scheduled:` stamp (steps 3–4 above)
+- If yes: create task (pattern indicates a real problem) — and apply the same mid-week auto-promote + `scheduled:` stamp (steps 3–4 above)
 - If no: note it, no task needed
 
 If classification is **Infrastructure**:
 
 - Retry the run: `bash ../_gh/gh.sh run rerun <run-id> --failed`
-- If retry also fails: create task — and apply mid-week-addition auto-promote + `scheduled:` stamp (steps 3–4 above)
+- If retry also fails: create task — and apply mid-week auto-promote + `scheduled:` stamp (steps 3–4 above)
 
 ### 7. Update the local knowledge base
 
