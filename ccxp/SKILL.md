@@ -1,17 +1,19 @@
 ---
 name: ccxp
-description: Use when the user explicitly asks to run the full XP engineering loop / day-or-week orchestrator (daily standup, Monday IPM, focused work, Friday retro)
+description: Use when the user explicitly asks to run the full XP engineering loop / day-or-week orchestrator (daily standup, focused work, Friday retro — the Monday IPM is a separate opt-in skill, see /ipm)
 disable-model-invocation: false
 argument-hint: "[task-id]"
 ---
 
-Claude Code Extreme Programming: the master skill that orchestrates daily engineering work following XP best practices. Starts with a daily standup (review yesterday, check progress against the week's IPM commit, plan today), runs an Iteration Planning Meeting on Mondays, focused work via `/drive`, and a weekly retrospective on Fridays.
+Claude Code Extreme Programming: the master skill that orchestrates daily engineering work following XP best practices. Starts with a daily standup (review yesterday, check progress against the week's IPM commit if one exists, plan today), focused work via `/drive`, and a weekly retrospective on Fridays.
+
+**The Monday Iteration Planning Meeting is a separate, opt-in ritual, not something this orchestrator auto-triggers** (T20260924-252293). The day-to-day planning loop is continuous `/todo next` + `/drive` pulling straight off `dev/TODO/queue.md`'s existing priority order. A repo that wants an explicit weekly iteration commit (e.g. one running a configured GH Project board) invokes `/ipm` directly, any day — see `ipm/SKILL.md`.
 
 ## Argument
 
 `$ARGUMENTS` is optional:
 
-- `/ccxp` — auto-mode: standup (+ IPM on Mondays, retro on Fridays)
+- `/ccxp` — auto-mode: standup (+ retro on Fridays). IPM is opt-in — invoke `/ipm` directly when wanted.
 
 ## Cron mode vs. interactive mode
 
@@ -20,29 +22,26 @@ cron-spawned session) draws the line between what the unattended loop does on
 its own and what stays reserved for a human sitting down with the agent.
 **Rituals and housekeeping run in both modes** — sync (Phase 0), the reclaim
 sweep (Phase 0.5), standup (Phase 1, which now includes nightly health/RCA as
-Phase 1.2 before the standup message is composed), the
-Monday IPM budget-cut (Phase 2a), and the Friday retro (Phase 2b) are all
-bookkeeping/process work, not product engineering, and cron does them the same
-as an interactive session would.
+Phase 1.2 before the standup message is composed), and the Friday retro
+(Phase 2b) are all bookkeeping/process work, not product engineering, and
+cron does them the same as an interactive session would. (The Monday IPM,
+Phase 2a, is no longer part of either mode's automatic sequence — see "The
+Monday Iteration Planning Meeting is a separate, opt-in ritual" above and
+Phase 2a below.)
 
-Two things are **interactive-only — skipped whenever `CCXP_CRON_MODE=1`**:
+One thing is **interactive-only — skipped whenever `CCXP_CRON_MODE=1`**:
 
-- **The pre-IPM design pass (`/ipm` step 3).** Reviewing business priorities,
-  reading each candidate task, and getting it design-ready (scope, unknowns,
-  a real estimate) is a judgment call worth a human's attention, not
-  something to run unattended every Monday morning. In cron mode, `/ipm`
-  step 2's Tier 2 candidate pool is filtered to tasks **already at `status:
-  Design` with an `estimation` set** — i.e., already taken through a pre-IPM
-  pairing session at some point during the week. Tasks still at `status:
-  Open` are left out of that week's Tier 2 commit; a thinner-than-usual Tier
-  2 is reported explicitly (`## Notes`: "N candidates still need a pre-IPM
-  pass"), never silently backfilled by skipping the design step.
 - **Phase 3 (focused work).** The autonomous loop never invokes `/drive`
   in cron mode — it exits after that day's rituals (standup any day,
-  +IPM on Monday, +retro on Friday). Implementation work happens only when
+  +retro on Friday). Implementation work happens only when
   a human runs `/drive` or `/ccxp` interactively (where `CCXP_CRON_MODE` is
-  unset/`0` and both the design pass and Phase 3 run normally, exactly as
-  this skill originally did end-to-end).
+  unset/`0` and Phase 3 runs normally, exactly as this skill originally did
+  end-to-end).
+
+(If a repo *does* invoke `/ipm` — ad hoc, per its own opt-in choice — that
+skill reads `CCXP_CRON_MODE` itself and skips its interactive-only pre-IPM
+design pass (step 3) the same way under cron; that branching lives entirely
+in `ipm/SKILL.md`, not here.)
 
 This mirrors the existing `CCXP_PEER_MODE` env-var pattern (default behavior
 baked into the skill, one var flips it) rather than adding a second
@@ -52,7 +51,7 @@ skill/argument surface.
 
 | XP Practice | How ccxp applies it |
 |-------------|---------------------|
-| Planning game | Pre-IPM design pass (interactive-only, `/ipm` step 3, run as `/incept` per candidate) readies candidates during the week; Monday IPM (`/ipm`, cron) budget-cuts whatever's design-ready → ipm-weekly.md; **continuous pre-IPM staging** via `/stage` (candidates accrue all week under `## Candidates`, IPM folds them in) |
+| Planning game | Day-to-day: `/todo next` + `/drive` pull straight off `dev/TODO/queue.md`'s priority order — no ceremony required. Optional, ad hoc: `/ipm` (invoked directly, not cron-triggered) budget-cuts whatever's design-ready → ipm-weekly.md, fed by the pre-IPM design pass (`/ipm` step 3, run as `/incept` per candidate) and **continuous pre-IPM staging** via `/stage` (candidates accrue all week under `## Candidates`, IPM folds them in) |
 | Small releases | Continuous PR flow — ship small, ship often |
 | Simple design | KISS principle from `dev/guidelines.md` |
 | Testing | TDD — test plan before code, `bats tests/` before push |
@@ -141,7 +140,7 @@ Generate a daily progress summary by reviewing yesterday's work.
 5. **Current drive-threads**: Read `.claude/state/drive-threads.json` for unresolved escalations
 5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`. This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads. **The MCP slack user CAN read `#acme-dev-notifications` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts. **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
 6. **Previous ccxp summary**: Read the most recent `dev/JOURNAL/*-daily-summary.md` for continuity (for continuity only — never let a prior note about Slack-unreadability suppress step 5b)
-7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash <skills-root>/_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes — see T20260604-194697). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit — first IPM happens this Monday" and skip the progress block in 1.2.
+7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash <skills-root>/_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes — see T20260604-194697). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit (IPM is opt-in — invoke `/ipm` directly if this repo wants one)" and skip the progress block in 1.2.
 
 #### 1.1a Cheap-hold short-circuit (Option C — T20260614-261293)
 
@@ -152,8 +151,8 @@ On the hourly cadence (`3 * * * *`), the pre-flight gate (`dev/daily-ccxp.sh`) s
 - **No new maintainer reply** — `/slack-check-reply all` (step 1.1#5b, already run — *mandatory, never skipped*) returned nothing actionable.
 - **Nightly all-green** — a cheap peek (`gh run list --branch main --created ">=<last-tick>"`, conclusions only — *not* a full Phase-1.5 RCA) shows no new `failure`.
 - **No drainable PR** — Phase 0 (`/address-pr`) already exited non-actionable (every open PR `owned:`/draft/blocked, nothing `mine`/`free`/`untracked` + mergeable).
-- **No clean autonomous leg** — `/todo next` yields nothing workable: Tier-1 + Tier-2 all peer-owned / supervised / external-blocked. This is the **genuine-gate** determination from Phase 3 ("VPN and the Workflow tool are tools, not walls"), **not** the reflexive "all gated" bail — each candidate maps to a concrete gate.
-- **Not a Monday or Friday tick** — the IPM (2a) and retro (2b) always run the full ritual; a cheap hold is weekday/weekend Tier-3 only.
+- **No clean autonomous leg** — `/todo next` yields nothing workable: its top candidates are all peer-owned / supervised / external-blocked. This is the **genuine-gate** determination from Phase 3 ("VPN and the Workflow tool are tools, not walls"), **not** the reflexive "all gated" bail — each candidate maps to a concrete gate.
+- **Not a Friday tick** — retro (2b) always runs the full ritual regardless of gating. Monday carries no special exemption anymore — the IPM (2a) is opt-in and no longer auto-invoked (see Phase 2a), so a cheap hold can fire on a Monday tick the same as any other weekday.
 
 **When the gate holds — cheap-hold action:**
 
@@ -308,7 +307,7 @@ For each flagged PR, record: PR number, title, and the one-line reason it's flag
 
 #### 1.2b Compute top 5 next
 
-Run the `/todo next` logic (same walk that skill documents: queue order top-to-bottom, skipping blocked / peer-claimed / lint-frozen candidates) to get the top 5 actionable tasks. This is the same computation `/ipm` step 2 does for the Monday IPM budget-cut — reuse it here for the daily glance; this call **reports only, commits nothing**.
+Run the `/todo next` logic (same walk that skill documents: queue order top-to-bottom, skipping blocked / peer-claimed / lint-frozen candidates) to get the top 5 actionable tasks. This is the same computation `/ipm` step 2 does when it's invoked — reuse it here for the daily glance; this call **reports only, commits nothing**.
 
 **Peer mode (the default; opt out with `CCXP_PEER_MODE=0`):** ccxp runs as a
 **parallel peer** alongside interactive sessions (even ones sharing GitHub
@@ -591,24 +590,13 @@ clearest reason per PR. Top 5 next is already bounded. If still tight, drop the
 whole *📊 Attribution* block first (it's the least actionable of the trailing
 context sections) before shortening the four headline sections.
 
-### Phase 2a: Monday IPM (Mondays only)
+### Phase 2a: Monday IPM — optional, not auto-invoked (T20260924-252293)
 
-**Trigger**: Only when today is Monday in the cron's reference frame — `TZ=America/Chicago date +%u` = 1. Skip on all other days.
+**This phase no longer runs as part of `/ccxp`'s automatic sequence, in either cron or interactive mode.** The mandatory Monday budget-cut ceremony was retired: continuous `/todo next` + `/drive` off `dev/TODO/queue.md`'s existing priority order is the documented day-to-day planning loop (it never required a weekly ceremony to pick the next task). `/ccxp` does not check the day of week to decide whether to run `/ipm`, and never calls it itself.
 
-Why `TZ=America/Chicago`: the crontab sets `CRON_TZ=America/Chicago` so the cron fires at a stable Chicago wall-clock time, but the spawned shell inherits the *server* timezone (often PDT). A plain `date +%u` from a PDT-local shell at "01:00 CDT Mon = 23:00 PDT Sun" returns `7` (Sunday) and skips Monday IPM. Pinning to Chicago time matches the cron's reference frame. See T20260518-170804 in the JOURNAL for the root-cause analysis.
+`/ipm` remains a fully-functional, standalone skill for a repo that *wants* an explicit weekly iteration commit — e.g. one running a configured GH Project board where a periodic `scheduled:`/budget snapshot is useful. Invoke it directly, any day: `/ipm` (see `ipm/SKILL.md`). It reads `CCXP_CRON_MODE` from the environment itself, so a cron-spawned session that chooses to call it still gets the interactive-only pre-IPM design pass (step 3) skipped correctly — no extra plumbing needed here.
 
-Run `/ipm` to commit the week's Iteration Planning Meeting. `/ipm` reads `CCXP_CRON_MODE` from the environment itself (see `ipm/SKILL.md`), so no extra plumbing is needed here.
-
-1. Run `/ipm` (see `ipm/SKILL.md`)
-2. `/ipm` will:
-   - Carry over in-flight Tier 1 WIP and seed Tier 2 candidates from `/todo next` + the week's staged candidates
-   - Run the pre-IPM design pass (interactive only — skipped whenever `CCXP_CRON_MODE=1`, which is how this cron-triggered call always runs it)
-   - Budget-cut into product / infrastructure-tooling / slack lines and write `dev/JOURNAL/YYYY-MM-DD-ipm-weekly.md`
-   - Drain the previous iteration (hard gate — the commit isn't final until this passes) and sync the cross-repo ROADMAP doc
-   - Slack the weekly focus
-3. Report: "IPM committed. {N}h committed ({M} carry-over, {K} new picks). Starting focused work."
-
-If a Monday is missed (holiday, off day), the next Monday's IPM covers the gap — there is no *automatic* mid-week catch-up via this cron trigger. `/ipm` itself can still be invoked ad hoc any day for a deliberate re-plan (see `ipm/SKILL.md`).
+(Historical note: this phase used to trigger only on Monday via a `TZ=America/Chicago date +%u` check, pinned because the crontab sets `CRON_TZ=America/Chicago` while the spawned shell inherits the *server* timezone — see T20260518-170804. That trigger is dead code now that nothing calls this phase automatically; kept here only in case a repo wants to reintroduce a day-gated cron call to `/ipm` itself.)
 
 ### Phase 2b: Friday retro (Fridays only)
 
@@ -637,7 +625,7 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
 
 ### Phase 3: Focused work (supervised loop) — interactive only, skipped when `CCXP_CRON_MODE=1`
 
-**Skip this phase entirely in cron mode.** When `CCXP_CRON_MODE=1`, ccxp ends its run after that day's rituals (Phase 1/1.5/0.5, +2a Monday, +2b Friday) — do not invoke `/drive`. Implementation work is reserved for interactive sessions (a human running `/ccxp` or `/drive` directly, where `CCXP_CRON_MODE` is unset/`0`). Report "Rituals done for today — no focused-work loop in cron mode." and exit. The rest of this section describes the interactive behavior.
+**Skip this phase entirely in cron mode.** When `CCXP_CRON_MODE=1`, ccxp ends its run after that day's rituals (Phase 1/1.5/0.5, +2b Friday) — do not invoke `/drive`. Implementation work is reserved for interactive sessions (a human running `/ccxp` or `/drive` directly, where `CCXP_CRON_MODE` is unset/`0`). Report "Rituals done for today — no focused-work loop in cron mode." and exit. The rest of this section describes the interactive behavior.
 
 Invoke `/drive` and monitor it. `/drive` runs in continuous mode (complete task → pick next → repeat), but it can exit for several reasons. ccxp supervises and re-invokes as needed.
 
@@ -696,7 +684,7 @@ Phase 3 normally, any day, regardless of this table.
 
 | Day | Phase 0 (sync) | Phase 1 (standup, incl. 1.2 nightly RCA) | Phase 2a (IPM) | Phase 2b (retro) | Phase 3 (focus) |
 |-----|----------------|-------------------------------------------|----------------|------------------|-----------------|
-| Mon | Pull both repos | Normal (with ipm-weekly block — references prior week's focus until `/ipm` writes the new one; checks last night's runs) | **Run `/ipm`** (budget-cut only — step 3 pre-IPM design pass skipped) | Skip | Skipped (cron mode) |
+| Mon | Pull both repos | Normal (with ipm-weekly block — references the most recent committed `/ipm` focus, if any; checks last night's runs) | Skip (opt-in — invoke `/ipm` directly if this repo wants one) | Skip | Skipped (cron mode) |
 | Tue–Thu | Pull both repos | Normal (with ipm-weekly block; checks last night's runs) | Skip | Skip | Skipped (cron mode) |
 | Fri | Pull both repos | Normal (with ipm-weekly block; checks last night's runs) | Skip | **Run retro** | Skipped (cron mode) |
 | Sat–Sun | Pull both repos | Normal (with ipm-weekly block; checks last night's runs) | Skip | Skip | Skipped (cron mode) |
@@ -709,13 +697,14 @@ The `dev/daily-ccxp.sh` script is the cron wrapper for this skill. It:
 - Sources `.env` for secrets
 - Runs `claude --dangerously-skip-permissions -p /ccxp` with `CCXP_CRON_MODE=1`
   in the environment — restricting the session to standup, nightly
-  health/reclaim housekeeping, the Monday IPM budget-cut, and the Friday
-  retro (see "Cron mode vs. interactive mode" above). The pre-IPM design
-  pass and Phase 3 focused work are reserved for interactive pairing
+  health/reclaim housekeeping, and the Friday
+  retro (see "Cron mode vs. interactive mode" above). The Monday IPM (opt-in,
+  invoked directly via `/ipm` when a repo wants it), the pre-IPM design
+  pass, and Phase 3 focused work are reserved for interactive pairing
   sessions and never run under this wrapper.
 - Logs to `.claude-ccxp-logs/`
 
-Crontab entry — **hourly**, pinned to Chicago wall-clock so the Monday-IPM / Friday-retro day-of-week triggers fire in the cron's reference frame (see Phase 2a):
+Crontab entry — **hourly**, pinned to Chicago wall-clock so the Friday-retro day-of-week trigger fires in the cron's reference frame (see Phase 2b):
 
 ```bash
 CRON_TZ=America/Chicago
@@ -727,7 +716,7 @@ The hourly cadence is governed by the wrapper, not by the schedule: a fresh `/cc
 ## Notes
 
 - **Standup generation is fast; the message is not terse.** "Brief" describes Phase 1's *execution time* (under a couple minutes — no new analysis, just composing from data already gathered in 1.1/1.2), not the Slack message's content. The 2026-07-18 revision (Resolved highlights, Nightly RCA, PRs needing attention, Top 5 next) is richer *because* it's assembled from data the phase already collects, not because the phase runs longer.
-- **Cron does rituals, not engineering.** In cron mode the loop's job is standup + nightly health/reclaim housekeeping + the Monday IPM budget-cut + the Friday retro — never the pre-IPM design pass and never Phase 3. Focused implementation work happens in interactive pairing sessions, where a human's judgment on business priority and design readiness is available.
+- **Cron does rituals, not engineering.** In cron mode the loop's job is standup + nightly health/reclaim housekeeping + the Friday retro — never the (opt-in) Monday IPM, never the pre-IPM design pass, and never Phase 3. Focused implementation work happens in interactive pairing sessions, where a human's judgment on business priority and design readiness is available.
 - **Retro is honest.** See the `/retro` skill notes — the retro exists to improve the process, not to report status.
 - **Read guidelines first.** Always read `dev/guidelines.md` before making changes — this rule cascades from `/drive`.
 - **Escalation protocol.** Inherited from `/drive` — all Slack escalations go to `#acme-dev-notifications` via MCP `slack_send_message`.

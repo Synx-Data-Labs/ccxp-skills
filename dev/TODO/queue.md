@@ -17,9 +17,6 @@ reprioritize.
 - [T20261001-334141](T20261001-334141-vendor-mattpocock-diagnosing-bugs-replace-superpowers.md): Vendor `mattpocock/skills` `diagnosing-bugs` to replace the `superpowers:systematic-debugging` soft gate
 - [T20261001-995405](T20261001-995405-scope-native-verification-before-completion-replacement.md): Scope a native replacement for the `superpowers:verification-before-completion` hard gate (no ready mattpocock equivalent)
 - [T20261002-363468](T20261002-363468-skill-conventions-script-drift-detection.md): Detect drift between a bundled `scripts/` helper and the SKILL.md prose it replaced
-- [T20261002-219904](T20261002-219904-document-ipm-ceremony-as-optional.md): Document `/ccxp`'s Monday IPM ceremony as optional/ad-hoc, not a mandatory cron step
-- [T20261002-245216](T20261002-245216-retro-bump-detector-dormant-note-and-stale-field-cleanup.md): Note retro's bump-3x/2x detectors as dormant-by-design; clean up two stale cross-references
-- [T20261002-359869](T20261002-359869-lifecycle-md-note-ipm-board-mirror-opt-in.md): Note in `lifecycle.md` that IPM / `scheduled:` board-mirroring is opt-in
 - [T20261002-303999](T20261002-303999-honor-claude-config-dir.md): Resolve Claude config paths via $CLAUDE_CONFIG_DIR, not hardcoded ~/.claude
 - [T20261005-554581](T20261005-554581-drain-gate-reads-retired-project-board.md): `ipm-iteration-drain-check.sh` hard-requires a Project board, so a board-less consumer's IPM gate is permanently red
 - [T20261005-639913](T20261005-639913-remove-roadmap-target-repo-per-repo-roadmap.md): Remove `ROADMAP_TARGET_REPO` — each repo owns its own `dev/ROADMAP.md` / `dev/EPICS.md`
