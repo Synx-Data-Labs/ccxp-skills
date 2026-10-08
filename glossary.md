@@ -14,10 +14,10 @@ source skill / phase / doc.
 
 ## Lifecycle & IPM
 
-- **Candidates staging** — appending tasks to the upcoming Monday's `## Candidates` section throughout the week via `/stage`, accumulating rationale before the IPM decides (`/stage`, `/ccxp` Phase 2a).
-- **ccxp** — Claude Code Extreme Programming: the orchestrator skill that runs the daily standup, Monday IPM, focused-work loops, and Friday retro (`/ccxp`).
+- **Candidates staging** — appending tasks to the upcoming Monday's `## Candidates` section throughout the week via `/stage`, accumulating rationale before the IPM decides (`/stage`, `/ipm` step 2).
+- **ccxp** — Claude Code Extreme Programming: the orchestrator skill that runs the daily standup, focused-work loops, and Friday retro (`/ccxp`). The Monday IPM is a separate, opt-in skill it no longer auto-invokes — see `/ipm`.
 - **claim PR** — a pure-status-change PR that flips a task `Open → In Progress`/`Design` and lands the ownership marker on `main` *before* design or implementation, so "someone is working on this" is durable and board-visible (`/drive` Phase 1).
-- **IPM** — Iteration Planning Meeting: the Monday commit that picks the week's work from candidates and cuts, revises estimates, and budgets focused-work hours (`/ccxp` Phase 2a).
+- **IPM** — Iteration Planning Meeting: the Monday commit that picks the week's work from candidates and cuts, revises estimates, and budgets focused-work hours (`/ipm`, optional/ad-hoc — no longer auto-invoked by `/ccxp`).
 - **IPM commit** — the moment the (optional, ad-hoc) IPM writes `dev/JOURNAL/<Mon>-ipm-weekly.md` with the committed list, cuts, and execution order, and stamps `scheduled:` on every picked task (`/ipm` step 5).
 - **kind-scaled** — documentation whose required depth and sections scale to the change kind: docs-class tasks omit the code-only sections, code-class tasks include them (`/drive` Phase 3.0).
 - **peer mode** — the default mode (disable with `CCXP_PEER_MODE=0`) where parallel sessions (cron + interactive) coordinate via a durable `claimed_by:` lock on `main`, replacing the older one-session-per-clone assumption (`/drive` Phase 1).
