@@ -6,7 +6,9 @@ disable-model-invocation: false
 
 # IPM
 
-The Iteration Planning Meeting commits a slice of the week's focused work. `dev/TODO/queue.md` is already the single ordered priority list (see `/todo`) — this skill does not re-rank it or run a separate scoring pass; it walks that one order top to bottom, auto-including in-flight work and budget-cutting whatever candidates are left. Output is a single `ipm-weekly.md` file that the daily standup grades against and the Friday retro grades final on.
+The Iteration Planning Meeting commits a slice of the week's focused work. `dev/TODO/queue.md` is already the single ordered priority list (see `/todo`) — this skill does not re-rank it or run a separate scoring pass; it walks that order top to bottom, auto-including in-flight work and budget-cutting whatever candidates are left.
+
+Output is a single `ipm-weekly.md` file that the daily standup grades against and the Friday retro grades final on.
 
 - **Optional, ad-hoc tool — not an automatic step.** T20260924-252293 retired the mandatory Monday budget-cut ceremony: continuous `/todo next` + `/drive` off `queue.md` is the documented day-to-day planning loop, and `/ccxp` no longer invokes this skill automatically (neither cron nor interactive mode day-of-week-triggers it — see `ccxp/SKILL.md` Phase 2a). `/ipm` stays available for a deliberate iteration re-plan — e.g. a repo running a configured GH Project board that wants an explicit weekly commit — invoked directly, any day.
 - **Callable ad hoc, any day** — re-scope after a design changes, or re-budget-cut after a priority shift. This skill has no day-of-week check of its own; "Monday" below just names the conventional cadence for a repo that chooses to run it weekly.
@@ -102,7 +104,9 @@ The survivors are **carry-over candidates** — tasks a prior IPM deliberately d
 
 ### 2 Pick candidates
 
-Run `/todo next` to get the top 5 ranked tasks (`Design` or `Open`) off `dev/TODO/queue.md`. **There is no separate scoring here** — `queue.md`'s position *is* the priority, and `/todo next` is a flat top-to-bottom walk of it (skipping only `Done`/peer-claimed/legacy-`Revisit` entries); it does not compute deadline, urgency, or unblocks-others weighting itself (see `../todo/SKILL.md` Workflow: `next`). Do not second-guess that ordering here, and do not re-derive a ranking the queue already encodes — if the order is wrong, that's a `/top`/`/stage`/hand-edit fix to `queue.md`, not something to work around in this step.
+Run `/todo next` to get the top 5 ranked tasks (`Design` or `Open`) off `dev/TODO/queue.md`. **There is no separate scoring** — `queue.md`'s position *is* the priority; `/todo next` is a flat top-to-bottom walk (skipping only `Done`/peer-claimed/legacy-`Revisit`), not a deadline/urgency/unblocks computation (see `../todo/SKILL.md` Workflow: `next`).
+
+Do not second-guess that ordering, and do not re-derive a ranking the queue already encodes — a wrong order is a `/top`/`/stage`/hand-edit fix to `queue.md`, not something to work around here.
 
 **Also fold in the staged candidates.** Look for this week's pre-IPM stub directly at `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` — not via `_ipm/current.sh`, which deliberately skips it (the selector returns the last *committed* IPM, never the still-`Pre-IPM staging` stub).
 
