@@ -1,6 +1,6 @@
 ---
-status: Open
-scheduled: 2026-10-12
+status: Done
+scheduled: 2026-10-05
 estimation: 1
 source: Follow-up from T20260924-252293 (decided the IPM ceremony is retired
   as a mandatory cron step)
@@ -31,3 +31,14 @@ related: T20260924-252293
   next-Monday fallback) whether or not a repo ever runs `/ipm`.
 - Cross-reference T20260924-252293 for the rationale/evidence, without
   duplicating its content here (one-line pointer, not a copy).
+
+## Closed (2026-10-08)
+
+- Folded into the same broader pass as T20261002-219904 / T20261002-245216.
+- `lifecycle.md`'s "Iteration assignment" section: replaced the forward-looking
+  "Note (2026-07-03)" (which predicted Phase 2a would simplify to "take the
+  top N queue entries that fit the budget, no more Tier 1/2/3 partition")
+  with a note confirming that reconciliation landed, plus the opt-in
+  statement this task asked for — `scheduled:` and the GH Project mirror
+  work independently of whether a repo ever runs `/ipm`, cross-referencing
+  T20260924-252293 without duplicating its content.
