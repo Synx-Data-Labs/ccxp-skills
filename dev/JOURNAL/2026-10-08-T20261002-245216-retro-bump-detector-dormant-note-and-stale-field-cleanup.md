@@ -1,6 +1,6 @@
 ---
-status: Open
-scheduled: 2026-10-12
+status: Done
+scheduled: 2026-10-05
 estimation: 2
 source: Follow-up from T20260924-252293 (decided the IPM ceremony is retired
   as a mandatory cron step)
@@ -47,3 +47,21 @@ related: T20260924-252293
   match `todo/SKILL.md`'s actual, current `next` behavior (flat queue walk,
   no deadline/urgency/unblocks scoring) — or the whole passage is removed if
   `/ipm` itself becomes optional/ad-hoc per T20261002-219904.
+
+## Closed (2026-10-08)
+
+- Folded into the same broader pass as T20261002-219904 / T20261002-359869
+  (direct ask to drop `/ipm`'s Tier 1/2/3 partition entirely, which
+  subsumed this task's narrower stale-reference scope).
+- `retro/SKILL.md`: added a dormancy note under "Focus list grade" (fires
+  only for a repo that runs the now-opt-in `/ipm`); fixed the stale
+  `ipm/SKILL.md:104` claim (removed — `/todo next` is documented in
+  `ipm/SKILL.md` step 2 as the flat queue walk it actually is); removed
+  "Tier" labels from the Focus-list-grade example table (replaced with a
+  `Status` column).
+- `priority: High` escalation (Phase 4b): repointed to `/top <id>` instead
+  — `todo/SKILL.md` already states there is no `priority:` field and
+  `lifecycle.md`'s "Iteration assignment" section already described `/top`
+  as the target escalation mechanism, so this aligns Phase 4b with the
+  design `lifecycle.md` had already committed to. Metrics-table row and
+  the rule/report text updated to match ("Escalated via /top").
