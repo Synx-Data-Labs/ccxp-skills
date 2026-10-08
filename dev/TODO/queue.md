@@ -26,3 +26,4 @@ reprioritize.
 - [T20261006-105476](T20261006-105476-address-pr-review-agent-dispatch-prompt-should-forbid-writes.md): `/address-pr` §2.d review-agent dispatch prompt doesn't forbid write actions, so a `general-purpose` reviewer can push to the PR branch unasked
 - [T20261006-227360](T20261006-227360-autopilot-explicit-task-and-pr-targeting.md): /autopilot must dispatch /drive at an explicit task, and /drive's own PR must always be addressed by explicit PR number
 - [T20261007-104557](T20261007-104557-refresh-skill-for-stale-task-pr-issue.md): /refresh skill — diff-since-last-look + skill-suggestion report for a task/PR/issue
+- [T20261008-636871](T20261008-636871-auto-bump-plugin-version.md): Auto-bump plugin.json version on release
