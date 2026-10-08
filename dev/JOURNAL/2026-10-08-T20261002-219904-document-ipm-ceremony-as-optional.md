@@ -51,5 +51,8 @@ related: T20260924-252293
 - `ipm/SKILL.md`'s own framing ("`/ccxp` Phase 2a owns the Monday cron
   trigger") reconciled — now states it's an optional, ad-hoc tool not
   invoked by `/ccxp`'s cron.
-- `/incept`'s pre-IPM design-pass wording needed no change (grepped for
-  `Monday`/`budget-cut`/`Tier` in `incept/SKILL.md` — none present).
+- `/incept`'s pre-IPM design-pass wording: the body workflow prose needed no
+  change (grepped for `Monday`/`budget-cut`/`Tier` post-edit — none present).
+  Its frontmatter `description` did need one small edit — dropped a
+  "Tier 2 candidate" reference — already made as part of the broader
+  Tier-removal sweep this task's scope was folded into.
