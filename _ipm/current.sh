@@ -14,7 +14,7 @@
 # lexically == chronologically.
 #
 # A SINGLE selector serves every caller:
-#   - /rca Step 6 (Tier-3 auto-promote target)      -> newest committed
+#   - /rca Step 6 (mid-week-addition auto-promote target) -> newest committed
 #   - /ccxp Phase 1.1 standup "current weekly focus" -> newest committed
 #   - /ccxp Phase 2a.1.5 (seed carry-over from last IPM) -> 2a.1.5 runs BEFORE
 #       2a.5, so this week's file is still a staging stub (excluded) and "newest

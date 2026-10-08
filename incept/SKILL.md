@@ -1,6 +1,6 @@
 ---
 name: incept
-description: Use when the user explicitly asks to grill, interview, or stress-test a plan or task before implementation, or when /ipm step 3 runs a pre-IPM design pass on a Tier 2 candidate
+description: Use when the user explicitly asks to grill, interview, or stress-test a plan or task before implementation, or when /ipm step 3 runs a pre-IPM design pass on a candidate
 disable-model-invocation: false
 argument-hint: "[task-id | free-text plan]"
 ---

@@ -210,10 +210,10 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 
 #### Focus list grade (the main accountability check)
 
-For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week.
+For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is (T20260924-252293): this grading pass, and the bump-counter below, are dormant by design wherever the ceremony isn't run, not broken.
 
 - **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case since T20260914-422854 — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
-- **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will be Tier 1 carry-over next IPM.
+- **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will carry over automatically next IPM.
 - **Partial** — commits exist on a branch but no PR is open, or PR is open but stalled (no movement in last 3 days).
 - **Dropped** — not started (Status still `Open` or `Design`). It re-enters the candidate pool next IPM.
 
@@ -372,7 +372,7 @@ Compute and report these metrics for the review period:
 | Focus list grade | `{shipped}/{total}` shipped, `{in_flight}` in flight, `{partial}` partial, `{dropped}` dropped (skip if no IPM this week) |
 | Focus budget hit rate | `{committed}h committed / {actual}h spent` — compute by summing revised est for shipped tasks vs PR cycle-time totals; report ratio (e.g. `1.4x` means actual was 40% over commit) |
 | Tasks bumped 3x | comma-separated task IDs that appeared on this week's, last week's, AND the prior week's focus lists without shipping (or "None") |
-| Escalated to High | `N tasks escalated` (Phase 4b — `priority: High` set on tasks bumped 3×). Include the IDs if N > 0; pure-text "None" if N = 0 |
+| Escalated via /top | `N tasks escalated` (Phase 4b — `/top`'d to the front of `queue.md`, tasks bumped 3×). Include the IDs if N > 0; pure-text "None" if N = 0 |
 | Cron active time | avg + range of active model min/day from Phase 1 step 11 (e.g. `27 min avg, 16–39`) — flag if trending down with a growing backlog (sessions starving) or up against flat throughput (churn) |
 | Cron cost | avg + range $/day (e.g. `$11.7 avg, $6.5–13.9`); flag a band shift vs the prior retro — the gate (T20260605-862341) should keep this flat while the hourly cron cuts latency |
 | Cron preflight ratio | `fires/total` hourly fires that launched claude (e.g. `3/24`); `n/a (pre-gate)` for pre-rollout days. A ratio near 1.0 means the gate never skips (signals always present — fine); near 0 with a stale backlog means probes may be missing real signals |
@@ -404,13 +404,13 @@ For each "needs improvement" finding, create a concrete, actionable task:
 
 `scheduled:` is **update-forward-only and is never cleared here** — it is the task's last-scheduling record, and a *past* `scheduled` already reads as a fresh candidate to `/todo next` (committed ⟺ `scheduled` ≥ current Monday), so no zombie-clearing hygiene pass is needed. Instead this phase acts on chronic deferral.
 
-**Rule**: For every task flagged **bumped 3×** by the bump-counter (Phase 1 step 10 / Phase 2 — cited in all 3 most-recent ipm-weekly files without shipping), open its `dev/TODO/*.md` file and set `priority: High` in the frontmatter. Idempotent — skip if already `High` or `Critical`.
+**Rule**: For every task flagged **bumped 3×** by the bump-counter (Phase 1 step 10 / Phase 2 — cited in all 3 most-recent ipm-weekly files without shipping), run `/top <id>` to move it to the front of `dev/TODO/queue.md`. Idempotent — a no-op if it's already at the front. (There is no `priority:` field to set — `todo/SKILL.md` retired it; position in `queue.md` **is** priority, so `/top` is the escalation mechanism, matching `lifecycle.md`'s "Iteration assignment" section.)
 
-**Why**: a task surfaced and cut three IPMs running that nobody parked is one the team keeps deciding matters but defers. Escalating forces it up `/todo next`'s ranking so the next IPM is likely to commit it; the human's release valve is to consciously park it (`/todo sweep`) if it genuinely shouldn't escalate.
+**Why**: a task surfaced and cut three IPMs running that nobody parked is one the team keeps deciding matters but defers. Escalating it to the front of the queue forces it up `/todo next`'s pick order so the next IPM (or the next `/drive` pull, for a repo not running IPM) is likely to commit it; the human's release valve is to consciously park it (`/todo sweep`) if it genuinely shouldn't escalate.
 
 **What this does NOT touch**: `scheduled:` on any task (never cleared); files in `dev/PARKING/` and `dev/JOURNAL/`; tasks not flagged by the bump-counter.
 
-**Report**: add an "Escalated N tasks to High (bumped 3×)" line to the metrics table (Phase 3) and the Slack summary (Phase 6); include the task IDs (or "None").
+**Report**: add an "Escalated N tasks via /top (bumped 3×)" line to the metrics table (Phase 3) and the Slack summary (Phase 6); include the task IDs (or "None").
 
 ### Phase 4c: Skill quality review
 
@@ -518,16 +518,16 @@ Render every `Task` cell as a clickable markdown link (T20260608-353422), not ba
 once and never regenerated, so an issue-URL link that survives every future task-file move is the
 right choice, same as the IPM template).
 
-| Task | Tier | IPM revised est | Revisions | Outcome | Actual | Notes |
-|------|------|-----------------|-----------|---------|--------|-------|
-| T... | 1 | 2h | filed `1h` → `2h` (scope discovered) | Shipped | 4h | 2x over — design pass missed the registry side |
-| T... | 2 | 1d | no revisions | In flight | — | Tier 2 carry-over next IPM |
-| T... | 2 | 4h | no revisions | Dropped | — | Bumped 3x — surface in "needs improvement" |
-| T... | 3 | 1h | filed `1h` | Shipped | 1h | Red-pipeline auto-promote (Phase 1.2 RCA) — fit slack cleanly |
+| Task | Status | IPM revised est | Revisions | Outcome | Actual | Notes |
+|------|--------|-----------------|-----------|---------|--------|-------|
+| T... | Carry-over | 2h | filed `1h` → `2h` (scope discovered) | Shipped | 4h | 2x over — design pass missed the registry side |
+| T... | New pick | 1d | no revisions | In flight | — | Carries over next IPM |
+| T... | New pick | 4h | no revisions | Dropped | — | Bumped 3x — surface in "needs improvement" |
+| T... | Mid-week addition | 1h | filed `1h` | Shipped | 1h | Red-pipeline auto-promote (Phase 1.2 RCA) — fit slack cleanly |
 
 The **Revisions** column is the per-task arc from `retro/scripts/estimation-revisions.sh` (Phase 2). `no revisions` = the estimate held all week.
 
-Grade Tier 3 separately from Tier 1/Tier 2 (Tier 3 estimation-vs-actual is a separate signal): if cumulative Tier 3 hours > slack reserve, flag in "needs improvement" — additions pushed Tier 1/Tier 2 work into next week. If Tier 3 count is consistently 0, that's also a signal — either the rhythm has no mid-week surprises (great) or appenders aren't using the convention (worth checking).
+Grade mid-week additions separately from the committed list (mid-week estimation-vs-actual is a separate signal): if cumulative mid-week hours > slack reserve, flag in "needs improvement" — additions pushed committed work into next week. If the mid-week-addition count is consistently 0, that's also a signal — either the rhythm has no mid-week surprises (great) or appenders aren't using the convention (worth checking).
 
 ## Journal sweep
 (skip if Phase 2b swept zero tasks)
