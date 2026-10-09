@@ -66,7 +66,7 @@ claimed_role: interactive
   suite uses, per a live grep across every call site: `_test-nested-invoker`
   :12 name-drops it illustratively, the original add-spinup JOURNAL entry
   and the skill-review notes discuss it, but nothing invokes it with a
-  non-default path). Its workflow (`spinup/SKILL.md:50-71`): verify git
+  non-default path). Its workflow (`spinup/SKILL.md:20-27`): verify git
   repo → if `CLAUDE.md` missing, stop and tell the user to run `/init`
   first → run `check`, `sync` on violations → if `.env.tpl` exists,
   dispatch `/1password-env-setup` → report a summary.
@@ -99,9 +99,13 @@ claimed_role: interactive
   /repo-conventions setup [team|solo] [--skip-ci-check] [--yes]
   ```
 
-  Policy arg defaults to `team` when omitted (vs. today's `mode.sh
-  <solo|team>` requiring an explicit choice). `solo` is the explicit
-  escape hatch for legacy repos.
+  Policy arg defaults to `team` when omitted *and the repo has no
+  existing policy configured* — vs. today's `mode.sh <solo|team>`
+  requiring an explicit choice always. On an **already-configured** repo
+  (solo or team), omitting the arg preserves the current policy instead
+  of overriding it (see step 6's default-resolution below) — true
+  idempotent convergence, not a silent flip. `solo` is still the explicit
+  escape hatch a caller can pass on a fresh repo that wants it.
 - **`mode {solo|team}` is removed as its own verb** — drop its
   `## Argument` line (`:15`) and its `### mode {solo|team}` Workflow
   section (`:147-170`) from `repo-conventions/SKILL.md`. `setup`'s
@@ -111,34 +115,54 @@ claimed_role: interactive
   hard-refuse (no `.github/workflows/*.yml` → refuse unless
   `--skip-ci-check`), same confirm-unless-`--yes` gate, same no-op when
   already in the requested policy. `setup` just forwards its resolved
-  policy arg (defaulting to `team`) and passes `--skip-ci-check`/`--yes`
-  straight through.
+  policy arg (see step 6's default-resolution logic below) and passes
+  `--skip-ci-check`/`--yes` straight through.
 - **New `### setup [team|solo]` Workflow section**, replacing `### mode
   {solo|team}` at the same position, absorbing `/spinup`'s steps (cwd-based,
   no `[path]`):
   1. Verify cwd is a git repo.
   2. If `CLAUDE.md` is missing: report that `/init` generates one first,
-     then stop (unchanged from `spinup/SKILL.md:52-56`).
+     then stop (unchanged from `spinup/SKILL.md:21`).
   3. Run `check`; on a CLAUDE.md-present-but-empty or guidelines.md-missing/
      empty violation, run `sync` (now same-skill subroutine calls instead
      of cross-skill composition — unchanged behavior,
-     `spinup/SKILL.md:57-60`).
+     `spinup/SKILL.md:22-24`).
   4. **New** — if `dev/TODO/*.md` files exist but `dev/TODO/queue.md` is
      missing: dispatch `/todo sweep` (closes the gap this task's Problem
      section flagged; conditional, mirroring the `.env.tpl`-presence-gated
      pattern in the next step rather than running unconditionally).
   5. If `.env.tpl` exists: dispatch `/1password-env-setup` (unchanged from
-     `spinup/SKILL.md:61-67`, cwd implied) — documented accurately per the
+     `spinup/SKILL.md:25-26`, cwd implied) — documented accurately per the
      Context note above (no false "confirm-before-overwrite" claim).
-  6. Apply branch policy: `bash ../repo-conventions/scripts/mode.sh
-     <team|solo — from setup's own arg, default team> [--skip-ci-check]
-     [--yes]`.
+  6. Apply branch policy. **Resolve the default first** (independent
+     review on this PR's own design caught a real gap here: naively
+     defaulting to `team` unconditionally would make a bare `setup` on an
+     existing **solo** repo silently propose flipping its branch policy
+     and mutating live GitHub branch protection — something `/spinup`
+     never did, and under `--yes` with no prompt at all):
+     - If no explicit `team|solo` arg was given to `setup`: check whether
+       `dev/guidelines.md` (or `CLAUDE.md` fallback) already has a
+       `## Branch and Merge Policy` section. If so, resolve the default to
+       the repo's *current* policy using `mode.sh`'s own existing
+       detection heuristic (`repo-conventions/scripts/mode.sh:64-67` —
+       `grep -qi "no ci"` + `grep -qi "direct.to.main"`) — this makes a
+       bare `setup` on an already-configured repo (solo *or* team) a true
+       convergence no-op, since `mode.sh` itself already no-ops when the
+       resolved arg matches the current policy (`:168`).
+       - Only when **no** `## Branch and Merge Policy` section exists yet
+         (a genuinely fresh, never-configured repo) does the default fall
+         through to `team`.
+     - An explicit `setup team` or `setup solo` always wins over the
+       above — this resolution only applies when the arg is omitted.
+     - Then: `bash ../repo-conventions/scripts/mode.sh <resolved>
+       [--skip-ci-check] [--yes]`.
   7. Report a summary: what was checked/fixed/applied; what's still open
-     and why (unchanged shape from `spinup/SKILL.md:68-71`).
+     and why (unchanged shape from `spinup/SKILL.md:27`).
   - Idempotent — re-running on an already-onboarded repo is a no-op at
     every step (check/sync clean, `queue.md` already present, no
-    `.env.tpl`, `mode.sh` already in the requested policy) — same
-    guarantee `spinup/SKILL.md`'s own Important Notes made.
+    `.env.tpl`, `mode.sh` already in the resolved policy per step 6's
+    default-resolution) — same guarantee `spinup/SKILL.md`'s own Important
+    Notes made, now extended to cover branch policy too.
 - **Delete `spinup/SKILL.md` entirely.** Update cross-references:
   - `README.md` — drop the `spinup` row, update the `repo-conventions` row
     to mention `setup`.
@@ -179,13 +203,29 @@ a 5.
 - [ ] Manual dry run in a throwaway scratch repo with no `CLAUDE.md`:
   `/repo-conventions setup` stops at step 2 and tells the user to run
   `/init` first (mirrors `/spinup`'s own original dry-run coverage).
+- [ ] **Independent-review-flagged (PR #286 review finding 3):** manual
+  dry run on a throwaway repo already in **solo** policy (has a `##
+  Branch and Merge Policy` section with the solo wording) — a bare
+  `/repo-conventions setup` with no arg must leave it in `solo` and make
+  **no** GitHub branch-protection API call, confirming step 6's
+  default-resolution preserves existing policy instead of flipping it to
+  `team`.
+- [ ] Companion case: the same throwaway repo starting with **no** `##
+  Branch and Merge Policy` section at all — a bare `/repo-conventions
+  setup` must default to `team` (the genuinely-fresh-repo case step 6
+  still falls through to).
+- [ ] `grep -n "argument-hint" repo-conventions/SKILL.md` shows
+  `"[check|sync|show|setup {team|solo}]"`.
 - [ ] `grep -rn "spinup" --include='*.md' .` outside `dev/JOURNAL/` and
   `dev/quality/skill-review-2026-09-28/` (archival, left alone per
   `lifecycle.md`'s no-mirror rule) returns no hits.
 - [ ] `grep -n "mode {solo|team}" repo-conventions/SKILL.md` returns no
   hits — confirms the standalone verb and its Workflow section are gone.
-- [ ] `bash design-score/scripts/score.sh dev/TODO/T20261009-154870-*.md`
-  scores ≥ 70 (Phase 2 gate).
+- [ ] `bash design-score/scripts/score.sh dev/TODO/T20261009-154870-*.md
+  --kind docs` scores ≥ 70 (Phase 2 gate; `--kind docs` because the actual
+  change touches only `*.md` files — the auto-detector's body-text
+  heuristic otherwise misreads this design doc's own script-path
+  citations as a code-class signal).
 
 ## Done criteria
 
@@ -200,5 +240,7 @@ a 5.
 - [ ] `_test-nested-invoker/SKILL.md` no longer references `/spinup` —
   test: `grep -n spinup _test-nested-invoker/SKILL.md` → no match.
 - [ ] `mode.sh` unchanged — test plan's `git diff --stat` item (above).
+- [ ] A bare `setup` on an already-solo repo preserves solo and makes no
+  GitHub API call — test plan's solo-preservation dry run (above).
 - [ ] Idempotent re-run on this already-onboarded repo makes zero
   unwanted changes — test plan's manual dry run (above).
