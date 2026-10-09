@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
+scheduled: 2026-10-12
 estimation: 1
 source: this conversation, 2026-10-09
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
 ---
 
 # T20261009-154870: Merge /spinup into /repo-conventions, resolve the mode/setup naming collision
