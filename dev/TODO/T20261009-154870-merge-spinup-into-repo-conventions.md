@@ -103,7 +103,7 @@ claimed_role: interactive
   existing policy configured* — vs. today's `mode.sh <solo|team>`
   requiring an explicit choice always. On an **already-configured** repo
   (solo or team), omitting the arg preserves the current policy instead
-  of overriding it (see step 6's default-resolution below) — true
+  of overriding it (see steps 3/7's default-resolution below) — true
   idempotent convergence, not a silent flip. `solo` is still the explicit
   escape hatch a caller can pass on a fresh repo that wants it.
 - **`mode {solo|team}` is removed as its own verb** — drop its
@@ -115,7 +115,7 @@ claimed_role: interactive
   hard-refuse (no `.github/workflows/*.yml` → refuse unless
   `--skip-ci-check`), same confirm-unless-`--yes` gate, same no-op when
   already in the requested policy. `setup` just forwards its resolved
-  policy arg (see step 6's default-resolution logic below) and passes
+  policy arg (see steps 3/7's default-resolution logic below) and passes
   `--skip-ci-check`/`--yes` straight through.
 - **New `### setup [team|solo]` Workflow section**, replacing `### mode
   {solo|team}` at the same position, absorbing `/spinup`'s steps (cwd-based,
@@ -123,66 +123,86 @@ claimed_role: interactive
   1. Verify cwd is a git repo.
   2. If `CLAUDE.md` is missing: report that `/init` generates one first,
      then stop (unchanged from `spinup/SKILL.md:21`).
-  3. Run `check`; on a CLAUDE.md-present-but-empty or guidelines.md-missing/
+  3. **New — snapshot the current branch policy BEFORE anything below can
+     change it** (see the three-round review history at the end of this
+     step for why this has to run first, not inline in step 7): if no
+     explicit `team|solo` arg was given to `setup`, detect the repo's
+     *current* policy right now, using `mode.sh`'s own doc-resolution
+     order and heuristic (`mode.sh:49-67` — `dev/guidelines.md` first if
+     it has a `## Branch and Merge Policy` section, else `CLAUDE.md`, then
+     `grep -qi "no ci"` + `grep -qi "direct.to.main"`) against the repo
+     **as it exists right now, before step 4's `sync` can run**. Store
+     the result (`solo`, `team`, or `none` if neither doc has the section
+     yet) — this is the value step 7 uses, not a re-detection after
+     `sync`.
+  4. Run `check`; on a CLAUDE.md-present-but-empty or guidelines.md-missing/
      empty violation, run `sync` (now same-skill subroutine calls instead
      of cross-skill composition — unchanged behavior,
      `spinup/SKILL.md:22-24`).
-  4. **New** — if `dev/TODO/*.md` files exist but `dev/TODO/queue.md` is
+  5. **New** — if `dev/TODO/*.md` files exist but `dev/TODO/queue.md` is
      missing: dispatch `/todo sweep` (closes the gap this task's Problem
      section flagged; conditional, mirroring the `.env.tpl`-presence-gated
      pattern in the next step rather than running unconditionally).
-  5. If `.env.tpl` exists: dispatch `/1password-env-setup` (unchanged from
+  6. If `.env.tpl` exists: dispatch `/1password-env-setup` (unchanged from
      `spinup/SKILL.md:25-26`, cwd implied) — documented accurately per the
      Context note above (no false "confirm-before-overwrite" claim).
-  6. Apply branch policy. **Resolve the default first** (independent
-     review on this PR's own design caught a real gap: naively defaulting
-     to `team` unconditionally would make a bare `setup` on an existing
-     **solo** repo silently propose flipping its branch policy and
-     mutating live GitHub branch protection — something `/spinup` never
-     did, and under `--yes` with no prompt at all. A second review round
-     then caught that the first fix's "no section → default team" branch
-     didn't actually work: `repo-conventions/templates/guidelines.md:11`
-     already bakes in team-worded text, so step 3's `sync` — when
-     `guidelines.md` was missing — pre-seeds that section *before* step 6
-     ever runs; and `mode.sh` itself (`mode.sh:49-57`) only **rewrites**
-     an existing `## Branch and Merge Policy` section, it never **creates**
-     one — it hard-errors (`exit 1`) if neither doc has the section at
-     all. The corrected logic below accounts for both):
-     - If no explicit `team|solo` arg was given to `setup`: detect the
-       repo's current policy the same way `mode.sh` itself does
-       internally (`mode.sh:49-67` — find the `## Branch and Merge
-       Policy` section in `dev/guidelines.md`, falling back to
-       `CLAUDE.md`, then `grep -qi "no ci"` + `grep -qi "direct.to.main"`
-       on it) and default to that detected value. This makes a bare
-       `setup` on an already-configured repo (solo *or* team) — including
-       one that just got the section seeded by step 3's `sync` — a true
-       convergence no-op, since `mode.sh` itself already no-ops when the
-       resolved arg matches what it independently detects as current
-       (`mode.sh:70-73`).
-       - **Rare edge case**: `guidelines.md` exists, is non-empty, but
-         happens to lack the `## Branch and Merge Policy` section
-         specifically (step 3's `sync` only fires on missing/empty, and
-         `check`'s own lint list, `SKILL.md:121-128`, has no check for
-         this section's presence — so this slips through both). No
-         detection is possible here; default to `team` and call `mode.sh
-         team` anyway. `mode.sh` will then surface its own existing
-         error ("no '## Branch and Merge Policy' section found — run
-         /repo-conventions sync first", `mode.sh:55`) — `setup` reports
-         this as an open item in step 7, same as any other out-of-scope
+  7. Apply branch policy, using step 3's snapshot:
+     - If `setup` was given an explicit `team`/`solo` arg, that always
+       wins — use it, ignoring the snapshot.
+     - Otherwise, use step 3's snapshotted value:
+       - `solo` or `team` snapshotted → default to that value. This makes
+         a bare `setup` on an already-configured repo (solo *or* team) a
+         true convergence no-op: `mode.sh` itself already no-ops when the
+         resolved arg matches what it independently detects as current
+         (`mode.sh:70-73`) — and because the snapshot was taken *before*
+         step 4's `sync` could run, a legacy repo whose policy lives only
+         in `CLAUDE.md` (`mode.sh:52-53`'s own supported fallback) keeps
+         its real `solo` default even though step 4 might create a fresh,
+         team-worded `dev/guidelines.md` from
+         `repo-conventions/templates/guidelines.md:11-20` moments later —
+         without the snapshot, step 7's detection would run *after* that
+         creation, read the fresh team-worded `guidelines.md` (`mode.sh`'s
+         own precedence checks `dev/guidelines.md` before `CLAUDE.md`),
+         and silently flip a real legacy-solo repo onto `team`, enabling
+         live GitHub branch protection with no explicit opt-in — exactly
+         the class of bug the first two review rounds fixed, just via a
+         different trigger path this snapshot-before-sync ordering closes.
+       - `none` snapshotted (neither doc had the section at snapshot
+         time) → default to `team`. In the common case this is the
+         genuinely-fresh-repo path: step 4's `sync` then creates a
+         team-worded `guidelines.md`, and `mode.sh team` no-ops against
+         it. In the **rare edge case** — `guidelines.md` exists, is
+         non-empty, but simply lacks the section (so step 4's `sync`,
+         which only fires on missing/empty, doesn't touch it, and
+         `check`'s own lint list, `SKILL.md:121-128`, doesn't flag it
+         either) — `mode.sh team` hard-errors with its existing message
+         ("no '## Branch and Merge Policy' section found — run
+         /repo-conventions sync first", `mode.sh:55`); `setup` reports
+         this as an open item in step 8, same as any other out-of-scope
          `check` finding, rather than treating it as a `setup` failure.
-         Teaching `mode.sh` to *create* a missing section is a pre-
-         existing gap, explicitly out of this task's scope.
-     - An explicit `setup team` or `setup solo` always wins over the
-       above — this resolution only applies when the arg is omitted.
+         Teaching `mode.sh` to *create* a missing section is a
+         pre-existing gap, explicitly out of this task's scope.
      - Then: `bash ../repo-conventions/scripts/mode.sh <resolved>
        [--skip-ci-check] [--yes]`.
-  7. Report a summary: what was checked/fixed/applied; what's still open
+  8. Report a summary: what was checked/fixed/applied; what's still open
      and why (unchanged shape from `spinup/SKILL.md:27`).
   - Idempotent — re-running on an already-onboarded repo is a no-op at
     every step (check/sync clean, `queue.md` already present, no
-    `.env.tpl`, `mode.sh` already in the resolved policy per step 6's
+    `.env.tpl`, `mode.sh` already in the resolved policy per step 7's
     default-resolution) — same guarantee `spinup/SKILL.md`'s own Important
     Notes made, now extended to cover branch policy too.
+  - **Review history on steps 3/7** (three independent review rounds on
+    this PR, each catching a real issue in the prior fix): round 1 —
+    naively defaulting to `team` unconditionally would silently flip an
+    existing solo repo; round 2 — the "no section → default team" fix
+    didn't account for `sync` pre-seeding a team-worded section before
+    detection ran, nor that `mode.sh` only rewrites an existing section
+    and never creates one; round 3 — even with current-policy detection
+    in place, running that detection *after* step 4's `sync` still let a
+    legacy repo whose policy lived only in `CLAUDE.md` get silently
+    overridden the moment `sync` created a fresh team-worded
+    `guidelines.md` ahead of detection. The fix is step 3's early
+    snapshot, taken before `sync` can touch anything.
 - **Delete `spinup/SKILL.md` entirely.** Update cross-references:
   - `README.md` — drop the `spinup` row, update the `repo-conventions` row
     to mention `setup`.
@@ -223,28 +243,40 @@ a 5.
 - [ ] Manual dry run in a throwaway scratch repo with no `CLAUDE.md`:
   `/repo-conventions setup` stops at step 2 and tells the user to run
   `/init` first (mirrors `/spinup`'s own original dry-run coverage).
-- [ ] **Independent-review-flagged (PR #286 review finding 3):** manual
-  dry run on a throwaway repo already in **solo** policy (has a `##
-  Branch and Merge Policy` section with the solo wording) — a bare
-  `/repo-conventions setup` with no arg must leave it in `solo` and make
-  **no** GitHub branch-protection API call, confirming step 6's
-  default-resolution preserves existing policy instead of flipping it to
-  `team`.
+- [ ] **Independent-review-flagged (PR #286 review finding, round 1):**
+  manual dry run on a throwaway repo already in **solo** policy (has a
+  `## Branch and Merge Policy` section with the solo wording in
+  `dev/guidelines.md`) — a bare `/repo-conventions setup` with no arg
+  must leave it in `solo` and make **no** GitHub branch-protection API
+  call, confirming steps 3/7's default-resolution preserves existing
+  policy instead of flipping it to `team`.
 - [ ] Companion case: a genuinely fresh throwaway repo (`CLAUDE.md`
-  present, `guidelines.md` missing entirely) — a bare `/repo-conventions
-  setup` runs step 3's `sync` first (which seeds the team-worded section
-  from `repo-conventions/templates/guidelines.md:11-20`), then step 6
-  detects that freshly-seeded section as `team` and `mode.sh` no-ops —
-  confirms the realistic path to a "team" outcome on a fresh repo, not
-  the originally-assumed-but-unreachable "no section found → default
-  team" branch.
+  present with no Branch and Merge Policy section, `guidelines.md`
+  missing entirely) — step 3 snapshots `none`, step 4's `sync` seeds the
+  team-worded section from
+  `repo-conventions/templates/guidelines.md:11-20`, and step 7 applies
+  the snapshotted `team` default, so `mode.sh` no-ops against the
+  freshly-seeded text — confirms the realistic path to a "team" outcome
+  on a fresh repo, not the originally-assumed-but-unreachable "no section
+  found at step 7 → default team" branch.
 - [ ] **Edge case (PR #286 review finding, round 2):** a throwaway repo
   with a non-empty `guidelines.md` that lacks the `## Branch and Merge
-  Policy` section specifically (so step 3's `sync` doesn't touch it) — a
-  bare `/repo-conventions setup` defaults to `team`, `mode.sh` hard-errors
-  with its existing "no section found" message, and `setup`'s step 7
-  summary reports it as an open item rather than silently swallowing or
-  mis-reporting it as success.
+  Policy` section specifically (so step 3 snapshots `none`, and step 4's
+  `sync` doesn't touch it since it's non-empty) — a bare `/repo-conventions
+  setup` defaults to `team`, `mode.sh` hard-errors with its existing "no
+  section found" message, and `setup`'s step 8 summary reports it as an
+  open item rather than silently swallowing or mis-reporting it as
+  success.
+- [ ] **Legacy-policy-in-CLAUDE.md case (PR #286 review finding, round
+  3):** a throwaway repo with `CLAUDE.md` carrying a solo-worded `##
+  Branch and Merge Policy` section and **no** `dev/guidelines.md` at all
+  — step 3 must snapshot `solo` (read from `CLAUDE.md`, per `mode.sh`'s
+  own fallback) *before* step 4's `sync` creates a fresh team-worded
+  `dev/guidelines.md`; step 7 then applies the snapshotted `solo`
+  default, leaving the repo in `solo` with no GitHub API call, even
+  though `dev/guidelines.md` now exists and reads "team". This is the
+  scenario that would silently flip if detection ran *after* `sync`
+  instead of the snapshot-before-sync ordering steps 3/7 now use.
 - [ ] `grep -n "argument-hint" repo-conventions/SKILL.md` shows
   `"[check|sync|show|setup {team|solo}]"`.
 - [ ] `grep -rn "spinup" --include='*.md' .` outside `dev/JOURNAL/` and
@@ -273,5 +305,9 @@ a 5.
 - [ ] `mode.sh` unchanged — test plan's `git diff --stat` item (above).
 - [ ] A bare `setup` on an already-solo repo preserves solo and makes no
   GitHub API call — test plan's solo-preservation dry run (above).
+- [ ] A bare `setup` on a repo with policy documented only in `CLAUDE.md`
+  (no `dev/guidelines.md` yet) preserves that policy even though `sync`
+  creates a fresh `dev/guidelines.md` moments later — test plan's
+  legacy-policy-in-CLAUDE.md dry run (above).
 - [ ] Idempotent re-run on this already-onboarded repo makes zero
   unwanted changes — test plan's manual dry run (above).
