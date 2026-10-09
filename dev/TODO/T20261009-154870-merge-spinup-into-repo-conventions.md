@@ -135,23 +135,43 @@ claimed_role: interactive
      `spinup/SKILL.md:25-26`, cwd implied) — documented accurately per the
      Context note above (no false "confirm-before-overwrite" claim).
   6. Apply branch policy. **Resolve the default first** (independent
-     review on this PR's own design caught a real gap here: naively
-     defaulting to `team` unconditionally would make a bare `setup` on an
-     existing **solo** repo silently propose flipping its branch policy
-     and mutating live GitHub branch protection — something `/spinup`
-     never did, and under `--yes` with no prompt at all):
-     - If no explicit `team|solo` arg was given to `setup`: check whether
-       `dev/guidelines.md` (or `CLAUDE.md` fallback) already has a
-       `## Branch and Merge Policy` section. If so, resolve the default to
-       the repo's *current* policy using `mode.sh`'s own existing
-       detection heuristic (`repo-conventions/scripts/mode.sh:64-67` —
-       `grep -qi "no ci"` + `grep -qi "direct.to.main"`) — this makes a
-       bare `setup` on an already-configured repo (solo *or* team) a true
+     review on this PR's own design caught a real gap: naively defaulting
+     to `team` unconditionally would make a bare `setup` on an existing
+     **solo** repo silently propose flipping its branch policy and
+     mutating live GitHub branch protection — something `/spinup` never
+     did, and under `--yes` with no prompt at all. A second review round
+     then caught that the first fix's "no section → default team" branch
+     didn't actually work: `repo-conventions/templates/guidelines.md:11`
+     already bakes in team-worded text, so step 3's `sync` — when
+     `guidelines.md` was missing — pre-seeds that section *before* step 6
+     ever runs; and `mode.sh` itself (`mode.sh:49-57`) only **rewrites**
+     an existing `## Branch and Merge Policy` section, it never **creates**
+     one — it hard-errors (`exit 1`) if neither doc has the section at
+     all. The corrected logic below accounts for both):
+     - If no explicit `team|solo` arg was given to `setup`: detect the
+       repo's current policy the same way `mode.sh` itself does
+       internally (`mode.sh:49-67` — find the `## Branch and Merge
+       Policy` section in `dev/guidelines.md`, falling back to
+       `CLAUDE.md`, then `grep -qi "no ci"` + `grep -qi "direct.to.main"`
+       on it) and default to that detected value. This makes a bare
+       `setup` on an already-configured repo (solo *or* team) — including
+       one that just got the section seeded by step 3's `sync` — a true
        convergence no-op, since `mode.sh` itself already no-ops when the
-       resolved arg matches the current policy (`:168`).
-       - Only when **no** `## Branch and Merge Policy` section exists yet
-         (a genuinely fresh, never-configured repo) does the default fall
-         through to `team`.
+       resolved arg matches what it independently detects as current
+       (`mode.sh:70-73`).
+       - **Rare edge case**: `guidelines.md` exists, is non-empty, but
+         happens to lack the `## Branch and Merge Policy` section
+         specifically (step 3's `sync` only fires on missing/empty, and
+         `check`'s own lint list, `SKILL.md:121-128`, has no check for
+         this section's presence — so this slips through both). No
+         detection is possible here; default to `team` and call `mode.sh
+         team` anyway. `mode.sh` will then surface its own existing
+         error ("no '## Branch and Merge Policy' section found — run
+         /repo-conventions sync first", `mode.sh:55`) — `setup` reports
+         this as an open item in step 7, same as any other out-of-scope
+         `check` finding, rather than treating it as a `setup` failure.
+         Teaching `mode.sh` to *create* a missing section is a pre-
+         existing gap, explicitly out of this task's scope.
      - An explicit `setup team` or `setup solo` always wins over the
        above — this resolution only applies when the arg is omitted.
      - Then: `bash ../repo-conventions/scripts/mode.sh <resolved>
@@ -210,10 +230,21 @@ a 5.
   **no** GitHub branch-protection API call, confirming step 6's
   default-resolution preserves existing policy instead of flipping it to
   `team`.
-- [ ] Companion case: the same throwaway repo starting with **no** `##
-  Branch and Merge Policy` section at all — a bare `/repo-conventions
-  setup` must default to `team` (the genuinely-fresh-repo case step 6
-  still falls through to).
+- [ ] Companion case: a genuinely fresh throwaway repo (`CLAUDE.md`
+  present, `guidelines.md` missing entirely) — a bare `/repo-conventions
+  setup` runs step 3's `sync` first (which seeds the team-worded section
+  from `repo-conventions/templates/guidelines.md:11-20`), then step 6
+  detects that freshly-seeded section as `team` and `mode.sh` no-ops —
+  confirms the realistic path to a "team" outcome on a fresh repo, not
+  the originally-assumed-but-unreachable "no section found → default
+  team" branch.
+- [ ] **Edge case (PR #286 review finding, round 2):** a throwaway repo
+  with a non-empty `guidelines.md` that lacks the `## Branch and Merge
+  Policy` section specifically (so step 3's `sync` doesn't touch it) — a
+  bare `/repo-conventions setup` defaults to `team`, `mode.sh` hard-errors
+  with its existing "no section found" message, and `setup`'s step 7
+  summary reports it as an open item rather than silently swallowing or
+  mis-reporting it as success.
 - [ ] `grep -n "argument-hint" repo-conventions/SKILL.md` shows
   `"[check|sync|show|setup {team|solo}]"`.
 - [ ] `grep -rn "spinup" --include='*.md' .` outside `dev/JOURNAL/` and
