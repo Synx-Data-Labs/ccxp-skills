@@ -25,3 +25,4 @@ reprioritize.
 - [T20261007-104557](T20261007-104557-refresh-skill-for-stale-task-pr-issue.md): /refresh skill — diff-since-last-look + skill-suggestion report for a task/PR/issue
 - [T20261008-636871](T20261008-636871-auto-bump-plugin-version.md): Auto-bump plugin.json version on release
 - [T20261009-154870](T20261009-154870-merge-spinup-into-repo-conventions.md): Merge /spinup into /repo-conventions, resolve the mode/setup naming collision
+- [T20261009-283022](T20261009-283022-rename-incept-to-iterate.md): Rename /incept to /iterate
