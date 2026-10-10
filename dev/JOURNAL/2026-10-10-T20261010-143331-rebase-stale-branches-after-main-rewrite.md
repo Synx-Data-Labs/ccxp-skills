@@ -1,5 +1,5 @@
 ---
-status: Open
+status: Done
 estimation: 1
 source: this conversation, 2026-10-10
 ---

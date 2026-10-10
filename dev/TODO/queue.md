@@ -24,6 +24,5 @@ reprioritize.
 - [T20261007-104557](T20261007-104557-refresh-skill-for-stale-task-pr-issue.md): /refresh skill — diff-since-last-look + skill-suggestion report for a task/PR/issue
 - [T20261008-636871](T20261008-636871-auto-bump-plugin-version.md): Auto-bump plugin.json version on release
 - [T20261009-283022](T20261009-283022-rename-incept-to-iterate.md): Rename /incept to /iterate
-- [T20261010-143331](T20261010-143331-rebase-stale-branches-after-main-rewrite.md): Rebase stale branches onto rewritten main and close them
 - [T20261010-274793](T20261010-274793-cross-repo-rule-in-guidelines.md): Add the cross-repo rule to the conventions layer and guidelines
 - [T20261010-363414](T20261010-363414-genericize-merge-bot-reference.md): Replace the `synx-merge-bot` reference with a generic merge-bot explanation
