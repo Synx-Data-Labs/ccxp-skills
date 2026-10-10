@@ -131,6 +131,33 @@ EOF
   echo "$output" | grep -q "some-other-agent"
 }
 
+@test "on: preserves settings.json's original permission bits across the rewrite" {
+  mk_settings
+  chmod 644 "$CLAUDE_DIR/settings.json"
+  run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  perm="$(stat -c '%a' "$CLAUDE_DIR/settings.json" 2>/dev/null || stat -f '%Lp' "$CLAUDE_DIR/settings.json")"
+  [ "$perm" = "644" ]
+}
+
+@test "invalid JSON in settings.json is a hard error, nothing is touched" {
+  echo "not valid json" > "$CLAUDE_DIR/settings.json"
+  run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$CLAUDE_DIR/settings.json")" = "not valid json" ]
+}
+
+@test "on: a write failure is reported as an error, never printed as ON" {
+  mk_settings
+  # Make the directory read-only so mktemp inside it fails -- simulates any
+  # write-time failure without depending on jq's own exit-code behavior.
+  chmod 555 "$CLAUDE_DIR"
+  run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
+  chmod 755 "$CLAUDE_DIR"
+  [ "$status" -ne 0 ]
+  ! echo "$output" | grep -q "ON --"
+}
+
 @test "missing settings.json is a hard error for on/off/status" {
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
   [ "$status" -ne 0 ]
