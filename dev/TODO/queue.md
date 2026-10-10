@@ -27,3 +27,4 @@ reprioritize.
 - [T20261009-283022](T20261009-283022-rename-incept-to-iterate.md): Rename /incept to /iterate
 - [T20261010-736699](T20261010-736699-agent-pairing-dispatcher-skill.md): New `/agent-pairing on|off|status` skill — toggle a dispatcher main-session agent
 - [T20261010-143331](T20261010-143331-rebase-stale-branches-after-main-rewrite.md): Rebase stale branches onto rewritten main and close them
+- [T20261010-274793](T20261010-274793-cross-repo-rule-in-guidelines.md): Add the cross-repo rule to the conventions layer and guidelines
