@@ -164,17 +164,32 @@ claimed_role: interactive
          actually came from — without pinning, `mode.sh` would read
          `CURRENT` from that freshly-created file instead of the
          snapshotted one, defeating the whole point of snapshotting
-         early. Pinning makes this a true convergence no-op: `mode.sh`
-         re-checks the *same* file the snapshot read, sees its own
-         resolved arg matches what it detects there (`mode.sh:70-73`),
-         and makes no GitHub API call.
+         early. Pinning makes this a true convergence no-op *when live
+         state agrees*: `mode.sh` re-checks the *same* file the snapshot
+         read, and — per `mode.sh:81-98`'s own live-state verification
+         (see the `## Closed`-referenced T20261010-129025 fix above) —
+         also confirms live GitHub branch-protection state actually
+         matches before exiting 0 (`mode.sh:95-97`). This makes **one
+         read-only GET** (`mode.sh:87`) but no *mutating* PUT/DELETE call
+         when live state and the resolved arg agree; if they disagree, it
+         falls through to the real apply path instead of a false no-op —
+         exactly the behavior T20261010-129025 added everywhere else
+         `mode.sh` is called, including here.
        - `none` snapshotted (neither doc had the section at snapshot
          time) → default to `team`, **no `--doc` override** (let `mode.sh`
          resolve naturally — there is no snapshotted doc to pin to). In
          the common case this is the genuinely-fresh-repo path: step 4's
-         `sync` creates a team-worded `guidelines.md`, `mode.sh` resolves
-         to it naturally, and `mode.sh team` no-ops against it. In the
-         **rare edge case** — `guidelines.md` exists, is non-empty, but
+         `sync` creates a team-worded `guidelines.md`; `mode.sh` resolves
+         to it naturally, and — since T20261010-129025 — verifies live
+         state before any no-op. On a repo where protection was never
+         actually enabled (the realistic first-time-onboarding case),
+         live state disagrees with the freshly-seeded doc text, so
+         `mode.sh team` now correctly falls through and makes the real
+         `PUT` call (gated by the CI-presence check, `mode.sh:104-110`,
+         and the confirmation prompt, `mode.sh:112-124`, as always) —
+         this is the scenario T20261010-129025 exists to fix; it is no
+         longer a silent no-op. In the **rare edge case** —
+         `guidelines.md` exists, is non-empty, but
          simply lacks the section (so step 4's `sync`, which only fires
          on missing/empty, doesn't touch it, and `check`'s own lint list,
          `SKILL.md:121-128`, doesn't flag it either) — `mode.sh team`
@@ -268,7 +283,9 @@ a 5.
 - [ ] Manual dry run: `/repo-conventions setup` against this repo
   (ccxp-skills itself, already onboarded) — zero unwanted changes
   (CLAUDE.md/guidelines.md already clean, `queue.md` already present, no
-  `.env.tpl`, already in `team` policy so `mode.sh` no-ops).
+  `.env.tpl`, already in `team` policy with live protection actually
+  enabled, so `mode.sh`'s live-state-verified no-op holds — no mutating
+  call).
 - [ ] Manual dry run in a throwaway scratch repo with no `CLAUDE.md`:
   `/repo-conventions setup` stops at step 2 and tells the user to run
   `/init` first (mirrors `/spinup`'s own original dry-run coverage).
@@ -276,18 +293,25 @@ a 5.
   manual dry run on a throwaway repo already in **solo** policy (has a
   `## Branch and Merge Policy` section with the solo wording in
   `dev/guidelines.md`) — a bare `/repo-conventions setup` with no arg
-  must leave it in `solo` and make **no** GitHub branch-protection API
-  call, confirming steps 3/7's default-resolution preserves existing
-  policy instead of flipping it to `team`.
-- [ ] Companion case: a genuinely fresh throwaway repo (`CLAUDE.md`
-  present with no Branch and Merge Policy section, `guidelines.md`
-  missing entirely) — step 3 snapshots `none`, step 4's `sync` seeds the
-  team-worded section from
+  must leave it in `solo` and make **no mutating** GitHub
+  branch-protection API call (a read-only live-state GET is expected,
+  per `mode.sh:87`), confirming steps 3/7's default-resolution preserves
+  existing policy instead of flipping it to `team`.
+- [ ] **Companion case (revised post-T20261010-129025):** a genuinely
+  fresh throwaway repo (`CLAUDE.md` present with no Branch and Merge
+  Policy section, `guidelines.md` missing entirely, and live GitHub
+  branch protection genuinely **not** enabled) — step 3 snapshots `none`,
+  step 4's `sync` seeds the team-worded section from
   `repo-conventions/templates/guidelines.md:11-20`, and step 7 applies
-  the snapshotted `team` default, so `mode.sh` no-ops against the
-  freshly-seeded text — confirms the realistic path to a "team" outcome
-  on a fresh repo, not the originally-assumed-but-unreachable "no section
-  found at step 7 → default team" branch.
+  the snapshotted `team` default. `mode.sh` resolves to the freshly-seeded
+  doc, but its live-state check (`mode.sh:81-98`) finds protection is NOT
+  actually enabled — so it does **not** no-op; it falls through to the
+  real apply path and makes a genuine `PUT` call, gated by the CI-presence
+  check and confirmation prompt as normal. (Earlier revisions of this
+  design — before T20261010-129025 fixed `mode.sh` — assumed this case
+  was a doc-text-only no-op; that was the exact bug T20261010-129025
+  closes. This test now confirms the *correct* outcome: a real apply, not
+  a false no-op.)
 - [ ] **Edge case (PR #286 review finding, round 2):** a throwaway repo
   with a non-empty `guidelines.md` that lacks the `## Branch and Merge
   Policy` section specifically (so step 3 snapshots `none`, and step 4's
@@ -302,8 +326,9 @@ a 5.
   `dev/guidelines.md` at all — step 3 must snapshot `solo` + doc path
   `CLAUDE.md` *before* step 4's `sync` creates a fresh team-worded
   `dev/guidelines.md`; step 7 must then invoke `mode.sh solo --doc
-  CLAUDE.md`, leaving the repo in `solo` with no GitHub API call, even
-  though `dev/guidelines.md` now exists and reads "team". Explicitly
+  CLAUDE.md`, leaving the repo in `solo` with no mutating GitHub API call
+  (live state there genuinely agrees — a read-only GET still happens),
+  even though `dev/guidelines.md` now exists and reads "team". Explicitly
   confirm `mode.sh` is invoked **with** `--doc CLAUDE.md` in this case —
   round 4 found that round 3's snapshot alone (value only, no doc pin)
   wasn't sufficient: omitting `--doc` lets `mode.sh` re-resolve to the
@@ -336,7 +361,8 @@ a 5.
   test: `grep -n spinup _test-nested-invoker/SKILL.md` → no match.
 - [ ] `mode.sh` unchanged — test plan's `git diff --stat` item (above).
 - [ ] A bare `setup` on an already-solo repo preserves solo and makes no
-  GitHub API call — test plan's solo-preservation dry run (above).
+  *mutating* GitHub API call (a read-only live-state GET is expected) —
+  test plan's solo-preservation dry run (above).
 - [ ] A bare `setup` on a repo with policy documented only in `CLAUDE.md`
   (no `dev/guidelines.md` yet) preserves that policy — `mode.sh` invoked
   with an explicit `--doc CLAUDE.md` pinned from step 3's snapshot — even
