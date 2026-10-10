@@ -2,7 +2,7 @@
 name: repo-conventions
 description: Use when setting up or checking a repo against these conventions — CLAUDE.md/guidelines.md structure, dev/ TODO lifecycle, or the conventions lint
 disable-model-invocation: false
-argument-hint: "[check|sync|show|mode {solo|team}]"
+argument-hint: "[check|sync|show|setup {team|solo}]"
 ---
 
 The single source of truth for how Your Company repos structure their `CLAUDE.md`, `dev/guidelines.md`, and `dev/{TODO,PARKING,JOURNAL}/` lifecycle. Each repo's `CLAUDE.md` stays repo-specific (purpose, deps), but defers conventions here so we don't re-litigate them per repo.
@@ -12,7 +12,7 @@ The single source of truth for how Your Company repos structure their `CLAUDE.md
 - `/repo-conventions check` — lint the current repo's CLAUDE.md and guidelines.md against the rules below
 - `/repo-conventions sync` — copy missing sections from templates into the current repo (interactive — asks before overwriting)
 - `/repo-conventions show` — print the canonical rules (default if no arg)
-- `/repo-conventions mode {solo|team}` — switch the current repo's Branch and Merge Policy wording and its actual GitHub branch-protection state to match (see `mode` below)
+- `/repo-conventions setup [team|solo] [--skip-ci-check] [--yes]` — bring the current repo fully online: convention check/sync, `dev/TODO/queue.md` init, secrets bootstrap, and branch-policy convergence, all in one pass (see `setup` below)
 
 ## Canonical Rules
 
@@ -144,30 +144,139 @@ The `templates/` dir also holds the **per-task scaffolds** — `task.md` (new TO
 
 Print this skill's "Canonical Rules" section above. Useful when prepping a new repo.
 
-### `mode {solo|team}` (branch-policy switch)
+### `setup [team|solo]` (bring a repo fully online)
 
-Switches the current repo between **solo** (direct-to-`main`, no CI, no
-feature-branch PRs) and **team** (feature branch + PR + CI required) branch
-policy — both the doc wording `/claim`/`/drive`'s solo-repo detection reads,
-and the actual GitHub branch-protection state on `main`:
+Absorbs what `/spinup` used to do, plus branch-policy convergence
+(formerly the standalone `mode` verb) — one pass, cwd-scoped, no `[path]`
+argument (every other verb in this skill is cwd-only; carrying over
+`/spinup`'s `[path]` would be unused generality, since no caller ever
+passed a non-default one).
+
+```
+/repo-conventions setup [team|solo] [--skip-ci-check] [--yes]
+```
+
+The policy arg defaults to `team` only when the repo has **no** existing
+policy configured yet (a genuinely fresh repo). On an already-configured
+repo (solo or team), omitting the arg preserves the current policy
+instead of overriding it — see step 3/7 below. `solo` is still the
+explicit choice for a repo that wants it.
+
+1. Verify cwd is a git repo.
+2. If `CLAUDE.md` is missing: report that the built-in `/init` command
+   generates one first (a skill cannot invoke a built-in slash command on
+   the user's behalf), then stop — nothing else here is safe to run
+   without a `CLAUDE.md` to check conventions against.
+3. **Snapshot the current branch policy before anything below can change
+   it.** If no explicit `team|solo` arg was given, detect the repo's
+   *current* policy right now, using the same doc-resolution order and
+   heuristic `mode.sh` uses internally: `dev/guidelines.md` first if it
+   has a `## Branch and Merge Policy` section, else `CLAUDE.md`, then
+   `grep -qi "no ci"` + `grep -qi "direct.to.main"`. Store **both** the
+   result (`solo`, `team`, or `none` if neither doc has the section yet)
+   **and which file it came from** — step 7 needs both, not a
+   re-detection after step 4's `sync` has run (a freshly-`sync`-created
+   `dev/guidelines.md` would otherwise silently out-rank a legacy repo's
+   real policy living only in `CLAUDE.md`).
+4. **Repo conventions**: run `check`. One `check` run can report two
+   independent categories at once — handle each on its own terms, don't
+   treat "all-clean" as a loop condition to chase:
+   - `CLAUDE.md` present but empty, or `guidelines.md` missing or empty
+     (step 2 already stopped the workflow if `CLAUDE.md` were missing
+     outright, so that half of this condition can't recur here): run
+     `sync` — it already diffs and asks before overwriting a non-empty
+     file. Re-run `check` afterward to confirm *this category* cleared; a
+     report on the next bullet's category is expected and not a reason to
+     retry `sync` again.
+   - Everything else `check` reports (task-frontmatter schema, unlinked
+     `T<id>`/`#N` references, etc.): `sync` doesn't touch these. Report
+     them to the user as-is — file paths plus whatever fix command
+     `check`'s own output names (e.g. `lint_refs.py --fix`) — and stop
+     there; this category is outside `setup`'s fix surface by design, not
+     an unfinished loop.
+5. **Queue init**: if `dev/TODO/*.md` files exist but `dev/TODO/queue.md`
+   is missing, dispatch `/todo sweep` to initialize it. Conditional, not
+   unconditional — mirrors the `.env.tpl`-presence-gated pattern in the
+   next step.
+6. **Secrets bootstrap**: independent of step 4's outcome — run this
+   regardless of whether step 4 found or fixed anything. If `.env.tpl`
+   exists, dispatch `/1password-env-setup`. Otherwise skip — most repos
+   don't use the 1Password-backed secrets flow, and "skip" here means
+   don't interrupt mid-flow to announce it, not omit it from step 8's
+   summary. Note: `1password-env-setup` replaces a non-identical
+   `.envrc` with no confirmation prompt (only a byte-identical file is
+   left alone) — it does not ask before overwriting, despite the name.
+   `1password-env-setup`'s own description gates on "the user explicitly
+   asks" — here, the explicit ask is `setup` itself; a user asking to
+   bring a repo fully online subsumes its setup sub-steps, the same
+   precedent `/drive` already sets dispatching `/address-pr`/`/gcpr`
+   without a separate per-call ask.
+7. **Apply branch policy**, using step 3's snapshot:
+   - An explicit `setup team` or `setup solo` arg always wins — use it,
+     ignoring the snapshot.
+   - Otherwise, use step 3's snapshot:
+     - `solo` or `team` snapshotted (from doc `<snapshotted-doc>`) →
+       default to that value, and pass `--doc <snapshotted-doc>`
+       explicitly: `bash ../repo-conventions/scripts/mode.sh <resolved>
+       --doc <snapshotted-doc> [--skip-ci-check] [--yes]`. The explicit
+       `--doc` is required, not cosmetic — `mode.sh` always re-resolves
+       its own target doc when `--doc` is omitted, `dev/guidelines.md`
+       first, and by the time step 7 runs, step 4's `sync` may have
+       created a *new* `dev/guidelines.md` that would out-rank the
+       `CLAUDE.md` the snapshot actually came from. Pinning makes this a
+       true convergence no-op: `mode.sh` re-checks the exact file the
+       snapshot read, and verifies live GitHub branch-protection state
+       actually agrees before exiting as a no-op — one read-only GET, no
+       mutating call, when live state and the resolved arg agree; if
+       they disagree, it falls through to the real apply path instead of
+       a false no-op.
+     - `none` snapshotted (neither doc had the section at snapshot time)
+       → default to `team`, no `--doc` override (let `mode.sh` resolve
+       naturally). In the common case — a genuinely fresh repo — step 4's
+       `sync` creates a team-worded `guidelines.md`; `mode.sh` resolves
+       to it and verifies live state before any no-op. On a repo where
+       protection was never actually enabled, live state disagrees with
+       the freshly-seeded text, so `mode.sh team` correctly falls through
+       and makes the real `PUT` call, gated by the normal CI-presence
+       check and confirmation prompt. **Rare edge case**: `guidelines.md`
+       exists, is non-empty, but simply lacks the section (so step 4's
+       `sync`, which only fires on missing/empty, doesn't touch it, and
+       `check`'s own lint list doesn't flag it either) — `mode.sh team`
+       hard-errors with its existing "no section found — run
+       /repo-conventions sync first" message; `setup` reports this as an
+       open item in step 8, same as any other out-of-scope `check`
+       finding, rather than treating it as a `setup` failure. Teaching
+       `mode.sh` to *create* a missing section is a pre-existing gap, out
+       of scope here.
+   - **Known accepted residual**: when the snapshot pins `CLAUDE.md`
+     (legacy repo, no pre-existing `dev/guidelines.md`) and step 4's
+     `sync` creates a fresh `dev/guidelines.md` from the generic
+     team-worded template, the repo ends up with two policy docs that
+     disagree in wording — `CLAUDE.md` correctly says `solo`;
+     `dev/guidelines.md` says `team`, unused by this run because of the
+     `--doc` pin. Documentation-consistency side-effect, not a safety
+     issue — no unwanted mutation occurs — accepted rather than solved
+     here, same spirit as the `mode.sh` section-creation gap above.
+8. Report a summary: what was checked/fixed/applied; what's still open
+   and why (user declined an overwrite, or it's outside `setup`'s fix
+   surface per step 4). Point at `/skill-conventions` +
+   `superpowers:writing-skills` for anything that needs a brand-new skill
+   authored — `setup` never authors skills itself.
+
+Idempotent — re-running on an already-onboarded repo is a no-op at every
+step: `check`/`sync` clean, `queue.md` already present, no `.env.tpl`,
+`mode.sh` already in the snapshotted policy (live-state-verified, so only
+a read-only GET happens, no mutation).
+
+`repo-conventions/scripts/mode.sh` itself is unchanged by `setup` — same
+CI-presence hard-refuse, same confirm-unless-`--yes` gate, same
+live-state-verified no-op. `setup` only resolves which policy arg and
+`--doc` to pass it, per step 7 above, and forwards `--skip-ci-check`/
+`--yes` straight through:
 
 ```bash
 bash ../repo-conventions/scripts/mode.sh <solo|team> [--repo OWNER/NAME] [--doc PATH] [--skip-ci-check] [--yes]
 ```
-
-- Rewrites the target repo's `## Branch and Merge Policy` section
-  (`dev/guidelines.md`, falling back to `CLAUDE.md`) to the canonical
-  wording for the requested mode.
-- **`team`**: refuses to enable protection with no `.github/workflows/*.yml`
-  configured, unless `--skip-ci-check` (for CI hosted elsewhere). Enables
-  branch protection requiring PR-based merges (`required_approving_review_count: 0`
-  by default — matches this suite's auto-merge tier; raise it later via
-  GitHub directly for the wait-for-approval tier).
-- **`solo`**: disables branch protection on `main` (tolerates it already
-  being absent).
-- Already in the requested mode → no-op (no doc rewrite, no API call).
-- Mutates live repo security settings — asks for confirmation unless
-  `--yes` (required for non-interactive/unattended use).
 
 ## Pointing a repo at this skill
 
