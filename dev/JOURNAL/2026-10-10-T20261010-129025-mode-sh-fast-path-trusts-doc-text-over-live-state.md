@@ -167,3 +167,33 @@ claimed_role:
   inspection (`git diff` on `mode.sh`), confirmed by the new live-state
   test cases actually exercising a `$REPO`-dependent API call from
   inside that branch.
+
+## Closed (2026-10-10)
+
+- Shipped in **[PR #288](https://github.com/Synx-Data-Labs/ccxp-skills/pull/288)**. Claim + stage landed in **[PR #287](https://github.com/Synx-Data-Labs/ccxp-skills/pull/287)**.
+- All three Done criteria met — see checked boxes above.
+- Quality probe recorded: `shellcheck` clean (0 errors/warnings/info/style),
+  `design_score=83`. Two non-blocking WARNINGs (`max_fn_lines` +3,
+  `file_loc` +213) from the probe's trailing metrics — expected growth
+  from adding the live-state check + 2 new/updated BATS cases; record+warn
+  only, not a gate (`dev/quality/metrics.jsonl`).
+- Nothing external/unverified remains. No follow-up tasks filed —
+  T20261009-154870 (the blocked goal-task) resumes now that this is
+  fixed, that's the only consumer.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes — confirmed red (3 new
+  BATS cases failing against the pre-fix script) before implementing,
+  green after (17/17, including all 14 original cases unaffected).
+- Verification (`superpowers:verification-before-completion`): yes — full
+  repo-wide `bats tests/*.bats` (841 cases, zero regressions) +
+  `shellcheck` (clean) before declaring done.
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't
+  get stuck; the fix was fully specified by the maintainer.
+- Receiving code review (`superpowers:receiving-code-review`): n/a at
+  design time — this task's own design was maintainer-specified in
+  conversation (exact fix given directly), not independently grilled;
+  the surrounding PR #286 design review process is what surfaced this
+  bug in the first place (see that task's own Skills-invoked block for
+  its 5-round review history).
