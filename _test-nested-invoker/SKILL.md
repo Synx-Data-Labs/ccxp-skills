@@ -9,7 +9,7 @@ Regression coverage for T20260922-409644's empirical question (see
 `_test-nested-target/SKILL.md` for the full rationale). This skill's only
 job is to invoke `_test-nested-target` right now, as the next step in this
 workflow — exactly the pattern `/todo sweep` uses to invoke `/top`, or
-`/spinup` uses to invoke `/1password-env-setup`.
+`/repo-conventions setup` uses to invoke `/1password-env-setup`.
 
 ## Workflow
 
