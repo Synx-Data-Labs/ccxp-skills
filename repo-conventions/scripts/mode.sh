@@ -67,18 +67,38 @@ else
   CURRENT=team
 fi
 
-if [ "$CURRENT" = "$MODE" ]; then
-  echo "mode.sh: already in $MODE mode ($DOC unchanged)"
-  exit 0
-fi
-
-# --- resolve repo slug ---------------------------------------------------------
+# --- resolve repo slug (moved earlier than the historical position: the
+# live-state check just below, and the normal apply path further down, both
+# need it) --------------------------------------------------------------------
 if [ -z "$REPO" ]; then
   REPO="$(bash "$GH_SH" repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)"
 fi
 if [ -z "$REPO" ]; then
   echo "mode.sh: could not determine repo. Pass --repo OWNER/NAME or run from inside a gh-recognized repo." >&2
   exit 1
+fi
+
+if [ "$CURRENT" = "$MODE" ]; then
+  # The doc-text heuristic says this is a no-op candidate — but doc text can
+  # lie: a freshly `/repo-conventions sync`-templated doc reads "team" the
+  # instant it's created, even though GitHub branch protection was never
+  # actually applied (the doc-text-as-proxy-for-live-state gap this check
+  # closes). Verify against live GitHub state before trusting the text.
+  if LIVE_OUT=$(bash "$GH_SH" api "repos/$REPO/branches/main/protection" 2>&1); then
+    LIVE=team
+  elif echo "$LIVE_OUT" | grep -qiE "404|not found|not protected"; then
+    LIVE=solo
+  else
+    echo "mode.sh: could not verify live branch-protection state on $REPO: $LIVE_OUT" >&2
+    exit 1
+  fi
+  if [ "$LIVE" = "$MODE" ]; then
+    echo "mode.sh: already in $MODE mode ($DOC unchanged, verified live)"
+    exit 0
+  fi
+  # Doc text and live state disagree (live state is the truth) — fall
+  # through to the normal apply path below, exactly as if the text
+  # heuristic had correctly detected a mismatch in the first place.
 fi
 
 # --- team: verify CI is plausibly configured before enabling protection -----
