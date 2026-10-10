@@ -1,8 +1,10 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-10-12
 estimation: 2
 source: this conversation, 2026-10-10
+claimed_by: cc1-50ac6891:ccfce931e6835f9b
+claimed_role: interactive
 ---
 
 # T20261010-736699: New `/agent-pairing on|off|status` skill — toggle a dispatcher main-session agent
