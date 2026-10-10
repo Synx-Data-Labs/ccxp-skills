@@ -219,7 +219,19 @@ claimed_role: interactive
     step-7 time and land on the same freshly-`sync`-created
     `guidelines.md` round 3 was guarding against, defeating the snapshot
     — fixed by also snapshotting *which file* the value came from and
-    passing `--doc <that-file>` explicitly at step 7.
+    passing `--doc <that-file>` explicitly at step 7; round 5 — even with
+    the `--doc` pin, `mode.sh`'s own no-op fast path trusted doc text
+    without ever checking live GitHub state, so on a genuinely fresh
+    repo (`none` snapshotted, the common case) `setup team` left the doc
+    correctly worded while never actually calling the branch-protection
+    API — a pre-existing gap in `mode.sh` itself (exposed, not caused, by
+    this design), fixed upstream in **`mode.sh`** by
+    **[T20261010-129025](../JOURNAL/2026-10-10-T20261010-129025-mode-sh-fast-path-trusts-doc-text-over-live-state.md)**
+    (merged in [PR #288](https://github.com/Synx-Data-Labs/ccxp-skills/pull/288)) — `mode.sh` now verifies live
+    branch-protection state before trusting a text-match no-op, for
+    every caller, not just `setup`. No further change needed here: steps
+    3/7 above call `mode.sh` exactly as designed; they now inherit the
+    fix for free.
 - **Delete `spinup/SKILL.md` entirely.** Update cross-references:
   - `README.md` — drop the `spinup` row, update the `repo-conventions` row
     to mention `setup`.
