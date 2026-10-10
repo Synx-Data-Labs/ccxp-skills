@@ -408,7 +408,7 @@ a 5.
 
 ## Closed (2026-10-10)
 
-- Shipped in **PR #PENDING**. Design landed in **[PR #286](https://github.com/Synx-Data-Labs/ccxp-skills/pull/286)** (6 independent review rounds). Claim landed in **[PR #285](https://github.com/Synx-Data-Labs/ccxp-skills/pull/285)**.
+- Shipped in **[PR #289](https://github.com/Synx-Data-Labs/ccxp-skills/pull/289)**. Design landed in **[PR #286](https://github.com/Synx-Data-Labs/ccxp-skills/pull/286)** (6 independent review rounds). Claim landed in **[PR #285](https://github.com/Synx-Data-Labs/ccxp-skills/pull/285)**.
 - All Done criteria met — see checked boxes above, each with its
   verification inline.
 - **Follow-up task filed and merged separately**: T20261010-129025
