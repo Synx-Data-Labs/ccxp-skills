@@ -1,8 +1,10 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 source: split off a larger "App-auth merge workflow" task (2026-09-23); the org-specific rollout moved out of this repo
 owner: Xin Zhang (Shine)
+claimed_by: cc1-50ac6891:9a6d77f112deefec
+claimed_role: interactive
 ---
 
 # T20260923-343482: Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
