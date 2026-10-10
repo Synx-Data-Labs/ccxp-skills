@@ -207,6 +207,56 @@ STUB
   ! grep -q "DELETE" "$CALLS"
 }
 
+@test "doc says solo but live state is STILL protected: false no-op is caught, DELETE applies" {
+  # T20261010-129025 round-2 review finding: the symmetric mismatch case
+  # (solo doc text, but a live GET succeeds -- meaning still protected)
+  # must also fall through to the real apply path, not just the
+  # team-doc/unprotected direction the first pass tested.
+  mk_gh_stub
+  mk_solo_doc
+  run env GH_SH="$GH_STUB" bash "$MODE_SH" solo --repo test-org/test-repo --yes
+  [ "$status" -eq 0 ]
+  grep -q "DELETE" "$CALLS"
+  grep -q "branches/main/protection" "$CALLS"
+}
+
+@test "live-state check fails with a non-404 error inside the fast path: hard error, no mutation" {
+  # T20261010-129025 round-2 review finding: an ambiguous GET failure
+  # (auth, rate limit, network) must never be silently treated as
+  # "unprotected" -- that would risk an unwanted mutation. It must hard
+  # error instead.
+  cat > "$GH_STUB" <<STUB
+#!/usr/bin/env bash
+{
+  echo "ARGS: \$*"
+  if [ ! -t 0 ]; then
+    echo "STDIN:"
+    cat
+  fi
+  echo "---"
+} >> "$CALLS"
+if [[ "\$*" == *"repo view"* ]]; then
+  echo "test-org/test-repo"
+  exit 0
+fi
+if [[ "\$*" == *"branches/main/protection"* ]] && [[ "\$*" != *"-X"* ]]; then
+  echo "gh: HTTP 403: Forbidden" >&2
+  exit 1
+fi
+exit 0
+STUB
+  chmod +x "$GH_STUB"
+  mk_team_doc
+  mkdir -p "$WORK/.github/workflows"
+  touch "$WORK/.github/workflows/ci.yml"
+  before="$(cat "$WORK/dev/guidelines.md")"
+  run env GH_SH="$GH_STUB" bash "$MODE_SH" team --repo test-org/test-repo --yes
+  [ "$status" -ne 0 ]
+  [ "$(cat "$WORK/dev/guidelines.md")" = "$before" ]
+  ! grep -q "PUT" "$CALLS"
+  ! grep -q "DELETE" "$CALLS"
+}
+
 @test "prefers dev/guidelines.md over CLAUDE.md when both have a Policy heading" {
   mk_gh_stub
   mk_team_doc

@@ -137,8 +137,9 @@ claimed_role:
   clean baseline.
 - [x] `bats tests/mode.bats` — all original 15 tests still pass unchanged
   (verifies the fix preserves existing idempotency behavior for the
-  common already-correct case). Verified: 17/17 green post-fix (14
-  original unaffected + 1 updated no-op test + 2 new).
+  common already-correct case). Verified: 19/19 green post-fix (14
+  original unaffected + 1 updated no-op test + 4 new — the initial 3 plus
+  2 more added from PR #288's own independent review, see below).
 - [x] New case: doc says `team`, live state already protected (GET
   returns 200) → no-op preserved (no PUT/DELETE call), doc unchanged.
   Verified green.
@@ -148,6 +149,12 @@ claimed_role:
   the API call happens). Verified green.
 - [x] New case: doc says `solo`, live state already unprotected (GET 404)
   → no-op preserved, no DELETE call. Verified green.
+- [x] **Added post-implementation (PR #288 independent review):** the
+  symmetric mismatch case — doc says `solo`, live GET succeeds (still
+  protected) → falls through to DELETE. Verified green.
+- [x] **Added post-implementation (PR #288 independent review):** an
+  ambiguous, non-404 GET failure (e.g. 403) inside the fast path → hard
+  error, no PUT/DELETE, doc untouched. Verified green.
 - [x] Full repo-wide `bats tests/*.bats` run (841 cases) — zero
   regressions, exit code 0.
 - [ ] Manual verification against the real GitHub API is out of scope —
@@ -159,9 +166,9 @@ claimed_role:
 ## Done criteria
 
 - [x] `mode.sh`'s fast path verifies live state before a no-op exit —
-  test: the 3 new BATS cases above (all green).
+  test: the 4 new BATS cases above (all green).
 - [x] All 15 pre-existing `tests/mode.bats` cases still pass unchanged —
-  test: `bats tests/mode.bats` (17/17 green, including the 14 untouched
+  test: `bats tests/mode.bats` (19/19 green, including the 14 untouched
   by this change).
 - [x] `$REPO` resolution runs before the fast-path check — test: code
   inspection (`git diff` on `mode.sh`), confirmed by the new live-state
@@ -174,26 +181,33 @@ claimed_role:
 - All three Done criteria met — see checked boxes above.
 - Quality probe recorded: `shellcheck` clean (0 errors/warnings/info/style),
   `design_score=83`. Two non-blocking WARNINGs (`max_fn_lines` +3,
-  `file_loc` +213) from the probe's trailing metrics — expected growth
-  from adding the live-state check + 2 new/updated BATS cases; record+warn
-  only, not a gate (`dev/quality/metrics.jsonl`).
+  `file_loc` +213) from the probe's trailing metrics at implementation
+  time — expected growth from adding the live-state check + new BATS
+  cases; record+warn only, not a gate (`dev/quality/metrics.jsonl`).
+- Independent review on PR #288 found a real test-coverage gap (the
+  symmetric solo/still-protected mismatch, and an ambiguous non-404 GET
+  failure inside the fast path) — both added as BATS cases post-review;
+  19/19 green. The review confirmed the core fix logic, ordering, and
+  safety properties (confirm gate, CI check, API-before-doc-rewrite) were
+  all correct as implemented — see PR #288 comments for the full report.
 - Nothing external/unverified remains. No follow-up tasks filed —
   T20261009-154870 (the blocked goal-task) resumes now that this is
   fixed, that's the only consumer.
 
 ## Skills invoked
 
-- TDD (`superpowers:test-driven-development`): yes — confirmed red (3 new
+- TDD (`superpowers:test-driven-development`): yes — confirmed red (3
   BATS cases failing against the pre-fix script) before implementing,
-  green after (17/17, including all 14 original cases unaffected).
+  green after; 2 more cases added post-review (see below), 19/19 final.
 - Verification (`superpowers:verification-before-completion`): yes — full
   repo-wide `bats tests/*.bats` (841 cases, zero regressions) +
   `shellcheck` (clean) before declaring done.
 - Systematic debugging (`superpowers:systematic-debugging`): no — didn't
   get stuck; the fix was fully specified by the maintainer.
-- Receiving code review (`superpowers:receiving-code-review`): n/a at
-  design time — this task's own design was maintainer-specified in
-  conversation (exact fix given directly), not independently grilled;
-  the surrounding PR #286 design review process is what surfaced this
-  bug in the first place (see that task's own Skills-invoked block for
-  its 5-round review history).
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  PR #288's independent review found a real test-coverage gap (not a
+  logic bug); both missing cases added, no pushback needed. (No
+  design-time grilling — this task's design was maintainer-specified in
+  conversation, exact fix given directly; the surrounding PR #286 design
+  review process is what surfaced this bug in the first place — see that
+  task's own Skills-invoked block for its 5-round review history.)
