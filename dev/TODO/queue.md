@@ -26,3 +26,4 @@ reprioritize.
 - [T20261008-636871](T20261008-636871-auto-bump-plugin-version.md): Auto-bump plugin.json version on release
 - [T20261009-154870](T20261009-154870-merge-spinup-into-repo-conventions.md): Merge /spinup into /repo-conventions, resolve the mode/setup naming collision
 - [T20261009-283022](T20261009-283022-rename-incept-to-iterate.md): Rename /incept to /iterate
+- [T20261010-736699](T20261010-736699-agent-pairing-dispatcher-skill.md): New `/agent-pairing on|off|status` skill — toggle a dispatcher main-session agent
