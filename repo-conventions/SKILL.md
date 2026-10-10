@@ -66,13 +66,14 @@ Any other top-level key is a violation. `status` must lead with a known value (O
 - **Typed `#N` refs only** — text the author already prefixed with `PR`, `pull request`, or
   `issue` (case-insensitive), e.g. `PR #250` or `issue #99`. The type is verified (and corrected
   if the author guessed wrong) via `gh api repos/<slug>/issues/<n>`.
-- **Bare, untyped `#N` is deliberately out of scope** — the corpus has real non-GitHub `#N` (a
-  street/suite number, an ordinal like "the #1 feature") that a blind resolver would corrupt, and
-  there's no reliable text-level signal that a bare `#N` is a GitHub reference at all. An
-  author-typed `PR #`/`issue #` prefix is the unambiguous signal this script requires — see
-  T20260616-130977 for the false-positive examples that ruled out resolving every bare `#N`. A
-  future task could revisit this with a stronger heuristic (e.g. requiring the number to fall in
-  GitHub's actual issue/PR range) if it proves worth the risk.
+- **Bare, untyped `#N` is deliberately out of scope**:
+  - The corpus has real non-GitHub `#N` (a street/suite number, an ordinal like "the #1
+    feature") that a blind resolver would corrupt.
+  - There's no reliable text-level signal that a bare `#N` is a GitHub reference at all — an
+    author-typed `PR #`/`issue #` prefix is the unambiguous signal this script requires (see
+    T20260616-130977 for the false-positive examples that ruled this out).
+  - A future task could revisit this with a stronger heuristic (e.g. requiring the number to
+    fall in GitHub's actual issue/PR range) if it proves worth the risk.
 - A reference that can't be resolved (cross-repo T-id, `gh` failure) is left bare rather than
   guessed at.
 - **Auto-fix only** — `lint_refs.py --fix` (wired into `/gcpr`'s doc-lint guard) rewrites files in
@@ -94,13 +95,14 @@ reach a public repo (T20260919-231319) — two independent signal classes:
   the same env-var-config-not-committed-data posture as `lint_refs.py`'s `KNOWN_SIBLING_REPOS`
   above — this is what keeps the check itself company-agnostic.
 
-`--all` defaults to `dev/TODO/*.md` + `dev/JOURNAL/*.md` (same `lint_refs.py`-style scope) — a
-whole-repo scan is available but not the CI-wired default; it produced false positives from
-illustrative example IPs and synthetic test-fixture paths elsewhere in this repo, well outside the
-task/journal-authoring channel the two real leak incidents both came through. `--fix` substitutes
-any denylist hit that carries a mapped placeholder; a hit with no mapping (or any structural hit)
-still fails even under `--fix` — nothing safe to substitute — which is what gives `/migrate-task`
-(see that skill) its genericize-or-refuse behavior on its `--dry-run` staged copy.
+- `--all` defaults to `dev/TODO/*.md` + `dev/JOURNAL/*.md` (same `lint_refs.py`-style scope) —
+  a whole-repo scan is available but not the CI-wired default; it produced false positives from
+  illustrative example IPs and synthetic test-fixture paths elsewhere in this repo, well outside
+  the task/journal-authoring channel the two real leak incidents both came through.
+- `--fix` substitutes any denylist hit that carries a mapped placeholder; a hit with no mapping
+  (or any structural hit) still fails even under `--fix` — nothing safe to substitute — which is
+  what gives `/migrate-task` (see that skill) its genericize-or-refuse behavior on its
+  `--dry-run` staged copy.
 
 ### Authoring a skill
 
@@ -147,10 +149,9 @@ Print this skill's "Canonical Rules" section above. Useful when prepping a new r
 ### `setup [team|solo]` (bring a repo fully online)
 
 Absorbs what `/spinup` used to do, plus branch-policy convergence
-(formerly the standalone `mode` verb) — one pass, cwd-scoped, no `[path]`
-argument (every other verb in this skill is cwd-only; carrying over
-`/spinup`'s `[path]` would be unused generality, since no caller ever
-passed a non-default one).
+(formerly the standalone `mode` verb) — one pass, cwd-scoped like every
+other verb here (no `[path]` arg — `/spinup`'s was unused generality;
+no caller ever passed a non-default one).
 
 ```
 /repo-conventions setup [team|solo] [--skip-ci-check] [--yes]
@@ -168,95 +169,101 @@ explicit choice for a repo that wants it.
    the user's behalf), then stop — nothing else here is safe to run
    without a `CLAUDE.md` to check conventions against.
 3. **Snapshot the current branch policy before anything below can change
-   it.** If no explicit `team|solo` arg was given, detect the repo's
-   *current* policy right now, using the same doc-resolution order and
-   heuristic `mode.sh` uses internally: `dev/guidelines.md` first if it
-   has a `## Branch and Merge Policy` section, else `CLAUDE.md`, then
-   `grep -qi "no ci"` + `grep -qi "direct.to.main"`. Store **both** the
-   result (`solo`, `team`, or `none` if neither doc has the section yet)
-   **and which file it came from** — step 7 needs both, not a
-   re-detection after step 4's `sync` has run (a freshly-`sync`-created
-   `dev/guidelines.md` would otherwise silently out-rank a legacy repo's
-   real policy living only in `CLAUDE.md`).
-4. **Repo conventions**: run `check`. One `check` run can report two
-   independent categories at once — handle each on its own terms, don't
-   treat "all-clean" as a loop condition to chase:
-   - `CLAUDE.md` present but empty, or `guidelines.md` missing or empty
-     (step 2 already stopped the workflow if `CLAUDE.md` were missing
-     outright, so that half of this condition can't recur here): run
-     `sync` — it already diffs and asks before overwriting a non-empty
-     file. Re-run `check` afterward to confirm *this category* cleared; a
-     report on the next bullet's category is expected and not a reason to
-     retry `sync` again.
-   - Everything else `check` reports (task-frontmatter schema, unlinked
-     `T<id>`/`#N` references, etc.): `sync` doesn't touch these. Report
-     them to the user as-is — file paths plus whatever fix command
-     `check`'s own output names (e.g. `lint_refs.py --fix`) — and stop
-     there; this category is outside `setup`'s fix surface by design, not
-     an unfinished loop.
+   it.** If no explicit `team|solo` arg was given:
+   - Detect the repo's *current* policy right now, using the same
+     doc-resolution order and heuristic `mode.sh` uses internally:
+     `dev/guidelines.md` first if it has a `## Branch and Merge Policy`
+     section, else `CLAUDE.md`, then `grep -qi "no ci"` + `grep -qi
+     "direct.to.main"`.
+   - Store **both** the result (`solo`, `team`, or `none` if neither doc
+     has the section yet) **and which file it came from** — step 7 needs
+     both, not a re-detection after step 4's `sync` has run (a
+     freshly-`sync`-created `dev/guidelines.md` would otherwise silently
+     out-rank a legacy repo's real policy living only in `CLAUDE.md`).
+4. **Repo conventions**:
+   - Run `sync` unconditionally first — it already does its own per-file
+     missing-or-empty detection (see `sync` above) and only acts on
+     `CLAUDE.md`/`guidelines.md` when one qualifies, so it's a safe no-op
+     on an already-compliant repo.
+   - Don't gate this on `check`'s report: `check`'s own line/size caps
+     only catch a *missing* or *oversized* `CLAUDE.md`, not a
+     present-but-empty one — relying on `check` to decide whether to run
+     `sync` would silently miss that case.
+   - Then run `check` and report everything it finds (task-frontmatter
+     schema, unlinked `T<id>`/`#N` references, etc.) — `sync` doesn't
+     touch any of this.
+   - Report it to the user as-is: file paths plus whatever fix command
+     `check`'s own output names (e.g. `lint_refs.py --fix`). This
+     category is outside `setup`'s fix surface by design, not an
+     unfinished loop.
 5. **Queue init**: if `dev/TODO/*.md` files exist but `dev/TODO/queue.md`
    is missing, dispatch `/todo sweep` to initialize it. Conditional, not
    unconditional — mirrors the `.env.tpl`-presence-gated pattern in the
    next step.
 6. **Secrets bootstrap**: independent of step 4's outcome — run this
-   regardless of whether step 4 found or fixed anything. If `.env.tpl`
-   exists, dispatch `/1password-env-setup`. Otherwise skip — most repos
-   don't use the 1Password-backed secrets flow, and "skip" here means
-   don't interrupt mid-flow to announce it, not omit it from step 8's
-   summary. Note: `1password-env-setup` replaces a non-identical
-   `.envrc` with no confirmation prompt (only a byte-identical file is
-   left alone) — it does not ask before overwriting, despite the name.
-   `1password-env-setup`'s own description gates on "the user explicitly
-   asks" — here, the explicit ask is `setup` itself; a user asking to
-   bring a repo fully online subsumes its setup sub-steps, the same
-   precedent `/drive` already sets dispatching `/address-pr`/`/gcpr`
-   without a separate per-call ask.
+   regardless of whether step 4 found or fixed anything.
+   - If `.env.tpl` exists, dispatch `/1password-env-setup`. Otherwise
+     skip — most repos don't use the 1Password-backed secrets flow, and
+     "skip" here means don't interrupt mid-flow to announce it, not omit
+     it from step 8's summary.
+   - Note: `1password-env-setup` replaces a non-identical `.envrc` with
+     no confirmation prompt (only a byte-identical file is left alone) —
+     it does not ask before overwriting, despite the name.
+   - `1password-env-setup`'s own description gates on "the user
+     explicitly asks" — here, the explicit ask is `setup` itself; a user
+     asking to bring a repo fully online subsumes its setup sub-steps,
+     the same precedent `/drive` already sets dispatching
+     `/address-pr`/`/gcpr` without a separate per-call ask.
 7. **Apply branch policy**, using step 3's snapshot:
    - An explicit `setup team` or `setup solo` arg always wins — use it,
      ignoring the snapshot.
    - Otherwise, use step 3's snapshot:
-     - `solo` or `team` snapshotted (from doc `<snapshotted-doc>`) →
-       default to that value, and pass `--doc <snapshotted-doc>`
-       explicitly: `bash ../repo-conventions/scripts/mode.sh <resolved>
-       --doc <snapshotted-doc> [--skip-ci-check] [--yes]`. The explicit
-       `--doc` is required, not cosmetic — `mode.sh` always re-resolves
-       its own target doc when `--doc` is omitted, `dev/guidelines.md`
-       first, and by the time step 7 runs, step 4's `sync` may have
-       created a *new* `dev/guidelines.md` that would out-rank the
-       `CLAUDE.md` the snapshot actually came from. Pinning makes this a
-       true convergence no-op: `mode.sh` re-checks the exact file the
-       snapshot read, and verifies live GitHub branch-protection state
-       actually agrees before exiting as a no-op — one read-only GET, no
-       mutating call, when live state and the resolved arg agree; if
-       they disagree, it falls through to the real apply path instead of
-       a false no-op.
-     - `none` snapshotted (neither doc had the section at snapshot time)
-       → default to `team`, no `--doc` override (let `mode.sh` resolve
-       naturally). In the common case — a genuinely fresh repo — step 4's
-       `sync` creates a team-worded `guidelines.md`; `mode.sh` resolves
-       to it and verifies live state before any no-op. On a repo where
-       protection was never actually enabled, live state disagrees with
-       the freshly-seeded text, so `mode.sh team` correctly falls through
-       and makes the real `PUT` call, gated by the normal CI-presence
-       check and confirmation prompt. **Rare edge case**: `guidelines.md`
-       exists, is non-empty, but simply lacks the section (so step 4's
-       `sync`, which only fires on missing/empty, doesn't touch it, and
-       `check`'s own lint list doesn't flag it either) — `mode.sh team`
-       hard-errors with its existing "no section found — run
-       /repo-conventions sync first" message; `setup` reports this as an
-       open item in step 8, same as any other out-of-scope `check`
-       finding, rather than treating it as a `setup` failure. Teaching
-       `mode.sh` to *create* a missing section is a pre-existing gap, out
-       of scope here.
+     - **`solo` or `team` snapshotted** (from doc `<snapshotted-doc>`):
+       - Default to that value, and pass `--doc <snapshotted-doc>`
+         explicitly: `bash ../repo-conventions/scripts/mode.sh <resolved>
+         --doc <snapshotted-doc> [--skip-ci-check] [--yes]`.
+       - The explicit `--doc` is required, not cosmetic — `mode.sh`
+         always re-resolves its own target doc when `--doc` is omitted,
+         `dev/guidelines.md` first, and by the time step 7 runs, step
+         4's `sync` may have created a *new* `dev/guidelines.md` that
+         would out-rank the `CLAUDE.md` the snapshot actually came from.
+       - Pinning makes this a true convergence no-op: `mode.sh`
+         re-checks the exact file the snapshot read, and verifies live
+         GitHub branch-protection state actually agrees before exiting
+         as a no-op — one read-only GET, no mutating call, when live
+         state and the resolved arg agree; if they disagree, it falls
+         through to the real apply path instead of a false no-op.
+     - **`none` snapshotted** (neither doc had the section at snapshot
+       time): default to `team`, no `--doc` override (let `mode.sh`
+       resolve naturally).
+       - Common case — a genuinely fresh repo: step 4's `sync` creates a
+         team-worded `guidelines.md`; `mode.sh` resolves to it and
+         verifies live state before any no-op. On a repo where
+         protection was never actually enabled, live state disagrees
+         with the freshly-seeded text, so `mode.sh team` correctly falls
+         through and makes the real `PUT` call, gated by the normal
+         CI-presence check and confirmation prompt.
+       - **Rare edge case**: `guidelines.md` exists, is non-empty, but
+         simply lacks the section (so step 4's `sync`, which only fires
+         on missing/empty, doesn't touch it, and `check`'s own lint list
+         doesn't flag it either).
+         - `mode.sh team` hard-errors with its existing "no section
+           found — run /repo-conventions sync first" message.
+         - `setup` reports this as an open item in step 8, same as any
+           other out-of-scope `check` finding, rather than treating it
+           as a `setup` failure.
+         - Teaching `mode.sh` to *create* a missing section is a
+           pre-existing gap, out of scope here.
    - **Known accepted residual**: when the snapshot pins `CLAUDE.md`
      (legacy repo, no pre-existing `dev/guidelines.md`) and step 4's
      `sync` creates a fresh `dev/guidelines.md` from the generic
      team-worded template, the repo ends up with two policy docs that
-     disagree in wording — `CLAUDE.md` correctly says `solo`;
-     `dev/guidelines.md` says `team`, unused by this run because of the
-     `--doc` pin. Documentation-consistency side-effect, not a safety
-     issue — no unwanted mutation occurs — accepted rather than solved
-     here, same spirit as the `mode.sh` section-creation gap above.
+     disagree in wording:
+     - `CLAUDE.md` correctly says `solo`; `dev/guidelines.md` says
+       `team`, unused by this run because of the `--doc` pin.
+     - Documentation-consistency side-effect, not a safety issue — no
+       unwanted mutation occurs — accepted rather than solved here, same
+       spirit as the `mode.sh` section-creation gap above.
 8. Report a summary: what was checked/fixed/applied; what's still open
    and why (user declined an overwrite, or it's outside `setup`'s fix
    surface per step 4). Point at `/skill-conventions` +
@@ -264,15 +271,13 @@ explicit choice for a repo that wants it.
    authored — `setup` never authors skills itself.
 
 Idempotent — re-running on an already-onboarded repo is a no-op at every
-step: `check`/`sync` clean, `queue.md` already present, no `.env.tpl`,
-`mode.sh` already in the snapshotted policy (live-state-verified, so only
-a read-only GET happens, no mutation).
+step (`check`/`sync` clean, `queue.md` present, no `.env.tpl`, `mode.sh`
+already in the snapshotted policy per its live-state verification).
 
-`repo-conventions/scripts/mode.sh` itself is unchanged by `setup` — same
-CI-presence hard-refuse, same confirm-unless-`--yes` gate, same
-live-state-verified no-op. `setup` only resolves which policy arg and
-`--doc` to pass it, per step 7 above, and forwards `--skip-ci-check`/
-`--yes` straight through:
+`mode.sh` itself is unchanged by `setup` — same CI-presence hard-refuse,
+confirm-unless-`--yes` gate, and live-state-verified no-op as always.
+`setup` only resolves which policy arg and `--doc` to pass it (step 7
+above) and forwards `--skip-ci-check`/`--yes` straight through:
 
 ```bash
 bash ../repo-conventions/scripts/mode.sh <solo|team> [--repo OWNER/NAME] [--doc PATH] [--skip-ci-check] [--yes]
