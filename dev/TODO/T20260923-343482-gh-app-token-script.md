@@ -1,7 +1,8 @@
 ---
-status: In Progress
+status: Design
 estimation: 2
 source: split off a larger "App-auth merge workflow" task (2026-09-23); the org-specific rollout moved out of this repo
+related: _gh/ci-triage.sh (pattern model)
 owner: Xin Zhang (Shine)
 claimed_by: cc1-50ac6891:9a6d77f112deefec
 claimed_role: interactive
@@ -9,27 +10,62 @@ claimed_role: interactive
 
 # T20260923-343482: Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
 
+## TLDR
+
+- **Type**: feature
+- **Problem**: no shared helper mints a GitHub App installation token; every caller would re-implement JWT signing and the token exchange.
+- **Solution**: one generic, sourceable `_gh/gh-app-token.sh` that prints a repo-scoped installation token; credentials come from the caller, nothing is hardcoded.
+
 ## Problem
 
-- Some workflows need a GitHub identity distinct from the human `gh` account — e.g. a bot that submits a formal PR approval or arms auto-merge.
-- A GitHub App is the right primitive (short-lived, repo-scoped tokens, minimal permissions), but no helper here mints an installation token.
-  - Callers would each re-implement JWT signing and the token exchange.
+- Some workflows need a GitHub identity distinct from the human `gh` account (a bot that submits a formal PR approval or arms auto-merge).
+- A GitHub App is the right primitive (short-lived, repo-scoped, minimal permissions), but `_gh/` holds only `gh.sh`, `git.sh`, `ci-triage.sh` (verified: `ls _gh`).
+  - Callers would each re-implement RS256 JWT signing and the two-call token exchange.
 
-## Design
+## Context
 
-- **New**: `_gh/gh-app-token.sh` — a generic helper that mints a short-lived installation token for a GitHub App and prints it to stdout.
-  - Inputs: App ID, private key, and the target repo (to scope the token).
-  - Credential source is the caller's choice (env vars, a secret manager CLI); the script does not hardcode any.
-  - Flow: sign an RS256 JWT with the private key, look up the repo's installation, exchange for an installation token.
-- Follows the repo script standards (`dev/guidelines.md`): function-wrapped, sourceable, idempotent, `set -euo pipefail`.
-- Out of scope: any change to `address-pr` merge behavior or branch protection — consumers wire the token in themselves.
+- Closest model: `_gh/ci-triage.sh` — sourceable, `BASH_SOURCE`-guarded CLI, and a DI seam env var (`CI_TRIAGE_GH`) that `tests/ci-triage.bats` stubs.
+- `_gh/gh.sh:35` uses `set -uo pipefail` (no `-e`, since it is sourced); the new script follows the repo standard `set -euo pipefail` per `dev/guidelines.md` but only when executed directly.
+- The company-specific half (bot identity, secret-manager lookup, merge wiring) lives in another repo; this script stays company-neutral.
+- GitHub API (assumed from public docs, not re-verified here): `GET /repos/{owner}/{repo}/installation` with the JWT, then `POST /app/installations/{id}/access_tokens` with `{"repositories":["<name>"]}`.
+
+## Solution
+
+- **New** `_gh/gh-app-token.sh`, functions prefixed `gh_app_token_`; CLI `gh-app-token.sh [--app-id ID] [--key-file PATH] [--repo OWNER/REPO]` prints the token on stdout and nothing else.
+  - Inputs fall back to env: `GH_APP_ID`, `GH_APP_PRIVATE_KEY` (PEM contents) or `GH_APP_PRIVATE_KEY_FILE`, `GH_APP_REPO`.
+  - The caller sources credentials however it likes (env, a secret-manager CLI); the script names no provider.
+- Flow: build the JWT (header `{"alg":"RS256","typ":"JWT"}`, claims `iat=now-60`, `exp=now+540`, `iss=<app id>`), sign with `openssl dgst -sha256 -sign`, base64url-encode; look up the installation; exchange for a token scoped to the one repo.
+- Failure: missing input, missing `openssl`/`curl`/`jq`, HTTP error, or a response with no `token` gives a stderr message and a non-zero exit with empty stdout. A PEM passed by content is written only to a `mktemp` file removed by a trap.
+- DI seams for tests: `GH_APP_TOKEN_CURL`, `GH_APP_TOKEN_OPENSSL` (default `curl`/`openssl`), `GH_APP_TOKEN_API` (default `https://api.github.com`), `GH_APP_TOKEN_NOW` (epoch override).
+- Alternatives rejected:
+  - Use `gh api` with the JWT: `gh.sh` injects a human account's token, which clashes with the JWT bearer header.
+  - Depend on a third-party action or CLI to mint: adds a dependency and does not work outside CI.
+  - Cache the token: tokens live one hour and callers mint rarely; caching adds state for no gain.
+- Out of scope: any change to `address-pr` merge behavior or branch protection.
 
 ## Test plan
 
-- [ ] bats coverage with `curl`/`gh` and `openssl` stubbed: JWT header/claims shape, installation lookup, token output, and non-zero exit on missing inputs or API errors.
-- [ ] Manual: mint a token for a real App + repo, then use it for a read call on a real PR via `GH_TOKEN=<token> gh pr view`.
+- [ ] bats (`tests/gh-app-token.bats`) with `curl`/`openssl` stubbed: JWT header/claims shape, installation lookup URL, request body scopes to the repo name, token printed alone on stdout.
+- [ ] bats: non-zero exit and stderr message on each missing input, HTTP error, and token-less response.
+- [ ] Manual (post-merge, needs a real App): mint a token, then `GH_TOKEN=<token> gh pr view <n>` on a real PR.
 
 ## Done criteria
 
-- [ ] `_gh/gh-app-token.sh` merged with tests.
-- [ ] Usage documented (header comment or `_gh/` docs), with no company-specific names.
+- [ ] `_gh/gh-app-token.sh` merged with tests — satisfied by `tests/gh-app-token.bats` passing in CI.
+- [ ] Usage documented with no company-specific names — satisfied by the header comment of `_gh/gh-app-token.sh`, plus a bats case in `tests/gh-app-token.bats` that greps it.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_gh/gh-app-token.sh` | new | the minter |
+| `tests/gh-app-token.bats` | new | stubbed coverage |
+| `_gh/ci-triage.sh` | 1-40 | DI-seam and sourceable pattern to follow |
+
+## Closed
+
+Written at close (Phase 7).
+
+## Skills invoked
+
+Written at close (Phase 7).
