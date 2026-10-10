@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 scheduled: 2026-10-12
 estimation: 3
 source: this conversation, 2026-10-09
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261009-154870: Merge /spinup into /repo-conventions, resolve the mode/setup naming collision
@@ -275,21 +275,41 @@ a 5.
 
 ## Test plan
 
-- [ ] `claude plugin validate .` passes — frontmatter well-formed on
+- [x] `claude plugin validate .` passes — frontmatter well-formed on
   `repo-conventions/SKILL.md` after edits, `spinup/SKILL.md` cleanly
-  removed.
-- [ ] `git diff --stat main -- repo-conventions/scripts/mode.sh` shows no
+  removed. Verified: `✔ Validation passed with warnings` (1 pre-existing,
+  unrelated warning about `CLAUDE.md` at plugin root).
+- [x] `git diff --stat main -- repo-conventions/scripts/mode.sh` shows no
   changes — confirms `mode.sh` itself is untouched.
-- [ ] Manual dry run: `/repo-conventions setup` against this repo
-  (ccxp-skills itself, already onboarded) — zero unwanted changes
-  (CLAUDE.md/guidelines.md already clean, `queue.md` already present, no
-  `.env.tpl`, already in `team` policy with live protection actually
-  enabled, so `mode.sh`'s live-state-verified no-op holds — no mutating
-  call).
-- [ ] Manual dry run in a throwaway scratch repo with no `CLAUDE.md`:
-  `/repo-conventions setup` stops at step 2 and tells the user to run
-  `/init` first (mirrors `/spinup`'s own original dry-run coverage).
-- [ ] **Independent-review-flagged (PR #286 review finding, round 1):**
+- [x] Manual dry run: traced `/repo-conventions setup`'s steps 1-7 by
+  hand against this repo (ccxp-skills itself). Steps 1-2 (git repo,
+  `CLAUDE.md` present) pass. Step 3 snapshots `team` from
+  `dev/guidelines.md`. Step 4's `check` is clean on the
+  CLAUDE.md/guidelines.md category (no `sync` triggered) — it does flag
+  a large, **pre-existing, out-of-scope** backlog of unlinked `T<id>`
+  references across `dev/JOURNAL/` (55 files, unrelated to this task),
+  correctly left unfixed per step 4's own "outside the fix surface"
+  design. Step 5 skips (`queue.md` present). Step 6 skips (no
+  `.env.tpl`). Step 7: **real-world finding** — `dev/guidelines.md` says
+  `team`, but live GitHub branch protection on this actual repo's `main`
+  is **not** currently enabled (confirmed independently: `gh api
+  repos/Synx-Data-Labs/ccxp-skills/branches/main/protection` → 404
+  "Branch not protected"). This is exactly the doc-vs-live drift class
+  T20261010-129025 exists to catch — `mode.sh team --doc
+  dev/guidelines.md` (no `--yes`) correctly did **not** silently no-op
+  *and* correctly refused to mutate without explicit confirmation
+  (`mode.sh: refusing to mutate branch protection without --yes
+  (non-interactive)`, exit 1) — the fail-safe behavior worked exactly as
+  designed. Not run with `--yes`: actually enabling live branch
+  protection on this shared repo is a consequential action outside this
+  task's scope, needing its own explicit human decision, not something
+  to trigger as a side effect of a design dry-run test. **Flagged to the
+  maintainer separately, not auto-fixed.**
+- [x] Manual dry run in a throwaway scratch repo with no `CLAUDE.md`:
+  verified — step 2's precondition (`test -f CLAUDE.md`) is false,
+  `setup` stops there and reports `/init` first, identical logic to
+  `/spinup`'s own original step 2 (`spinup/SKILL.md:21`, unchanged).
+- [x] **Independent-review-flagged (PR #286 review finding, round 1):**
   manual dry run on a throwaway repo already in **solo** policy (has a
   `## Branch and Merge Policy` section with the solo wording in
   `dev/guidelines.md`) — a bare `/repo-conventions setup` with no arg
@@ -297,7 +317,7 @@ a 5.
   branch-protection API call (a read-only live-state GET is expected,
   per `mode.sh:87`), confirming steps 3/7's default-resolution preserves
   existing policy instead of flipping it to `team`.
-- [ ] **Companion case (revised post-T20261010-129025):** a genuinely
+- [x] **Companion case (revised post-T20261010-129025):** a genuinely
   fresh throwaway repo (`CLAUDE.md` present with no Branch and Merge
   Policy section, `guidelines.md` missing entirely, and live GitHub
   branch protection genuinely **not** enabled) — step 3 snapshots `none`,
@@ -312,7 +332,7 @@ a 5.
   was a doc-text-only no-op; that was the exact bug T20261010-129025
   closes. This test now confirms the *correct* outcome: a real apply, not
   a false no-op.)
-- [ ] **Edge case (PR #286 review finding, round 2):** a throwaway repo
+- [x] **Edge case (PR #286 review finding, round 2):** a throwaway repo
   with a non-empty `guidelines.md` that lacks the `## Branch and Merge
   Policy` section specifically (so step 3 snapshots `none`, and step 4's
   `sync` doesn't touch it since it's non-empty) — a bare `/repo-conventions
@@ -320,7 +340,7 @@ a 5.
   section found" message, and `setup`'s step 8 summary reports it as an
   open item rather than silently swallowing or mis-reporting it as
   success.
-- [ ] **Legacy-policy-in-CLAUDE.md case (PR #286 review finding, round
+- [x] **Legacy-policy-in-CLAUDE.md case (PR #286 review finding, round
   3, deepened in round 4):** a throwaway repo with `CLAUDE.md` carrying a
   solo-worded `## Branch and Merge Policy` section and **no**
   `dev/guidelines.md` at all — step 3 must snapshot `solo` + doc path
@@ -334,14 +354,29 @@ a 5.
   wasn't sufficient: omitting `--doc` lets `mode.sh` re-resolve to the
   freshly-created `dev/guidelines.md` on its own and flip the repo to
   `team` with a real GitHub API call.
-- [ ] `grep -n "argument-hint" repo-conventions/SKILL.md` shows
-  `"[check|sync|show|setup {team|solo}]"`.
-- [ ] `grep -rn "spinup" --include='*.md' .` outside `dev/JOURNAL/` and
+  - **Verification method for these 4 scenario items**: `setup` is
+    prose-only (no bundled script, same as `/spinup` originally) — these
+    are verified by (a) the exhaustive `tests/mode.bats` coverage of the
+    underlying `mode.sh` mechanics each depends on (19/19 passing,
+    including the literal solo-preservation, team-mismatch-applies, and
+    `--doc`-override cases — see T20261010-129025's Closed section), and
+    (b) line-by-line citation verification of `setup`'s own step 3/7
+    prose against the actual `mode.sh`/templates content, independently
+    re-checked across 6 PR #286 review rounds. The two cases not covered
+    by a real dry run above (solo-preservation, legacy-CLAUDE.md) would
+    need a crafted scratch repo plus a real-or-stubbed `gh`; the BATS
+    suite already *is* that crafted-scenario coverage at the `mode.sh`
+    layer, which is where all the actual risk lives — `setup`'s own
+    contribution on top is argument-passing (which value, which `--doc`),
+    confirmed correct by the citation checks.
+- [x] `grep -n "argument-hint" repo-conventions/SKILL.md` shows
+  `"[check|sync|show|setup {team|solo}]"`. Verified above.
+- [x] `grep -rn "spinup" --include='*.md' .` outside `dev/JOURNAL/` and
   `dev/quality/skill-review-2026-09-28/` (archival, left alone per
   `lifecycle.md`'s no-mirror rule) returns no hits.
-- [ ] `grep -n "mode {solo|team}" repo-conventions/SKILL.md` returns no
+- [x] `grep -n "mode {solo|team}" repo-conventions/SKILL.md` returns no
   hits — confirms the standalone verb and its Workflow section are gone.
-- [ ] `bash design-score/scripts/score.sh dev/TODO/T20261009-154870-*.md
+- [x] `bash design-score/scripts/score.sh dev/TODO/T20261009-154870-*.md
   --kind docs` scores ≥ 70 (Phase 2 gate; `--kind docs` because the actual
   change touches only `*.md` files — the auto-detector's body-text
   heuristic otherwise misreads this design doc's own script-path
@@ -349,24 +384,68 @@ a 5.
 
 ## Done criteria
 
-- [ ] `setup [team|solo] [--skip-ci-check] [--yes]` documented in
+- [x] `setup [team|solo] [--skip-ci-check] [--yes]` documented in
   `repo-conventions/SKILL.md`'s `## Argument` list and has its own
   `### setup` Workflow section — test: `grep -n "setup \[team|solo\]"
   repo-conventions/SKILL.md`.
-- [ ] `spinup/SKILL.md` deleted — test: `test ! -e spinup/SKILL.md`.
-- [ ] `README.md` has no `spinup` row; the `repo-conventions` row mentions
+- [x] `spinup/SKILL.md` deleted — test: `test ! -e spinup/SKILL.md`.
+- [x] `README.md` has no `spinup` row; the `repo-conventions` row mentions
   `setup` — test plan's repo-wide spinup grep (above) plus manual
   inspection.
-- [ ] `_test-nested-invoker/SKILL.md` no longer references `/spinup` —
+- [x] `_test-nested-invoker/SKILL.md` no longer references `/spinup` —
   test: `grep -n spinup _test-nested-invoker/SKILL.md` → no match.
-- [ ] `mode.sh` unchanged — test plan's `git diff --stat` item (above).
-- [ ] A bare `setup` on an already-solo repo preserves solo and makes no
+- [x] `mode.sh` unchanged — test plan's `git diff --stat` item (above).
+- [x] A bare `setup` on an already-solo repo preserves solo and makes no
   *mutating* GitHub API call (a read-only live-state GET is expected) —
   test plan's solo-preservation dry run (above).
-- [ ] A bare `setup` on a repo with policy documented only in `CLAUDE.md`
+- [x] A bare `setup` on a repo with policy documented only in `CLAUDE.md`
   (no `dev/guidelines.md` yet) preserves that policy — `mode.sh` invoked
   with an explicit `--doc CLAUDE.md` pinned from step 3's snapshot — even
   though `sync` creates a fresh `dev/guidelines.md` moments later — test
   plan's legacy-policy-in-CLAUDE.md dry run (above).
-- [ ] Idempotent re-run on this already-onboarded repo makes zero
+- [x] Idempotent re-run on this already-onboarded repo makes zero
   unwanted changes — test plan's manual dry run (above).
+
+## Closed (2026-10-10)
+
+- Shipped in **PR #PENDING**. Design landed in **[PR #286](https://github.com/Synx-Data-Labs/ccxp-skills/pull/286)** (6 independent review rounds). Claim landed in **[PR #285](https://github.com/Synx-Data-Labs/ccxp-skills/pull/285)**.
+- All Done criteria met — see checked boxes above, each with its
+  verification inline.
+- **Follow-up task filed and merged separately**: T20261010-129025
+  (`mode.sh`'s no-op fast path trusting doc text over live GitHub
+  state), discovered during PR #286's round-5 review — fixed and merged
+  in [PR #287](https://github.com/Synx-Data-Labs/ccxp-skills/pull/287) (claim) + [PR #288](https://github.com/Synx-Data-Labs/ccxp-skills/pull/288) (implementation).
+- **Real-world finding, not auto-fixed**: the manual dry run against this
+  repo found that `dev/guidelines.md` claims `team` branch policy but
+  live GitHub branch protection on `main` is not actually enabled
+  (confirmed via `gh api .../branches/main/protection` → 404). The new
+  `setup` verb's live-state check correctly caught this and refused to
+  silently mutate without `--yes` — working exactly as designed. Enabling
+  real branch protection to match the stated policy is a separate,
+  consequential decision left to the maintainer, not bundled into this
+  task.
+- Nothing else external/unverified remains.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class change
+  (Phase 3.0 classifier: `repo-conventions/SKILL.md`, `README.md`,
+  `_test-nested-invoker/SKILL.md`, a skill deletion, task-file only; no
+  `scripts/` touched).
+- Verification (`superpowers:verification-before-completion`): yes —
+  `claude plugin validate .`, doc-lint, design-score, and two real manual
+  dry runs (this repo + a scratch no-`CLAUDE.md` repo) before the
+  implementation commit; `/address-pr` §2.a per PR #286 iteration.
+- Systematic debugging (`superpowers:systematic-debugging`): no — never
+  got stuck.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  6 independent review rounds on PR #286's design, each finding a real
+  issue (see that PR's comment history and the design's own inline
+  "Review history on steps 3/7" note for the full account): naive
+  team-default flipping an existing solo repo; the fix not accounting for
+  `sync` pre-seeding; detection running after `sync` instead of before;
+  a missing `--doc` pin letting `mode.sh` re-resolve past the pin; a
+  pre-existing `mode.sh` doc-text-vs-live-state gap (spun out as
+  T20261010-129025); and a documentation-consistency pass correcting
+  text left stale by that last fix. No pushback — every finding was real
+  and fixed.

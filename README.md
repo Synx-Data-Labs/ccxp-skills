@@ -123,9 +123,8 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `design-score` | Deterministic 0–100 structural score gating a design doc's Phase 2 → Phase 3 |
 | `quality-probe` | Measure code quality on a task's touched files, record to `dev/quality/metrics.jsonl` |
 | `journal-compact` | Compact a month of `dev/JOURNAL/` into a digest |
-| `repo-conventions` | CLAUDE.md/guidelines.md structure, `dev/` TODO lifecycle, conventions lint |
+| `repo-conventions` | CLAUDE.md/guidelines.md structure, `dev/` TODO lifecycle, conventions lint, branch-policy switch, and `setup` — bring a repo fully online in one pass |
 | `skill-conventions` | Conventions for authoring a SKILL.md in this suite |
-| `spinup` | Bring a repo online — check/fix `repo-conventions`, dispatch other setup skills (e.g. `1password-env-setup`) |
 
 ### Notification & integration
 
