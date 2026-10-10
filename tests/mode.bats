@@ -118,7 +118,9 @@ EOF
   grep -q "PUT" "$CALLS"
 }
 
-@test "requesting the mode already in effect is a no-op: no rewrite, no API call" {
+@test "requesting the mode already in effect, live state agrees: no-op, verified via a live GET, no PUT/DELETE" {
+  # Default stub answers every call (including the live-state GET below)
+  # with exit 0 — representing a real "200 protected" response.
   mk_gh_stub
   mk_team_doc
   mkdir -p "$WORK/.github/workflows"
@@ -127,7 +129,82 @@ EOF
   run env GH_SH="$GH_STUB" bash "$MODE_SH" team --repo test-org/test-repo --yes
   [ "$status" -eq 0 ]
   [ "$(cat "$WORK/dev/guidelines.md")" = "$before" ]
-  [ ! -s "$CALLS" ]
+  # the live-state verification GET happened...
+  grep -q "branches/main/protection" "$CALLS"
+  # ...but it was read-only: no mutating PUT/DELETE call
+  ! grep -q "PUT" "$CALLS"
+  ! grep -q "DELETE" "$CALLS"
+}
+
+@test "doc says team but live state is NOT protected: false no-op is caught, applies for real" {
+  # T20261010-129025: a freshly-templated doc can read 'team' before
+  # GitHub protection was ever actually enabled. The live-state GET must
+  # report 404 (unprotected) so mode.sh falls through to the real PUT,
+  # instead of trusting the doc text and exiting early.
+  cat > "$GH_STUB" <<STUB
+#!/usr/bin/env bash
+{
+  echo "ARGS: \$*"
+  if [ ! -t 0 ]; then
+    echo "STDIN:"
+    cat
+  fi
+  echo "---"
+} >> "$CALLS"
+if [[ "\$*" == *"repo view"* ]]; then
+  echo "test-org/test-repo"
+  exit 0
+fi
+if [[ "\$*" == *"branches/main/protection"* ]] && [[ "\$*" != *"-X"* ]]; then
+  # the live-state verification GET: report unprotected (404)
+  echo "gh: Branch not protected (HTTP 404: Not Found)" >&2
+  exit 1
+fi
+exit 0
+STUB
+  chmod +x "$GH_STUB"
+  mk_team_doc
+  mkdir -p "$WORK/.github/workflows"
+  touch "$WORK/.github/workflows/ci.yml"
+  run env GH_SH="$GH_STUB" bash "$MODE_SH" team --repo test-org/test-repo --yes
+  [ "$status" -eq 0 ]
+  grep -q "PUT" "$CALLS"
+  grep -q "branches/main/protection" "$CALLS"
+  grep -q '"required_approving_review_count": 0' "$CALLS"
+}
+
+@test "requesting solo already in effect, live state agrees (unprotected): no-op, no DELETE call" {
+  # The solo-side equivalent of the team no-op case above: the live-state
+  # GET itself reports 404 (unprotected), which correctly means LIVE=solo.
+  cat > "$GH_STUB" <<STUB
+#!/usr/bin/env bash
+{
+  echo "ARGS: \$*"
+  if [ ! -t 0 ]; then
+    echo "STDIN:"
+    cat
+  fi
+  echo "---"
+} >> "$CALLS"
+if [[ "\$*" == *"repo view"* ]]; then
+  echo "test-org/test-repo"
+  exit 0
+fi
+if [[ "\$*" == *"branches/main/protection"* ]] && [[ "\$*" != *"-X"* ]]; then
+  echo "gh: Branch not protected (HTTP 404: Not Found)" >&2
+  exit 1
+fi
+exit 0
+STUB
+  chmod +x "$GH_STUB"
+  mk_solo_doc
+  before="$(cat "$WORK/dev/guidelines.md")"
+  run env GH_SH="$GH_STUB" bash "$MODE_SH" solo --repo test-org/test-repo --yes
+  [ "$status" -eq 0 ]
+  [ "$(cat "$WORK/dev/guidelines.md")" = "$before" ]
+  grep -q "branches/main/protection" "$CALLS"
+  ! grep -q "PUT" "$CALLS"
+  ! grep -q "DELETE" "$CALLS"
 }
 
 @test "prefers dev/guidelines.md over CLAUDE.md when both have a Policy heading" {
