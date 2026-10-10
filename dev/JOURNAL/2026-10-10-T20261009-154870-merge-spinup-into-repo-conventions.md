@@ -424,6 +424,26 @@ a 5.
   real branch protection to match the stated policy is a separate,
   consequential decision left to the maintainer, not bundled into this
   task.
+- **PR #289 independent review found one real gap**: step 4's prose
+  claimed `check` would detect a present-but-empty `CLAUDE.md`, but
+  `lint.sh`'s cap-check only catches missing/oversized files — verified
+  empirically (an empty `CLAUDE.md` passes silently). Fixed by having
+  `setup` run `sync` unconditionally first (it already does its own
+  per-file missing-or-empty detection) rather than gating it on `check`'s
+  report — closes the gap without touching `lint.sh`'s shared behavior.
+- **CI `skill-quality` gate caught a real regression**: the new `setup`
+  content pushed `repo-conventions`'s score from baseline 95 to 85
+  (`prose_density` 0/5 — 6 paragraphs over 60 words; `size` down from
+  absorbing `/spinup` + `mode`'s combined scope). Fixed the prose issue
+  properly (nested the long paragraphs into bullets per this suite's own
+  Documentation convention, 6→0 violations, back to 5/5) and re-scored at
+  90/100. The remaining size-driven gap from the 95 baseline is inherent
+  to legitimately consolidating two skills' responsibility into one, not
+  neglect — re-locked `repo-conventions`'s baseline at 90 in
+  `dev/quality/skill-scores.json` and removed `spinup`'s now-stale
+  100-baseline entry (the skill no longer exists), rather than inflating
+  `--write-baseline`'s blast radius across ~50 unrelated skills by
+  running it unscoped.
 - Nothing else external/unverified remains.
 
 ## Skills invoked
@@ -433,19 +453,20 @@ a 5.
   `_test-nested-invoker/SKILL.md`, a skill deletion, task-file only; no
   `scripts/` touched).
 - Verification (`superpowers:verification-before-completion`): yes —
-  `claude plugin validate .`, doc-lint, design-score, and two real manual
-  dry runs (this repo + a scratch no-`CLAUDE.md` repo) before the
-  implementation commit; `/address-pr` §2.a per PR #286 iteration.
+  `claude plugin validate .`, doc-lint, design-score, skill-quality score,
+  and two real manual dry runs (this repo + a scratch no-`CLAUDE.md`
+  repo) before the implementation commit; `/address-pr` §2.a per PR #286
+  and #289 iteration.
 - Systematic debugging (`superpowers:systematic-debugging`): no — never
   got stuck.
-- Receiving code review (`superpowers:receiving-code-review`): yes —
-  6 independent review rounds on PR #286's design, each finding a real
-  issue (see that PR's comment history and the design's own inline
-  "Review history on steps 3/7" note for the full account): naive
-  team-default flipping an existing solo repo; the fix not accounting for
-  `sync` pre-seeding; detection running after `sync` instead of before;
-  a missing `--doc` pin letting `mode.sh` re-resolve past the pin; a
-  pre-existing `mode.sh` doc-text-vs-live-state gap (spun out as
-  T20261010-129025); and a documentation-consistency pass correcting
-  text left stale by that last fix. No pushback — every finding was real
-  and fixed.
+- Receiving code review (`superpowers:receiving-code-review`): yes — 6
+  independent review rounds on PR #286's design (see that PR's comment
+  history and the design's own inline "Review history on steps 3/7" note
+  for the full account: naive team-default flipping an existing solo
+  repo; the fix not accounting for `sync` pre-seeding; detection running
+  after `sync` instead of before; a missing `--doc` pin letting `mode.sh`
+  re-resolve past the pin; a pre-existing `mode.sh` doc-text-vs-live-state
+  gap spun out as T20261010-129025; a documentation-consistency pass
+  correcting text left stale by that fix) plus 1 more on PR #289's
+  implementation (the `CLAUDE.md`-empty detection gap above). No
+  pushback across either PR — every finding was real and fixed.
