@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-12
 estimation: 1
 source: PR #286 round-5 independent review, 2026-10-10
 blocks: T20261009-154870
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261010-129025: `mode.sh`'s no-op fast path trusts doc text over live GitHub state
