@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-12
 estimation: 2
 source: this conversation, 2026-10-10
-claimed_by: cc1-50ac6891:ccfce931e6835f9b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261010-736699: New `/agent-pairing on|off|status` skill — toggle a dispatcher main-session agent
@@ -61,3 +61,50 @@ claimed_role: interactive
   real `~/.claude/settings.json`-shaped fixture, BATS green, and the
   SKILL.md explains the XP-pairing framing for a teammate reading it
   cold.
+
+## Fix
+
+- Implemented per the negotiated design: `agent-pairing/SKILL.md` +
+  `agent-pairing/scripts/agent-pairing.sh` + bundled
+  `agent-pairing/assets/dispatcher.md`.
+- Self-review (no independent review agent available to this worker
+  fork — no `Agent` tool access by design) caught three real issues
+  before merge, fixed in the same PR:
+  - `write_agent_key`'s `jq` failure wasn't checked by its callers, so
+    a silently-failed write (e.g. read-only dir) still reported
+    `ON`/`OFF` as if it had succeeded.
+  - A malformed `settings.json` was silently read as "no agent set"
+    rather than refused outright.
+  - The tempfile+`mv` write dropped `settings.json` onto `mktemp`'s
+    default `0600` permissions, narrowing it from whatever it
+    originally was — that file can carry a real secret
+    (`GITHUB_TOKEN`). Fixing the permission-read itself surfaced a
+    second bug: trying BSD `stat -f` first breaks when GNU coreutils'
+    `stat` shadows the system one on PATH (common via Homebrew) — GNU
+    `stat -f` is an unrelated flag that doesn't fail cleanly, it dumps
+    filesystem info to stdout instead of erroring. Reordered to try
+    the GNU form first (fails cleanly on real BSD `stat`), plus a
+    numeric sanity check before the value ever reaches `chmod`.
+- 16 BATS tests, all green. `skill_score.py`: 100/100.
+
+## Files changed
+
+| File | Change |
+|---|---|
+| `agent-pairing/SKILL.md` | new |
+| `agent-pairing/assets/dispatcher.md` | new — bundled agent definition |
+| `agent-pairing/scripts/agent-pairing.sh` | new — on/off/status logic |
+| `tests/agent_pairing.bats` | new — 16 tests |
+
+## Next steps
+
+- None required for this task. Possible future follow-up (not filed,
+  flagged for the maintainer to decide): `--claude-dir` doesn't honor
+  `$CLAUDE_CONFIG_DIR` — same pre-existing gap tracked separately by
+  T20261002-303999 for the rest of the suite, not a regression
+  introduced here.
+
+## Closed
+
+- PR: [ccxp-skills#291](https://github.com/Synx-Data-Labs/ccxp-skills/pull/291) (implementation, merged)
+- PR: [ccxp-skills#290](https://github.com/Synx-Data-Labs/ccxp-skills/pull/290) (queue staging, merged)
