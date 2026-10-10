@@ -1,8 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: this conversation, 2026-09-28 — independent review finding on PR #164
 related: T20260610-248248
+claimed_by: cc1-50ac6891:da7297ceb68effbb
+claimed_role: interactive
 ---
 
 # T20260928-115329: `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
