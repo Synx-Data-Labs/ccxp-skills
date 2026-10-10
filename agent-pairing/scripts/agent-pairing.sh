@@ -47,16 +47,38 @@ if [ ! -f "$SETTINGS" ]; then
   exit 1
 fi
 
+if ! jq empty "$SETTINGS" 2>/dev/null; then
+  echo "agent-pairing.sh: $SETTINGS is not valid JSON -- refusing to touch it" >&2
+  exit 1
+fi
+
 current_agent() {
   jq -r '.agent // empty' "$SETTINGS"
 }
 
 write_agent_key() {
-  # $1: jq filter. Atomic write via a sibling tempfile + mv.
+  # $1: jq filter. Atomic write via a sibling tempfile + mv, preserving the
+  # original file's permissions (it can carry a secret, e.g. GITHUB_TOKEN --
+  # mktemp's own 0600 default must never silently narrow or widen that).
   local filter="$1"
-  local tmp
+  local tmp perm
   tmp="$(mktemp "$CLAUDE_DIR/.settings.json.XXXXXX")"
-  jq "$filter" "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+  if ! jq "$filter" "$SETTINGS" > "$tmp"; then
+    rm -f "$tmp"
+    echo "agent-pairing.sh: jq failed to apply the edit -- $SETTINGS left untouched" >&2
+    return 1
+  fi
+  # GNU stat first: its `-c` cleanly fails (nonzero, no stdout) on real BSD
+  # stat, which is a safe probe. The reverse order is NOT safe -- BSD-style
+  # `-f FORMAT` collides with GNU stat's own `-f` (an unrelated boolean flag,
+  # "show filesystem status"): GNU stat then silently treats the format
+  # string as a second file argument and dumps filesystem info to STDOUT
+  # instead of failing, which would corrupt $perm on any machine where GNU
+  # coreutils' stat shadows the system one on PATH (common via Homebrew).
+  perm="$(stat -c '%a' "$SETTINGS" 2>/dev/null || stat -f '%Lp' "$SETTINGS" 2>/dev/null)"
+  [[ "$perm" =~ ^[0-7]{3,4}$ ]] || perm=644
+  chmod "$perm" "$tmp"
+  mv "$tmp" "$SETTINGS"
 }
 
 case "$ACTION" in
@@ -75,7 +97,7 @@ case "$ACTION" in
       echo "agent-pairing.sh: already ON (takes effect at the next session start)"
       exit 0
     fi
-    write_agent_key '. + {agent: "dispatcher"}'
+    write_agent_key '. + {agent: "dispatcher"}' || exit 1
     echo "agent-pairing.sh: ON -- takes effect at the next session start (this session is unaffected)"
     ;;
 
@@ -84,7 +106,7 @@ case "$ACTION" in
       echo "agent-pairing.sh: already OFF"
       exit 0
     fi
-    write_agent_key 'del(.agent)'
+    write_agent_key 'del(.agent)' || exit 1
     echo "agent-pairing.sh: OFF -- takes effect at the next session start"
     ;;
 
