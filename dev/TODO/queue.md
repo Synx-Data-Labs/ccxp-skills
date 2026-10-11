@@ -11,7 +11,6 @@ reprioritize.
 - [T20261010-326861](T20261010-326861-skill-concision-pass.md): Concision pass: ccxp, drive, retro, address-pr to >= 70
 - [T20261010-151792](T20261010-151792-extract-queue-lib-and-land-helper.md): Extract `_queue/queue.sh` and a shared land-as-PR helper
 - [T20261010-762961](T20261010-762961-cloudflare-family-router-and-dedupe.md): Cloudflare family: router description, 'not for' lines, drop duplicated references
-- [T20260923-343482](T20260923-343482-gh-app-token-script.md): Add `_gh/gh-app-token.sh` — mint GitHub App installation tokens
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260928-115329](T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
 - [T20260929-120385](T20260929-120385-ipm-drain-check-bare-gh-call.md): `_ipm/ipm-iteration-drain-check.sh:224` makes a bare, unwrapped `gh` call
