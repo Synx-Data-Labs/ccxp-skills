@@ -64,7 +64,7 @@ This is the functional equivalent of a `:eyes:` reaction: it tells the channel t
 
 ### 4. Run RCA
 
-Delegate to `/rca <run-id>`. That skill handles:
+Delegate to `/rca <run-id> --no-post` (`--no-post` suppresses `/rca` §5.5's channel-root Slack post — step 5 below is the one and only post, in the thread). That skill handles:
 
 - Run lookup (`gh run view`)
 - Failed job + step identification

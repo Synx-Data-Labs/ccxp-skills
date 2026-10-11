@@ -15,7 +15,7 @@ claimed_role: interactive
 - **T20261006-138216** (Done, see `dev/JOURNAL/`) — the `migrate-task`/`statusline-setup` invalid-YAML-frontmatter bug (one of the README §1 bullets below) was driven to merge as its own task. `/drive`'s own design-score gate failed on *this* task's full scope (56/100 — a 8-point mega-task doesn't score well against a gate designed for a focused design doc), which is itself a signal this task should be decomposed phase-by-phase rather than designed as one unit. Recommend filing the remaining README §1 bugs, the script-path convention, concision pass, shared-helper extraction, and Cloudflare-family work each as their own task before resuming (per this file's own "Split any phase into its own task if it outgrows this one").
 - **T20261006-579135** (Done, see `dev/JOURNAL/`) — the `cleanup-branch` merged-PR force-delete-discards-post-merge-commits bug (another README §1 bullet) was driven to merge as its own task, same pattern as T20261006-138216.
 - **Remaining phases split on 2026-10-10** (user: `/drive all 3 of them`; the file is an 8-point umbrella, driven phase by phase):
-  - **T20261010-355951** — remaining README §1 bugs (phase 1).
+  - **T20261010-355951** (Done) — remaining README §1 bugs (phase 1).
   - **T20261010-254146** — script-path convention (phase 2).
   - **T20261010-326861** — concision pass (phase 3).
   - **T20261010-151792** — shared helpers; **T20261010-762961** — Cloudflare family. Company residue is covered by T20261010-363414 and its siblings.

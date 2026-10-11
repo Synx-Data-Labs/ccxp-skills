@@ -163,3 +163,24 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"SLACK_WEBHOOK_URL not set"* ]]
 }
+
+# --- --channel resolves after .env is loaded (regression: README §1 slack bug) ---
+
+@test "channel: webhook living only in an env file is picked up" {
+  unset SLACK_WEBHOOK_URL
+  printf 'SLACK_WEBHOOK_URL_FOO=https://hooks.slack.com/services/FOO\n' > "$BATS_TEST_TMPDIR/env"
+  curl() {
+    local url="" ; while [[ $# -gt 0 ]]; do case "$1" in https://*) url="$1"; shift ;; *) shift ;; esac; done
+    printf '%s' "$url" > "$BATS_TEST_TMPDIR/url"; printf '200'
+  }
+  export -f curl
+  SLACK_ENV_FILE="$BATS_TEST_TMPDIR/env" run bash "$SLACK_SEND" --channel foo "hi"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/url")" = "https://hooks.slack.com/services/FOO" ]
+}
+
+@test "channel: unset channel var fails loudly instead of using the default webhook" {
+  run bash "$SLACK_SEND" --channel nope "hi"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"SLACK_WEBHOOK_URL_NOPE"* ]]
+}

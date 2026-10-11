@@ -24,7 +24,7 @@ in:inbox last N ─► │ Classify each thread:              │
                    User decides what to archive / reply / act on
 ```
 
-The skill is **read-only** on Gmail. Cleanup (archive, label, reply) is the user's job.
+The skill **only reads** Gmail — by policy, not because the connector forbids more. The connector also exposes mutating tools (send, reply, forward, draft, trash, label, spam); this skill must never call them. Cleanup (archive, label, reply) is the user's job.
 
 ## Argument
 
@@ -169,7 +169,7 @@ Run daily via the `schedule` skill:
 
 ## Notes
 
-- **Read-only by design.** This skill never archives, labels, or replies. The Anthropic Gmail connector is read-only as of writing — and that's fine: the user decides what to do with each item.
+- **Read-only by policy.** Call only `search_threads`, `get_thread`, `list_labels` (and `get_message`). Never call send/reply/forward/draft/trash/label/spam tools — the connector offers them, so the restriction is this skill's own rule, not a platform limit. The user decides what to do with each item.
 - **Top-1 is a recommendation.** The user decides whether to act, snooze, or override.
 - **Digest grouping is sender-domain based** for resilience — new senders still group sensibly.
 - **No deep reads outside top-3.** Phase 1–4 use thread snippets only (cheap). Phase 5 reads up to 3 full threads.

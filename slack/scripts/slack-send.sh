@@ -5,6 +5,8 @@
 #   slack-send.sh "hello world"
 #   slack-send.sh --product NAME --version VER --status STATUS
 #
+#   slack-send.sh --channel NAME "hello"   (uses SLACK_WEBHOOK_URL_<NAME>)
+#
 # Environment / .env resolution (in order, first wins):
 #   1. SLACK_WEBHOOK_URL already exported in the environment
 #   2. ~/.claude/.env  (machine-global, recommended)
@@ -16,15 +18,44 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/slack-notify.sh"
 
-# Load .env (skip in BATS to keep tests hermetic)
-if [[ -z "${SLACK_WEBHOOK_URL:-}" ]] && [[ -z "${BATS_TEST_TMPDIR:-}" ]]; then
-  for ENV_FILE in "${HOME}/.claude/.env" "$(pwd)/.env"; do
+# --channel NAME: select SLACK_WEBHOOK_URL_<NAME_UPPERCASED> (resolved AFTER .env is loaded,
+# so a webhook that lives only in ~/.claude/.env works — a shell-side
+# SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO" prefix expands before the script loads .env).
+CHANNEL=""
+ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --channel) CHANNEL="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+set -- ${ARGS[@]+"${ARGS[@]}"}
+
+CHANNEL_VAR=""
+if [[ -n "$CHANNEL" ]]; then
+  CHANNEL_VAR="SLACK_WEBHOOK_URL_$(printf '%s' "$CHANNEL" | tr '[:lower:]-' '[:upper:]_')"
+fi
+
+# Load .env (skip in BATS to keep tests hermetic, unless SLACK_ENV_FILE is given).
+need_env() {
+  if [[ -n "$CHANNEL_VAR" ]]; then [[ -z "${!CHANNEL_VAR:-}" ]]; else [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; fi
+}
+if need_env && { [[ -z "${BATS_TEST_TMPDIR:-}" ]] || [[ -n "${SLACK_ENV_FILE:-}" ]]; }; then
+  for ENV_FILE in ${SLACK_ENV_FILE:+"$SLACK_ENV_FILE"} "${HOME}/.claude/.env" "$(pwd)/.env"; do
     if [[ -f "$ENV_FILE" ]]; then
       # shellcheck disable=SC1090
       source "$ENV_FILE"
-      [[ -n "${SLACK_WEBHOOK_URL:-}" ]] && break
+      need_env || break
     fi
   done
+fi
+if [[ -n "$CHANNEL_VAR" ]]; then
+  if [[ -z "${!CHANNEL_VAR:-}" ]]; then
+    echo "Error: $CHANNEL_VAR is not set (needed for --channel $CHANNEL)." >&2
+    exit 1
+  fi
+  SLACK_WEBHOOK_URL="${!CHANNEL_VAR}"
+  export SLACK_WEBHOOK_URL
 fi
 
 slack-send-usage() {

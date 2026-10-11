@@ -19,7 +19,7 @@ position 2, `T<id3>` to position 3, pushing everything else down —
 **first-listed wins the very top.**
 
 **`--before T<id>` mode:** `/top T<id1> [T<id2> ...] --before T<targetId>`
-inserts the given task(s) immediately ahead of `T<targetId>`'s *current*
+inserts the given task(s), in the order given, immediately ahead of `T<targetId>`'s *current*
 position, instead of jumping to the absolute front. Use this whenever a
 task's urgency is relative to one specific other task — most commonly, a
 blocker that must land before the thing it blocks, but doesn't need to
@@ -67,11 +67,11 @@ mention as a hard blocker would drag unrelated tasks to the top on every
 `/top` call. `Blocked by` is the one field the lifecycle convention reserves
 for "cannot proceed until this closes."
 
-Worked example — `T20260629-868957`'s frontmatter reads `status: Blocked by
-T20260618-288900`, and `T20260618-288900` resolves to an open task with no
-further blocker. Running `/top T20260629-868957` expands the argument list
-to `[T20260618-288900, T20260629-868957]` before step 3 runs. In `--before`
-mode the same expansion happens first, so `/top T20260629-868957 --before Y`
+Worked example — `T-task`'s frontmatter reads `status: Blocked by
+T-blocker`, and `T-blocker` resolves to an open task with no
+further blocker. Running `/top T-task` expands the argument list
+to `[T-blocker, T-task]` before step 3 runs. In `--before`
+mode the same expansion happens first, so `/top T-task --before Y`
 inserts both the blocker and the originally-requested task immediately above
 `Y`, blocker first.
 
@@ -108,19 +108,21 @@ Final order has `A` at #1, `B` at #2, exactly matching the order given on
 the command line. If an ID wasn't already queued, this both adds and
 promotes it in one step — no need to `/stage` first.
 
-Continuing the blocker example from step 2 — `/top T20260629-868957` expands
-to `[T20260618-288900, T20260629-868957]`, so the *blocker* lands at the very
+Continuing the blocker example from step 2 — `/top T-task` expands
+to `[T-blocker, T-task]`, so the *blocker* lands at the very
 top and the originally-requested task sits directly behind it: the queue now
 tells whoever reads it next to work the blocker first, not the task that's
 still stuck.
 
-**`--before` mode.** Same reverse-order processing over the **expanded** ID
-list, but instead of "insert at position 1," insert immediately above
-`T<targetId>`'s *current* line (re-read its position fresh each iteration —
-an earlier insert in the same batch may have shifted it down by one):
+**`--before` mode.** Process the **expanded** ID list in **forward** order
+(the opposite of default mode — each insert lands immediately above
+`T<targetId>`, i.e. *below* everything inserted earlier in the batch, so
+forward processing keeps the list's own order and the blocker stays ahead
+of the task it blocks). Re-read `T<targetId>`'s position fresh each
+iteration — an earlier insert in the same batch shifts it down by one:
 
 ```
-for id in reversed(expanded_id_list):
+for id in expanded_id_list:        # forward — NOT reversed
     remove the line for `id` from queue.md if present
     find T<targetId>'s current line number in queue.md
     insert `- [T{id}](T{id}-{slug}.md): {title}` immediately above that line
@@ -128,14 +130,14 @@ for id in reversed(expanded_id_list):
 
 Worked example — queue starts as `[W, X, Y, Z]`, running `/top A B --before Y`:
 
-1. Process `B`: `Y` is at position 3 → insert above it → `[W, X, B, Y, Z]`
-2. Process `A`: `Y` is now at position 4 → insert above it → `[W, X, B, A, Y, Z]`
+1. Process `A`: `Y` is at position 3 → insert above it → `[W, X, A, Y, Z]`
+2. Process `B`: `Y` is now at position 4 → insert above it → `[W, X, A, B, Y, Z]`
 
-`A` ends up immediately before `Y` (position 4), `B` right before `A`
-(position 3) — same "first-listed wins the position closest to the target"
-contract as default mode, just anchored to `T<targetId>` instead of the
-absolute front. `W` and `X` are untouched — this is the difference from
-plain `/top`, which would have pushed them down too.
+Final order is `A, B, Y` — the given order, with the whole batch directly
+ahead of `Y`. For a blocker chain `/top T --before Y` (expanded to
+`[blocker, T]`) this yields `[..., blocker, T, Y, ...]`: blocker first.
+`W` and `X` are untouched — this is the difference from plain `/top`,
+which would have pushed them down too.
 
 ### 4. Commit, push, and merge
 

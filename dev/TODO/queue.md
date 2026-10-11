@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20261010-355951](T20261010-355951-fix-skill-review-remaining-bugs.md): Fix the remaining 2026-09-28 review bugs (drive trap, slack, autopilot, top, incept, gcpr, rca, email-triage)
 - [T20261010-254146](T20261010-254146-skill-script-path-convention.md): One base-dir convention for skill script paths (consumer-repo exit 127)
 - [T20261010-326861](T20261010-326861-skill-concision-pass.md): Concision pass: ccxp, drive, retro, address-pr to >= 70
 - [T20261010-151792](T20261010-151792-extract-queue-lib-and-land-helper.md): Extract `_queue/queue.sh` and a shared land-as-PR helper
