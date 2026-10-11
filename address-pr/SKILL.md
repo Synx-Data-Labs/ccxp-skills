@@ -124,12 +124,12 @@ esac
 
 **`free` → claim now, same mechanism as `/drive` Phase 1's Claim PR** (this is the one case where `/address-pr` *does* acquire, not just read):
 
-1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ../_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ../_session/task_claim.sh acquire <id>` — wrapped in the **status-preserve** step below (T20260928-115329), so a `Design` task isn't demoted to `In Progress`.
+1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ../_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ../_session/task_claim.sh acquire <id>` — wrapped in the **status-preserve** step below (T20260928-115329).
 2. Commit (pure frontmatter change — status + `claimed_by`), push, `gh pr create`, and drive *that* claim PR through this same `/address-pr` loop to merge (it's docs-only, auto-merge-eligible under the status-change tier).
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
 4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, then continue to §2 on the *original* PR you were addressing.
 
-**Status-preserve (both `free` and `new` — T20260928-115329).** `task_claim.sh acquire` hard-sets `status: In Progress` (`_session/task_claim.sh:569`), so a task already at `Design` (e.g. just recorded by `/incept`) would be silently demoted in the claim commit. Capture the status first, restore it after:
+**Status-preserve (both `free` and `new`).** `task_claim.sh acquire` hard-sets `status: In Progress` (`_session/task_claim.sh:569`), so a task already at `Design` (e.g. just recorded by `/incept`) would be silently demoted in the claim commit. Capture the status first, restore it after:
 
 ```bash
 PRE=$(bash ../_session/task_claim.sh read <id> | cut -f1)   # before acquire
