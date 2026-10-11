@@ -124,7 +124,7 @@ esac
 
 **`free` → claim now, same mechanism as `/drive` Phase 1's Claim PR** (this is the one case where `/address-pr` *does* acquire, not just read):
 
-1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ../_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ../_session/task_claim.sh acquire <id>` — wrapped in the **status-preserve** step below (T20260928-115329).
+1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash ../_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash ../_session/task_claim.sh acquire <id>`, plus the status-preserve step below.
 2. Commit (pure frontmatter change — status + `claimed_by`), push, `gh pr create`, and drive *that* claim PR through this same `/address-pr` loop to merge (it's docs-only, auto-merge-eligible under the status-change tier).
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
 4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, then continue to §2 on the *original* PR you were addressing.
@@ -147,7 +147,7 @@ fi
 **`new` → claim directly on the PR's own branch** (T20260918-404944) — unlike `free`, there is **no separate claim-branch/merge round-trip**, because `free`'s procedure above can't work here: `task_claim.sh acquire`'s file lookup (`_tc_find_file`) is a **local filesystem glob**, and a fresh branch cut off `main` does not have a file that exists only on this PR's own (not-yet-merged) branch. Instead:
 
 1. `git fetch && git checkout <the PR's headRefName>` — the **existing** PR branch, not a new one, so the just-added task file is present in the local working tree.
-2. `bash ../_session/task_claim.sh release-others <id>` then `bash ../_session/task_claim.sh acquire <id>` (again wrapped in the **status-preserve** step below) — now succeeds, since the file is right there on this checked-out branch.
+2. `bash ../_session/task_claim.sh release-others <id>` then `bash ../_session/task_claim.sh acquire <id>` — now succeeds, since the file is right there on this checked-out branch.
 3. Commit (pure frontmatter change) and push — lands as one more commit on the **same** PR; no separate claim PR.
 4. **Push rejected (non-fast-forward) = you lost the race** — mirrors `free`'s step 3 above: another session saw `new` on this same PR and pushed its own claim commit first. Do **not** force-push. `git fetch && git checkout <branch>` again (picks up their commit) and re-run `task_claim.sh pr-owner <number>` — it re-resolves via the same head-ref path against the *new* head SHA, reads their now-stamped `claimed_by`, and reports `owned:<other>`. Defer per that case.
 5. Otherwise, continue driving this PR through the rest of this loop (§2 onward) as normal — one PR, one push, done.
