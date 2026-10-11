@@ -1,6 +1,7 @@
 ## Epics
 
-Human-owned. See README.md's "dev/EPICS.md format" section for the shape —
+Human-owned, local to this repo's toplevel (T20261005-639913 — no separate
+hub repo). See README.md's "dev/EPICS.md format" section for the shape —
 `epic-status.sh`'s parser and `tests/epic-status.bats` are written against
 this exact file, so keep the two in sync rather than letting either drift.
 

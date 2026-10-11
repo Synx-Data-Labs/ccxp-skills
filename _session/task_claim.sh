@@ -20,10 +20,12 @@
 # `release-mine` — still accepted as an alias) reliable.
 # See build-pipeline-repo T20260615-169917 (retires the old <sid>@<machine>).
 #
-# `sync-tasks-to-issues` projects claimed_by from `main` onto the Project V2
-# field of the SAME name (1:1). The soft-claim direct writes
-# (_session/claim.sh, heartbeat.sh) and the old machine/cc_session_id/clone_path/
-# last_heartbeat Project fields are retired; there is no heartbeat in this design
+# There is no GitHub Project board anywhere in this suite (T20261005-554581,
+# T20261005-639913) — `claimed_by:` in the task file's own frontmatter is the
+# sole, durable claim record, not a value projected onto (or read back from)
+# any board field. The soft-claim direct writes (_session/claim.sh,
+# heartbeat.sh) and the old machine/cc_session_id/clone_path/last_heartbeat
+# Project fields are retired; there is no heartbeat in this design
 # (liveness comes from git progress).
 #
 # NOTE: `claimed_by:` is the *session execution lock* and is distinct from the

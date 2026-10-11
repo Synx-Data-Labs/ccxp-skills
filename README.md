@@ -77,10 +77,6 @@ shares:
   - `METRICS_OWNER` / `METRICS_REPOS` — the org + space-separated repo list
     `retro` Phase 4d reads `dev/quality/metrics.jsonl` scoreboards from.
     Unset/empty means Phase 4d reports "no scoreboard reachable" and skips.
-  - `ROADMAP_TARGET_REPO` — `<owner>/<repo>` of a separate hub repo whose
-    `dev/ROADMAP.md` gets the week's IPM commit propagated into it.
-    Required only if `/ipm` step 5b actually runs; `update-roadmap.sh`
-    exits with a clear error (no clone/PR attempted) if unset when needed.
   - `KNOWN_SIBLING_REPOS` — comma-separated sibling repo names
     `repo-conventions/scripts/lint_refs.py` treats as "foreign" for bare
     reference qualification. Unset/empty is a no-op.
@@ -240,19 +236,26 @@ repo's cwd, not this repo's. Scripts must:
 - Read shared config (e.g. `SLACK_WEBHOOK_URL`) from `~/.claude/.env`
   first, then `$(pwd)/.env`.
 
-### `dev/EPICS.md` format (hub repo)
+### `dev/EPICS.md` / `dev/ROADMAP.md` format (local to each repo)
 
-`ccxp/scripts/epic-status.sh` (T20260911-347027) reads a human-owned
-`dev/EPICS.md` in `ROADMAP_TARGET_REPO` to roll up epic-level progress into
-the daily `/ccxp` standup. Per epic:
+Every repo owns its own `dev/ROADMAP.md` and `dev/EPICS.md` — there is no
+shared hub repo and no `ROADMAP_TARGET_REPO` config (T20261005-639913
+retired that global variable; each file lives at the repo's own toplevel,
+read and edited as plain local files). `/ipm` step 5b updates `dev/ROADMAP.md`
+in place (creating it from `ipm/templates/ROADMAP.md` on first use);
+`dev/EPICS.md` is human-authored, proposed/edited by `/retro` Phase 2b.
+
+`ccxp/scripts/epic-status.sh` (T20260911-347027) reads the local
+`dev/EPICS.md` to roll up epic-level progress into the daily `/ccxp` standup.
+Per epic:
 
 ```markdown
 ### E1 — <title>
 Goal: <one line — the standing goal this epic exists for>
 Done when: <one line — the concrete completion condition>
 Deadline: YYYY-MM-DD          # optional
-- T20260101-000001            # any repo; local tasks resolve from this
-- T20260101-000002            # clone, others via the hub-scoped `gh api`
+- T20260101-000001            # any task id; local tasks resolve from
+- T20260101-000002            # this repo's own dev/TODO|PARKING|JOURNAL
 ```
 
 - No status rows in the file — status is always derived at standup time

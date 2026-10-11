@@ -100,7 +100,7 @@ This call is pure visualization — nothing depends on the write succeeding, and
 
 **Claim PR — land the status change on `main` before working (maintainer ask 2026-06-10):**
 
-The in-place status flip above and the `status.sh` board mirror are **not durable**. The flip lives only on the working tree until some later PR carries it to `main`, and the mirror is best-effort — it is lost on a PAT/network failure, and the next `sync-tasks-to-issues` run (which reads from `main`, where the file still says `Open`) overwrites the board back to Open. So a session can be deep in implementation while `main` — and the GitHub Issue the board is driven from — still shows the task **Open / unclaimed**.
+The in-place status flip above is **not durable** on its own — it lives only on the working tree until some later PR carries it to `main`. So a session can be deep in implementation while `main` still shows the task **Open / unclaimed** to every other session and peer claim check. (The `status.sh` call right above is a best-effort Project-board mirror; most repos in this suite run no such board at all — T20261005-554581, T20261005-639913 — so treat it as optional visualization only, never as the durability fix this section is actually about.)
 
 Close that gap by landing a tiny **claim PR as the very first thing**, before any design or implementation work:
 
