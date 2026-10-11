@@ -38,7 +38,7 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 @test "gcpr: no hardcoded model in the Co-Authored-By trailer; Review flip precedes the commit" {
   run grep -n 'Co-Authored-By: Claude Opus' "$REPO_ROOT/gcpr/SKILL.md"
   [ "$status" -ne 0 ]
-  grep -q 'flip BEFORE the Step 4 commit' "$REPO_ROOT/gcpr/SKILL.md"
+  grep -q 'before Step 4, not here' "$REPO_ROOT/gcpr/SKILL.md"
 }
 
 @test "rca + labrun-rca: delegated RCA does not also post to the channel root" {

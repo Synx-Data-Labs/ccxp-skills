@@ -184,3 +184,10 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"SLACK_WEBHOOK_URL_NOPE"* ]]
 }
+
+@test "channel: --channel without a valid name is an error, not a silent default send" {
+  run bash "$SLACK_SEND" --channel
+  [ "$status" -eq 1 ]
+  run bash "$SLACK_SEND" --channel "a.b" "hi"
+  [ "$status" -eq 1 ]
+}

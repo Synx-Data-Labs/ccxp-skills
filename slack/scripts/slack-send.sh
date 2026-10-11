@@ -25,7 +25,12 @@ CHANNEL=""
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --channel) CHANNEL="${2:-}"; shift $(( $# > 1 ? 2 : 1 )) ;;
+    --channel)
+      if [[ $# -lt 2 || ! "$2" =~ ^[A-Za-z0-9_-]+$ ]]; then
+        echo "Error: --channel needs a name made of letters, digits, '-' or '_'." >&2
+        exit 1
+      fi
+      CHANNEL="$2"; shift 2 ;;
     *) ARGS+=("$1"); shift ;;
   esac
 done
