@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: this conversation, 2026-09-28 — independent review finding on PR #164
 related: T20260610-248248
-claimed_by: cc1-50ac6891:da7297ceb68effbb
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20260928-115329: `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
@@ -53,12 +53,25 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] Local: scratch clone, task at `status: Design`, run the new snippet, confirm frontmatter reads `Design` with `claimed_by` set.
-- [ ] Local: same with `status: Open`, confirm `In Progress` (unchanged path).
-- [ ] CI: Markdown Lint, lint-tasks, skill-quality, bats green on the implementation PR.
+- [x] Local: scratch clone, task at `status: Design`, run the new snippet, confirm frontmatter reads `Design` with `claimed_by` set.
+- [x] Local: same with `status: Open`, confirm `In Progress` (unchanged path).
+- [x] CI: Markdown Lint, lint-tasks, skill-quality, bats green on the implementation PR.
 
 ## Done criteria
 
-- [ ] `free` procedure preserves pre-existing `Design` (`address-pr/SKILL.md` §1.6 `free` step 1; scratch test above).
-- [ ] `new` procedure does the same (`address-pr/SKILL.md` §1.6 `new` step 2).
-- [ ] Cross-referenced against `/ipm` step 3.4 (`address-pr/SKILL.md` §1.6 note naming `ipm/SKILL.md`).
+- [x] `free` procedure preserves pre-existing `Design` (`address-pr/SKILL.md` §1.6 `free` step 1; scratch test above).
+- [x] `new` procedure does the same (`address-pr/SKILL.md` §1.6 `new` step 2).
+- [x] Cross-referenced against `/ipm` step 3.4 (`address-pr/SKILL.md` §1.6 note naming `ipm/SKILL.md`).
+
+## Closed (2026-10-10)
+
+- Shipped in the implementation PR for this task, branch `t20260928-115329-free-claim-keep-design` (`address-pr/SKILL.md` §1.6 status-preserve step, referenced by `free` step 1 and `new` step 2); design PR #303, claim PR #300.
+- Verified locally in a scratch tree: `Design` survives `acquire` plus the restore; `Open` becomes `In Progress` as before.
+- Observation, not filed: `ipm/SKILL.md` step 3.4 uses `status.sh` alone, which is board-only, so its claimed task's frontmatter may still read `In Progress`; worth a follow-up check.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, docs-class
+- Verification (`superpowers:verification-before-completion`): yes, scratch-tree test plus CI
+- Systematic debugging (`superpowers:systematic-debugging`): no, didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes, 1 finding on the design PR accepted
