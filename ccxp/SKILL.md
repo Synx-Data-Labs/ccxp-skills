@@ -480,7 +480,7 @@ for the day-by-day count). Don't let a failed send silently drop the day's stand
    <the *Daily Standup* (YYYY-MM-DD) mrkdwn block composed above>
    EOF
    )"
-   SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_DEV" bash <skills-root>/slack/scripts/slack-send.sh "$STANDUP_MESSAGE"
+   bash <skills-root>/slack/scripts/slack-send.sh --channel dev "$STANDUP_MESSAGE"
    ```
 
    Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s

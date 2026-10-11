@@ -82,7 +82,7 @@ bash ../_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/c
 ```
 
 - **Exit 0** — present in this repo's `dev/TODO`/`dev/PARKING`; proceed.
-- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same `trap 'rm -rf "$HUB"' EXIT` pattern as Phase 1.5's `$TARGET`) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out (build-pipeline-repo `dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md`). If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
+- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out (build-pipeline-repo `dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md`). If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
 - **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone).
 
 (Auto-pick via `/todo next` only surfaces tasks already in this clone, so the guard is a no-op there; it's the explicit-id path that needs it.)
@@ -159,8 +159,9 @@ TARGET="/tmp/T<task-id>-<slug>-target"
 rm -rf "$TARGET"          # idempotent: kill any leftover from a prior crashed run
 git clone --depth=20 --recurse-submodules \
   "git@github.com:${TARGET_REPO}.git" "$TARGET"
-trap 'rm -rf "$TARGET"' EXIT      # cleanup on any exit path, clean or aborted
 ```
+
+**No `trap` and no shell variables across calls.** Each Bash tool call is its own shell: an `EXIT` trap would fire (deleting the clone) when *that call* returns, and `$TARGET`/`$HUB` do not survive into the next call. Use the literal absolute path in every later command (`cd /tmp/T<id>-<slug>-target && …`), and clean up explicitly in Phase 7 (`rm -rf` that path) — plus the orphan sweep below as the backstop for aborted runs.
 
 That's it. No safety guards, no JIT-refresh logic. A fresh clone is clean, on `main`, with no concurrent ops by construction — the entire class of "respect another process's state" coordination disappears because there is no other process in our clone.
 
@@ -176,7 +177,7 @@ Phase split:
 
 Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as single-repo mode — the hub task ID is the canonical reference.
 
-**Frontmatter override** (rare). If the task file ALSO sets `Target path: <path>`, reuse that path instead of creating an ephemeral clone. Use this only when the user has an existing checkout with WIP that must not be re-cloned (e.g., a long-lived integration branch with unpushed work). The override skips the cleanup trap — the user owns the path's lifecycle.
+**Frontmatter override** (rare). If the task file ALSO sets `Target path: <path>`, reuse that path instead of creating an ephemeral clone. Use this only when the user has an existing checkout with WIP that must not be re-cloned (e.g., a long-lived integration branch with unpushed work). The override skips the Phase 7 clone removal — the user owns the path's lifecycle.
 
 **Why ephemeral**: parallel `/drive` sessions on the same target repo each get their own ephemeral clone, so the design has zero collision surface. Hub-side has no coordination either — the convention is one session per clone (see T20260513-422869). If you need parallel hub-side work, open a new hub clone. No cross-session state to maintain.
 
@@ -186,7 +187,7 @@ Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as si
 - `--recurse-submodules`: correct for repos with submodules. Skip with `SUBMODULES=0` env var if the user wants faster clones for repos without them.
 - For very large repos (e.g. a large monorepo), the user can additionally pass `--filter=blob:none` via a `CLONE_EXTRA_FLAGS` env var; defaults stay simple.
 
-**Orphan cleanup**: the `trap EXIT` covers normal completion + ctrl-c + most crashes. A weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed at its own Phase 5 stop, but orphaned the same way on a crash).
+**Orphan cleanup**: explicit `rm -rf` at Phase 7 covers normal completion; an aborted run leaves its clone behind, so a weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed at its own Phase 5 stop, but orphaned the same way on a crash).
 
 (History — see T20260513-403409 in `dev/JOURNAL/`. Previous design required 3 safety guards [worktree clean, no in-flight git op, branch=main] + JIT-refresh + degraded path to share an existing target clone with other processes. The ephemeral-clone model makes those unnecessary.)
 
@@ -572,7 +573,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    This PR is docs-only, typically auto-mergeable (pure status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr $JOURNAL_PR_NUMBER` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR.
 4. Close the source GitHub issue (same as same-repo).
 5. Pop back to parent goal if recursed; otherwise exit (same as same-repo).
-6. **Remove the ephemeral target clone**: `rm -rf "$TARGET"`. The `trap EXIT` from Phase 1.5 also handles this on abort, but doing it explicitly at normal close-up keeps `/tmp/` tidy without waiting for shell exit. Skip this step if Phase 1.5 used the `Target path` override (the path is user-owned).
+6. **Remove the ephemeral target clone**: `rm -rf` of the literal clone path. This is the only cleanup besides the orphan sweep (Phase 1.5 deliberately sets no `trap`). Skip this step if Phase 1.5 used the `Target path` override (the path is user-owned).
 
 (Phase 7.5 parking-lot review removed — lateral housekeeping belongs in `/ccxp`, not `/drive`. `/drive` drives the current goal-task only.)
 

@@ -2,7 +2,7 @@
 name: rca
 description: Use when you have a failed GitHub Actions run URL or run ID to diagnose, classify, and track root cause directly (not from a Slack notification — that's /labrun-rca)
 disable-model-invocation: false
-argument-hint: "<run-url or run-id> [workflow-name]"
+argument-hint: "<run-url or run-id> [workflow-name] [--no-post]"
 ---
 
 Perform root cause analysis on a failed GitHub Actions pipeline run.
@@ -14,6 +14,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 - `/rca https://github.com/your-org/build-pipeline-repo/actions/runs/12345`
 - `/rca 12345`
 - `/rca` — auto-pick the most recent failed run on main
+- `--no-post` (any position) — skip step 5.5's Slack post. A caller that owns the Slack reply (`/labrun-rca` posts into the alert's thread) passes it so the report is not also posted to the channel root.
 
 ## Workflow
 
@@ -115,7 +116,7 @@ Output a structured report:
 
 ### 5.5 Post to Slack
 
-Immediately post the report to Slack via `slack_send_message` — don't ask "want me to post this?" first; that just adds friction and stalls the loop. The RCA is meant to feed back to the team, so posting is the default, not an opt-in. Post to `#claude-notification` (or whatever the repo's configured standup/alert channel is — see `SLACK_STANDUP_CHANNEL`) if a more specific build-alerts channel isn't reachable.
+**Skip this whole step when `--no-post` was passed** (the caller posts the report itself, in a thread). Otherwise, immediately post the report to Slack via `slack_send_message` — don't ask "want me to post this?" first; that just adds friction and stalls the loop. The RCA is meant to feed back to the team, so posting is the default, not an opt-in. Post to `#claude-notification` (or whatever the repo's configured standup/alert channel is — see `SLACK_STANDUP_CHANNEL`) if a more specific build-alerts channel isn't reachable.
 
 **Plain text, not a markdown table** — even though the report template in step 5 above reads naturally as a set of labeled fields, render it as bold key-value lines / bullets, not a table, when posting to Slack. Slack does not render markdown tables; a table posted there shows up as a garbled pipe-delimited mess instead of the structured report it's meant to be.
 

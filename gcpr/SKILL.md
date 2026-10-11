@@ -97,7 +97,7 @@ flagged content genuinely decomposes into bullets; leave narrative sections (Roo
 prose — the script already exempts those two headings.
 
 Also auto-link task/issue/PR references in any changed `dev/TODO/`/`dev/JOURNAL/` files — makes
-`T<id>` refs and typed `PR #N`/`issue #N` refs clickable (T20260616-130977):
+`T<id>` refs and typed `PR #N`/`issue #N` refs clickable:
 
 ```bash
 CHANGED_REFS=$(git status --porcelain | awk '
@@ -163,11 +163,7 @@ For each logical group:
 - Stage only the files in that group with `git add <file>...`
 - Draft a concise commit message (conventional commits style: `fix:`, `feat:`, `docs:`, `refactor:`)
 - If `$ARGUMENTS` provides a message and there is only one group, use it as the commit title
-- Always append:
-
-  ```
-  Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-  ```
+- Always append the attribution trailer the session specifies (the system-reminder's "End git commit messages with:" line carries the correct model name). Never hardcode a model/version; if the session gives none, use `Co-Authored-By: Claude <noreply@anthropic.com>`.
 
 - Commit using HEREDOC format:
 
@@ -175,7 +171,7 @@ For each logical group:
   git commit -m "$(cat <<'EOF'
   <message>
 
-  Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+  <attribution trailer from the session, per above>
   EOF
   )"
   ```
@@ -186,7 +182,7 @@ On a machine with multiple `gh`-authenticated accounts, a bare `git push` can si
 authenticate as whichever account is globally active — which may not have write access to
 this repo. Route through `_gh/git.sh`, which auto-detects the account with write access the
 same way `_gh/gh.sh` does for `gh` calls (process-scoped `GH_TOKEN`, no global `gh auth
-switch` — T20260911-140914):
+switch`):
 
 ```bash
 bash ../_gh/git.sh push -u origin <branch>
@@ -231,11 +227,9 @@ Do not move the task file to JOURNAL in this PR — the task file lives in the h
 
 - Use: `bash ../_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
 
-### 6.5 Flip task-file Status to `Review`
+### 6.5 Task-file Status `Review` — flip BEFORE the Step 4 commit
 
-Right after `gh pr create` succeeds, edit the task file in `dev/TODO/T<id>-*.md` to flip Status from `In Progress` to `Review`. This reflects the lifecycle from `dev/guidelines.md` (`Open → Design → In Progress → Review → Done`); without it, tasks jump from `In Progress` straight to `Done` when the JOURNAL move lands.
-
-Done in-place; no separate registry to update.
+If the PR implements a tracked task whose `status:` is `In Progress`, flip it to `Review` in `dev/TODO/T<id>-*.md` **before Step 4's commit**, so the change ships in this very PR (lifecycle in `dev/guidelines.md`: `Open → Design → In Progress → Review → Done`). Do **not** edit the task file after `gh pr create`: nothing would commit it, leaving an orphaned dirty edit that the next branch swallows or loses. Skip when the PR closes the task (Phase 4 of `/drive` sets `Done` instead) or for untracked work.
 
 ### 6.6 Annotate the Project item title with the PR ref (best-effort)
 

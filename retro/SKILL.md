@@ -607,7 +607,7 @@ Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP 
    <the *Weekly Retro* (YYYY-MM-DD) mrkdwn block composed below>
    EOF
    )"
-   SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_DEV" bash ../slack/scripts/slack-send.sh "$RETRO_MESSAGE"
+   bash ../slack/scripts/slack-send.sh --channel dev "$RETRO_MESSAGE"
    ```
 
    Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s Prerequisites documents (already-exported env var → `~/.claude/.env` → repo `.env`).

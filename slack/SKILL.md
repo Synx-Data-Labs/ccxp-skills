@@ -50,22 +50,17 @@ SLACK_WEBHOOK_URL_DEV=https://hooks.slack.com/services/...    # --channel dev, e
 
 ## Workflow
 
-1. Parse `$ARGUMENTS` for `--channel <name>`. If present, remove it from args.
-2. Map the channel name to an env var, generically:
-   - Absent → `SLACK_WEBHOOK_URL` (default, unsuffixed, back-compat)
-   - Given → `SLACK_WEBHOOK_URL_<NAME_UPPERCASED>` (e.g. `--channel foo` → `SLACK_WEBHOOK_URL_FOO`; any name works, there is no fixed set)
-3. Run the script with the selected webhook:
+1. Pass `$ARGUMENTS` through unchanged. `slack-send.sh` parses `--channel <name>` itself and
+   resolves `SLACK_WEBHOOK_URL_<NAME_UPPERCASED>` *after* loading `~/.claude/.env` — never prefix the
+   call with `SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO"` (the shell expands that before the script
+   loads `.env`, so a webhook living only there silently falls back to the default channel).
+2. Run the script:
 
 ```bash
-# Default (no --channel):
-bash ../slack/scripts/slack-send.sh <remaining args>
-
-# Named channel, e.g. --channel foo:
-SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO" bash ../slack/scripts/slack-send.sh <remaining args>
+bash ../slack/scripts/slack-send.sh [--channel <name>] <remaining args>
 ```
 
-(The script loads `~/.claude/.env` itself, so no `source .env` wrapper is needed.)
-
+3. A named channel whose var is unset exits 1 with an error — it never falls back to the default.
 4. Report the result to the user.
 
 ## When to notify proactively
