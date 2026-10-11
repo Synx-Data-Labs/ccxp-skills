@@ -227,7 +227,7 @@ Do not move the task file to JOURNAL in this PR — the task file lives in the h
 
 - Use: `bash ../_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
 
-### 6.5 Task-file Status `Review` — flip BEFORE the Step 4 commit
+### 6.5 Task-file Status `Review` — do this before Step 4, not here
 
 If the PR implements a tracked task whose `status:` is `In Progress`, flip it to `Review` in `dev/TODO/T<id>-*.md` **before Step 4's commit**, so the change ships in this very PR (lifecycle in `dev/guidelines.md`: `Open → Design → In Progress → Review → Done`). Do **not** edit the task file after `gh pr create`: nothing would commit it, leaving an orphaned dirty edit that the next branch swallows or loses. Skip when the PR closes the task (Phase 4 of `/drive` sets `Done` instead) or for untracked work.
 

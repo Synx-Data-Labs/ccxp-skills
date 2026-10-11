@@ -129,7 +129,7 @@ QUEUE-EMPTY
 (only if /todo next found no free, unblocked, ungated task; omit otherwise)
 
 WAITING: <what's pending — the only legitimate case is address-pr's wait-for-approval merge tier (address-pr/SKILL.md §3): the hard gate already passed (CI green, Claude Code review addressed, test plan verified) but merge needs a human's formal GitHub review approval, e.g. "PR #<n> ready to merge, awaiting human review approval (wait-for-approval tier)">
-(only if the cycle ended in this wait-for-approval state, which resolves without further /drive action — either a human merges directly, or the next cycle's Phase 0 completes it once approved; omit otherwise. CI-in-progress is never this case: /drive always waits it out internally and never returns control mid-CI-wait, per drive/SKILL.md Phase 5 / "Background waits are not blockers")
+(only if the cycle ended waiting on a human's formal approval; Phase 4 backs this off, it is not Progress; omit otherwise. CI-in-progress is never this case: /drive waits it out internally, per drive/SKILL.md Phase 5 / "Background waits are not blockers")
 ```
 
 Wait for the dispatched agent's completion notification before Phase 4 — don't poll, don't schedule a separate `ScheduleWakeup` (same as any background-agent wait). If the dispatch fails or the final message doesn't parse into the format above, treat it as **Stuck** in Phase 4: `last_stuck_reason: "dispatch failed or report unparseable"`.
@@ -164,7 +164,7 @@ Needs your attention:
 
 1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
 2. **Done** lists only what actually merged this run. **Needs your attention** applies the same **Needs-your-attention filter** as Phase 0 (see Important Notes) — a Stuck task still mid-backoff when `elapsed` fired always qualifies (that's the definition of Stuck: no skill resolved it); a merely-open PR or a task `Blocked by T{id}` does not, since a fresh `/autopilot`/`/drive` invocation drains/recurses into those automatically — omit them even though the run has stopped. For the `queue-empty` stop reason this is usually "Nothing outstanding". The tally isn't guaranteed to survive a `ScheduleWakeup` resume — reconstruct what you can from this conversation's history, but don't claim precision it can't back up.
-3. Update the state file: `status: "stopped"`, `stop_reason: <reason>` (`"user-requested"` from Phase 0.1), `paused_at: null`. Leave `stuck_count`/`cycle_count`/`last_*` at whatever Phase 4 (or `queue-empty`) last set.
+3. Update the state file: `status: "stopped"`, `stop_reason: <reason>` (`"user-requested"` from Phase 0.1), `paused_at: null`. Leave `stuck_count`/`waiting_count`/`cycle_count`/`last_*` at whatever Phase 4 (or `queue-empty`) last set.
 4. **Remove the dispatch clone**: if `dispatch_clone_path` is set, `rm -rf "$dispatch_clone_path"` (plain directory removal — it's a real clone, not a worktree) and set `dispatch_clone_path: null` in the state file.
 5. Post the report to `/slack --channel dev` (`#acme-dev-notifications` — not the default automation-alerts channel).
 6. Report the same template, filled in the same way, to the user in this turn's response.
