@@ -5,81 +5,35 @@
 #
 # ccxp Phase 1.3/1.4 (T20260911-347027): rolls the hourly `/ccxp` standup up
 # from individual tasks/PRs to the 3-5 standing epics the maintainer actually
-# steers by. Reads a human-owned `dev/EPICS.md` in a separate hub repo (the
-# same `ROADMAP_TARGET_REPO` config `ccxp/scripts/update-roadmap.sh` already
-# uses) and renders it deterministically — no LLM summarization, so the
+# steers by. Reads a human-owned `dev/EPICS.md` **local to this repo's
+# toplevel** and renders it deterministically — no LLM summarization, so the
 # output can be spot-checked and diffed like any script output.
 #
+# Made local-only by T20261005-639913 (dropped the global `ROADMAP_TARGET_REPO`
+# hub config — every repo now owns its own `dev/ROADMAP.md` / `dev/EPICS.md`).
+# This file used to read `dev/EPICS.md` out of a separate hub repo over the
+# GitHub Contents API, which needed its own cross-repo gh-account-picking
+# (`_gh_pick_account`/`_epic_gh_token`) because `_gh/gh.sh`'s plain CLI form
+# always derives its target repo from `$PWD`'s own `git remote get-url
+# origin` and has no `--repo` override. With `dev/EPICS.md` local, every read
+# in this file is now a plain local-repo operation — no hub, no cross-repo
+# token, no `gh api repos/.../contents/...` call anywhere.
+#
 # READ-ONLY on the daily path (Phase 1.3/1.4) — this script never writes to
-# `dev/EPICS.md`. Phase 2b (Friday retro) is the only write path, and it
-# reuses `update-roadmap.sh`'s own `clone`/`commit-pr` machinery rather than
-# anything in this file.
+# `dev/EPICS.md`. `dev/EPICS.md` is human-owned; Phase 2b (Friday retro) may
+# propose edits to it, but as a plain local file edit in the retro's own
+# commit, not through anything in this file.
 #
-# Cross-repo account scoping (the reason this file doesn't just shell out to
-# `_gh/gh.sh`'s CLI form): `_gh/gh.sh main()` (_gh/gh.sh:94-101) always
-# derives its target slug from `git remote get-url origin` of `$PWD`
-# (_gh/gh.sh:38-51) — it has no `--repo` override. `update-roadmap.sh` only
-# gets away with calling it for the hub repo because it `cd`s into a real
-# clone of that hub repo first (roadmap_commit_pr). This script has no clone
-# step — it does single-file API reads from wherever it's invoked (a
-# consumer repo's working directory) — so a bare `_gh/gh.sh api
-# repos/$ROADMAP_TARGET_REPO/...` run from there would pick a gh account
-# proven to access the *consumer* repo, not the hub — silently wrong on a
-# multi-account box. Fix: source `_gh/gh.sh` (its own header documents this
-# as supported — "lets tests source this file and call individual
-# functions... without invoking main") and call
-# `_gh_pick_account "$ROADMAP_TARGET_REPO"` directly for the hub-scoped
-# token, then invoke `GH_TOKEN=... gh api|pr list --repo "$ROADMAP_TARGET_REPO"`
-# explicitly. Every cross-repo call in this file goes through
-# `_epic_gh_token` below and also passes an explicit repo-qualified
-# argument — `gh pr list --search <id>` alone silently scopes to `$PWD`'s
-# repo too.
-#
-# Fail-quiet everywhere: unlike update-roadmap.sh's fail-LOUD clone/commit-pr
-# (a scheduled write the maintainer must notice failed), this script's output
-# feeds an hourly standup that must never block on a missing/misconfigured
-# hub — every failure mode (ROADMAP_TARGET_REPO unset, EPICS.md unreadable,
-# an unresolvable task id) degrades to a one-line note or an `unknown` row,
-# never a non-zero exit to the caller.
+# Fail-quiet everywhere: this script's output feeds an hourly standup that
+# must never block on a missing/misconfigured `EPICS.md` — every failure mode
+# (file missing, unreadable, an unresolvable task id) degrades to a one-line
+# note or an `unknown` row, never a non-zero exit to the caller.
 set -euo pipefail
 
 # Resolve sibling scripts relative to this script's own directory, not a
-# hardcoded install path — same pattern as update-roadmap.sh. Overridable
-# via SKILLS_ROOT for tests.
+# hardcoded install path — same pattern as elsewhere in this suite.
+# Overridable via SKILLS_ROOT for tests.
 SKILLS_ROOT="${SKILLS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-
-ROADMAP_TARGET_REPO="${ROADMAP_TARGET_REPO:-}"
-
-# Load ROADMAP_TARGET_REPO from ~/.claude/.env (machine-global) when not
-# already exported — same resolution order and ENV_FILE test seam as
-# update-roadmap.sh's _update_roadmap_load_env (already-exported wins, else
-# $ENV_FILE, else skipped under BATS, else ~/.claude/.env). This is a
-# separate, OWN copy rather than a sourced call to that function: it is
-# effectively private to update-roadmap.sh (same rationale as
-# _session/task-state.sh's ts_fm_get vs task_claim.sh's _tc_fm_get — each
-# sourceable script that needs the pattern keeps its own copy rather than
-# reaching into another script's underscore-private internals).
-#
-# Both `source` calls below are `|| true`-guarded for the same reason
-# documented in update-roadmap.sh: ~/.claude/.env is a shared, hand-edited,
-# machine-global file carrying many unrelated vars — a failing last
-# statement there must degrade this script to "unset", not abort it under
-# set -e before ROADMAP_TARGET_REPO is even checked.
-_epic_status_load_env() {
-  [ -n "$ROADMAP_TARGET_REPO" ] && return 0
-  if [ -n "${ENV_FILE:-}" ]; then
-    [ -f "$ENV_FILE" ] && { # shellcheck disable=SC1090
-      source "$ENV_FILE" || true; }
-    return 0
-  fi
-  [ -n "${BATS_TEST_TMPDIR:-}" ] && return 0
-  if [ -f "$HOME/.claude/.env" ]; then
-    # shellcheck disable=SC1090
-    source "$HOME/.claude/.env" || true
-  fi
-}
-_epic_status_load_env
-ROADMAP_TARGET_REPO="${ROADMAP_TARGET_REPO:-}"
 
 # taskid-path / taskid-repo-slug — public, documented-sourceable functions
 # (same file _session/task-state.sh sources directly).
@@ -87,7 +41,9 @@ ROADMAP_TARGET_REPO="${ROADMAP_TARGET_REPO:-}"
 source "$SKILLS_ROOT/_taskid/url.sh"
 
 # --- frontmatter read (pure; own copy, first fence only, per the
-# ts_fm_get/_tc_fm_get convention — see the env-loader comment above) -------
+# ts_fm_get/_tc_fm_get convention — each sourceable script that needs this
+# keeps its own copy rather than reaching into another script's
+# underscore-private internals) ---------------------------------------------
 
 _epic_fm_get() {
   local file="$1" field="$2"
@@ -115,38 +71,16 @@ _epic_iso_to_epoch() {
   printf ''
 }
 
-# --- cross-repo gh-account scoping (the core fix — see header comment) -----
-
-_epic_gh_token() {
-  # stdout: a GH token scoped to $ROADMAP_TARGET_REPO, or return 1.
-  [ -n "$ROADMAP_TARGET_REPO" ] || return 1
-  # shellcheck disable=SC1091
-  source "$SKILLS_ROOT/_gh/gh.sh"   # sourced, not exec'd — bypasses main()'s
-                                     # $PWD-derived repo slug (_gh/gh.sh:94-101).
-                                     # Idempotent (function redefinition), so
-                                     # calling this more than once per run is
-                                     # harmless.
-  local user
-  user="$(_gh_pick_account "$ROADMAP_TARGET_REPO")" || return 1
-  _gh_token_for "$user"
-}
-
 # --- fetch -------------------------------------------------------------------
 
 epic_fetch() {
-  # stdout: path to a tmp file holding the decoded dev/EPICS.md; return 1
-  # (silent — no stderr) on: ROADMAP_TARGET_REPO unset, no gh account can
-  # access it, or the file 404s. Pure I/O primitive — the human-readable
-  # "epics unavailable" note is epic_render's job, not this function's.
-  [ -n "$ROADMAP_TARGET_REPO" ] || return 1
-  local tok b64 tmp
-  tok="$(_epic_gh_token)" || return 1
-  b64="$(GH_TOKEN="$tok" gh api "repos/$ROADMAP_TARGET_REPO/contents/dev/EPICS.md?ref=main" \
-         --jq '.content // ""' 2>/dev/null)" || return 1
-  [ -n "$b64" ] || return 1
-  tmp="$(mktemp "${TMPDIR:-/tmp}/epic-status-epics.XXXXXX")" || return 1
-  printf '%s' "$b64" | base64 -d > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
-  printf '%s' "$tmp"
+  # stdout: path to the local dev/EPICS.md; return 1 (silent — no stderr) if
+  # it doesn't exist or isn't readable. Pure I/O primitive — the
+  # human-readable "epics unavailable" note is epic_render's job, not this
+  # function's.
+  local f="dev/EPICS.md"
+  [ -r "$f" ] || return 1
+  printf '%s\n' "$f"
 }
 
 # --- EPICS.md parser (portable line-oriented bash; no gawk-only features) ---
@@ -207,40 +141,17 @@ _epic_tasks_for() {
 
 # --- resolve -------------------------------------------------------------
 
-_epic_hub_lookup() {
-  # $1 id → stdout "dev/<DIR>/<filename>"; return 1 if not found in the hub's
-  # TODO/PARKING/JOURNAL (in that precedence order — same as taskid-path's
-  # local precedence and _tc_resolve_task_location's hub search shape).
-  local id="$1" tok dir names name
-  tok="$(_epic_gh_token)" || return 1
-  for dir in dev/TODO dev/PARKING dev/JOURNAL; do
-    names="$(GH_TOKEN="$tok" gh api "repos/$ROADMAP_TARGET_REPO/contents/$dir?ref=main" \
-             --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null)" || continue
-    # Pure parameter expansion, not `| head -1` — see epic_parse_file's
-    # SIGPIPE note (a live producer racing an early-exiting consumer).
-    name="${names%%$'\n'*}"
-    if [ -n "$name" ]; then
-      printf '%s/%s\n' "$dir" "$name"
-      return 0
-    fi
-  done
-  return 1
-}
-
 epic_resolve() {
-  # $1 id → one TSV line, 6 columns: status\tclaimed_by\tsource\trepo\tpath\tepoch.
+  # $1 id → one TSV line, 5 columns: status\tclaimed_by\trepo\tpath\tepoch.
   # NEVER returns non-zero — "unknown" is a valid, expected outcome (a
   # typo'd/deleted id), not a script error; render checks the status column,
-  # not the exit code.
+  # not the exit code. Local-only (T20261005-639913): no hub fallback.
   local id="${1:-}"
   # Reachable with raw, unvalidated argv from `main`'s `resolve` dispatch
   # (unlike every other caller, which only ever passes ids already
   # extracted via epic_parse_file's strict T-id regex) — a shape check here
-  # closes that off before $id ever reaches _epic_hub_lookup's --jq string
-  # interpolation (harmless today since jq has no shell-exec primitive
-  # reachable that way, but cheap to make impossible rather than merely
-  # safe).
-  [[ "$id" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || { printf 'unknown\t\t\t\t\t\n'; return 0; }
+  # closes that off before $id reaches taskid-path.
+  [[ "$id" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || { printf 'unknown\t\t\t\t\n'; return 0; }
 
   local file
   if file="$(taskid-path "$id" 2>/dev/null)"; then
@@ -249,39 +160,11 @@ epic_resolve() {
     status="$(_epic_fm_get "$file" status)" || status=""
     claimed="$(_epic_fm_get "$file" claimed_by)" || claimed=""
     epoch="$(git log -1 --format=%ct -- "$file" 2>/dev/null)" || epoch=""
-    printf '%s\t%s\tlocal\t%s\t%s\t%s\n' "$status" "$claimed" "$repo" "$file" "$epoch"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$status" "$claimed" "$repo" "$file" "$epoch"
     return 0
   fi
 
-  if [ -n "$ROADMAP_TARGET_REPO" ]; then
-    local hub_path
-    if hub_path="$(_epic_hub_lookup "$id")"; then
-      local tok b64 tmp status="" claimed="" epoch=""
-      tok="$(_epic_gh_token)" || { printf 'unknown\t\t\t\t\t\n'; return 0; }
-      b64="$(GH_TOKEN="$tok" gh api "repos/$ROADMAP_TARGET_REPO/contents/$hub_path?ref=main" \
-             --jq '.content // ""' 2>/dev/null)" || b64=""
-      if [ -n "$b64" ]; then
-        tmp="$(mktemp "${TMPDIR:-/tmp}/epic-status-hub.XXXXXX")" || { printf 'unknown\t\t\t\t\t\n'; return 0; }
-        if printf '%s' "$b64" | base64 -d > "$tmp" 2>/dev/null; then
-          status="$(_epic_fm_get "$tmp" status)" || status=""
-          claimed="$(_epic_fm_get "$tmp" claimed_by)" || claimed=""
-        fi
-        rm -f "$tmp"
-      fi
-      if [ -z "$status" ]; then
-        printf 'unknown\t\t\t\t\t\n'
-        return 0
-      fi
-      local iso
-      iso="$(GH_TOKEN="$tok" gh api "repos/$ROADMAP_TARGET_REPO/commits?path=$hub_path&per_page=1" \
-             --jq '.[0].commit.committer.date // ""' 2>/dev/null)" || iso=""
-      [ -n "$iso" ] && epoch="$(_epic_iso_to_epoch "$iso")"
-      printf '%s\t%s\thub\t%s\t%s\t%s\n' "$status" "$claimed" "$ROADMAP_TARGET_REPO" "$hub_path" "$epoch"
-      return 0
-    fi
-  fi
-
-  printf 'unknown\t\t\t\t\t\n'
+  printf 'unknown\t\t\t\t\n'
   return 0
 }
 
@@ -326,22 +209,21 @@ _epic_status_rank() {
 
 epic_pr_state() {
   # $1 id  $2 repo → "PR #N STATE" or "no PR". Only called for a bounded
-  # number of ids per render (the leading task of each epic), not every task.
+  # number of ids per render (the leading task of each epic), not every
+  # task. Always local now (T20261005-639913) — $repo is this clone's own
+  # repo, so the plain `_gh/gh.sh` CLI form (account picked from $PWD's own
+  # origin) is correct; no cross-repo token-picking needed anywhere in this
+  # file any more.
   local id="${1:-}" repo="${2:-}" line=""
-  if [ -z "$id" ] || [ -z "$repo" ]; then
+  if [ -z "$id" ]; then
     printf 'no PR\n'
     return 0
   fi
-  if [ -n "$ROADMAP_TARGET_REPO" ] && [ "$repo" = "$ROADMAP_TARGET_REPO" ]; then
-    local tok
-    tok="$(_epic_gh_token)" || { printf 'no PR\n'; return 0; }
-    line="$(GH_TOKEN="$tok" gh pr list --repo "$repo" --search "$id" --state all --limit 1 \
+  if [ -n "$repo" ]; then
+    line="$(bash "$SKILLS_ROOT/_gh/gh.sh" pr list --repo "$repo" --search "$id" --state all --limit 1 \
             --json number,state --jq '.[0] | "PR #\(.number) \(.state)"' 2>/dev/null)" || line=""
   else
-    # LOCAL repo (the task resolved in *this* clone) — $PWD already IS that
-    # repo, so the plain _gh/gh.sh CLI form (account picked from $PWD's own
-    # origin) is correct here, unlike every cross-repo call above.
-    line="$(bash "$SKILLS_ROOT/_gh/gh.sh" pr list --repo "$repo" --search "$id" --state all --limit 1 \
+    line="$(bash "$SKILLS_ROOT/_gh/gh.sh" pr list --search "$id" --state all --limit 1 \
             --json number,state --jq '.[0] | "PR #\(.number) \(.state)"' 2>/dev/null)" || line=""
   fi
   if [ -n "$line" ]; then printf '%s\n' "$line"; else printf 'no PR\n'; fi
@@ -353,14 +235,9 @@ epic_render() {
   local mode="text"
   [ "${1:-}" = "--slack" ] && mode="slack"
 
-  local reason=""
-  if [ -z "$ROADMAP_TARGET_REPO" ]; then
-    reason="ROADMAP_TARGET_REPO is not set"
-  fi
-
-  local epics_file=""
-  if [ -z "$reason" ] && ! epics_file="$(epic_fetch)"; then
-    reason="could not read dev/EPICS.md from $ROADMAP_TARGET_REPO"
+  local reason="" epics_file=""
+  if ! epics_file="$(epic_fetch)"; then
+    reason="dev/EPICS.md not found or unreadable"
   fi
 
   if [ -n "$reason" ]; then
@@ -370,7 +247,8 @@ epic_render() {
 
   local parsed
   parsed="$(epic_parse_file "$epics_file")" || true
-  rm -f "$epics_file"
+  # dev/EPICS.md is a real repo file now (not a downloaded tmp copy) — never
+  # rm it.
 
   # Here-string, not `printf ... | grep -q` — see epic_parse_file's SIGPIPE
   # note (grep -q exits on its first match, the exact hazard).
@@ -410,9 +288,9 @@ epic_render() {
       # literal single-char separator with no such collapsing, so split
       # through it instead (verified: `printf 'x\t\ty' | IFS=$'\t' read -r a
       # b c` gives b="y" c="", not b="" c="y"). Columns: status, claimed_by
-      # (unused here), source (unused here), repo, path (unused here), epoch.
-      mapfile -t fields < <(awk -F'\t' '{for (i=1;i<=6;i++) print $i}' <<<"$row")
-      status="${fields[0]}"; repo="${fields[3]}"; epoch="${fields[5]}"
+      # (unused here), repo, path (unused here), epoch.
+      mapfile -t fields < <(awk -F'\t' '{for (i=1;i<=5;i++) print $i}' <<<"$row")
+      status="${fields[0]}"; repo="${fields[2]}"; epoch="${fields[4]}"
       if [ -z "$status" ] || [ "$status" = "unknown" ]; then
         unresolved="${unresolved}${tid}"$'\n'
         continue
@@ -464,7 +342,7 @@ epic_render() {
       # Real UTF-8 bytes via ANSI-C quoting, not literal \xHH escapes fed
       # through `printf '%b'` — %b re-interprets EVERY backslash escape in
       # its argument, including any that happen to originate from
-      # hub-authored $title/$leading_status text (a literal "\c" in an
+      # repo-authored $title/$leading_status text (a literal "\c" in an
       # EPICS.md title would make %b silently stop producing output mid-line).
       # Building the markers as real bytes up front and printing with %s
       # means no runtime escape interpretation ever touches interpolated

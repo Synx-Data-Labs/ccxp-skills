@@ -13,12 +13,10 @@
 # assignment, a Python dict literal (either quote style), a subscript
 # assignment (`os.environ[...] = ...`), or `os.putenv(...)` — a check
 # that only caught one spelling would give false confidence (caught by
-# independent review of PR #175, 2026-09-29). Three sites are documented,
-# deliberate exceptions, not violations:
-#   - `ccxp/scripts/epic-status.sh` (5 sites) — cross-repo reads against
-#     `$ROADMAP_TARGET_REPO`, a different repo than `$PWD`; `gh.sh main()`
-#     has no `--repo` override, so this script sources `gh.sh` for its
-#     account-picking primitives directly instead (see its own header).
+# independent review of PR #175, 2026-09-29). Two sites are documented,
+# deliberate exceptions, not violations (a third, `ccxp/scripts/epic-status.sh`'s
+# 5 cross-repo-hub sites, was retired by T20261005-639913 — that script is
+# local-only now, no hub repo, no manual `GH_TOKEN=` anywhere in it):
 #   - `_session/_lib.sh`'s no-wrapper CI-only fallback line — a GHA runner
 #     sparse-cloning just `_session/` has exactly one token and no account
 #     ambiguity.
@@ -51,8 +49,7 @@ setup() {
 #   - _gh/gh.sh, _gh/git.sh (the wrappers themselves — they set GH_TOKEN
 #     internally on purpose; that's their whole job)
 #   - comment-only lines (first non-whitespace char '#') — a doc comment
-#     that merely MENTIONS the pattern (e.g. epic-status.sh's own header
-#     explaining why it does this) isn't itself a call site.
+#     that merely MENTIONS the pattern isn't itself a call site.
 # Empty output means clean. Pure directory-tree logic (`find`/`grep`, no
 # git), so it works against a plain fixture tree with no `.git` too.
 _scan_gh_token_sites() {
@@ -76,7 +73,7 @@ _scan_gh_token_sites() {
   done < <(find "$root" -type f \( -name '*.sh' -o -name '*.py' \) | sort)
 }
 
-@test "the repo's only caller-side GH_TOKEN= sites are the three allowlisted ones" {
+@test "the repo's only caller-side GH_TOKEN= sites are the two allowlisted ones" {
   run _scan_gh_token_sites "$REPO_ROOT"
   [ "$status" -eq 0 ]
 
@@ -84,7 +81,6 @@ _scan_gh_token_sites() {
   while IFS= read -r hit; do
     [ -z "$hit" ] && continue
     case "$hit" in
-      ccxp/scripts/epic-status.sh:*) ;;
       _session/_lib.sh:*) ;;
       actions/sync-tasks/sync.py:*) ;;
       *) bad="$bad
@@ -100,12 +96,16 @@ $hit" ;;
   [ "$status" -eq 0 ]
 
   local n
-  n="$(printf '%s\n' "$output" | grep -c '^ccxp/scripts/epic-status\.sh:')"
-  [ "$n" -eq 5 ]
   n="$(printf '%s\n' "$output" | grep -c '^_session/_lib\.sh:')"
   [ "$n" -eq 1 ]
   n="$(printf '%s\n' "$output" | grep -c '^actions/sync-tasks/sync\.py:')"
   [ "$n" -eq 1 ]
+}
+
+@test "ccxp/scripts/epic-status.sh no longer carries any caller-side GH_TOKEN= site (T20261005-639913 made it local-only)" {
+  run _scan_gh_token_sites "$REPO_ROOT"
+  [ "$status" -eq 0 ]
+  ! grep -q '^ccxp/scripts/epic-status\.sh:' <<<"$output"
 }
 
 @test "a fixture with a new unauthorized GH_TOKEN= assignment fails the check" {

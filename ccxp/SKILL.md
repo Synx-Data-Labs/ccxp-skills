@@ -7,7 +7,7 @@ argument-hint: "[task-id]"
 
 Claude Code Extreme Programming: the master skill that orchestrates daily engineering work following XP best practices. Starts with a daily standup (review yesterday, check progress against the week's IPM commit if one exists, plan today), focused work via `/drive`, and a weekly retrospective on Fridays.
 
-**The Monday Iteration Planning Meeting is a separate, opt-in ritual, not something this orchestrator auto-triggers** (T20260924-252293). The day-to-day planning loop is continuous `/todo next` + `/drive` pulling straight off `dev/TODO/queue.md`'s existing priority order. A repo that wants an explicit weekly iteration commit (e.g. one running a configured GH Project board) invokes `/ipm` directly, any day — see `ipm/SKILL.md`.
+**The Monday Iteration Planning Meeting is a separate, opt-in ritual, not something this orchestrator auto-triggers** (T20260924-252293). The day-to-day planning loop is continuous `/todo next` + `/drive` pulling straight off `dev/TODO/queue.md`'s existing priority order. A repo that wants an explicit weekly iteration commit invokes `/ipm` directly, any day — see `ipm/SKILL.md`.
 
 ## Argument
 
@@ -358,10 +358,11 @@ resolves. "Nothing merged yesterday" if empty — never an empty section.}
 
 ## Epic progress
 (From `epic-status.sh render`, T20260911-347027 — token-free, deterministic; reads
-the hub repo's `dev/EPICS.md`. Paste its stdout verbatim; the script itself
-prints a one-line note instead of the heading's body when `ROADMAP_TARGET_REPO`
-is unset, `dev/EPICS.md` is unreadable, or no epics are defined yet — so this
-section, like Resolved/Nightly/Attention/Top-5, is never simply omitted.)
+this repo's own local `dev/EPICS.md` (T20261005-639913 — no hub repo). Paste
+its stdout verbatim; the script itself prints a one-line note instead of the
+heading's body when `dev/EPICS.md` is missing/unreadable, or no epics are
+defined yet — so this section, like Resolved/Nightly/Attention/Top-5, is
+never simply omitted.)
 
 {verbatim output of `bash <skills-root>/ccxp/scripts/epic-status.sh render`}
 
@@ -571,8 +572,8 @@ bash <skills-root>/ccxp/scripts/epic-status.sh render --slack
 (Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md`
 exists yet. Omit the whole `*📊 Attribution*` block on a no-data day. Omit the
 whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack`
-emits no lines (unset `ROADMAP_TARGET_REPO`, unreadable `EPICS.md`, or no
-epics defined) — same optional-block class as Weekly focus/Attribution, not
+emits no lines (`dev/EPICS.md` missing/unreadable, or no epics defined) —
+same optional-block class as Weekly focus/Attribution, not
 one of the four always-render headline sections. Every
 other section — Resolved, Nightly, Needs your attention, Top 5 next — always
 renders, using its "None"/"Nothing"/"all green" fallback rather than being
@@ -594,7 +595,7 @@ context sections) before shortening the four headline sections.
 
 **This phase no longer runs as part of `/ccxp`'s automatic sequence, in either cron or interactive mode.** The mandatory Monday budget-cut ceremony was retired: continuous `/todo next` + `/drive` off `dev/TODO/queue.md`'s existing priority order is the documented day-to-day planning loop (it never required a weekly ceremony to pick the next task). `/ccxp` does not check the day of week to decide whether to run `/ipm`, and never calls it itself.
 
-`/ipm` remains a fully-functional, standalone skill for a repo that *wants* an explicit weekly iteration commit — e.g. one running a configured GH Project board where a periodic `scheduled:`/budget snapshot is useful. Invoke it directly, any day: `/ipm` (see `ipm/SKILL.md`). It reads `CCXP_CRON_MODE` from the environment itself, so a cron-spawned session that chooses to call it still gets the interactive-only pre-IPM design pass (step 3) skipped correctly — no extra plumbing needed here.
+`/ipm` remains a fully-functional, standalone skill for a repo that *wants* an explicit weekly iteration commit snapshot. Invoke it directly, any day: `/ipm` (see `ipm/SKILL.md`). It reads `CCXP_CRON_MODE` from the environment itself, so a cron-spawned session that chooses to call it still gets the interactive-only pre-IPM design pass (step 3) skipped correctly — no extra plumbing needed here.
 
 (Historical note: this phase used to trigger only on Monday via a `TZ=America/Chicago date +%u` check, pinned because the crontab sets `CRON_TZ=America/Chicago` while the spawned shell inherits the *server* timezone — see T20260518-170804. That trigger is dead code now that nothing calls this phase automatically; kept here only in case a repo wants to reintroduce a day-gated cron call to `/ipm` itself.)
 
@@ -614,12 +615,12 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
    - Slack a summary
 3. Report: "Retro filed. {N} action items created. Starting focused work."
 4. **Optionally propose an `EPICS.md` update** (new task IDs discovered under
-   an epic this week, an epic newly done): reuse `update-roadmap.sh`'s
-   `clone`/`commit-pr` machinery against the same `ROADMAP_TARGET_REPO`,
-   editing `dev/EPICS.md` instead of `dev/ROADMAP.md` in the ephemeral clone.
-   This is the **only** write path for `EPICS.md` — Phase 1.3/1.4's daily
-   render stays strictly read-only. Skip silently when there's nothing to
-   propose; never block the retro on this step.
+   an epic this week, an epic newly done): edit this repo's own local
+   `dev/EPICS.md` directly (T20261005-639913 — no hub repo, no ephemeral
+   clone) and fold the change into the retro's own commit/PR. This is the
+   **only** write path for `EPICS.md` — Phase 1.3/1.4's daily render stays
+   strictly read-only. Skip silently when there's nothing to propose; never
+   block the retro on this step.
 
 **If a Friday session is missed**, the next Friday's retro covers the gap (it always looks at the last 7 days).
 
