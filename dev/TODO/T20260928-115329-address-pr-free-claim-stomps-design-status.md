@@ -32,7 +32,7 @@ claimed_role: interactive
 
 - Add one shared sub-step to `address-pr/SKILL.md` §1.6, referenced by both `free` and `new`:
   - Before `acquire`: `PRE=$(bash ../_session/task_claim.sh read <id> | cut -f1)`.
-  - After `acquire`: if `PRE` is non-empty and not `Open`/`In Progress`, restore it with the script's own writer, then mirror with `status.sh <id> "$PRE"` (best-effort).
+  - After `acquire`: if `PRE` is non-empty and not `Open`/`In Progress`, restore it by sourcing the script (side-effect-free; there is no CLI verb for a bare status write) and calling its internal writer, `( . ../_session/task_claim.sh; _tc_fm_set "$(_tc_find_file <id>)" status "$PRE" )`, then mirror with `status.sh <id> "$PRE"` (best-effort).
   - The restore lands in the same commit as the claim, so the claim PR stays a pure frontmatter change.
 - Alternatives rejected:
   - Change `_tc_acquire` to preserve status: out of scope (caller-side fix per `ccxp/SKILL.md` precedent; `/drive` relies on the primitive setting `In Progress`).
