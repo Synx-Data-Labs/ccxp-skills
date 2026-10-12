@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 1
 claimed_by: cc1-50ac6891:bf6b098f35f88e3b
 scheduled: 2026-10-12
@@ -346,50 +346,71 @@ once approved — but nothing in it should be done until that decision lands.
 
 ## Test plan
 
-- [ ] Label taxonomy: `delivered` label created via an updated
-      `scripts/setup-labels.sh`, re-run idempotently (`--force` create, no
-      duplicate/error on a second run).
-- [ ] State machine: a BATS/unit suite covering every row of the Transition
+- [x] Label taxonomy: `delivered` label created via an updated
+      `scripts/setup-labels.sh` (`synxdb-support#28`, merged), re-run
+      idempotently (`--force` create, no duplicate/error on a second run —
+      verified by running it live twice).
+- [x] State machine: a BATS/unit suite covering every row of the Transition
       rules table — valid transitions succeed, invalid ones (e.g. `accept` from
       anything but `delivered`, `accept` attempted by a non-support identity)
-      are rejected.
-- [ ] `deliver` evidence gate: mocked reachability check — a non-200/301/302
+      are rejected. `tests/customer_support_state_machine.bats` (16 cases),
+      `tests/customer_support_accept_gate.bats` (7 cases, identity gate).
+- [x] `deliver` evidence gate: mocked reachability check — a non-200/301/302
       response blocks the transition (regression case for tonight's `#21`).
-- [ ] `links`: BATS against a fixture released-SBOM — verifies the
+      `tests/customer_support_deliver_gate.bats` (8 cases).
+- [x] `links`: BATS against a fixture released-SBOM — verifies the
       `SYNX_PARTNER_TOKEN`/`ENTITLEMENT_TOKEN` bridging, token never accepted
       as a CLI arg (same rejection-test pattern as the two scripts it wraps),
       and that a non-verifying URL blocks `deliver` the same way a failed
-      generic reachability check does.
-- [ ] `audit`: run against the live repo once implemented — confirm it flags
+      generic reachability check does. `tests/customer_support_links.bats`
+      (10 cases).
+- [x] `audit`: run against the live repo once implemented — confirm it flags
       `#20`/`#21`/`#23`/`#24`/`#25`/`#27`'s current real-world label gaps as a
       smoke test, and that its board-drift report is read-only (no writes to
-      `projects/3`).
+      `projects/3`). **Run live** (`bash customer-support/scripts/audit.sh
+      Synx-Data-Labs/synxdb-support`) — correctly flagged all six issues'
+      missing primary-state label; made zero writes (board-drift reporting
+      is intentionally not implemented at all, per the deferred board
+      retirement — see Important Notes).
 - [ ] End-to-end dry run: walk one real backlog issue through
       `triage → start → deliver → accept` and confirm the label state and
-      issue-closed reason match the table above at each step.
+      issue-closed reason match the table above at each step. **Deliberately
+      NOT done by this task** — this would relabel/close a real customer-
+      facing issue, an irreversible, outward-facing action per `/drive`'s own
+      escalation rules; left for a human (or an explicitly-approved follow-up)
+      to run as the real backfill the design always intended ("running
+      `/customer-support triage`/`start`/etc. on them once the skill exists
+      **is** the backfill").
 
 ## Done criteria
 
-- [ ] `delivered` is the only new label in `Synx-Data-Labs/synxdb-support`
-      (verify via `gh label list` diff against this doc's taxonomy table).
-- [ ] `/customer-support` skill exists in `ccxp-skills` with all 11 subcommands
+- [x] `delivered` is the only new label in `Synx-Data-Labs/synxdb-support`
+      (verify via `gh label list` diff against this doc's taxonomy table) —
+      confirmed via `gh label list --limit 100` after `synxdb-support#28`.
+- [x] `/customer-support` skill exists in `ccxp-skills` with all 11 subcommands
       above; `/support` itself is renamed+generalized to `/to-task` (intake
       only, `source-url:` key, `support-issue:` kept as a recognized legacy
       alias — see § 5).
-- [ ] `scripts/setup-labels.sh` creates the full taxonomy (no more missing
-      `triage`/`accepted`/`in-progress`/`blocked`/`sev*`/`area:*`).
-- [ ] `links`/`deliver` correctly bridge `.env`'s `ENTITLEMENT_TOKEN` to
+- [x] `scripts/setup-labels.sh` creates the full taxonomy (no more missing
+      `triage`/`accepted`/`in-progress`/`blocked`/`sev*`/`area:*`) —
+      `synxdb-support#28`.
+- [x] `links`/`deliver` correctly bridge `.env`'s `ENTITLEMENT_TOKEN` to
       `SYNX_PARTNER_TOKEN` and never hand-construct a Cloudsmith URL.
 - [ ] Projects-board section stays a pure recommendation — **not executed**
       until Shine confirms the leadership-meeting decision; that confirmation
       is a separate follow-up (new task or a comment here), not implied by
-      this task closing.
+      this task closing. **Still open, deliberately** — left unchecked
+      because the decision itself hasn't landed, not because of any gap in
+      this task's own work.
 
 ## Open questions
 
 - ~~Q1: final `delivered` label color~~ — RESOLVED (decided now, applied
-  when the label is created at implementation time): `#5319e7` (matches the
-  existing state-label family, adjacent to `in-progress`'s blue).
+  when the label is created at implementation time): `#0052cc` — checked
+  against the live label set (`gh label list`) to avoid a collision;
+  `#5319e7` (one of the two colors this doc's Migration plan originally
+  suggested) turned out to already be `family:synxdb`/`family:cloud`'s
+  color, which would read as "another family label," not a state label.
 - ~~Q2: `links`/cross-repo invocation shape~~ — RESOLVED: ephemeral ad-hoc
   clone of `synxdb-build-pipeline` per `/drive` Phase 1.5's pattern (never
   reuse an existing local clone — same reasoning as Phase 1.5 itself: a local

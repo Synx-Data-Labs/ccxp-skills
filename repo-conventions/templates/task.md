@@ -14,7 +14,8 @@ estimation: 1
 #   file work about it directly there, see its lifecycle.md § "Tasks about
 #   ccxp-skills itself")
 # target-path: /abs/path/to/<repo>     # only when reusing an existing checkout with WIP
-# support-issue: <canonical issue URL> # customer support task (written by /support; dedup key)
+# source-url: <canonical URL> # generic intake task (written by /to-task; dedup key)
+# support-issue: <canonical issue URL> # legacy alias for source-url, pre-dates the /support -> /to-task rename
 # support-report: on                   # opt in to outward status reports (default off; later phase)
 #
 # Runtime fields written by tooling — do NOT hand-author:

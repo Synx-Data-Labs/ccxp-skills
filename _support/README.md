@@ -1,7 +1,9 @@
 # _support — customer-support task lib
 
-Shared by `/support` (intake) and the `type == support` branch of `/drive`,
-`design-score` and `/address-pr`. Nothing here posts to an issue.
+Shared by `/to-task` (intake, for its designated-support-repo branch) and
+the `type == support` branch of `/drive`, `design-score` and `/address-pr`.
+Nothing here posts to an issue — lifecycle posting (triage/deliver/accept/
+etc.) is `/customer-support`'s job.
 
 ## Scripts
 
@@ -14,7 +16,7 @@ Shared by `/support` (intake) and the `type == support` branch of `/drive`,
 
 ## Task shape
 
-- Frontmatter: `support-issue: <canonical url>` (dedup key), optional `support-report: on|off` (absent = off; read only by the later reporter phase), existing `deadline: YYYY-MM-DD`.
+- Frontmatter: `source-url: <canonical url>` (dedup key; `support-issue:` is a recognized legacy alias, pre-dates the `/support` -> `/to-task` rename), optional `support-report: on|off` (absent = off; read only by the later reporter phase), existing `deadline: YYYY-MM-DD`.
 - Body: `- **Type**: support`, `## Customer summary`, `## Repro`, `## Regression test`.
 
 ## Fix-side gates (via `/drive`)

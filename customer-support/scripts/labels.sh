@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# labels.sh — gh I/O for /customer-support's label-driven lifecycle
+# (T20261012-373882). Reads/writes issue labels and close state. The
+# transition *rules* live in state_machine.sh (pure, no I/O); this file is
+# the thin GitHub-talking layer that applies a decided transition.
+#
+# gh wrapper — DI seam via CS_GH (tests inject a stub here), mirroring
+# _gh/ci-triage.sh's CI_TRIAGE_GH / _taskid/url.sh's TASKID_GH convention.
+set -euo pipefail
+
+CS_PRIMARY_LABELS="triage accepted in-progress delivered"
+CS_REJECT_LABELS="wontfix invalid duplicate"
+
+CS_GH="${CS_GH:-}"
+cs-gh() {
+  if [[ -n "$CS_GH" ]]; then
+    "$CS_GH" "$@"
+  else
+    gh "$@"
+  fi
+}
+
+# cs-labels-primary <owner/repo> <issue-number>
+# Prints the single current primary label, or "none" if the issue carries
+# none (e.g. already closed and cleared). Fails loudly if MORE than one
+# primary label is present — that is the exact invariant violation `audit`
+# exists to catch; a transition should never proceed against a dirty state.
+cs-labels-primary() {
+  local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
+  local json names found="" n
+  json=$(cs-gh issue view "$issue" --repo "$repo" --json labels)
+  names=$(echo "$json" | jq -r '.labels[].name')
+  for n in $CS_PRIMARY_LABELS; do
+    if grep -qxF "$n" <<<"$names"; then
+      if [[ -n "$found" ]]; then
+        echo "error: issue ${repo}#${issue} carries more than one primary label (${found}, ${n}) — invariant violated, run 'audit'" >&2
+        return 1
+      fi
+      found="$n"
+    fi
+  done
+  echo "${found:-none}"
+}
+
+# cs-labels-apply <owner/repo> <issue> <old-primary|none> <new-primary|CLOSED:reason>
+# Removes the old primary label (if any), adds the new one, or closes the
+# issue with the given reason when new starts with CLOSED:.
+cs-labels-apply() {
+  local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
+  local old="${3:?old state required}" new="${4:?new state required}"
+
+  if [[ -n "$old" && "$old" != "none" ]]; then
+    cs-gh issue edit "$issue" --repo "$repo" --remove-label "$old"
+  fi
+
+  case "$new" in
+    CLOSED:completed)
+      cs-gh issue close "$issue" --repo "$repo" --reason completed
+      ;;
+    CLOSED:rejected)
+      # Caller (reject.sh) is responsible for also adding the specific
+      # wontfix/invalid/duplicate label before this call.
+      cs-gh issue close "$issue" --repo "$repo" --reason "not planned"
+      ;;
+    *)
+      cs-gh issue edit "$issue" --repo "$repo" --add-label "$new"
+      ;;
+  esac
+}
+
+# cs-labels-toggle <owner/repo> <issue> <label> <on|off>
+cs-labels-toggle() {
+  local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
+  local label="${3:?label required}" mode="${4:?on|off required}"
+  case "$mode" in
+    on) cs-gh issue edit "$issue" --repo "$repo" --add-label "$label" ;;
+    off) cs-gh issue edit "$issue" --repo "$repo" --remove-label "$label" ;;
+    *)
+      echo "usage: cs-labels-toggle <owner/repo> <issue> <label> <on|off>" >&2
+      return 2
+      ;;
+  esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  cmd="${1:-}"
+  shift || true
+  case "$cmd" in
+    primary) cs-labels-primary "$@" ;;
+    apply) cs-labels-apply "$@" ;;
+    toggle) cs-labels-toggle "$@" ;;
+    *)
+      echo "usage: labels.sh <primary|apply|toggle> ..." >&2
+      exit 2
+      ;;
+  esac
+fi
