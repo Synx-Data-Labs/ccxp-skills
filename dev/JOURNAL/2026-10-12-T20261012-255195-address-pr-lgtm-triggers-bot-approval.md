@@ -1,9 +1,9 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: this conversation, 2026-10-12
-claimed_by: cc1-50ac6891:4d9eb48c700d5e9a
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261012-255195: address-pr: an LGTM comment from the PR author triggers the bot approval
@@ -39,7 +39,8 @@ claimed_role: interactive
 - **Counts**: comments by the PR author (issue comment, review comment, or review body; current body, all pages, merged and sorted by timestamp across the three streams) created strictly after the push time. Optional `--after <iso>` raises that lower bound further.
 - **Match**: first non-empty line, case-insensitive, is `lgtm` plus optional `!`/`.`/`,` and an optional short tail (`thanks`, `ship it`, `merge it`); anything else (`LGTM but ...`, `not LGTM`, quoted `>`, fenced code) does not count.
 - **Never counts**: bot logins (`[bot]` suffix or `app/` prefix) and any body starting `**Claude Code review:**`.
-- **Revoke**: first line starting `hold`, `do not merge`, `don't merge`, `wip`, `changes requested`, `needs changes`; the latest decisive comment (LGTM or hold) wins.
+- **Revoke (tightened after implementation review)**: the author's latest comment decides; anything other than a clean LGTM (hold, wait, a second thought) revokes. A `**Claude Code review:**` comment is ignored. A body whose later lines contain but/not/fix/bug/wrong-style words is not a clean LGTM.
+- **Skill gate**: `FINDINGS_OPEN=1` while any finding is unanswered blocks the LGTM path (clean bill path unchanged).
 - **Push time** = the later of the newest commit `committedDate` and the newest `head_ref_force_pushed` timeline event (a rebase/amend keeps old commit dates, so the force-push event is needed). Residual gap: commit, then LGTM, then plain push can be misjudged; accepted because the review pinned to `HEAD_SHA` still has to exist.
 - **Pushback path**: when findings were answered by pushback (not fixed), the skill passes `--after <time of our latest pushback comment>`, so the LGTM must postdate the pushback and cannot be a stale or automated one. If the PR author is the automation account itself, the LGTM is taken as the human operator's (assumption).
 - **Guard stays platform-side**: the dispatch only requests a real `APPROVE`; `required_approving_review_count` and protection rules still decide merge.
@@ -52,15 +53,15 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `tests/address_pr_has_lgtm.bats` (red first): author LGTM passes; `LGTM!`/`lgtm` pass; non-author, bot, `**Claude Code review:**`, stale (before push), `LGTM but`, `not LGTM`, quoted, fenced, later hold, hold then re-LGTM, review-body LGTM, empty input; one stubbed-`GH_SH` live-path test.
-- [ ] Skill gates: `skill_score.py --check`, `test_skill_quality.py`, `bash _docs/lint-docs.sh`, shellcheck.
+- [x] `tests/address_pr_has_lgtm.bats` (red first): author LGTM passes; `LGTM!`/`lgtm` pass; non-author, bot, `**Claude Code review:**`, stale (before push), `LGTM but`, `not LGTM`, quoted, fenced, later hold, hold then re-LGTM, review-body LGTM, empty input; one stubbed-`GH_SH` live-path test.
+- [x] Skill gates: `skill_score.py --check`, `test_skill_quality.py`, `bash _docs/lint-docs.sh`, shellcheck.
 
 ## Done criteria
 
-- [ ] `has-lgtm.sh` implements the contract above: `tests/address_pr_has_lgtm.bats` (all cases green).
-- [ ] `address-pr/SKILL.md` step d wires it in and the report wording is added: `address-pr/SKILL.md` approval-gate block (`grep -n has-lgtm address-pr/SKILL.md`).
-- [ ] No skill-score regression: `skill_score.py --check dev/quality/skill-scores.json` passes (address-pr stays >= 61).
-- [ ] Task citation gap fixed: this file cites `dev/guidelines.md:11-20`, not the missing policy file.
+- [x] `has-lgtm.sh` implements the contract above: `tests/address_pr_has_lgtm.bats` (30 cases green).
+- [x] `address-pr/SKILL.md` step d wires it in and the report wording is added: `address-pr/SKILL.md` approval-gate block (`grep -n has-lgtm address-pr/SKILL.md`).
+- [x] No skill-score regression: `skill_score.py --check dev/quality/skill-scores.json` passes (address-pr stays >= 61).
+- [x] Task citation gap fixed: this file cites `dev/guidelines.md:11-20`, not the missing policy file.
 
 ## Root cause
 
@@ -74,10 +75,17 @@ claimed_role: interactive
 | `address-pr/scripts/auto-pick.sh` | pattern for stubbable `GH_SH` script (verified) |
 | `tests/address_pr_auto_pick.bats` | pattern for hermetic bats (verified) |
 
-## Closed
+## Closed (2026-10-12)
 
-- Pending implementation PR.
+- Shipped in PR #330 (design: PR #329, claim: PR #328). All done criteria met; 30 bats cases, skill score held at 61, design score 92.
+- Review rounds: design PR and implementation PR each had an independent review; all findings adopted (push time via force-push events, pushback ordering via `--after`, hang on trailing flag, broader revoke, `FINDINGS_OPEN` gate in the snippet).
+- Residual (accepted): commit, then LGTM, then plain push can be misjudged by the committedDate proxy; mitigated by the mandatory review for `HEAD_SHA`.
+- Open questions answered with defaults: supplement (not replace), author only, no workflow means notify/wait, no ack comment.
+- Not done: `drive/SKILL.md` still cites the nonexistent `dev/branch-merge-policy.md`; left as a cross-repo reference.
 
 ## Skills invoked
 
-- Design only so far; see Closed at task close.
+- TDD (`superpowers:test-driven-development`): yes, tests written first for has-lgtm.sh
+- Verification (`superpowers:verification-before-completion`): yes, bats + skill-score + lint before PR
+- Systematic debugging: no, didn't get stuck
+- Receiving code review: yes, two independent review rounds, all findings adopted

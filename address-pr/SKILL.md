@@ -277,8 +277,8 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 
 **LGTM supplement.** The PR author's `LGTM` comment is a second trigger for this same dispatch — it is *not* an approval itself (the bot's real `APPROVE` review is what satisfies `required_approving_review_count`, and branch protection still decides merge). It supplements the independent review, never replaces it:
 
-- A review of `HEAD_SHA` must exist and **no finding may be unanswered** (each fixed, or pushed back with a comment); the LGTM never skips the review or silences an open finding.
-- `bash ../address-pr/scripts/has-lgtm.sh <NUMBER> [--after <time of our latest pushback comment>]` decides: exit 0 prints the author. It counts only the PR author's own, non-bot comment after the latest push whose first line is a bare `LGTM` (not `LGTM but`, `not LGTM`, quoted, or a `**Claude Code review:**` comment); a later hold / changes-requested revokes. Contract and tests: `tests/address_pr_has_lgtm.bats`.
+- A review of `HEAD_SHA` must exist and **no finding may be unanswered** (each fixed, or pushed back with a comment; set `FINDINGS_OPEN=1` while any is, which blocks the LGTM path); the LGTM never skips the review or silences an open finding.
+- `bash ../address-pr/scripts/has-lgtm.sh <NUMBER> [--after <time of our latest pushback comment>]` decides: exit 0 prints the author. It counts only the PR author's own, non-bot comment after the latest push whose first line is a bare `LGTM` (not `LGTM but`, `not LGTM`, quoted, or a `**Claude Code review:**` comment); any later author comment other than a clean LGTM (hold, wait, a second thought) revokes. Contract and tests: `tests/address_pr_has_lgtm.bats`.
 - Only the author's LGTM triggers (other maintainers' do not); no ack comment is posted. Exit 1 or 2 means no LGTM — behave exactly as before.
 - No `pr-approve.yml` in the repo: nothing is triggered; notify/wait as usual, and note "LGTM seen, no approval workflow" in the §3 report.
 
@@ -289,7 +289,7 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 # auto-approval (merge stalls, gets investigated), never approves something
 # it shouldn't.
 LGTM_BY="$(bash ../address-pr/scripts/has-lgtm.sh <NUMBER> ${PUSHBACK_AT:+--after "$PUSHBACK_AT"} 2>/dev/null || true)"
-if { [ "${CLEAN_BILL:-0}" = 1 ] || [ -n "$LGTM_BY" ]; } && bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
+if { [ "${CLEAN_BILL:-0}" = 1 ] || { [ -n "$LGTM_BY" ] && [ "${FINDINGS_OPEN:-0}" = 0 ]; }; } && bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
   [ -n "$LGTM_BY" ] && echo "approval triggered via LGTM by ${LGTM_BY}"
   bash ../_gh/gh.sh workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"
   # Poll the PR's own reviews, not the workflow run — this is what we actually
