@@ -1,8 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1
 blocks: [T20261012-949870]
 source: this conversation, 2026-10-12 (customer-support skill plan, phase 1 of 4)
+claimed_by: cc1-50ac6891:f926680a9bc26294
+claimed_role: interactive
 ---
 
 # T20261012-109735: support skill P1: intake, support task type, lint keys, repro + same-commit regression gates
