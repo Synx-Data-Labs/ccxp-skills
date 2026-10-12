@@ -30,7 +30,7 @@ source: this conversation, 2026-10-12 (customer-support skill plan, phase 3 of 4
   - Posting identity, internal Slack audit/escalation note via `slack-send.sh --channel $SUPPORT_SLACK_CHANNEL`, transition notice when cadence tightens ("moving to more frequent updates"), `SUPPORT_DRY_RUN` kill switch and `support:paused` label honored.
   - Enable the scheduled tick on ONE real, opted-in task first and observe it for a few days before wider use.
 - Safeguards (outward-facing, hard to reverse): opt-in per task, default off; deny-list lint aborts a post and alerts the owner; per-failure-class daily alert, no hot-loop retries.
-- Evals: `evals/evals.json` for the prose parts of `/support` and `/support-report` (skill-conventions section 5).
+- Evals: `evals/evals.json` for the prose parts of `/customer-support`'s `report`/`status`/`stop` subcommands and the `/support-report` composite action (skill-conventions section 5).
 - Done: one real support issue receives correct, deduplicated updates at the right cadence with no manual intervention, and the first comment was human-approved.
 - Source plan: scratchpad `support-skill-plan.md`, sections 2.3, 3.2, 3.6, 6, 7.
 

@@ -32,10 +32,12 @@ description: Design for /customer-support, a label-driven synxdb-support lifecyc
   fully designed here but explicitly **deferred**, not actioned.
 - **Latest iteration (this pass)**: `/support` itself is renamed and
   generalized to `/to-task` (any URL → a task, not just a synxdb-support
-  issue); the lifecycle skill gets a real name (candidates proposed, Shine
-  decides); and `synxdb-build-pipeline`'s existing `close-support-issue`
-  skill is found to already overlap this design's delivery/links/accept
-  logic — flagged for reconciliation, not solved here.
+  issue); the lifecycle skill's name is **decided: `/customer-support`**
+  (Shine named it directly in a live follow-up — see § 6); and
+  `synxdb-build-pipeline`'s existing `close-support-issue` skill's overlap
+  with this design's delivery/links/accept logic is **resolved**:
+  `close-support-issue` Phase 4 will call `/customer-support` instead of
+  duplicating it, tracked as `synxdb-build-pipeline#T20261012-612044`.
 
 ## Problem
 
@@ -385,9 +387,9 @@ once approved — but nothing in it should be done until that decision lands.
 
 ## Open questions
 
-- ~~Q1: final `delivered` label color~~ — RESOLVED at implementation:
-  `#5319e7` (matches the existing state-label family, adjacent to
-  `in-progress`'s blue).
+- ~~Q1: final `delivered` label color~~ — RESOLVED (decided now, applied
+  when the label is created at implementation time): `#5319e7` (matches the
+  existing state-label family, adjacent to `in-progress`'s blue).
 - ~~Q2: `links`/cross-repo invocation shape~~ — RESOLVED: ephemeral ad-hoc
   clone of `synxdb-build-pipeline` per `/drive` Phase 1.5's pattern (never
   reuse an existing local clone — same reasoning as Phase 1.5 itself: a local
