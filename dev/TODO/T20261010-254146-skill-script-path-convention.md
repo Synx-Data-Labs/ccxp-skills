@@ -1,10 +1,12 @@
 ---
-status: Open
+status: In Progress
 scheduled: 2026-10-12
 estimation: 5
 source: split from T20260928-101526
 related: [T20260928-101526]
 description: One base-dir convention for skill script paths (consumer-repo exit 127)
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
 ---
 
 # T20261010-254146: One base-dir convention for skill script paths (consumer-repo exit 127)
