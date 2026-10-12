@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 blocks: [T20261012-949870]
 related: [T20261012-333879]
 source: this conversation, 2026-10-12 (customer-support skill plan, phase 1 of 4)
-claimed_by: cc1-50ac6891:f926680a9bc26294
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261012-109735: support skill P1: intake, support task type, lint keys, repro + same-commit regression gates
@@ -80,25 +80,31 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `tests/support_parse_url.bats`: URL, `owner/repo#N`, GHES host, fragment, PR URL rejected, garbage rejected.
-- [ ] `tests/support_regression_commit.bats`: fix+test same commit passes; fix then test in a later commit fails; docs-only passes; trailer exempts; custom `SUPPORT_E2E_GLOB`; bad range exits 2.
-- [ ] `repo-conventions/scripts/test_lint_tasks.py`: `support-issue` and `support-report` accepted, an unrelated key still rejected.
-- [ ] `tests/design_score.bats`: support doc without Repro or Regression test fails; complete one passes; non-support docs unchanged.
-- [ ] `tests/support_neutrality.bats`: no company-specific literals under `support/` and `_support/`, and no issue-posting calls.
-- [ ] Full `bats tests/*.bats`, skill-quality and markdown lint green in CI.
+- [x] `tests/support_parse_url.bats`: URL, `owner/repo#N`, GHES host, fragment, PR URL rejected, garbage rejected.
+- [x] `tests/support_regression_commit.bats`: fix+test same commit passes; fix then test in a later commit fails; docs-only passes; trailer exempts; custom `SUPPORT_E2E_GLOB`; bad range exits 2.
+- [x] `repo-conventions/scripts/test_lint_tasks.py`: `support-issue` and `support-report` accepted, an unrelated key still rejected.
+- [x] `tests/design_score.bats`: support doc without Repro or Regression test fails; complete one passes; non-support docs unchanged.
+- [x] `tests/support_neutrality.bats`: no company-specific literals under `support/` and `_support/`, and no issue-posting calls.
+- [x] Full `bats tests/*.bats`, skill-quality and markdown lint green in CI.
 
 ## Done criteria
 
-- [ ] Pointing `/support` at an issue URL files a staged `support` task: `support/SKILL.md` steps plus `tests/support_parse_url.bats` (the scripted part).
-- [ ] A support PR without fix+e2e test in one commit is blocked: `tests/support_regression_commit.bats` and `_support/gate-pr.sh` wired in `address-pr/SKILL.md`.
-- [ ] Allowlist accepts both keys: `repo-conventions/scripts/test_lint_tasks.py`.
-- [ ] Support design gate: `tests/design_score.bats`.
-- [ ] Nothing posts to any issue: `tests/support_neutrality.bats`.
+- [x] Pointing `/support` at an issue URL files a staged `support` task: `support/SKILL.md` steps plus `tests/support_parse_url.bats` (the scripted part).
+- [x] A support PR without fix+e2e test in one commit is blocked: `tests/support_regression_commit.bats` and `_support/gate-pr.sh` wired in `address-pr/SKILL.md`.
+- [x] Allowlist accepts both keys: `repo-conventions/scripts/test_lint_tasks.py`.
+- [x] Support design gate: `tests/design_score.bats`.
+- [x] Nothing posts to any issue: `tests/support_neutrality.bats`.
 
-## Closed
+## Closed (2026-10-12)
 
-(filled at close)
+- Shipped in PR #326 (design: PR #323, claim: PR #320). All done criteria met by the tests named above; CI green on the PR.
+- Quality probe: shellcheck info +1, large new files (score.sh support check, tests); record-only, in `dev/quality/metrics.jsonl`.
+- Left for the user (design assumptions, reversible): Q3 `support-report` key added but unused until P2; Q2 date-only deadline; Q9 generic `SUPPORT_E2E_GLOB` with `No-regression-test:` trailer exemption; Q10 only `due:YYYY-MM-DD` label or line parsed. Q1, Q4-Q8, Q11 stay open for P2/P3.
+- No follow-up tasks filed; P2 (T20261012-949870) is unblocked.
 
 ## Skills invoked
 
-(filled at close)
+- TDD (`superpowers:test-driven-development`): yes, Phase 3.0 code-class (red bats and unittest first)
+- Verification (`superpowers:verification-before-completion`): yes, local bats/shellcheck/ratchet before PR
+- Systematic debugging (`superpowers:systematic-debugging`): no, didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes for the design PR review (3 nits fixed)
