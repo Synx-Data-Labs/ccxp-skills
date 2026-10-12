@@ -30,3 +30,4 @@ reprioritize.
 - [T20261010-274793](T20261010-274793-cross-repo-rule-in-guidelines.md): Add the cross-repo rule to the conventions layer and guidelines
 - [T20261010-363414](T20261010-363414-genericize-merge-bot-reference.md): Replace the `synx-merge-bot` reference with a generic merge-bot explanation
 - [T20261012-109735](T20261012-109735-support-skill-p1-intake-and-gates.md): support skill P1: intake, support task type, lint keys, repro + same-commit regression gates
+- [T20261012-949870](T20261012-949870-support-skill-p2-reporter-dry-run.md): support skill P2: status reporter engine in dry-run (cadence, renderer, marker, tick)
