@@ -14,6 +14,8 @@ estimation: 1
 #   file work about it directly there, see its lifecycle.md § "Tasks about
 #   ccxp-skills itself")
 # target-path: /abs/path/to/<repo>     # only when reusing an existing checkout with WIP
+# support-issue: <canonical issue URL> # customer support task (written by /support; dedup key)
+# support-report: on                   # opt in to outward status reports (default off; later phase)
 #
 # Runtime fields written by tooling — do NOT hand-author:
 #   scheduled (IPM only), claimed_by (/drive)

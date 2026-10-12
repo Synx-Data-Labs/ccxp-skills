@@ -63,12 +63,13 @@ related: <T-ids / journal paths this depends on, pairs with, or follows>
 
 3-5 bullets, skimmable in 10 seconds — this is the whole doc in miniature:
 
-- **Type**: bug | feature | chore | research | spike | rca | other — `research`
+- **Type**: bug | feature | chore | research | spike | rca | support | other — `research`
   is reading-based (a question to answer, no code); `spike` is a throwaway
   prototype to verify feasibility (code, but disposable — mirrors
   `superpowers:brainstorming`'s own Spike path); `rca` investigates a
   reported failure/bug (usually links the triggering incident via `source:`
-  or `related:`) and leans on `## Root cause` below
+  or `related:`) and leans on `## Root cause` below; `support` is a
+  customer-reported issue (see §Support-only below)
 - **Problem**: one line
 - **Solution**: one line
 
@@ -145,3 +146,22 @@ A table — every file the change touches or cites:
 | File | Lines | Purpose |
 |---|---|---|
 | `path/to/file` | `NN–MM` | what it is / why it matters |
+
+## §Support-only — `Type: support` tasks *also* include
+
+### `## Customer summary`
+
+The only text a later status reporter may quote to the reporter: plain
+language, no task IDs, internal paths or customer data.
+
+### `## Repro`
+
+The smallest self-contained failing case (schema, data, steps), commands
+copy-pasteable and sanitized of customer data.
+
+### `## Regression test`
+
+Path of the new e2e test. It must fail before the fix and pass after, and
+land in the **same commit** as the fix. See `_support/README.md`;
+`design-score` hard-fails a support doc whose Repro or Regression test is
+missing, empty or a placeholder.

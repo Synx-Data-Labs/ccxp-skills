@@ -52,7 +52,7 @@ Filesystem is the index — never mirror it elsewhere.
 Every `dev/TODO/` and `dev/PARKING/` file is linted against a strict allowlist (see `templates/task.md`):
 
 - **Required:** `status`, `estimation`.
-- **Authored-optional:** `priority`, `deadline`, `blocks`, `blocked-by`, `source`, `target-repo`, `target-path`, `related`, `owner`, `description`.
+- **Authored-optional:** `priority`, `deadline`, `blocks`, `blocked-by`, `source`, `target-repo`, `target-path`, `related`, `owner`, `description`, `support-issue`, `support-report`.
 - **Runtime (tooling-written):** `scheduled`, `claimed_by`, `iteration`.
 
 Any other top-level key is a violation. `status` must lead with a known value (Open/Design/In Progress/Review/Blocked/Parked/Done; prose suffix allowed) and `estimation` one of `{1, 2, 3, 5, 8}` (points). `dev/JOURNAL/` is exempt (archival).

@@ -20,6 +20,7 @@ ALLOWED = REQUIRED | {
     # authored-optional
     "priority", "deadline", "blocks", "blocked-by", "source",
     "target-repo", "target-path", "related", "owner", "description",
+    "support-issue", "support-report",
     # runtime (tooling-written: /stage, IPM, /focus)
     "scheduled", "claimed_by", "claimed_role", "iteration",
 }
@@ -128,7 +129,7 @@ def check_estimation(ctx):
 
 
 def check_allowlist(ctx):
-    return [f"unknown field '{k}' (not in the canonical 16-key allowlist)"
+    return [f"unknown field '{k}' (not in the canonical 18-key allowlist)"
             for k in sorted(ctx.keys) if k not in ALLOWED]
 
 

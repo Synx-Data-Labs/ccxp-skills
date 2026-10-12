@@ -122,6 +122,19 @@ class LintTasksTest(unittest.TestCase):
         out = lint_tasks.lint_file(f)
         self.assertTrue(any("unknown field 'name'" in m for m in out), out)
 
+    def test_support_keys_pass(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Open\nestimation: 1\n"
+            "support-issue: https://example.com/acme/repo/issues/7\n"
+            "support-report: off"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
+    def test_support_lookalike_key_still_fails(self):
+        f = write_task(self.root,
+            frontmatter="status: Open\nestimation: 1\nsupport-ticket: 7")
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("unknown field 'support-ticket'" in m for m in out), out)
+
     def test_allowed_extra_fields_pass(self):
         f = write_task(self.root, frontmatter=(
             "status: Open\nestimation: 2\n"
