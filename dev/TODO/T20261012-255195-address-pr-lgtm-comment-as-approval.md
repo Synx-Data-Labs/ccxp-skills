@@ -4,31 +4,30 @@ estimation: 1
 source: this conversation, 2026-10-12
 ---
 
-# T20261012-255195: address-pr: treat an LGTM comment from a user with write access as an approval
+# T20261012-255195: address-pr: an LGTM comment from the PR author triggers the bot approval
 
 ## Problem
 
 - **Type**: feature
-- User request: "in address-pr, if you see LGTM in the comment, means the write already approved the PR." Assumption to confirm: "write" means a collaborator with write/maintain/admin permission on the repo (a maintainer).
-- Today, for PRs in the wait-for-approval tier, `/address-pr` only recognizes a real GitHub `APPROVE` review (the `pr-approve.yml` bot path pinned to `HEAD_SHA`, `address-pr/SKILL.md:276-302`). A human maintainer who comments "LGTM" is not recognized, so the PR stalls or the user gets a "needs approval" notification.
-- The merge decision is `address-pr/SKILL.md:357` ("Follow the merge policy in `dev/guidelines.md` ... auto-merge tier, or notify for wait-for-approval tier"). The policy itself is `dev/guidelines.md:11-20` (Branch and Merge Policy); note this repo has no `dev/branch-merge-policy.md` (referenced by `/stage`), so the tier definitions live in consumer repos or must be located before implementing.
-- The staleness rule must stay consistent with `address-pr/SKILL.md:375` ("Never sneak changes into an approved PR": new commits after approval make it stale; do not merge).
+- User request (clarified): "in address-pr, if you see LGTM in the comment, means the writer already approved the PR. you can trigger the bot approval process." "Writer" = the PR author (the human who wrote/owns the PR).
+- Today `/address-pr` dispatches the `pr-approve.yml` bot only after its own independent review returns a clean bill (`address-pr/SKILL.md:276-302`: workflow dispatch with `pr_number` and `commit_sha=HEAD_SHA`, then poll for an `APPROVED` review pinned to `HEAD_SHA`). A human LGTM comment is not recognized, so the PR stalls or the user gets a "needs approval" notification.
+- The merge decision is `address-pr/SKILL.md:357` ("Follow the merge policy in `dev/guidelines.md` ... auto-merge tier, or notify for wait-for-approval tier"). The policy is `dev/guidelines.md:11-20`; this repo has no `dev/branch-merge-policy.md` (referenced by `/stage`), so tier definitions must be located before implementing.
+- Staleness must stay consistent with `address-pr/SKILL.md:375` ("Never sneak changes into an approved PR").
 
 ## Proposed design (not decided)
 
-- In the merge decision, treat a PR comment (issue comment, review comment, or review body) containing LGTM (word-boundary, case-insensitive, also "lgtm!") by a user whose repo permission (collaborators permission API) is write, maintain or admin as satisfying the human-approval requirement.
-- Safety rules:
-  - Bot accounts and the Claude Code review comment itself (`**Claude Code review:**`, `address-pr/SKILL.md:235-263`) never count.
-  - PR author self-LGTM does not count by default (see open question 2).
-  - Pinned to the current head: an LGTM created before the latest push is stale. Compare comment `created_at` to the head commit's push time, or require a re-LGTM after new commits.
-  - Conservative match: the comment's first non-empty line must begin with LGTM. "not LGTM", "LGTM but ...", quoted replies and code blocks do not count.
-  - Revoked by a later "changes requested" review or a later "NOT LGTM"/"hold" comment from a maintainer.
-  - Never overrides GitHub branch protection: if the repo requires an approving review count (platform gate), an LGTM comment cannot satisfy it. Applies only where approval is a policy gate.
-- Where: `address-pr/scripts/has-lgtm.sh` with bats tests, called from the merge-gate decision; update `address-pr/SKILL.md` and the report wording ("approved via LGTM by <user>").
+- The LGTM comment is NOT itself treated as a GitHub approval. When address-pr sees a qualifying LGTM on the current head, it triggers the existing bot approval process (`pr-approve.yml` dispatch with `pr_number` and `commit_sha=HEAD_SHA`, poll for the `APPROVED` review pinned to `HEAD_SHA`) so a real APPROVE review lands. That real review is what satisfies `required_approving_review_count` on repos that enforce it.
+- A qualifying LGTM is a comment (issue comment, review comment or review body) by the PR author; word-boundary, case-insensitive, "lgtm!" also fine. The author may be the account running the automation, so self-LGTM counts (no "not the author" rule); the automation's own comments do not.
+- Guards:
+  - Bots and the `**Claude Code review:**` comment (`address-pr/SKILL.md:235-263`) never count.
+  - Staleness: an LGTM created before the latest push does not count; a re-LGTM is required.
+  - Conservative match: the first non-empty line must begin with LGTM. "not LGTM", "LGTM but ...", quoted replies and code blocks do not count.
+  - A later "hold" or "changes requested" revokes it.
+- Where: `address-pr/scripts/has-lgtm.sh` with bats tests, called from the approval-gate dispatch; update `address-pr/SKILL.md` and the report wording ("approval triggered via LGTM by <user>").
 
 ## Open questions
 
-1. Exact meaning of "write": any collaborator with write access, or specific named approvers?
-2. Does self-LGTM by the PR author count? This repo's PRs are authored by the same account running the automation, so a strict "not the author" rule makes LGTM unusable here. Options: allow the author when they have write access and the comment is not the automation's own bot comment, or require a different human.
-3. Staleness rule: compare to head commit time vs. require re-LGTM after any push.
-4. Should address-pr also post a reaction or ack comment when it accepts an LGTM?
+1. Should LGTM replace or only supplement the independent-review clean bill as the trigger for dispatching the bot?
+2. Who besides the author may trigger it (other write-access maintainers, checked via the collaborators permission API)?
+3. Repos with no `pr-approve.yml`: nothing to trigger, so fall back to notify/wait (confirm).
+4. Should address-pr post a reaction or ack comment when it accepts an LGTM?
