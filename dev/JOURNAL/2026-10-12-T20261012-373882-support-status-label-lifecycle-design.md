@@ -1,11 +1,12 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_by:
 scheduled: 2026-10-12
 source: this conversation, 2026-10-12 (Shine: formalize the synxdb-support issue lifecycle via GitHub labels; 4 follow-up decisions on top of a same-night design draft)
 related: [T20261012-333879, T20261012-109735, T20261012-383399, T20261012-278418]
 description: Design for /customer-support, a label-driven synxdb-support lifecycle skill, plus a /support -> /to-task intake rename+generalization
+claimed_role:
 ---
 
 # T20261012-373882: Design /customer-support — label-driven lifecycle for synxdb-support issues
@@ -435,3 +436,81 @@ once approved — but nothing in it should be done until that decision lands.
   `report`/`status`/`stop` subcommands from `/support` to `/customer-support`.
 - Projects-board retirement: **blocked on the pending leadership decision**
   (Q3) — do not action until Shine confirms the outcome of tonight's meeting.
+
+## Closed (2026-10-12)
+
+Shipped across four PRs, three repos:
+
+- **`ccxp-skills#345`** (merged) — design resolution: naming decided
+  (`/customer-support`), close-support-issue reconciliation decided, Q1/Q2
+  resolved, epic children (`T20261012-383399`/`T20261012-278418`) updated.
+- **`ccxp-skills#346`** (merged) — implementation: `/customer-support` skill
+  (11 subcommands, 7 scripts, 69 BATS cases across 7 test files), `/support`
+  renamed+generalized to `/to-task`, `lint_tasks.py` allowlist update, doc
+  updates (`lifecycle.md`, `_support/README.md`, `todo/SKILL.md`,
+  `new-task/SKILL.md`, `repo-conventions/templates/task.md`). Two rounds of
+  independent review found and fixed real issues (see below).
+- **`synxdb-support#28`** (merged) — `scripts/setup-labels.sh` now creates
+  the full lifecycle taxonomy; `delivered` label applied live and verified.
+- **`synxdb-build-pipeline#3741`** (merged) — filed `T20261012-612044`
+  tracking the `close-support-issue` reconciliation, blocked on this task's
+  `/customer-support` shipping (now unblocked — see Next steps there).
+
+**What's met**: every Done criterion above is checked except the
+Projects-board recommendation, which is deliberately still open pending
+Shine's confirmation of tonight's leadership-meeting outcome — not a gap in
+this task's work.
+
+**What's external/unverified**: the live end-to-end backfill walk
+(`triage -> start -> deliver -> accept`) on a real `synxdb-support` issue
+was deliberately not run by this task (irreversible, outward-facing action
+on a real customer issue) — `audit` was run live instead (read-only) and
+correctly flagged `#20`/`#21`/`#23`/`#24`/`#25`/`#27`. Running the real
+subcommands on those six issues is the backfill the design always intended;
+left for a human or an explicitly-approved follow-up to confirm and run.
+
+**Independent review found real issues, both fixed before merge**:
+
+- PR #345: a stale TLDR bullet and a stale Evals-section skill reference
+  left behind by the first design-resolve edit; a `status: Open` that
+  contradicted its own "blocked" body text (caught on the cross-repo
+  `T20261012-612044` task, fixed to a free-text blocked status since the
+  blocker lives in a different repo's `dev/` tree).
+- PR #346: a real functional bug in `links.sh` (the `.env` token fallback
+  was unreachable from the default ephemeral-clone path, since
+  `synxdb-build-pipeline`'s `.env` is gitignored — fixed to fail fast with a
+  clear message instead); a dangling reference to a `reject.sh` that never
+  existed and an unenforced rejection-label rule; gates
+  (`deliver_gate`/`accept_gate`) not structurally composed with
+  `labels.sh`, meaning a direct call could skip them; a stale `/support`
+  reference in `new-task/SKILL.md`. Fixed by adding `customer-support/
+  scripts/transition.sh` (the single enforced entrypoint SKILL.md now
+  documents) plus 13 new BATS cases; a follow-up focused review confirmed
+  the fix is structurally correct (gate failures abort via `set -euo
+  pipefail` before any label write; `reject`'s label-then-close ordering is
+  guaranteed by control flow, not convention).
+
+**Follow-up tasks filed**: `synxdb-build-pipeline#T20261012-612044`
+(close-support-issue reconciliation — now unblocked, ready to pick up).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — the bulk of this task
+  is bash-script-backed (state machine, gates, I/O wrappers); tests were
+  written alongside each script and run before every commit, but not
+  strictly red-green-refactor per function.
+- Verification (`superpowers:verification-before-completion`): yes — full
+  BATS suite + `lint_tasks.py` + `skill_score.py` + `design-score` run
+  before each PR, plus a live (read-only) `audit` run against the real
+  `synxdb-support` repo as a smoke test.
+- Systematic debugging (`superpowers:systematic-debugging`): no — no stuck
+  failing test required it; the one real bug found (links.sh's `.env`
+  fallback) was caught by independent review, not by a failing test loop.
+- Receiving code review (`superpowers:receiving-code-review`): yes —
+  `ccxp-skills#346`'s review found 5 real issues (1 high, 2 medium, 2 low);
+  all fixed rather than argued with, since each was independently
+  verifiable (confirmed `.gitignore`, confirmed the missing `reject.sh`,
+  confirmed the gate-bypass path) — one minor pushback made on
+  `synxdb-support#28` (a reviewer note that `delivered` "already existed
+  live" was correct but not a defect, since this task's own earlier step
+  had just created it).

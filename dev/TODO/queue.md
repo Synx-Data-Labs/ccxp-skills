@@ -32,4 +32,3 @@ reprioritize.
 - [T20261012-151045](T20261012-151045-follow-ups-pr-308-drop-gh-board-dependency.md): follow-ups from PR #308 (drop gh board dependency)
 - [T20260827-238870](T20260827-238870-remove-solo-repo-mode.md): Remove solo-repo (no-CI) mode; always follow the team-repo (peer/CI) process
 - [T20260829-362863](T20260829-362863-solo-to-team-mode-conversion-checklist.md): Write the solo-mode → team-mode conversion checklist for any ccxp repo
-- [T20261012-373882](T20261012-373882-support-status-label-lifecycle-design.md): Design a label-driven synxdb-support lifecycle skill + /support -> /to-task rename
