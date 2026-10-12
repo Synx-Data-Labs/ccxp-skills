@@ -241,7 +241,7 @@ LAST_REVIEWED_SHA=$(bash ../_gh/gh.sh api "/repos/$OWNER/$NAME/issues/<NUMBER>/c
   | grep -oE '\(sha: [0-9a-f]+\)' | grep -oE '[0-9a-f]+' || true)
 
 if [ "$LAST_REVIEWED_SHA" = "$HEAD_SHA" ]; then
-  : # already reviewed this exact commit — skip to step e
+  : # already reviewed this exact commit — skip to the approval gate below (LGTM check), then step e
 else
   : # dispatch a fresh review (steps 1-3 below)
 fi
@@ -270,10 +270,17 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 
    This both preserves the audit trail a human skimming the PR used to get from Copilot's comments (visible on the PR itself, not just in this session's transcript) and re-derives cleanly next time this section runs — no local state to lose or hand off between sessions.
 
-- If the report is a clean bill (no real findings): review is complete — dispatch the approval gate below, then continue to step e.
+- If the report is a clean bill (no real findings): review is complete — set `CLEAN_BILL=1`, dispatch the approval gate below, then continue to step e.
 - If the report describes real issues: **before responding**, invoke `superpowers:receiving-code-review`. It enforces: steelman the finding before deciding to push back; distinguish "wrong because I have context the reviewer lacked" from "wrong because I want to be done"; and when pushing back (not making a code change), post a follow-up PR comment with the specific design constraint or test that makes the finding incorrect — not "stylistic preference". Then address each per the skill's output: fix code (commit + push — the head SHA changes, so the check above no longer matches `$LAST_REVIEWED_SHA` and a fresh review re-triggers next iteration), or post the pushback comment and move on. **Never silently drop a finding without a comment explaining why.** This targets the same "argue with the reviewer to feel productive" anti-pattern the Copilot-era wording warned about — the skill is still the brake, just aimed at a different reviewer.
 
 **Dispatch the approval gate (only after a clean bill, only when the repo has one — T20260922-603756).** A repo with a `synx-merge-bot` App-auth `pr-approve.yml` workflow (`.github/workflows/pr-approve.yml` on its default branch — check once per run, not once per repo forever, since a repo can gain this later) uses that workflow to submit a real GitHub `APPROVE` review, pinned to the exact commit this step's review just covered — this is what makes `required_approving_review_count: 1` on such a repo satisfiable by automation without weakening what the review means (see `pr-approve.yml`'s own design comment: it is deliberately mechanical and never decides *whether* to approve — that judgment is entirely this step, right here). Repos without the workflow skip this block entirely; nothing else in `/address-pr` depends on it.
+
+**LGTM supplement.** The PR author's `LGTM` comment is a second trigger for this same dispatch — it is *not* an approval itself (the bot's real `APPROVE` review is what satisfies `required_approving_review_count`, and branch protection still decides merge). It supplements the independent review, never replaces it:
+
+- A review of `HEAD_SHA` must exist and **no finding may be unanswered** (each fixed, or pushed back with a comment); the LGTM never skips the review or silences an open finding.
+- `bash ../address-pr/scripts/has-lgtm.sh <NUMBER> [--after <time of our latest pushback comment>]` decides: exit 0 prints the author. It counts only the PR author's own, non-bot comment after the latest push whose first line is a bare `LGTM` (not `LGTM but`, `not LGTM`, quoted, or a `**Claude Code review:**` comment); a later hold / changes-requested revokes. Contract and tests: `tests/address_pr_has_lgtm.bats`.
+- Only the author's LGTM triggers (other maintainers' do not); no ack comment is posted. Exit 1 or 2 means no LGTM — behave exactly as before.
+- No `pr-approve.yml` in the repo: nothing is triggered; notify/wait as usual, and note "LGTM seen, no approval workflow" in the §3 report.
 
 ```bash
 # The existence check below can't distinguish "no pr-approve.yml" from a
@@ -281,7 +288,9 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 # fail-unsafe: worst case this silently skips a repo that should get
 # auto-approval (merge stalls, gets investigated), never approves something
 # it shouldn't.
-if bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
+LGTM_BY="$(bash ../address-pr/scripts/has-lgtm.sh <NUMBER> ${PUSHBACK_AT:+--after "$PUSHBACK_AT"} 2>/dev/null || true)"
+if { [ "${CLEAN_BILL:-0}" = 1 ] || [ -n "$LGTM_BY" ]; } && bash ../_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
+  [ -n "$LGTM_BY" ] && echo "approval triggered via LGTM by ${LGTM_BY}"
   bash ../_gh/gh.sh workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"
   # Poll the PR's own reviews, not the workflow run — this is what we actually
   # care about (a genuine APPROVED review pinned to HEAD_SHA), and sidesteps
