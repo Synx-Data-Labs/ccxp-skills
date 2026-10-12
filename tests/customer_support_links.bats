@@ -109,3 +109,20 @@ EOF
   run cs-links-main --clone-dir fake-clone
   [ "$status" -eq 2 ]
 }
+
+@test "main without --clone-dir fails fast (before any clone) when ENTITLEMENT_TOKEN is unset" {
+  # Regression test for the gap an independent review of ccxp-skills#346
+  # found: a fresh ephemeral clone can never have a populated .env, so the
+  # caller must export ENTITLEMENT_TOKEN itself. This must fail BEFORE
+  # attempting a network clone, with a clear, actionable message.
+  run env -u ENTITLEMENT_TOKEN bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; CS_LINKS_REPO=/nonexistent/should-never-be-cloned cs-links-main sbom.json label"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ENTITLEMENT_TOKEN is not set"* ]]
+  [[ "$output" == *"--clone-dir"* ]]
+}
+
+@test "main without --clone-dir proceeds past the token check when ENTITLEMENT_TOKEN IS set (clone itself may still fail in this sandbox, but not on the token)" {
+  run env ENTITLEMENT_TOKEN=already-exported CS_LINKS_REPO=/nonexistent/not-a-real-repo bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; cs-links-main sbom.json label"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"ENTITLEMENT_TOKEN is not set"* ]]
+}

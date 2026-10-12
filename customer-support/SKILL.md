@@ -40,40 +40,50 @@ support team — the delivering engineer can never close their own delivery.
 
 ## Workflow
 
-### 1. Resolve the issue and current state
+### 1. Resolve the issue
 
 ```bash
 bash <skills-root>/_support/parse-issue-url.sh <issue-ref>        # -> owner repo number
-bash <skills-root>/customer-support/scripts/labels.sh primary <owner>/<repo> <number>
 ```
 
-`labels.sh primary` fails loudly if more than one primary label is present
-(an invariant violation `audit` exists to catch) — do not proceed past that
-error by guessing which one is "real."
+### 2. Run the subcommand through `transition.sh` — the single enforced entrypoint
 
-### 2. Decide the transition (pure, no I/O)
+**Always go through `transition.sh`, never call `labels.sh apply`/`toggle`
+directly for a state-changing subcommand.** `transition.sh` is what makes
+the evidence gate and identity gate structurally unbypassable: it resolves
+the current primary label, asks `state_machine.sh` for the next one, runs
+the relevant gate, and ONLY THEN writes the label — a direct `labels.sh`
+call skips every gate.
 
 ```bash
-bash <skills-root>/customer-support/scripts/state_machine.sh <current-state> <subcommand>
+bash <skills-root>/customer-support/scripts/transition.sh triage <owner>/<repo> <number>
+bash <skills-root>/customer-support/scripts/transition.sh start <owner>/<repo> <number>
+bash <skills-root>/customer-support/scripts/transition.sh deliver <owner>/<repo> <number> --urls <url>...
+bash <skills-root>/customer-support/scripts/transition.sh deliver <owner>/<repo> <number> --release <sbom> "Hashdata.ai"
+bash <skills-root>/customer-support/scripts/transition.sh request-confirm <owner>/<repo> <number>
+bash <skills-root>/customer-support/scripts/transition.sh accept <owner>/<repo> <number> --actor "$(gh api user --jq .login)" --allowed "$SUPPORT_TEAM_LOGINS"
+bash <skills-root>/customer-support/scripts/transition.sh reject <owner>/<repo> <number> --reason <wontfix|invalid|duplicate>
+bash <skills-root>/customer-support/scripts/transition.sh block <owner>/<repo> <number>      # post the explanatory comment yourself, via gh issue comment — never skip it
+bash <skills-root>/customer-support/scripts/transition.sh unblock <owner>/<repo> <number>
+bash <skills-root>/customer-support/scripts/transition.sh needs-upstream <owner>/<repo> <number> <on|off>
 ```
 
-Prints the next state (or `CLOSED:<reason>`), or a clear error if the
-subcommand isn't valid from the current state. **Never skip this** — it is
-what stops e.g. `accept` from firing on an issue that isn't `delivered`.
+- `reject` applies the specific `wontfix`/`invalid`/`duplicate` label itself
+  (before closing) — never left to the caller to remember separately.
+- `accept`/`reject` also clear any stale `blocked`/`needs-upstream` modifier
+  on close.
+- `deliver --urls`/`--release` run the evidence gate (§ 3 below) BEFORE any
+  label write; a failed gate means `labels.sh` is never even called.
+- `accept` runs the identity gate (§ 5 below) BEFORE any label write.
+
+The building blocks below (`state_machine.sh`, `labels.sh`, `deliver_gate.sh`,
+`accept_gate.sh`) are what `transition.sh` composes — read them to
+understand the mechanics, but drive the skill through `transition.sh`.
 
 ### 3. `deliver`'s evidence gate (hard gate — never self-report)
 
-- **Generic delivery**: `bash <skills-root>/customer-support/scripts/deliver_gate.sh check-urls <url>...` — every shared URL must verify `200`/`301`/`302`. Any non-verifying URL blocks the transition.
-- **Release-type issue** (a package/download delivery): invoke `links` first:
-
-  ```bash
-  bash <skills-root>/customer-support/scripts/links.sh <released-sbom-path> "Hashdata.ai"
-  ```
-
-  A non-zero exit (any resolved artifact failed to verify) blocks the
-  `in-progress -> delivered` transition — this is the direct regression
-  test for `synxdb-support#21` (a package self-reported delivered when the
-  publish step had actually failed silently).
+- **Generic delivery** (`transition.sh deliver ... --urls <url>...`): every shared URL must verify `200`/`301`/`302`. Any non-verifying URL blocks the transition.
+- **Release-type issue** (`transition.sh deliver ... --release <sbom> <entitlement-label>`, a package/download delivery): delegates to `links` (§ 4) — a non-zero exit (any resolved artifact failed to verify) blocks the `in-progress -> delivered` transition. This is the direct regression test for `synxdb-support#21` (a package self-reported delivered when the publish step had actually failed silently).
 
 ### 4. `links` — cross-repo worker (token bridging)
 
@@ -88,26 +98,22 @@ SynxDB4 releases: Cloudsmith repo `synx/synxdb`, entitlement id
 `3PNyRETaE96a`, display label `"Hashdata.ai"` (the label is a free-text
 argument, not the id).
 
+**Token source, exactly**: `synxdb-build-pipeline`'s `.env` is gitignored,
+so the *default* ephemeral clone never has one populated. Without
+`--clone-dir`, **the caller must already have `ENTITLEMENT_TOKEN`
+exported** before calling `links.sh` (the normal case for a session already
+working in this suite) — `links.sh` fails fast, before cloning, if it
+isn't. The `.env`-file fallback only applies when `--clone-dir` points at
+an existing, already-populated checkout.
+
 ### 5. `accept` — support-team-only (identity gate)
 
-```bash
-bash <skills-root>/customer-support/scripts/accept_gate.sh "$(gh api user --jq .login)" "$SUPPORT_TEAM_LOGINS"
-```
+`transition.sh accept` runs `accept_gate.sh` against `SUPPORT_TEAM_LOGINS`
+(a comma-separated allowlist, env var, never hardcoded) before writing any
+label. **Fails closed**: an unconfigured allowlist refuses `accept` entirely
+rather than defaulting to "anyone may accept."
 
-`SUPPORT_TEAM_LOGINS` is a comma-separated allowlist (env var, never
-hardcoded). **Fails closed**: an unconfigured allowlist refuses `accept`
-entirely rather than defaulting to "anyone may accept."
-
-### 6. Apply the transition
-
-```bash
-bash <skills-root>/customer-support/scripts/labels.sh apply <owner>/<repo> <number> <old-state> <new-state-or-CLOSED:reason>
-```
-
-For `block`/`unblock`/`needs-upstream` (modifiers, not primary-state
-transitions): `bash <skills-root>/customer-support/scripts/labels.sh toggle <owner>/<repo> <number> <blocked|needs-upstream> <on|off>`, then post the required explanatory comment via `gh issue comment` — never toggle `block` on without one.
-
-### 7. `audit`
+### 6. `audit`
 
 ```bash
 bash <skills-root>/customer-support/scripts/audit.sh <owner>/<repo>
