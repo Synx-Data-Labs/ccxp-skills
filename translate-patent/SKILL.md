@@ -150,13 +150,13 @@ Skip this step (and all remaining EN-side work) if `--cn-only` was passed.
 Run `translate-patent/scripts/postprocess.py` on the CN `.md`:
 
 ```bash
-python3 translate-patent/scripts/postprocess.py "<cn.md>" --lang zh --in-place
+python3 "<base-dir>/scripts/postprocess.py" "<cn.md>" --lang zh --in-place
 ```
 
 Unless `--cn-only` was passed, also run it on the EN `.md`:
 
 ```bash
-python3 translate-patent/scripts/postprocess.py "<en.md>" --lang en --in-place
+python3 "<base-dir>/scripts/postprocess.py" "<en.md>" --lang en --in-place
 ```
 
 This applies, per language, in one deterministic pass:

@@ -82,7 +82,7 @@ Any other top-level key is a violation. `status` must lead with a known value (O
 
 ### Relative-link check (`lint_links.py`)
 
-`python3 repo-conventions/scripts/lint_links.py --all [repo]` fails (read-only, exit 1) when a relative link under `dev/**/*.md` points at a missing file. Links rot when a task moves out of `dev/TODO/` at close, so **link tasks by `T<id>`**, not by relative path.
+`python3 "<base-dir>/scripts/lint_links.py" --all [repo]` fails (read-only, exit 1) when a relative link under `dev/**/*.md` points at a missing file. Links rot when a task moves out of `dev/TODO/` at close, so **link tasks by `T<id>`**, not by relative path.
 
 - Skipped: external URLs, `mailto:`, `#anchor`, code, and paths outside the repo (cross-repo).
 - `--fix` rewrites a missing target whose filename has a `T<id>` found in TODO/PARKING/JOURNAL.

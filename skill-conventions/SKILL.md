@@ -89,9 +89,9 @@ Three deterministic instruments, all under `skill-conventions/scripts/`:
 
 | Instrument | Grades | Command |
 |---|---|---|
-| `skill_score.py` | Static structure, 0–100: trigger phrasing, context cost (full marks ≤ 8 KB body), broken in-repo refs, task-ID changelog noise, sections, long paragraphs, untested scripts | `python3 skill-conventions/scripts/skill_score.py [skill…]` |
-| `skill_eval.py` | Behavior: runs `<skill>/evals/evals.json` via `claude -p` in a throwaway fixture dir, grades with regex/file assertions (no LLM judge), N runs per case, pass at ≥ 90% | `python3 skill-conventions/scripts/skill_eval.py <skill> --record` |
-| `skill_feedback.py` | Real-use misbehavior log (`dev/quality/skill-feedback.jsonl`) | `python3 skill-conventions/scripts/skill_feedback.py add <skill> correction "<what went wrong>"` |
+| `skill_score.py` | Static structure, 0–100: trigger phrasing, context cost (full marks ≤ 8 KB body), broken in-repo refs, task-ID changelog noise, sections, long paragraphs, untested scripts | `python3 "<base-dir>/scripts/skill_score.py" [skill…]` |
+| `skill_eval.py` | Behavior: runs `<skill>/evals/evals.json` via `claude -p` in a throwaway fixture dir, grades with regex/file assertions (no LLM judge), N runs per case, pass at ≥ 90% | `python3 "<base-dir>/scripts/skill_eval.py" <skill> --record` |
+| `skill_feedback.py` | Real-use misbehavior log (`dev/quality/skill-feedback.jsonl`) | `python3 "<base-dir>/scripts/skill_feedback.py" add <skill> correction "<what went wrong>"` |
 
 **Maturity ladder** — computed by `skill_score.py`, never self-declared:
 

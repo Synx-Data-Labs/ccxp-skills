@@ -34,7 +34,7 @@ this skill again from each clone.
 ### 1. Locate this clone's memory directory
 
 ```bash
-bash memory-to-skill/scripts/find-memory-dir.sh
+bash "<base-dir>/scripts/find-memory-dir.sh"
 ```
 
 Prints the absolute path to `~/.claude/projects/<encoded-cwd>/memory`, or
