@@ -107,4 +107,4 @@ claimed_role:
 - TDD (`superpowers:test-driven-development`): yes, Phase 3.0 code-class (red bats and unittest first)
 - Verification (`superpowers:verification-before-completion`): yes, local bats/shellcheck/ratchet before PR
 - Systematic debugging (`superpowers:systematic-debugging`): no, didn't get stuck
-- Receiving code review (`superpowers:receiving-code-review`): yes for the design PR review (3 nits fixed)
+- Receiving code review (`superpowers:receiving-code-review`): yes, design PR (3 nits) and impl PR (merge-skip, deleted-test, dedup anchoring fixed; gate-pr fail-open for unresolvable tasks kept deliberately, documented)

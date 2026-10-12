@@ -75,3 +75,23 @@ commit() { git add -A && git commit -q -m "$1"; }
   run bash "$C"
   [ "$status" -eq 2 ]
 }
+
+@test "deleting an e2e test does not satisfy the rule" {
+  echo t > tests/e2e/old.sh; commit "add old test" ; git checkout -q main; git merge -q --ff-only fix; git checkout -q -b fix2
+  git rm -q tests/e2e/old.sh; echo v2 > src/a.sh; commit "fix: a"
+  run bash "$C" fix..HEAD
+  [ "$status" -eq 1 ]
+}
+
+@test "merge commits are skipped" {
+  git checkout -q main; echo m > src/main_only.sh; commit "main change"
+  git checkout -q fix; echo v2 > src/a.sh; echo t > tests/e2e/a_test.sh; commit "fix: a"
+  git merge -q --no-edit main
+  run bash "$C" main..HEAD
+  [ "$status" -eq 0 ]
+}
+
+@test "a range without .. is a usage error" {
+  run bash "$C" main
+  [ "$status" -eq 2 ]
+}
