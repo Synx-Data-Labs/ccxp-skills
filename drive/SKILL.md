@@ -77,7 +77,7 @@ If task ID given:
 2. Verify it's not Blocked or Done
 3. Flip the task file's Status to the appropriate next state (Open → Design, Design → In Progress, etc.) in-place
 
-**Clone-locality guard:**
+**Clone-locality guard (run right after the id is resolved, before any status/claim write):**
 
 A task's claim, journal, and file all live in ONE repo. Working a task from a *different* clone takes the claim against the wrong `dev/` tree and leaves the clone-scoped status line blind to it. Before flipping status, assert the task file is actually in this clone:
 
@@ -218,7 +218,7 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 5. **Wait for the design PR to merge.** This is a checkpoint — do NOT proceed to Phase 3 until the design PR is on `main`.
 6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `In Progress` (in a follow-up commit on the implementation branch — see Phase 3).
 6a. **Support tasks** (`bash <skills-root>/_support/is-support-task.sh <id>`): the design needs non-empty `## Repro` and `## Regression test`; the gate below enforces it. Details: [`_support/README.md`](../_support/README.md).
-7. **Design-score gate.** Before any code, score the merged design deterministically:
+7. **Design-score gate (hard gate, Phase 2 → Phase 3).** Before any code, score the merged design deterministically:
 
    ```bash
    bash <skills-root>/design-score/scripts/score.sh <task-file>
@@ -520,9 +520,7 @@ After merge (auto or approved):
 **Final verification.** Before declaring the goal-task done, invoke `superpowers:verification-before-completion` once more from the merged-on-main perspective. Common catches: a follow-up cross-repo PR still needed (the hub journal-move PR); a source GitHub issue not yet closed; a memory rule worth saving from this task's surprises; unchecked "Done when" items.
 
 - **Write the `## Closed (YYYY-MM-DD)` section** (standardized name — **not** "Resolution"/"Outcome"/"Done", so `/retro` and greps find it predictably) per [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md): shipped-in **PR #N** + run/evidence links, what's met, what's external/unverified and when it'll be confirmed, and any **follow-up tasks filed** (T-ids) — file each as a **follow-up** staged into the **next** iteration (`bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`) and promoted to the front of the queue (`/top <id>`; see Important Notes).
-- Then —
-
-**Append a "Skills invoked" block to the task body** before the close (Phase 4/Phase 7 `status: Done` flip or immediate journal move), so `/retro` Phase 4c can grade compliance by grepping JOURNAL:
+Then **append a "Skills invoked" block to the task body** before the close (Phase 4/Phase 7 `status: Done` flip or immediate journal move), so `/retro` Phase 4c can grade compliance by grepping JOURNAL:
 
 ```markdown
 ## Skills invoked
