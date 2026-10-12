@@ -2,6 +2,7 @@
 status: Design
 estimation: 1
 source: "synxdb-team discussion 2026-10-12"
+related: PR #314
 description: Add relative-link existence validation to the repo-conventions lint (hard-gate capable) so consumer repos keep dev/ links current
 claimed_by: cc1-50ac6891:da7297ceb68effbb
 claimed_role: interactive
@@ -9,41 +10,72 @@ claimed_role: interactive
 
 # T20261012-220839: Add relative-link existence check to the repo-conventions lint
 
+## TLDR
+
+- **Type**: feature (code: new lint script + wiring + docs)
+- **Problem**: no check verifies that relative links under `dev/` resolve; they rot when a task moves TODO -> JOURNAL/PARKING.
+- **Solution**: `repo-conventions/scripts/lint_links.py` (read-only; `--fix` repairs by `T-id`), wired into `lint.sh`, plus a CI template and rollout docs.
+
 ## Problem
 
-- Consumer repos have no enforced check that relative links under `dev/` resolve.
-  - Observed in one consumer repo (synxdb-team): `markdownlint-cli2` workflow has no link-existence rule (MD051 disabled).
-  - `repo-conventions/scripts/lint.sh`, `lint_tasks.py`, `lint_refs.py` do not verify relative link targets exist.
-  - `lint.sh` is not run by any workflow there, and no lint is a required status check on `main` (ruleset has no `required_status_checks`).
-- Scan of that repo's `dev/**/*.md`: ~101 of 251 relative links broken.
-  - ~31 are `TODO/` paths that rot when a task moves to JOURNAL/PARKING at close.
-  - The rest: bare filenames and cross-repo `../../` paths.
-- Done = any ccxp-skills consumer can run one command (and one CI template) that fails on broken `dev/` links.
+- Observed in a consumer repo (synxdb-team, 2026-10-12): about 101 of 251 relative links under `dev/**/*.md` are broken.
+  - About 31 are `TODO/` paths that rotted when the task moved to JOURNAL/PARKING at close.
+  - The rest are bare filenames and cross-repo `../../` paths.
+- Verified: `repo-conventions/scripts/lint.sh` runs `lint_tasks.py`, `lint_refs.py`, `lint_identifiers.py` (`lint.sh` steps 4-6); none checks link targets.
+- Impact: dead links in task/journal files, and no required status check to stop new ones (consumer ruleset has none).
 
-## Proposed design
+## Context
 
-- New `check-links` script in `repo-conventions/scripts/`, next to `lint_refs.py`.
-  - Follow repo script standards (idempotent; sourceable function-wrapped bash, or Python like its siblings); read-only by default.
-  - Checks every relative `[text](path)` target in `dev/**/*.md` exists.
-- Task-ID-aware repair.
-  - Missing target whose filename contains a `T<id>` that resolves in TODO/PARKING/JOURNAL: report the new path.
-  - Optional `--fix` rewrites the link to the resolved path.
-- Allow-list for cross-repo and external paths.
-- Convention doc: link tasks by `T<id>` (mirror link), not by relative path into TODO/JOURNAL/PARKING.
-- Wire into `lint.sh`; ship a reusable CI workflow template/snippet.
-- Docs for making it a required check (repo admin; ruleset `required_status_checks`).
-- Rollout note: fix or baseline existing broken links before enabling the hard gate.
+- Siblings: `lint_refs.py` (read-only `--all` for `lint.sh`, `--fix` for `/gcpr`) is the pattern to mirror, with `test_lint_refs.py` as the unittest model.
+- `lint_refs.py` already treats `[...](...)` spans as protected, so the two scripts do not conflict.
+- The journal-move at close (`git mv dev/TODO/... dev/JOURNAL/...`) is the main rot source; T-id mirror links survive moves.
 
-## Acceptance criteria
+## Solution
 
-- [ ] `check-links` exists, exits non-zero on a broken relative link, zero otherwise; read-only unless `--fix`.
-- [ ] Missing-target report suggests the new path when a `T<id>` resolves in TODO/PARKING/JOURNAL; `--fix` applies it idempotently.
-- [ ] Allow-list mechanism documented and tested (cross-repo, external).
-- [ ] Unit tests alongside the existing `test_lint_*.py` pattern.
-- [ ] `lint.sh` invokes it; a hard-gate mode is available.
-- [ ] CI workflow template added under `repo-conventions/templates/`.
-- [ ] Convention (link by `T<id>`) documented in the conventions layer and `lifecycle.md` as needed.
-- [ ] Required-check and baseline/rollout docs written.
+- New `repo-conventions/scripts/lint_links.py` (Python, like its siblings), CLI `--all [repo]`, `--fix`, `--allow GLOB`, `--print-allowlist`.
+  - Scans `dev/**/*.md`; ignores fenced code and inline code spans.
+  - Skips external (`scheme:`), `mailto:`, pure `#anchor`; strips `#fragment`/`?query` before the existence check.
+  - A target resolving outside the repo root is cross-repo: skipped by default (not verifiable from one clone).
+  - Any other missing target is a violation (exit 1); read-only unless `--fix`.
+- Allow-list: optional `dev/.link-allowlist` (one fnmatch glob per line, `#` comments) matched against the link target as written, plus `--allow`. `--print-allowlist` emits the currently-broken targets in that format as the rollout baseline.
+- T-id repair: a missing target whose basename contains `T-id` that resolves in `dev/TODO|PARKING|JOURNAL` reports the new relative path; `--fix` rewrites it (idempotent: after the rewrite the target exists).
+- `lint.sh` step 7 calls it. Default is warn (rollout-safe); `LINT_LINKS_HARD=1` makes it count as a violation. The CI template runs hard.
+- CI template `repo-conventions/templates/link-check.yml`; `SKILL.md` gets a short section (rule, allow-list, required-check via ruleset `required_status_checks`, baseline-then-enable rollout); `lifecycle.md` gets the "link tasks by `T-id`" convention.
+- Alternatives rejected:
+  - Enable `markdownlint-cli2` MD051/link rules: checks anchors only, not file existence, and needs node.
+  - Extend `lint_refs.py`: different purpose and mode semantics (it fixes, this gates); a separate script keeps each small.
+  - Hard-fail by default in `lint.sh`: would break every consumer on upgrade (the 101-broken-links case).
+
+## Root cause
+
+- Link rot is structural: the close step `git mv dev/TODO/X dev/JOURNAL/date-X` (`lifecycle.md`) invalidates every relative path to the old location, and nothing re-checks links afterwards (assumed deliberate gap: `lint_refs.py` handles T-id/PR refs only, `lint_refs.py:1-60`).
+
+## Test plan
+
+- [ ] Unit: `test_lint_links.py` covers broken/ok, fenced/inline code, external, cross-repo, fragment, allow-list, T-id suggestion, `--fix` idempotency, exit codes.
+- [ ] Integration: `tests/lint_links.bats` runs `lint.sh` on a fixture repo in warn and hard modes.
+- [ ] Local: run on this repo's own `dev/` and fix or allow-list what it finds.
+- [ ] CI: `tests` workflow passes (path filter covers `repo-conventions/scripts/**`).
+
+## Done criteria
+
+- [ ] `lint_links.py` exits non-zero on a broken link, zero otherwise, read-only without `--fix` (`test_lint_links.py` exit-code and read-only tests).
+- [ ] Suggestion and `--fix` by `T-id`, idempotent (`test_lint_links.py` fix tests).
+- [ ] Allow-list documented and tested (`repo-conventions/SKILL.md` link-check section; `test_lint_links.py` allow tests).
+- [ ] Unit tests beside the `test_lint_*.py` siblings (`repo-conventions/scripts/test_lint_links.py`).
+- [ ] `lint.sh` invokes it with a hard mode (`repo-conventions/scripts/lint.sh` step 7; `tests/lint_links.bats`).
+- [ ] CI template added (`repo-conventions/templates/link-check.yml`).
+- [ ] Link-by-`T-id` convention documented (`lifecycle.md`, `repo-conventions/SKILL.md`).
+- [ ] Required-check and baseline/rollout docs (`repo-conventions/SKILL.md`).
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `repo-conventions/scripts/lint_refs.py` | `1-60` | sibling pattern (modes, `--all`/`--fix`) |
+| `repo-conventions/scripts/lint.sh` | `95-115` | steps 4-6; new step 7 goes after |
+| `repo-conventions/scripts/test_lint_refs.py` | `1-40` | unittest model |
+| `.github/workflows/tests.yml` | `1-40` | path filter already covers `repo-conventions/scripts/**` |
 
 ## Follow-up
 
