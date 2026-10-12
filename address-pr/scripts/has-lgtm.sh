@@ -20,7 +20,8 @@
 # after pushedAt (and --after); the first non-empty line must be `lgtm` plus an
 # optional `!`/`.`/`,` and short tail (thanks / ship it / merge it) — so
 # "LGTM but", "not LGTM", quotes and code fences don't count; the latest
-# decisive comment (LGTM or hold-ish) wins, so a later hold revokes.
+# author comment wins (anything but a clean LGTM revokes), so a later hold,
+# "wait", or any other author comment requires a fresh LGTM.
 # Timestamps are UTC `...Z`, so string comparison orders them.
 #
 # GH_SH is overridable for hermetic tests.
@@ -56,12 +57,13 @@ function has-lgtm-decide() {
   out="$(jq -r --arg after "$after" '
     def first_line: (.body // "" | split("\n") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)) | .[0] // "");
     def bot($l): ($l | test("\\[bot\\]$") or startswith("app/"));
+    def rest_ok: ([.body // "" | split("\n") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)) | .[1:][]] | join(" ") | ascii_downcase)
+                 | test("\\b(but|however|except|unless|before|until|wait|hold|not|don.t|fix|bug|broken|wrong|nit)\\b") | not;
     def kind:
       first_line as $f | ($f | ascii_downcase) as $x
       | if ($f | startswith("**Claude Code review:**")) then "none"
-        elif ($x | test("^lgtm([ ]*[!.,]+)?([ ,]+(thanks|thank you|ship it|merge it))?[ !.]*$")) then "lgtm"
-        elif ($x | test("^(hold|do not merge|don.t merge|wip|changes requested|needs changes)([^a-z]|$)")) then "hold"
-        else "none" end;
+        elif ($x | test("^lgtm([ ]*[!.,]+)?([ ,]+(thanks|thank you|ship it|merge it))?[ !.]*$")) and rest_ok then "lgtm"
+        else "other" end;
     (.author // "") as $a
     | (if ($a == "" ) then error("missing author") else . end)
     | (.pushedAt // "") as $p
@@ -74,7 +76,7 @@ function has-lgtm-decide() {
         | sort_by(.t) | last
         | if . == null then "no:no LGTM after the last push"
           elif .k == "lgtm" then "yes:\($a)"
-          else "no:revoked by a later hold" end
+          else "no:revoked by a later author comment" end
       end' 2>/dev/null)" || return 2
   case "$out" in
     yes:*) printf '%s\n' "${out#yes:}" ;;
@@ -87,8 +89,10 @@ function has-lgtm-main() {
   local pr="" from="" after=""
   while [ $# -gt 0 ]; do
     case "$1" in
-      --from-json) from="${2:-}"; shift 2 || true ;;
-      --after)     after="${2:-}"; shift 2 || true ;;
+      --from-json) [ $# -ge 2 ] || { echo "has-lgtm: --from-json needs a value" >&2; return 2; }
+                   from="$2"; shift 2 ;;
+      --after)     [ $# -ge 2 ] || { echo "has-lgtm: --after needs a value" >&2; return 2; }
+                   after="$2"; shift 2 ;;
       *)           pr="$1"; shift ;;
     esac
   done

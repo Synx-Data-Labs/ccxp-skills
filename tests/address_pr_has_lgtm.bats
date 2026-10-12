@@ -135,10 +135,33 @@ go() { run bash "$SCRIPT" --from-json "$BATS_TEST_TMPDIR/in.json"; }
   [ "$status" -eq 1 ]
 }
 
-@test "unrelated author chatter between does not revoke" {
-  mk "[$(c alice 2026-10-12T11:00:00Z 'LGTM'),$(c alice 2026-10-12T12:00:00Z 'thanks for the review')]"
+@test "any later non-LGTM author comment revokes (conservative)" {
+  mk "[$(c alice 2026-10-12T11:00:00Z 'LGTM'),$(c alice 2026-10-12T12:00:00Z 'wait, found a bug')]"
+  go
+  [ "$status" -eq 1 ]
+  mk "[$(c alice 2026-10-12T11:00:00Z 'LGTM'),$(c alice 2026-10-12T12:00:00Z 'Not LGTM anymore')]"
+  go
+  [ "$status" -eq 1 ]
+}
+
+@test "a later Claude Code review comment does not revoke" {
+  mk "[$(c alice 2026-10-12T11:00:00Z 'LGTM'),$(c alice 2026-10-12T12:00:00Z $'**Claude Code review:** (sha: abc)\nfinding')]"
   go
   [ "$status" -eq 0 ]
+}
+
+@test "LGTM with a qualifying second paragraph is rejected" {
+  mk "[$(c alice 2026-10-12T11:00:00Z $'LGTM\n\nbut foo is broken')]"
+  go
+  [ "$status" -eq 1 ]
+}
+
+@test "trailing --after / --from-json without a value exits 2 instead of hanging" {
+  mk '[]'
+  run timeout 5 bash "$SCRIPT" --from-json "$BATS_TEST_TMPDIR/in.json" --after
+  [ "$status" -eq 2 ]
+  run timeout 5 bash "$SCRIPT" --from-json
+  [ "$status" -eq 2 ]
 }
 
 @test "no comments is a plain no" {
