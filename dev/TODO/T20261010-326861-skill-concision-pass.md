@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 scheduled: 2026-10-12
 estimation: 8
 source: split from T20260928-101526

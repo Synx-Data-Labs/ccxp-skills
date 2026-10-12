@@ -2,7 +2,7 @@
 name: drive
 description: Use when the user explicitly asks to work a single task end-to-end — implement, PR, merge, recursing into blockers; never switch laterally to unrelated work
 disable-model-invocation: false
-# Never flip this to `true` (T20260922-409644 Bucket C) — per
+# Never flip this to `true` — per
 # https://code.claude.com/docs/en/skills, disable-model-invocation:true
 # "prevents the skill from being preloaded into subagents", and /autopilot
 # Phase 3 dispatches a fresh subagent specifically instructed to run /drive.
@@ -11,7 +11,8 @@ disable-model-invocation: false
 argument-hint: "[task-id]"
 ---
 
-Single-task work loop: pick ONE task (or accept one from the user), implement it, create a PR, babysit through CI and Copilot review, merge, done. If the task becomes blocked by **another task** (a dependency), recurse INTO that blocker and drive IT to done, then pop back up and resume. Never switch laterally to an unrelated task — that's `/ccxp`'s job.
+- Single-task work loop: pick ONE task (or accept one from the user), implement it, create a PR, babysit through CI and Copilot review, merge, done.
+- If the task becomes blocked by **another task** (a dependency), recurse INTO that blocker and drive IT to done, then pop back up and resume. Never switch laterally to an unrelated task — that's `/ccxp`'s job.
 
 **Invariant**: one invocation of `/drive` owns one goal-task and follows its chain of blockers. It exits when the goal-task is merged (or permanently blocked by an external dependency with no actionable sub-task).
 
@@ -24,12 +25,12 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
 - `--dispatch-blockers` (combinable with either form above) — at Phase 6 step 3, drive each
   blocker via a fresh dispatched sub-agent instead of inline in this conversation. See Phase 6
   step 3 for the mechanics. **Opt-in only** — omitting this flag keeps the default, fully-inline
-  behavior unchanged (T20260719-204917).
+  behavior unchanged.
 - `--auto-selected` (combinable with the explicit-task-id form only — meaningless with bare
   `/drive`, which already auto-picks) — marks the given id as resolved by an **orchestrating
   skill** via the same `/todo sweep` + `/todo next` logic Phase 1's own auto-pick runs, not a
   human's deliberate single-task request. Only effect: Phase 0's skip rule does not apply
-  (see Phase 0 below) — nothing else about Phase 1 onward changes (T20261006-227360).
+  (see Phase 0 below) — nothing else about Phase 1 onward changes.
 
 ## Workflow
 
@@ -37,14 +38,16 @@ Single-task work loop: pick ONE task (or accept one from the user), implement it
 
 Before picking new work, make one forward move on the PR backlog by handing off to `/address-pr`:
 
-Call `/address-pr` with no args once. It auto-picks the first open PR authored by us that isn't deferred by ownership (§1's `auto-pick.sh`, oldest-first, walking past any `owned:<other>`/`unknown` candidate instead of stopping at the single oldest — T20260919-266165), reads that PR's ownership (§1.6 — *derived* from the implementing task's `claimed_by` on `main`), runs the hard merge gate, and then either merges, addresses-and-loops, or exits with a non-actionable status (nothing pickable at all). After it returns, proceed to Phase 1.
+- Call `/address-pr` with no args once.
+- It auto-picks the first open PR authored by us that isn't deferred by ownership (§1's `auto-pick.sh`, oldest-first, walking past any `owned:<other>`/`unknown` candidate instead of stopping at the single oldest), reads that PR's ownership (§1.6 — *derived* from the implementing task's `claimed_by` on `main`), runs the hard merge gate, and then either merges, addresses-and-loops, or exits with a non-actionable status (nothing pickable at all).
+- After it returns, proceed to Phase 1.
 
 - **0 open PRs** → `/address-pr` reports "No open PRs to address" and exits; proceed to Phase 1 normally.
 - **Multiple actionable PRs** → only the oldest is driven this session; the rest wait for the next session's Phase 0. `/drive` Phase 0's job is to make ONE forward move on the PR backlog before picking new work, not to drain all of it — this matches the single-goal-task principle the rest of the skill follows.
 - **PRs owned by another session, or blocked on CI / external review / approval / pipeline** → `/address-pr` defers, fixes, or exits without an unsafe merge as appropriate. The §1.6 ownership guard (the anti-steal protection against a concurrent-session-drives-the-same-PR failure mode — a PR lives on GitHub, reachable from every clone, so nothing local stops two sessions from driving it at once without an explicit lock) and the hard merge gate live inside `/address-pr`, so no separate per-PR pre-classification is needed here.
 - **PR's task is unclaimed (`free`)** → `/address-pr` §1.6 now claims the task itself (same mechanism as this skill's Phase 1 Claim PR) before driving the PR further — don't just proceed against an unclaimed task (an unclaimed task's PR can sit open, unnoticed, for weeks before this gets caught).
 
-**Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag's only effect is on this skip rule; Phase 0's PR-drain still runs every cycle, the same as bare `/drive` (T20261006-227360).
+**Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag's only effect is on this skip rule; Phase 0's PR-drain still runs every cycle, the same as bare `/drive`.
 
 ### Phase 0.5: Check escalation replies
 
@@ -73,7 +76,7 @@ If task ID given:
 2. Verify it's not Blocked or Done
 3. Flip the task file's Status to the appropriate next state (Open → Design, Design → In Progress, etc.) in-place
 
-**Clone-locality guard (run right after the id is resolved, before any status/claim write — T20260626-298293, reworked T20260928-324939):**
+**Clone-locality guard:**
 
 A task's claim, journal, and file all live in ONE repo. Working a task from a *different* clone takes the claim against the wrong `dev/` tree and leaves the clone-scoped status line blind to it. Before flipping status, assert the task file is actually in this clone:
 
@@ -82,7 +85,7 @@ bash <skills-root>/_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero
 ```
 
 - **Exit 0** — present in this repo's `dev/TODO`/`dev/PARKING`; proceed.
-- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out (build-pipeline-repo `dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md`). If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
+- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out. If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
 - **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone).
 
 (Auto-pick via `/todo next` only surfaces tasks already in this clone, so the guard is a no-op there; it's the explicit-id path that needs it.)
@@ -96,26 +99,32 @@ After picking the task and updating its frontmatter `status:`, mirror that stage
 bash <skills-root>/_session/status.sh <task-id> <Design|In Progress>
 ```
 
-This call is pure visualization — nothing depends on the write succeeding, and other sessions won't be blocked from picking the same task. See `_session/README.md` for the design. If it fails (missing PAT, network, etc.), it logs to stderr and exits 0 — continue with the task. The frontmatter `status:` field in the task file remains the source of truth; the Project Status field just mirrors it for the board view.
+- This call is pure visualization — nothing depends on the write succeeding, and other sessions won't be blocked from picking the same task. See `_session/README.md` for the design.
+- If it fails (missing PAT, network, etc.), it logs to stderr and exits 0 — continue with the task. The frontmatter `status:` field in the task file remains the source of truth; the Project Status field just mirrors it for the board view.
 
 **Claim PR — land the status change on `main` before working (maintainer ask 2026-06-10):**
 
-The in-place status flip above is **not durable** on its own — it lives only on the working tree until some later PR carries it to `main`. So a session can be deep in implementation while `main` still shows the task **Open / unclaimed** to every other session and peer claim check. (The `status.sh` call right above is a best-effort Project-board mirror; most repos in this suite run no such board at all — T20261005-554581, T20261005-639913 — so treat it as optional visualization only, never as the durability fix this section is actually about.)
+- The in-place status flip above is **not durable** on its own — it lives only on the working tree until some later PR carries it to `main`.
+- So a session can be deep in implementation while `main` still shows the task **Open / unclaimed** to every other session and peer claim check.
+- (The `status.sh` call right above is a best-effort Project-board mirror; most repos in this suite run no such board at all — so treat it as optional visualization only, never as the durability fix this section is actually about.)
+
 
 Close that gap by landing a tiny **claim PR as the very first thing**, before any design or implementation work:
 
 1. Branch `t<id>-claim` off `main`.
 2. Edit **only** the task file's `status:` frontmatter line: `Open` → `In Progress` (or `Open` → `Design` when a design PR will follow in Phase 2). A short prose note is fine (`claimed YYYY-MM-DD`). Change nothing else — keep it a **pure status-change** so it auto-merges under the carve-out in `dev/branch-merge-policy.md`.
-3. Commit, push, `gh pr create` (its stdout is the new PR's URL — `<claim-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`), then run `/address-pr <claim-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR. It auto-merges on the pure-status-change tier once CI is green (no manual approval needed). (No doc-lint guard here — the claim PR is a pure frontmatter `status:`/`claimed_by:` change and cannot trip MD032, a body-list rule; the guard runs on the body-doc paths — Phase 4 via `/gcpr` Step 1.5 and the Phase 7 journal-move. T20260627-192311.)
+3. Commit, push, `gh pr create` (its stdout is the new PR's URL — `<claim-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`), then run `/address-pr <claim-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR. It auto-merges on the pure-status-change tier once CI is green (no manual approval needed). (No doc-lint guard here — the claim PR is a pure frontmatter `status:`/`claimed_by:` change and cannot trip MD032, a body-list rule; the guard runs on the body-doc paths — Phase 4 via `/gcpr` Step 1.5 and the Phase 7 journal-move.)
 4. After it merges, `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), then continue to Phase 2/3 on a fresh implementation branch.
 
-This makes "somebody is working on T<id>" true **on `main`** at claim time — durable, and visible to every other session and the Project board — instead of only after the implementation PR lands, for the price of one fast docs-only PR. **Same-repo / hub-side only**: the claim PR touches the hub task file; in cross-repo mode it still lands in the hub repo and is independent of the Phase 1.5 target clone.
+- This makes "somebody is working on T<id>" true **on `main`** at claim time — durable, and visible to every other session and the Project board — instead of only after the implementation PR lands, for the price of one fast docs-only PR.
+- **Same-repo / hub-side only**: the claim PR touches the hub task file; in cross-repo mode it still lands in the hub repo and is independent of the Phase 1.5 target clone.
 
 **Peer mode — cross-session claim lock (default; `CCXP_PEER_MODE=0` to disable):** Peer mode is **on by default** — ccxp and interactive sessions run as parallel peers (even sharing GitHub state), so the one-session-per-clone assumption no longer holds and the claim PR becomes the **cross-machine lock**, not just a status flip. (Default-on means *every* session claims — no env-var-symmetry gap.) The lock lives in a single frontmatter field the merge-to-`main` arbitrates atomically: `claimed_by: cc1-<machine-id>:<path-hash>` (the canonical single-line conflict point — a clone-stable identity that already carries the working-dir, so a new invocation in the same clone is the *same* claimant). Use `_session/task_claim.sh` instead of a bare `status:` flip:
 
 1. **Before picking, confirm the task is free:** `bash <skills-root>/_session/task_claim.sh read <id>` → if `claimed_by` is non-empty and is **not** this session's id (`task_claim.sh claimant-id`), the task is held by another session — **do not pick it**. Check `task_claim.sh reclaimable <id>` (a stale claim — no open PR, no commits in N days — may be reclaimed); otherwise go back to `/todo next` for a different task.
 
-   **Also confirm it is not lint-frozen (T20260629-185057):** `bash <skills-root>/_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation` (the [T20260626-353630] schema-fork class). If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason. `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
+   **Also confirm it is not lint-frozen:** `bash <skills-root>/_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation`. If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason. `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
+
 2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash <skills-root>/_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash <skills-root>/_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: In Progress`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`In Progress`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
 3. **Claim-PR conflict = you lost the race.** If the claim PR cannot merge because of a conflict on the `claimed_by:` line, another session acquired the same task in the same window. Do **not** force it — `git checkout main && git pull && git remote prune origin`, then re-pick via `/todo next`. **The merge conflict IS the lock rejecting your acquire.**
 4. **Release on close.** In Phase 7 (task done/parked), `bash <skills-root>/_session/task_claim.sh release <id> <final-status>` clears `claimed_by` as part of the journal-move/close PR.
@@ -139,16 +148,16 @@ If the task file frontmatter has `Target repo` set, the implementation lives in 
 
 If `Target repo` is unset **and** the change genuinely lands in this hub repo: **same-repo mode** — everything happens in the hub repo, skip the rest of this phase.
 
-> **Undeclared cross-repo (common — T20260629-332546).** A task can be cross-repo *in practice* without a `Target repo:` line: that key is **not** on the `lint_tasks.py` allowlist (T20260626-353630), so stamping it would trip the changed-mode frontmatter lint (it re-checks the whole file, failing on the pre-existing non-allowlisted key). A skill/spec change whose code lands in `your-org/ccxp-skills` (it edits a `*/SKILL.md`), a website change in `example-website.com`, etc., is cross-repo even with no marker. **Treat a task as cross-repo when *either* `Target repo:` is set *or* you can see the implementation lands in another repo.** Set `TARGET_REPO` to the declared value or the one you recognize; the resume guard and pointer-recording below apply in both cases.
+> **Undeclared cross-repo.** A task can be cross-repo *in practice* without a `Target repo:` line: that key is **not** on the `lint_tasks.py` allowlist, so stamping it would trip the changed-mode frontmatter lint (it re-checks the whole file, failing on the pre-existing non-allowlisted key). A skill/spec change whose code lands in `your-org/ccxp-skills` (it edits a `*/SKILL.md`), a website change in `example-website.com`, etc., is cross-repo even with no marker. **Treat a task as cross-repo when *either* `Target repo:` is set *or* you can see the implementation lands in another repo.** Set `TARGET_REPO` to the declared value or the one you recognize; the resume guard and pointer-recording below apply in both cases.
 
-**Phase 1.5.0 — cross-repo existing-work guard (run BEFORE cloning/implementing — T20260629-332546).** `/drive`'s hub-side resume check (`git branch -r | grep <id>`, Phase 6) is **blind** to a cross-repo task's work: the work branches + PRs live in the *target* repo, and the hub task file's `status:` stays at its pre-implementation value (the cross-repo impl PR never flips the hub status to `Review`). So an unattended loop re-picks the same cross-repo task each tick, finds "no existing work" in the hub, and re-implements — opening a **duplicate** target PR every time (an observed run produced three convergent implementations across multiple open PRs for a single task, one of them broken despite green CI and nearly merged). Before you clone or write any code, query the **target** repo for existing work:
+**Phase 1.5.0 — cross-repo existing-work guard.** `/drive`'s hub-side resume check (`git branch -r | grep <id>`, Phase 6) is **blind** to a cross-repo task's work: the work branches + PRs live in the *target* repo, and the hub task file's `status:` stays at its pre-implementation value (the cross-repo impl PR never flips the hub status to `Review`). So an unattended loop re-picks the same cross-repo task each tick, finds "no existing work" in the hub, and re-implements — opening a **duplicate** target PR every time (an observed run produced three convergent implementations across multiple open PRs for a single task, one of them broken despite green CI and nearly merged). Before you clone or write any code, query the **target** repo for existing work:
 
 ```bash
 bash <skills-root>/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "<task-id>" --state all \
   --json number,state,title,headRefName,url --jq '.[]'
 ```
 
-- **An OPEN PR matches** → do **not** re-implement. Check out its `headRefName` (clone the target repo at that branch), verify it against the design + test plan, and drive it through Phase 5 (`/address-pr`) instead. This is exactly the move that dodged a 4th duplicate on T20260614-261293 (2026-06-29).
+- **An OPEN PR matches** → do **not** re-implement. Check out its `headRefName` (clone the target repo at that branch), verify it against the design + test plan, and drive it through Phase 5 (`/address-pr`) instead. This is exactly the move that dodged a 4th duplicate.
 - **A recently-MERGED PR matches** *and the hub task is still in `dev/TODO/`* → the implementation already shipped; the task just never got closed in the hub. Skip Phase 3/4 and go straight to Phase 7 (the hub journal-move / close PR).
 - **No match** → proceed to clone + implement below, and **record the pointer** (Phase 4 cross-repo step 5) so the *next* tick takes the cheap path instead of re-searching.
 
@@ -179,7 +188,7 @@ Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as si
 
 **Frontmatter override** (rare). If the task file ALSO sets `Target path: <path>`, reuse that path instead of creating an ephemeral clone. Use this only when the user has an existing checkout with WIP that must not be re-cloned (e.g., a long-lived integration branch with unpushed work). The override skips the Phase 7 clone removal — the user owns the path's lifecycle.
 
-**Why ephemeral**: parallel `/drive` sessions on the same target repo each get their own ephemeral clone, so the design has zero collision surface. Hub-side has no coordination either — the convention is one session per clone (see T20260513-422869). If you need parallel hub-side work, open a new hub clone. No cross-session state to maintain.
+**Why ephemeral**: parallel `/drive` sessions on the same target repo each get their own ephemeral clone, so the design has zero collision surface. Hub-side has no coordination either — the convention is one session per clone. If you need parallel hub-side work, open a new hub clone. No cross-session state to maintain.
 
 **Clone-cost mitigations** (defaults baked in above):
 
@@ -189,7 +198,7 @@ Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as si
 
 **Orphan cleanup**: explicit `rm -rf` at Phase 7 covers normal completion; an aborted run leaves its clone behind, so a weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed at its own Phase 5 stop, but orphaned the same way on a crash).
 
-(History — see T20260513-403409 in `dev/JOURNAL/`. Previous design required 3 safety guards [worktree clean, no in-flight git op, branch=main] + JIT-refresh + degraded path to share an existing target clone with other processes. The ephemeral-clone model makes those unnecessary.)
+
 
 ### Phase 2: Design — write, raise design PR, get reviewed, merge
 
@@ -201,14 +210,17 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 4. **Create the design PR** — branch `t<id>-design`, commit ONLY the task-file changes, push, `gh pr create` (its stdout is the new PR's URL — `<design-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`). PR body: 1-paragraph summary of the design + "Design-only PR — implementation lands in a follow-up after this merges." Run `/address-pr <design-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR (CI will be green for docs-only; the independent review covers the design itself; the maintainer reviews and approves).
 5. **Wait for the design PR to merge.** This is a checkpoint — do NOT proceed to Phase 3 until the design PR is on `main`.
 6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `In Progress` (in a follow-up commit on the implementation branch — see Phase 3).
-6a. **Support tasks** (`bash <skills-root>/_support/is-support-task.sh <id>`): the design needs non-empty `## Repro` and `## Regression test`; the gate below enforces it. Details: [`_support/README.md`](../_support/README.md).
-7. **Design-score gate (hard gate — Phase 2 → Phase 3, per T20260609-204303 D3).** Before any code, score the merged design deterministically:
+   6a. **Support tasks** (`bash <skills-root>/_support/is-support-task.sh <id>`): the design needs non-empty `## Repro` and `## Regression test`; the gate below enforces it. Details: [`_support/README.md`](../_support/README.md).
+7. **Design-score gate.** Before any code, score the merged design deterministically:
 
    ```bash
    bash <skills-root>/design-score/scripts/score.sh <task-file>
    ```
 
-   Exit 0 (`score >= threshold`, default 70) ⇒ proceed to Phase 3.0. Exit 1 ⇒ the design is **not ready** — read the per-check breakdown, fix the gaps (missing §Common sections, anchor-less prose, unmapped done-criteria, placeholder text, missing alternatives-rejected) in a follow-up design commit, re-score, and only then proceed. **Kind-scaled** — `score.sh` auto-detects code-vs-docs (same classifier as Phase 3.0); pass `--kind code|docs` to override. This is a cheap deterministic counterpart to the Phase 3.6 completeness gate, run *up front* so design decay is caught before any code exists. (When the design PR is skipped — see below — run the gate against the on-`main` task file before coding all the same.)
+   - Exit 0 (`score >= threshold`, default 70) ⇒ proceed to Phase 3.0.
+   - Exit 1 ⇒ the design is **not ready** — read the per-check breakdown, fix the gaps (missing §Common sections, anchor-less prose, unmapped done-criteria, placeholder text, missing alternatives-rejected) in a follow-up design commit, re-score, and only then proceed.
+   - **Kind-scaled** — `score.sh` auto-detects code-vs-docs (same classifier as Phase 3.0); pass `--kind code|docs` to override. This is a cheap deterministic counterpart to the Phase 3.6 completeness gate, run *up front* so design decay is caught before any code exists.
+   - (When the design PR is skipped — see below — run the gate against the on-`main` task file before coding all the same.)
 
 **When to skip the design PR (rare):**
 
@@ -247,16 +259,12 @@ Aggregate: all docs → **docs**; any code → **code** (mixed treated as code �
 For **code-class, non-trivial** tasks (per the Phase 3.0 classifier), execute the core work —
 **design → implement → test → verify** — as a single **sequential** `Workflow` (the Workflow
 tool): **one agent per stage, awaited in order, NO `parallel()` / no fan-out** (maintainer
-decision 2026-06-13, T20260613-508663). Each stage hands its structured result to the next; the
+decision 2026-06-13). Each stage hands its structured result to the next; the
 final stage adversarially verifies the change before you open the PR.
 
-This is what gives the headless `-p /ccxp` cron ultracode-style orchestration *without* ultracode
-session-mode (which is unreachable for a slash-command `-p` prompt — verified 2026-06-13). The
-Workflow tool is available in headless sessions, and authoring a Workflow from a skill is the
-sanctioned mechanism for invoking it (the platform permits the Workflow tool when a skill's
-instructions call for it). The surrounding lifecycle is unchanged — the Phase 2 design
-checkpoint, Phase 3.5–3.7 gates, Phase 4 PR, and Phase 7 close-out still apply; the Workflow is
-just *how you execute* the design+implement+test work for a substantive task.
+- This is what gives the headless `-p /ccxp` cron ultracode-style orchestration *without* ultracode session-mode (which is unreachable for a slash-command `-p` prompt — verified 2026-06-13).
+- The Workflow tool is available in headless sessions, and authoring a Workflow from a skill is the sanctioned mechanism for invoking it (the platform permits the Workflow tool when a skill's instructions call for it).
+- The surrounding lifecycle is unchanged — the Phase 2 design checkpoint, Phase 3.5–3.7 gates, Phase 4 PR, and Phase 7 close-out still apply; the Workflow is just *how you execute* the design+implement+test work for a substantive task.
 
 **Cross-repo: before authoring/running the Workflow, `cd $TARGET` and confirm `pwd` matches
 `$TARGET`** — the Workflow's agents inherit this cwd, so a wrong cwd makes them edit the wrong
@@ -335,6 +343,7 @@ directly.
    **cwd discipline**: Before *any* `git` or `gh pr` invocation in cross-repo mode, verify `pwd` literally matches the expected absolute path — `$TARGET` for implementation steps (Phase 3 + Phase 4), `$HUB` for the journal-move PR (Phase 7). The cost of one `pwd` check is trivial; the cost of committing to the wrong repo and force-pushing the "fix" is hours. If a session bounces between the ccxp-skills checkout, the target repo's `/tmp/cc-...` clone, and the hub-repo hub, expect to lose cwd at least once and assert defensively.
 
    For cross-repo target clones, **always clone fresh under `/tmp/cc-<repo>-<purpose>-$(date +%s)`** — never reuse another session's clone or the maintainer's working clone. The Tasks-as-Issues mirror workflow runs on every push, so a stray commit in someone else's clone has visible consequences. The ephemeral clone pattern is what `/drive` Phase 1.5 codifies; this is the operational reinforcement.
+
 3. Write the code — follow `dev/guidelines.md` conventions (the target repo's guidelines take precedence when they differ)
 4. Write tests if the test plan calls for them (scripts in `scripts/` must have BATS tests)
 5. Run tests locally: `bats tests/` — fix any failures before proceeding
@@ -381,14 +390,15 @@ Before opening the PR, run the doc-freshness check so a behaviour / structure / 
 bash <skills-root>/_docs/doc-impact.sh "${BASE_REF:-origin/main}"
 ```
 
-It flags repo docs (`README*`, `CLAUDE.md`, `dev/guidelines.md`, `*/SKILL.md`, `docs/**`) that reference what you changed, or that a newly-added workflow / action / script implies. For each flag: **update the doc on this branch** so it lands in the *same* PR, or — if it's genuinely unaffected — note "reviewed, no change needed". Kind-scaled via the Phase 3.0 classifier; for a large doc surface, escalate to `/proof-read` on the touched docs.
+- It flags repo docs (`README*`, `CLAUDE.md`, `dev/guidelines.md`, `*/SKILL.md`, `docs/**`) that reference what you changed, or that a newly-added workflow / action / script implies. For each flag:
+- **update the doc on this branch** so it lands in the *same* PR, or — if it's genuinely unaffected — note "reviewed, no change needed". Kind-scaled via the Phase 3.0 classifier; for a large doc surface, escalate to `/proof-read` on the touched docs.
 
 - **Interactive (a human is driving):** soft gate — resolve every flag (update or acknowledge) before Phase 4.
 - **Unattended (ccxp loop):** never block the loop — update what's clearly in scope, then for any remaining flags **file a follow-up doc-conformance task** (`bash <skills-root>/_taskid/new.sh --check ./dev`) — a **follow-up**, so stage it into the **next** iteration by stamping `scheduled:` after the file is written: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`, then promote it to the front of the queue (`/top <id>`; see Important Notes) — and proceed. Drift becomes tracked backlog, not a silent miss.
 
 Cross-repo: run this in `$TARGET` (the repo whose code changed); doc updates land in the target PR.
 
-#### Phase 3.8: Quality probe — record + warn (code-class only, per T20260609-204303 D2)
+#### Phase 3.8: Quality probe — record + warn
 
 **Code-class tasks only** (per the Phase 3.0 classifier — docs-class changes touch no measurable code; skip with a one-line note). Before opening the PR, measure quality on the task's **touched files** and append one record to the target repo's append-only scoreboard:
 
@@ -413,7 +423,7 @@ Use the `/gcpr` skill workflow:
 **Same-repo mode:**
 
 1. Group changes into logical commits
-2. If this PR completes the task: flip the task file's frontmatter `status:` to `Done` via `bash <skills-root>/_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; caught 2026-07-18 on T20260717-329670, where a hand-edit close needed a follow-up release PR), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`, **before** writing the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks — see the order-of-operations guard in Phase 7.0) as part of the commits. Always immediate, every close (T20260914-422854) — retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep (`/retro` Phase 2b), because that default made most of the week's just-closed tasks invisible to `/retro`'s own Phase 2 classification, which runs *before* Phase 2b's sweep in the same invocation.
+2. If this PR completes the task: flip the task file's frontmatter `status:` to `Done` via `bash <skills-root>/_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; observed once, where a hand-edit close needed a follow-up release PR), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`, **before** writing the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks — see the order-of-operations guard in Phase 7.0) as part of the commits. Always immediate, every close — retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep (`/retro` Phase 2b), because that default made most of the week's just-closed tasks invisible to `/retro`'s own Phase 2 classification, which runs *before* Phase 2b's sweep in the same invocation.
 3. Push to feature branch
 4. Create PR with summary + test plan
 
@@ -428,11 +438,12 @@ Use the `/gcpr` skill workflow:
    ```
 
    Put this as the first line of the Summary section, before the bullets.
+
 4. Push and create PR in the target repo
-5. **Record the cross-repo pointer + flip the hub status (T20260629-332546)** — so the next tick's Phase-1.5.0 guard finds this PR by pointer instead of re-searching, and the board reads past-`Design`. The pointer recording closes the duplication window the moment the PR exists (don't defer it to Phase 7). On a short `t<id>-xrepo-pointer` branch **in `$HUB`** (a tiny docs PR — auto-merges as status-change tier):
-   - Append a `## Cross-repo work` line to the hub task **body** (not frontmatter — a `target_pr:` frontmatter key would need a `lint_tasks.py` allowlist entry, coupling to the T20260626-353630 schema fork): `` - Implementation: <target-repo>#<pr-number> (`<headRefName>`) — opened <YYYY-MM-DD>. ``
+5. **Record the cross-repo pointer + flip the hub status** — so the next tick's Phase-1.5.0 guard finds this PR by pointer instead of re-searching, and the board reads past-`Design`. The pointer recording closes the duplication window the moment the PR exists (don't defer it to Phase 7). On a short `t<id>-xrepo-pointer` branch **in `$HUB`** (a tiny docs PR — auto-merges as status-change tier):
+   - Append a `## Cross-repo work` line to the hub task **body** (not frontmatter — a `target_pr:` frontmatter key would need a `lint_tasks.py` allowlist entry, coupling to the schema fork): `` - Implementation: <target-repo>#<pr-number> (`<headRefName>`) — opened <YYYY-MM-DD>. ``
    - Flip the hub task `status:` → `Review` (it was `In Progress` from the claim PR), and mirror it: `bash <skills-root>/_session/status.sh <id> Review`.
-   - **Lint-frozen fallback (T20260626-353630 class):** if the hub task file's pre-existing frontmatter trips the changed-mode `Lint task frontmatter` check (so even a body edit's whole-file lint fails), **skip the pointer edit** — the Phase-1.5.0 `gh pr list --search` guard already finds the PR with zero recorded state, so the safety net holds without an unmergeable edit.
+   - **Lint-frozen fallback:** if the hub task file's pre-existing frontmatter trips the changed-mode `Lint task frontmatter` check (so even a body edit's whole-file lint fails), **skip the pointer edit** — the Phase-1.5.0 `gh pr list --search` guard already finds the PR with zero recorded state, so the safety net holds without an unmergeable edit.
 
 ### Phase 5: Address PR
 
@@ -454,22 +465,20 @@ When the current task (G, the goal) can't progress because it depends on another
    Best-effort; the local `Blocked by` line in the task file is the source of truth.
 
    **Checkpoint discipline (applies to ANY mid-task park, blocker or session-budget checkpoint):**
+
    - The task-file update recording the park (status + **the exact branch name** + what's done/what remains) must land **on main** (small docs PR — auto-merges as status-change tier). A progress note committed only to the work branch is invisible to every future session: main's task file still reads as un-started "In Progress", and the resuming session re-does the work on a fresh branch (observed incident: a feature was implemented twice on two branches because a park/resume didn't record which branch had the in-progress work).
-   - **On resuming any `In Progress` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash <skills-root>/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing (T20260629-332546).
-   - Before exiting the session, return the clone to `main` (the cron wrapper executes from this working tree; a parked branch makes the wrapper itself go stale — see T20260605-862341 JOURNAL).
+   - **On resuming any `In Progress` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash <skills-root>/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing.
+   - Before exiting the session, return the clone to `main`.
 3. **Recurse into B.** Default (no flag) — invoke the `/drive` workflow on B **inline, in this
    same conversation**:
    - Flip B's Status to the appropriate next state.
    - Run Phase 2 → Phase 5 on B end-to-end.
    - If B itself is blocked by another task C, recurse again (same rules). Typical chain depth is 1-2; deeper is a smell — stop and slack.
 
-   **`--dispatch-blockers` mode (opt-in — T20260719-204917, Factor 10 "small, focused
-   agents").** Instead of recursing inline, dispatch B to a fresh sub-agent and only read back
-   its compact result. Rationale: a fully-inline blocker chain (each blocker's own investigation,
-   fixes, and PR loop) keeps growing the SAME conversation's context for work that is logically
-   independent of the goal-task G — the exact pattern that ballooned this session's context
-   driving T20260629-281129's blocker chain (T20260718-300856, T20260718-274226,
-   T20260718-206307), each a substantial, self-contained investigation.
+   **`--dispatch-blockers` mode (opt-in — Factor 10 "small, focused
+
+   - agents").** Instead of recursing inline, dispatch B to a fresh sub-agent and only read back its compact result.
+   - Rationale: a fully-inline blocker chain (each blocker's own investigation, fixes, and PR loop) keeps growing the SAME conversation's context for work that is logically independent of the goal-task G — the exact pattern that ballooned this session's context driving a blocker chain whose blockers were each a substantial, self-contained investigation.
 
    - Dispatch via the `Agent` tool, `isolation: "worktree"` (B's `/drive` run will checkout
      branches and edit files — same reasoning as the cross-repo ephemeral-clone isolation in
@@ -523,9 +532,9 @@ After merge (auto or approved):
 - Receiving code review (`superpowers:receiving-code-review`): {yes — /address-pr §2.d, {N} pushbacks | no — no Copilot comments}
 ```
 
-Fill the bracketed alternatives from what actually happened; the block lands directly in the `dev/JOURNAL/` file at close time — every close journal-moves immediately (T20260914-422854), no deferred-to-Friday path anymore.
+Fill the bracketed alternatives from what actually happened; the block lands directly in the `dev/JOURNAL/` file at close time — every close journal-moves immediately, no deferred-to-Friday path anymore.
 
-> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This bites **every close now** (the journal-move is the only path — T20260914-422854 retired the old deferred-to-Friday default that used to make this a rare case). Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing**: `git show --stat HEAD` must show real insertions/deletions, not `100% rename` / `0 insertions(+), 0 deletions(-)`.
+> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This bites **every close now**. Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing**: `git show --stat HEAD` must show real insertions/deletions, not `100% rename` / `0 insertions(+), 0 deletions(-)`.
 
 **Status=Done** (run right after Phase 7.0, before the remaining Phase 7 steps):
 
@@ -540,8 +549,8 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 **Same-repo mode:**
 
 1. `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**)
-2. Verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed in the PR from Phase 4, with `status: Done` set on the moved file — every close journal-moves immediately now (T20260914-422854), there is no in-place-only path left to check instead.
-3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip (T20260717-329670, 2026-07-18 — the close PR flipped status but left `claimed_by` set, needing a follow-up release PR). Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash <skills-root>/_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
+2. Verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed in the PR from Phase 4, with `status: Done` set on the moved file — every close journal-moves immediately now, there is no in-place-only path left to check instead.
+3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip. Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash <skills-root>/_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
 4. If the task has `Source: GitHub issue #N`, update and close the issue:
 
    ```bash
@@ -556,7 +565,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 
 1. In `$TARGET`: pull latest main, confirm the merge landed.
 2. `cd $HUB` and `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**).
-3. Open a **separate hub-repo PR** that closes the task — every close journal-moves immediately now (T20260914-422854, retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep):
+3. Open a **separate hub-repo PR** that closes the task — every close journal-moves immediately now:
 
    ```bash
    git checkout -b t<id>-journal-move
@@ -565,7 +574,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    # Add a short "## Closed (YYYY-MM-DD)" section pointing at the target PR URL
    # (mv FIRST then edit, as above — else `git add` the JOURNAL path before committing)
    bash <skills-root>/_docs/lint-docs.sh "dev/JOURNAL/$(date +%F)-T<id>-<slug>.md" \
-     || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"   # doc-lint guard, scoped to just this file (T20260910-919422), check-only (T20260928-608242) — shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+     || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"   # doc-lint guard, scoped to just this file, check-only — shared script, see /gcpr Step 1.5
    git add dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    git commit -m "docs(tasks): close T<id> (shipped in <target-repo>#<pr-number>)"
    git show --stat HEAD   # must show insertions, NOT "100% rename / 0 insertions"
@@ -574,6 +583,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    ```
 
    This PR is docs-only, typically auto-mergeable (pure status-move — see the auto-merge carve-out in `dev/guidelines.md`), and closes the task lifecycle. Run `/address-pr $JOURNAL_PR_NUMBER` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR.
+
 4. Close the source GitHub issue (same as same-repo).
 5. Pop back to parent goal if recursed; otherwise exit (same as same-repo).
 6. **Remove the ephemeral target clone**: `rm -rf` of the literal clone path. This is the only cleanup besides the orphan sweep (Phase 1.5 deliberately sets no `trap`). Skip this step if Phase 1.5 used the `Target path` override (the path is user-owned).
@@ -590,7 +600,9 @@ When escalating to the user via Slack, use the MCP `slack_send_message` tool (no
 
 `DRIVE_ESCALATION_CHANNEL_ID` — the Slack channel_id escalations post to. Required, no baked-in default — resolved the same way as every other `~/.claude/.env`-backed var in this suite: already-exported wins, else `~/.claude/.env` (see `SLACK_STANDUP_CHANNEL` in `/slack-check-reply`).
 
-If unset, do not let the `slack_send_message` call crash the `/drive` run and do not silently drop the escalation either: skip steps 1-2 below, log a clear `ERROR: DRIVE_ESCALATION_CHANNEL_ID not configured — cannot send escalation for T<id>` line, and record the escalation's message + type directly in the task file's status note in place of the `drive-threads.json` entry from step 3 — the escalation is surfaced in the task file, not lost. The triggering condition still governs whether `/drive` stops or continues (see Escalation Rules below); only the Slack transport degrades, an escalation mechanism is not something that gets skipped with a one-line note the way a read-only search does.
+- If unset, do not let the `slack_send_message` call crash the `/drive` run and do not silently drop the escalation either: skip steps 1-2 below, log a clear `ERROR:
+- DRIVE_ESCALATION_CHANNEL_ID not configured — cannot send escalation for T<id>` line, and record the escalation's message + type directly in the task file's status note in place of the `drive-threads.json` entry from step 3 — the escalation is surfaced in the task file, not lost.
+- The triggering condition still governs whether `/drive` stops or continues (see Escalation Rules below); only the Slack transport degrades, an escalation mechanism is not something that gets skipped with a one-line note the way a read-only search does.
 
 1. Use the `$DRIVE_ESCALATION_CHANNEL_ID` channel
 2. Send via `slack_send_message` with `channel_id: "$DRIVE_ESCALATION_CHANNEL_ID"` and the message text
@@ -641,7 +653,9 @@ Follow `dev/guidelines.md`:
   - **Dependency / blocker** (Phase 3 "New dependency discovered", Phase 6 blocker discovered mid-work) → the **current** iteration: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` — it's needed to unblock the goal-task *now*.
   - **Follow-up** (Phase 3.7 doc-conformance task, Phase 7 close-time follow-ups) → the **next** iteration: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` — deferred work, not this iteration's commitment.
 
-  The stamper resolves the Monday token-free (committed IPM file → Project API → next-Monday fallback) and writes it **update-forward-only**, printing the effective date. Token-free means it still stages correctly in the ccxp cron (no PAT) — unlike the old `_session/iteration.sh` inline call, which returned empty without a token and silently left the task unscheduled (T20260626-190842). It only no-ops on a non-YAML/legacy task file. `scheduled` is a lint-allowlisted key. (Closed tasks get their iteration automatically from the close-date via `sync-tasks` — see that action; this rule is only for *live* tasks at creation.)
+  - The stamper resolves the Monday token-free (committed IPM file → Project API → next-Monday fallback) and writes it **update-forward-only**, printing the effective date.
+  - Token-free means it still stages correctly in the ccxp cron (no PAT) — unlike the old `_session/iteration.sh` inline call, which returned empty without a token and silently left the task unscheduled. It only no-ops on a non-YAML/legacy task file. `scheduled` is a lint-allowlisted key.
+  - (Closed tasks get their iteration automatically from the close-date via `sync-tasks` — see that action; this rule is only for *live* tasks at creation.)
 
 - **Promote every task you CREATE to the front of the queue** (trying this 2026-10-02 — revisit at `/retro` if it causes churn): right after stamping `scheduled:` above, also run `/top <id>` so the new task lands at position 1 of `dev/TODO/queue.md`, not the tail `/stage`'s default or the next `/todo sweep` would give it. Applies to **every** kind `/drive` creates — blocker *and* follow-up alike — not just the current-iteration ones: a task filed while driving another to completion is a direct loose end of the work just done (a blocker, a doc-conformance gap, a close-time follow-up), and doing it next while the context is still warm beats letting it sit behind unrelated backlog. This overrides `/stage`'s normal "blocks nothing queued → append" rule specifically for tasks `/drive` itself files; tasks filed by other means (`/new-task`, hand-filed, another session) still get `/stage`'s plain append. If a `/top`'d task is itself `Blocked by` something open, `/top` pulls that blocker along to the very front too (its own step 2) — expected, not a bug.
 
