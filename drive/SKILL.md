@@ -520,6 +520,7 @@ After merge (auto or approved):
 **Final verification.** Before declaring the goal-task done, invoke `superpowers:verification-before-completion` once more from the merged-on-main perspective. Common catches: a follow-up cross-repo PR still needed (the hub journal-move PR); a source GitHub issue not yet closed; a memory rule worth saving from this task's surprises; unchecked "Done when" items.
 
 - **Write the `## Closed (YYYY-MM-DD)` section** (standardized name — **not** "Resolution"/"Outcome"/"Done", so `/retro` and greps find it predictably) per [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md): shipped-in **PR #N** + run/evidence links, what's met, what's external/unverified and when it'll be confirmed, and any **follow-up tasks filed** (T-ids) — file each as a **follow-up** staged into the **next** iteration (`bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`) and promoted to the front of the queue (`/top <id>`; see Important Notes).
+
 Then **append a "Skills invoked" block to the task body** before the close (Phase 4/Phase 7 `status: Done` flip or immediate journal move), so `/retro` Phase 4c can grade compliance by grepping JOURNAL:
 
 ```markdown
