@@ -5,15 +5,15 @@ claimed_by: cc1-50ac6891:bf6b098f35f88e3b
 scheduled: 2026-10-12
 source: this conversation, 2026-10-12 (Shine: formalize the synxdb-support issue lifecycle via GitHub labels; 4 follow-up decisions on top of a same-night design draft)
 related: [T20261012-333879, T20261012-109735, T20261012-383399, T20261012-278418]
-description: Design for a label-driven synxdb-support lifecycle skill (working name /support-status, not final) plus a /support -> /to-task intake rename+generalization
+description: Design for /customer-support, a label-driven synxdb-support lifecycle skill, plus a /support -> /to-task intake rename+generalization
 ---
 
-# T20261012-373882: Design /support-status — label-driven lifecycle for synxdb-support issues
+# T20261012-373882: Design /customer-support — label-driven lifecycle for synxdb-support issues
 
-> **Naming note**: `/support-status` is used throughout this doc as a **working
-> name only** — see § "Naming the lifecycle skill" below for 3 candidates and a
-> recommendation. Do not treat `/support-status` as decided; every occurrence
-> below is a placeholder pending Shine's pick.
+> **Naming note (RESOLVED 2026-10-12)**: `/customer-support` is the decided,
+> final name — see § "Naming the lifecycle skill" below for the 3 candidates
+> considered and why. Every occurrence of `/customer-support` in this doc is
+> the real skill name, not a placeholder.
 
 ## TLDR
 
@@ -23,7 +23,7 @@ description: Design for a label-driven synxdb-support lifecycle skill (working n
   but nothing drives it — tonight's real issues (#20, #21, #23, #24, #25, #27)
   show it going unused even while being actively worked, and the org Project
   board that was meant to compensate has no automation and is already wrong.
-- **Solution**: a new sibling skill, `/support-status`, with evidence-gated
+- **Solution**: a new sibling skill, `/customer-support`, with evidence-gated
   subcommands that move an issue through its lifecycle via **existing** labels
   plus exactly **one** new label (`delivered`); the Project board is left alone
   pending a separate leadership call.
@@ -91,11 +91,11 @@ description: Design for a label-driven synxdb-support lifecycle skill (working n
 - `/support` (`ccxp-skills/support/SKILL.md`) is intake-only today — it files a
   `dev/TODO` task with `support-issue: <canonical url>` and explicitly
   "never posts, comments, labels or edits anything on the issue." This design
-  does not change that; `/support-status` is a new sibling skill, not a
+  does not change that; `/customer-support` is a new sibling skill, not a
   `/support` revision.
 - `_support/README.md`'s `support-issue:`/`support-report:` correlation (shipped
   in `T20261012-109735`, epic `T20261012-333879` P1, already in
-  `dev/JOURNAL/`) is the hook `/support-status` reuses to find the task file
+  `dev/JOURNAL/`) is the hook `/customer-support` reuses to find the task file
   backing an issue — no new correlation mechanism needed.
 - **Partner download links (added after the first pass of this design, per
   Shine's live feedback on tonight's SynxDB4 4.5.4 release):**
@@ -132,7 +132,7 @@ description: Design for a label-driven synxdb-support lifecycle skill (working n
     (the one they're entitled to download from) is a narrower, already-accepted
     destination, same risk class as the precedent's Slack-message use — not a
     new exception.
-  - `synxdb-build-pipeline` is a different repo from where `/support-status`
+  - `synxdb-build-pipeline` is a different repo from where `/customer-support`
     itself will live (`ccxp-skills`) — invoking these scripts is cross-repo,
     same shape as `/drive` Phase 1.5's ephemeral-clone pattern.
 
@@ -154,13 +154,18 @@ description: Design for a label-driven synxdb-support lifecycle skill (working n
     team closes it after confirming with the customer."* — strong independent
     validation of this design's `accept`-is-support-team-only rule, but it
     means the rule already lives in two places.
-  - **Not resolved here**: whether `close-support-issue`'s Phase 4 should be
-    rewritten to *call* the new lifecycle skill's `deliver`/`links`/`accept`
-    instead of its own manual steps (recommended, to kill the duplication —
-    `close-support-issue` keeps Phases 1-3 and 5, which are about the fix
-    itself, not the lifecycle label/comment mechanics), or left standalone.
-    This touches a different repo and its own task/PR process — tracked as an
-    explicit open question and Next step below, not actioned in this task.
+  - **RESOLVED 2026-10-12**: `close-support-issue`'s Phase 4 is rewritten to
+    *call* `/customer-support`'s `deliver`/`links`/`accept` instead of its own
+    manual steps — kills the duplication. `close-support-issue` keeps Phases
+    1-3 (understand the bug, fix it, hard-gate on durable E2E regression
+    coverage) and Phase 5 (close the internal task), which are about the fix
+    itself, not lifecycle label/comment mechanics, and stay exactly as they
+    are. **Not actioned by this task** — it touches a different repo
+    (`synxdb-build-pipeline`) and its own task/PR process, and is blocked on
+    `/customer-support` existing first (it has to be callable before
+    `close-support-issue` can call it). Tracked as
+    `synxdb-build-pipeline#T20261012-612044`, filed 2026-10-12, blocked on
+    this task's implementation shipping.
 
 ## Solution
 
@@ -204,10 +209,10 @@ description: Design for a label-driven synxdb-support lifecycle skill (working n
 | *(any pre-close state)* | `+needs-upstream` | add + GitLab link comment | fix depends on upstream R&D | engineer, `needs-upstream` |
 | Accepted (closed) | — | **none** | regression found later | support files a **brand-new issue**, optionally cross-referencing the old one in its body — no same-issue reopen, no time-window rule (Shine: "case by case, support always opens a new issue") |
 
-### 3. `/support-status` subcommands
+### 3. `/customer-support` subcommands
 
 Sibling skill to `/support` (which stays intake-only); argument shape
-`/support-status <subcommand> <issue-ref>`:
+`/customer-support <subcommand> <issue-ref>`:
 
 | Subcommand | Does |
 |---|---|
@@ -236,7 +241,7 @@ Sibling skill to `/support` (which stays intake-only); argument shape
 - Issue templates (`report.yml:4`, `request.yml:4`) are unchanged — they
   already correctly seed `triage`.
 - No bulk backfill of `#20`/`#21`/`#23`/`#24`/`#25`/`#27` ahead of the skill —
-  running `/support-status triage`/`start`/etc. on them once the skill exists
+  running `/customer-support triage`/`start`/etc. on them once the skill exists
   **is** the backfill, and doubles as its first real-world test.
 
 ### 5. `/support` → `/to-task`: rename + generalize intake
@@ -244,7 +249,7 @@ Sibling skill to `/support` (which stays intake-only); argument shape
 Shine: *"rename the existing skill `/support` to `/to-task`, and it will take
 any URL [and] convert it into our task [tracking system]."* This is a scope
 change to `/support` itself, not part of the lifecycle skill above — called
-out here because `/support` is the correlation mechanism `/support-status`
+out here because `/support` is the correlation mechanism `/customer-support`
 (or whatever it's named) depends on.
 
 - **Generic correlation key**: `support-issue: <url>` is synxdb-support-
@@ -295,21 +300,23 @@ out here because `/support` is the correlation mechanism `/support-status`
   this note before building the reporter** — this task does not edit P3/P4's
   files itself (different owner, different task).
 
-### 6. Naming the lifecycle skill — open, Shine's call
+### 6. Naming the lifecycle skill — DECIDED: `/customer-support`
 
-`/support-status` was this design's working name throughout. Shine proposed
-`/customer-support` as one option and asked for a better name if one exists.
-Candidates:
+**Resolved 2026-10-12.** In a live follow-up, Shine referred to this task as
+"the follow-up on the `/customer-support` skill (where `/support` renamed to
+`/to-task`)" — naming it directly, which settles the open question in favor
+of his original suggestion over the recommended alternative. The skill ships
+as **`/customer-support`**. `/support-status` was only ever this design's
+working name; every occurrence of `/customer-support` above is the real,
+decided skill name.
+
+For the record, the candidates considered:
 
 | Candidate | Rationale |
 |---|---|
-| `/customer-support` (Shine's suggestion) | Clearest in plain English. Risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded. |
-| **`/support-lifecycle`** (recommended) | Names the mechanism precisely — the label-driven state machine this task designs. Lowest ambiguity/collision risk. Matches this repo's existing descriptive kebab-case naming (`close-support-issue`, `new-task`, `address-pr`). |
-| `/support-ops` | Short; frames it as the action/operations skill (do the next lifecycle step) vs. `/to-task`'s passive intake. Less self-explanatory than `/support-lifecycle` without reading its description line. |
-
-**This is Shine's final call, not decided by this task.** `/support-status`
-stays as the placeholder in this doc until a name is picked; the rename is a
-mechanical find-replace across whichever files implement it.
+| **`/customer-support` (DECIDED — Shine's suggestion, confirmed by him naming it this way)** | Clearest in plain English. Accepted risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded — outweighed by Shine's explicit, repeated use of the name. |
+| `/support-lifecycle` (previously recommended, not chosen) | Names the mechanism precisely — the label-driven state machine this task designs. Lowest ambiguity/collision risk. Matches this repo's existing descriptive kebab-case naming (`close-support-issue`, `new-task`, `address-pr`). |
+| `/support-ops` (not chosen) | Short; frames it as the action/operations skill (do the next lifecycle step) vs. `/to-task`'s passive intake. Less self-explanatory than `/support-lifecycle` without reading its description line. |
 
 ### Projects-board retirement — DEFERRED, pending leadership decision
 
@@ -325,14 +332,14 @@ once approved — but nothing in it should be done until that decision lands.
   with no matching label on the issue) — it is not functioning as a source of
   truth today, labels would just be a second, equally-unmaintained one.
   option after approval: a **read-only board driven from labels** (auto-synced
-  `Status` reflecting the primary label, populated by `/support-status` as a
+  `Status` reflecting the primary label, populated by `/customer-support` as a
   side effect) **or** archive it outright. Either way, labels — not the board
   — become the single source of truth; this mirrors the `scheduled:`-not-a-
   board precedent already established for the general task lifecycle
   (`lifecycle.md` § Iteration assignment: "There is no GitHub Project board
   anywhere in this suite").
 - **Not blocking the rest of this task**: the label scheme and the
-  `/support-status` skill do not depend on the board's fate either way — they
+  `/customer-support` skill do not depend on the board's fate either way — they
   work identically whether the board is archived, synced, or left alone.
 
 ## Test plan
@@ -363,8 +370,10 @@ once approved — but nothing in it should be done until that decision lands.
 
 - [ ] `delivered` is the only new label in `Synx-Data-Labs/synxdb-support`
       (verify via `gh label list` diff against this doc's taxonomy table).
-- [ ] `/support-status` skill exists in `ccxp-skills` with all 11 subcommands
-      above, `/support` itself unchanged (still intake-only).
+- [ ] `/customer-support` skill exists in `ccxp-skills` with all 11 subcommands
+      above; `/support` itself is renamed+generalized to `/to-task` (intake
+      only, `source-url:` key, `support-issue:` kept as a recognized legacy
+      alias — see § 5).
 - [ ] `scripts/setup-labels.sh` creates the full taxonomy (no more missing
       `triage`/`accepted`/`in-progress`/`blocked`/`sev*`/`area:*`).
 - [ ] `links`/`deliver` correctly bridge `.env`'s `ENTITLEMENT_TOKEN` to
@@ -376,19 +385,30 @@ once approved — but nothing in it should be done until that decision lands.
 
 ## Open questions
 
-- Q1: final `delivered` label color — cosmetic, pick at implementation time.
-- Q2: `links`/cross-repo invocation shape — ephemeral ad-hoc clone of
-  `synxdb-build-pipeline` per `/drive` Phase 1.5's pattern, vs. requiring the
-  session already have it checked out. Needs a decision before implementing
-  `links`.
+- ~~Q1: final `delivered` label color~~ — RESOLVED at implementation:
+  `#5319e7` (matches the existing state-label family, adjacent to
+  `in-progress`'s blue).
+- ~~Q2: `links`/cross-repo invocation shape~~ — RESOLVED: ephemeral ad-hoc
+  clone of `synxdb-build-pipeline` per `/drive` Phase 1.5's pattern (never
+  reuse an existing local clone — same reasoning as Phase 1.5 itself: a local
+  clone may be another live session's working tree mid-operation).
+- ~~Naming (was its own section 6 open item)~~ — RESOLVED: `/customer-support`
+  (see § 6).
+- ~~close-support-issue reconciliation~~ — RESOLVED: see Context §
+  "Cross-repo overlap found", tracked as `synxdb-build-pipeline#T20261012-612044`.
 - Q3 (blocked on Shine, not on design): whether the Projects-board
   recommendation above is approved, archived-as-is, or rejected — pending
   tonight's leadership meeting. Nothing in this task's Done criteria depends
-  on the answer landing first.
+  on the answer landing first. **Still open** — not actioned by this task.
 
 ## Next steps
 
-- Label-scheme + `/support-status` skill: **open and workable now** — ready
-  for `/incept` to size it up, then `/drive`.
+- Label-scheme + `/customer-support` skill: all design-time open questions
+  resolved 2026-10-12 — proceeding to `/drive` implementation.
+- `synxdb-build-pipeline#T20261012-612044` (close-support-issue reconciliation):
+  filed, blocked on this task's implementation shipping first.
+- `T20261012-383399`/`T20261012-278418` (epic children rippled by the
+  `/to-task` generalization): updated 2026-10-12 to move their planned
+  `report`/`status`/`stop` subcommands from `/support` to `/customer-support`.
 - Projects-board retirement: **blocked on the pending leadership decision**
   (Q3) — do not action until Shine confirms the outcome of tonight's meeting.

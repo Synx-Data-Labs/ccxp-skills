@@ -10,6 +10,12 @@ source: this conversation, 2026-10-12 (customer-support skill plan, phase 4 of 4
 ## Problem
 
 - **Type**: feature
+- **Note (T20261012-373882, 2026-10-12)**: `/support` was renamed and
+  generalized to `/to-task` (generic any-URL intake); the live-reporter
+  subcommands this phase tunes (P3's `/support report`/`status`/`stop`) now
+  live on `/customer-support` instead — see `T20261012-383399`'s updated
+  scope. This phase's own scope (CI enforcement of the regression-commit
+  rule, cadence tuning) is unaffected beyond that renaming.
 - Requirement (user): support tasks always get a simplified repro and a new e2e regression test, committed together with the fix. P1 enforces it inside `/drive` and `/address-pr`; this phase enforces it in consumer-repo CI and tunes the live reporter from real usage.
 - Phase 4 of 4 (last). Ordering: blocked-by `T20261012-383399` (P3: live reporting, which supplies the real-usage data for tuning); also builds on P1 `T20261012-109735` (`check-regression-commit.sh`). Planned size: 3 points (filed at `estimation: 1`; `/incept` revises).
 - Scope, CI enforcement:
