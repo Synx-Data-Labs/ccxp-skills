@@ -1,6 +1,7 @@
 ---
 status: Design
 estimation: 1
+scheduled: 2026-10-12
 source: "synxdb-team discussion 2026-10-12"
 related: PR #314
 description: Add relative-link existence validation to the repo-conventions lint (hard-gate capable) so consumer repos keep dev/ links current
