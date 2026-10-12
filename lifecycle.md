@@ -170,6 +170,7 @@ A one-time, lossy migration script (`repo-conventions/scripts/migrate-estimation
 3. **Move the file**: `git mv dev/TODO/{id}-slug.md dev/JOURNAL/yyyy-mm-dd-{id}-slug.md`
 4. **Include in the implementing PR**: the journal move goes in the same PR that completes the task — not as a separate commit after merge. This keeps the task lifecycle atomic.
 5. **Concrete pre-merge check**: before merging any PR that completes a task, verify the diff actually moves `dev/TODO/{id}.md` → `dev/JOURNAL/yyyy-mm-dd-{id}.md` with `status: Done` and test-plan boxes ticked. The most common miss is creating/updating the task file mid-work and simply forgetting the move at completion — a merged implementing PR whose task file is still sitting in `dev/TODO/` is that miss.
+6. **Link tasks by `T{id}`, not by relative path** into `dev/TODO/`, `dev/PARKING/` or `dev/JOURNAL/` — the move at close breaks path links. `repo-conventions/scripts/lint_links.py` (see `/repo-conventions`) fails on broken `dev/` links and `--fix`es them by `T{id}`.
 
 ## Branch Rule
 

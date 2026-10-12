@@ -134,7 +134,7 @@ file (see that section for why) — so this case gets its **own** verdict,
 
   **Correction to an earlier draft**: this design previously asserted "a
   same-repo PR never carries a `Task:` line" — that's false as stated. PR #85
-  (see [T20260922-324422](T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md),
+  (see [T20260922-324422](2026-10-01-T20260922-324422-pr-owner-task-link-to-not-yet-merged-path.md),
   a related, separately-tracked bug) is a real same-repo PR whose body *did*
   carry a `Task:` line with a genuine blob link (pointing at a not-yet-merged
   JOURNAL path). This design's gate handles that case correctly regardless —
