@@ -58,12 +58,11 @@ to `/stage` first.
 
 ```bash
 BRANCH="docs/bottom-$(date +%Y%m%d-%H%M%S)"
-git checkout -b "$BRANCH"
-git add dev/TODO/queue.md
-git commit -m "docs(queue): move T<id> [T<id> ...] to the bottom"
-bash ../_gh/git.sh push -u origin "$BRANCH"
-bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
+bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the bottom" \
+  --title "docs(queue): move T<id> to the bottom" --body "Queue reorder." -- dev/TODO/queue.md
 ```
+
+`land.sh` branches, stages only the listed paths, commits, pushes and prints the PR URL.
 
 Then drive the PR to merge with `/address-pr <number>`. Pure `queue.md`
 reorder — lifecycle bookkeeping, not a code change — auto-merges under the

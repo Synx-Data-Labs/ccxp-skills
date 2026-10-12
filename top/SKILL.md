@@ -143,15 +143,10 @@ which would have pushed them down too.
 ### 4. Commit, push, and merge
 
 ```bash
-git add dev/TODO/queue.md
-# Also add any newly-untracked T<id> file (same fix as /stage).
-for id in T<id> [T<id> ...]; do
-  f="$(git status --porcelain -- "dev/TODO/${id}-"*.md | awk '/^\?\?/{print $2}')"
-  [ -n "$f" ] && git add "$f"
-done
-git commit -m "docs(queue): move T<id> [T<id> ...] to the top"  # --before mode: "...to immediately before T<targetId>"
-bash ../_gh/git.sh push -u origin "$BRANCH"
-bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
+# Also pass any newly-untracked T<id> file (same fix as /stage) as an extra path.
+bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the top" \
+  --title "docs(queue): move T<id> to the top" --body "Queue reorder." -- dev/TODO/queue.md [dev/TODO/T<id>-*.md ...]
+# --before mode message: "...to immediately before T<targetId>"
 ```
 
 Then drive the PR to merge with `/address-pr <number>`. Pure `queue.md`
