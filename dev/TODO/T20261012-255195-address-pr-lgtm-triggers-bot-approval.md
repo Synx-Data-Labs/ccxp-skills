@@ -1,7 +1,9 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: this conversation, 2026-10-12
+claimed_by: cc1-50ac6891:4d9eb48c700d5e9a
+claimed_role: interactive
 ---
 
 # T20261012-255195: address-pr: an LGTM comment from the PR author triggers the bot approval
