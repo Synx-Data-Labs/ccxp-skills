@@ -133,10 +133,12 @@ Generate a daily progress summary by reviewing yesterday's work.
 3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
 4. **Journal entries**: Check `dev/JOURNAL/` for files dated yesterday
 5. **Current drive-threads**: Read `.claude/state/drive-threads.json` for unresolved escalations
-- 5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`.
-- This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads.
-- **The MCP slack user CAN read `#acme-dev-notifications` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts.
-- **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
+   5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`.
+
+   - This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads.
+   - **The MCP slack user CAN read `#acme-dev-notifications` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts.
+   - **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
+
 6. **Previous ccxp summary**: Read the most recent `dev/JOURNAL/*-daily-summary.md` for continuity (for continuity only — never let a prior note about Slack-unreadability suppress step 5b)
 7. **Current weekly focus**: Read the current committed IPM — `IPM_FILE=$(bash <skills-root>/_ipm/current.sh)` (staging-aware: skips the future-dated pre-IPM staging stub `/stage` writes). If `$IPM_FILE` is empty, no IPM commit exists yet — note "No active IPM commit (IPM is opt-in — invoke `/ipm` directly if this repo wants one)" and skip the progress block in 1.2.
 
