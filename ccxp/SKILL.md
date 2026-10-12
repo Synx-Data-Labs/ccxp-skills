@@ -118,7 +118,7 @@ bash <skills-root>/_session/claim_gap.sh
 - Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one.
 - `In Progress` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
 
-- No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup, same fix — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat).
+- No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat).
 - Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into.
 - See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
 
@@ -423,7 +423,7 @@ bash <skills-root>/_session/attribution.sh table "$(pwd)/dev"
 #### 1.3b Lint the standup doc before committing (catch MD032 locally)
 
 - The standup doc is committed + PR'd each tick (ad-hoc — there is no scripted commit step here), and a list glued to a preceding line is the recurring MD032 red that sits on `main` until a fix-PR lands.
-- Before committing/pushing the daily-summary (and any journal docs written this tick), run the shared doc-lint guard, scoped to whatever `.md` this tick is actually about to commit — `lint-docs.sh` requires an explicit path and is check-only (the bare/default-scope `--fix` call this used to make, after it hit an `EACCES` running unscoped against the full 1509-file repo glob):
+- Before committing/pushing the daily-summary (and any journal docs written this tick), run the shared doc-lint guard, scoped to whatever `.md` this tick is actually about to commit — `lint-docs.sh` requires an explicit path and is check-only (it replaced the bare/default-scope `--fix` call this used to make, after it hit an `EACCES` running unscoped against the full 1509-file repo glob):
 
 ```bash
 CHANGED_MD=$(git status --porcelain | awk '
@@ -458,10 +458,9 @@ Send daily summary to `#acme-dev-notifications` via MCP `slack_send_message`.
 
 **Webhook fallback on MCP send failure.** `slack_send_message` has shown
 chronic intermittent `MCP error -32603: Internal Server Error` failures — a 7-consecutive-day
-miss streak on the daily standup, 2026-07-30 through 2026-08-05 (see that task's Progress notes
-for the day-by-day count). Don't let a failed send silently drop the day's standup from Slack:
+miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a failed send silently drop the day's standup from Slack:
 
-1. Attempt `slack_send_message` once, then one retry on error — per the Plan
+1. Attempt `slack_send_message` once, then one retry on error — per the design decision
    ("don't loop retries in a single session — 2 attempts is enough evidence per occurrence"), not
    a policy documented elsewhere in this file. Looping past that second attempt is not warranted.
 2. If both attempts error, capture the standup message text into a variable and fall back
@@ -551,10 +550,10 @@ bash <skills-root>/ccxp/scripts/epic-status.sh render --slack
 {or "• None" if empty}
 ```
 
-- (Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md` exists yet. Omit the whole `*📊 Attribution*` block on a no-data day.
+- Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md` exists yet. Omit the whole `*📊 Attribution*` block on a no-data day.
 - Omit the whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack` emits no lines (`dev/EPICS.md` missing/unreadable, or no epics defined) — same optional-block class as Weekly focus/Attribution, not one of the four always-render headline sections.
 - Every other section — Resolved, Nightly, Needs your attention, Top 5 next — always renders, using its "None"/"Nothing"/"all green" fallback rather than being cut; those four are the sections a reader scans for first, so a missing one reads as broken rather than empty.
-- **Blockers always renders** (unlike Weekly focus/Attribution) — "None" is itself the informative answer to "is anything stuck," so cutting the section on a clean day would read as unchecked, not clean.)
+- **Blockers always renders** (unlike Weekly focus/Attribution) — "None" is itself the informative answer to "is anything stuck," so cutting the section on a clean day would read as unchecked, not clean.
 
 - **Message-length discipline.** The tool has a 5000-char cap per text element.
 - On a very busy day (many merges + many flagged PRs), trim rather than truncate mid-sentence: cap *Resolved* highlights at one line each (drop extra detail, keep the task link + PR #), and cap *Needs your attention* to the single clearest reason per PR.
