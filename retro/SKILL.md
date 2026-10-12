@@ -177,10 +177,10 @@ jq '...' .claude/state/drive-threads.json > .claude/state/drive-threads.json.new
    - **Revised** — not effective as-is. Capture *what* failed in the task file; file a
      `Category: process` action item via Phase 4's task-creation steps (do **not** silent-revert
      the underlying policy); update the Outcome cell pointing at the new task.
-   - **Extended** — inconclusive, needs one more iteration of evidence. Update the Outcome cell
-     - with `**Extended** — next review <today + 7d>` and the reason. `chore-review.sh` treats `Extended` as terminal (same as `Kept`/`Revised`) — it will not auto-resurface the row.
+   - **Extended** — inconclusive, needs one more iteration of evidence. Update the Outcome cell with `**Extended** — next review <today + 7d>` and the reason. `chore-review.sh` treats `Extended` as terminal (same as `Kept`/`Revised`) — it will not auto-resurface the row.
      - Known v1 limitation: a genuinely multi-cycle chore needs a human/retro to manually reset its Outcome cell to blank once the noted review date arrives, re-entering it into `list-due`. Fine for now since no chore has needed a second extension yet; revisit if one does.
-     - Commit the `dev/chore.md` + task-file updates in the same PR as the rest of the retro's docs changes (Phase 5).
+
+   Commit the `dev/chore.md` + task-file updates in the same PR as the rest of the retro's docs changes (Phase 5).
 
 3. **Creation safety-net scan** — flag process-looking `dev/*.md` changes with no matching row:
 
