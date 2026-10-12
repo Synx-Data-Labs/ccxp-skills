@@ -13,9 +13,15 @@ source: this conversation, 2026-10-12 (customer-support skill plan, phase 3 of 4
 - **Type**: feature
 - Requirement (user): daily status updates to the customer issue with progress and ETA, tightening to 4-hourly and hourly as a due date nears. P2 built the engine in dry-run; this phase makes it post for real, with a human in the loop first.
 - Phase 3 of 4. Ordering: blocked-by `T20261012-949870` (P2: cadence, renderer, marker, tick in dry-run); blocks P4 `T20261012-278418`. Planned size: 3 points (filed at `estimation: 1`; `/incept` revises).
+- **Note (T20261012-373882, 2026-10-12)**: `/support` was renamed and
+  generalized to `/to-task` (generic any-URL intake, `source-url:` key — no
+  longer synxdb-support-specific). The customer-support-lifecycle subcommands
+  below therefore belong on the new `/customer-support` skill
+  (`T20261012-373882`), not on `/to-task` — updated throughout this section
+  accordingly; nothing else about this phase's scope or sizing changes.
 - Scope, manual path:
-  - `/support-report` skill (thin, `disable-model-invocation: true`): the reporter tick for every open support task, also runnable by hand.
-  - `/support report T<id>` one-shot post, `/support status [T<id>]`, `/support stop T<id>`.
+  - `/customer-support report` skill surface (thin, `disable-model-invocation: true`): the reporter tick for every open support task, also runnable by hand.
+  - `/customer-support report T<id>` one-shot post, `/customer-support status [T<id>]`, `/customer-support stop T<id>`.
   - First comment for a task is human-reviewed: show the rendered draft, user approves (y/edit/n) before the first post and before enabling automatic ticks; later ticks are templated-only.
   - Consent at intake: prints "Report cadence will post to <url> as <account>. Enable? (y/N)" and records `support-report: on` only on yes.
   - On task Done: one final "resolved, pending your confirmation" comment (marker `final`), then stop.
