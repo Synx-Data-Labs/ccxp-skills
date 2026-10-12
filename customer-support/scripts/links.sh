@@ -24,6 +24,21 @@
 # session's own hub clone, or a test fixture) — the caller owns that path's
 # lifecycle, this script never deletes a clone it didn't create itself.
 #
+# Token source in each path (found by independent review of ccxp-skills#346
+# — the .env fallback below is NOT reachable from the default ephemeral-
+# clone path, since synxdb-build-pipeline's .env is gitignored and only
+# populated locally via `1password-env-setup`/`op inject`; a bare
+# `git clone` never has one):
+#   - Default (ephemeral clone, no --clone-dir): the CALLER must already
+#     have ENTITLEMENT_TOKEN exported (the normal case for an engineer or
+#     agent session already working in this suite, where the hub repo's own
+#     1Password-backed .env is typically already loaded). This script does
+#     NOT read any .env in this path.
+#   - --clone-dir pointing at an existing, already-populated checkout: the
+#     .env fallback applies there, and ENTITLEMENT_TOKEN is read from that
+#     checkout's .env if not already exported.
+# Either way, an already-exported ENTITLEMENT_TOKEN always wins.
+#
 # Env:
 #   SYNXDB_BUILD_PIPELINE_REPO   git remote to clone (default:
 #                                git@github.com:Synx-Data-Labs/synxdb-build-pipeline.git)
@@ -53,7 +68,7 @@ cs-links-reject-token-arg() {
 cs-links-resolve-token() {
   local env_file="${1:?env file path required}" line
   if [[ ! -f "$env_file" ]]; then
-    echo "error: no .env at ${env_file} and ENTITLEMENT_TOKEN is not already set" >&2
+    echo "error: no ENTITLEMENT_TOKEN in the environment, and no .env at ${env_file} — a freshly-cloned checkout never has a populated .env (it's gitignored). Export ENTITLEMENT_TOKEN yourself before calling links.sh, or pass --clone-dir pointing at an existing checkout whose .env IS populated." >&2
     return 1
   fi
   line=$(grep -E '^ENTITLEMENT_TOKEN=' "$env_file" | tail -1 || true)
@@ -109,6 +124,14 @@ cs-links-main() {
 
   local created=0 cleanup_dir=""
   if [[ -z "$clone_dir" ]]; then
+    # Fail fast, BEFORE the network clone: a fresh ephemeral clone can never
+    # have a populated .env (gitignored), so without --clone-dir the caller
+    # must already have ENTITLEMENT_TOKEN exported. Checking this up front
+    # avoids a slow clone only to fail on the token afterward.
+    if [[ -z "${ENTITLEMENT_TOKEN:-}" ]]; then
+      echo "error: ENTITLEMENT_TOKEN is not set. Without --clone-dir, links.sh clones synxdb-build-pipeline fresh — a fresh clone never has a populated .env (gitignored) — so the caller must export ENTITLEMENT_TOKEN itself first, or pass --clone-dir pointing at an existing checkout with a populated .env." >&2
+      return 1
+    fi
     clone_dir="$(mktemp -d "${TMPDIR:-/tmp}/customer-support-links.XXXXXX")"
     cleanup_dir="$clone_dir"
     created=1

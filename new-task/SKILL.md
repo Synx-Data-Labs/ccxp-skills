@@ -32,7 +32,7 @@ Ask which of these the task is, unless it's obvious from context:
 | `research` | A question to answer — reading-based, no code |
 | `spike` | A throwaway prototype to verify feasibility (mirrors `superpowers:brainstorming`'s own Spike path — code, but disposable) |
 | `rca` | Investigates a reported failure/bug; usually links the triggering incident |
-| `support` | A customer-reported issue; file it with `/support <issue-url>` instead (adds the `support-issue:` key, repro + same-commit regression-test gates) |
+| `support` | A customer-reported issue; file it with `/to-task <issue-url>` instead (adds the `source-url:` key, repro + same-commit regression-test gates); see `/customer-support` for the label-driven lifecycle once filed |
 | `other` | None of the above fit |
 
 ### 2. Gather content
