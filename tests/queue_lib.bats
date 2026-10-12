@@ -80,3 +80,14 @@ order() { sed -nE 's/^- \[(T[0-9]+)\].*/\1/p' "$F" | xargs; }
   run bash "$Q" bogus
   [ "$status" -eq 2 ]
 }
+
+@test "insert-before with itself as target leaves the order unchanged" {
+  bash "$Q" insert-before "$F" T2 T2-b.md "B" T2
+  [ "$(order)" = "T1 T2 T3" ]
+}
+
+@test "edits preserve the queue file mode" {
+  chmod 644 "$F"
+  bash "$Q" top "$F" T3 T3-c.md "C"
+  [ "$(stat -c %a "$F" 2>/dev/null || stat -f %Lp "$F")" = 644 ]
+}

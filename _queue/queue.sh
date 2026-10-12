@@ -33,7 +33,7 @@ function q_remove() {
   [[ -f "$q" ]] || return 0
   tmp="$(mktemp)"
   grep -vE "^- \[${id}\]" "$q" > "$tmp" || true
-  mv "$tmp" "$q"
+  cat "$tmp" > "$q"; rm -f "$tmp"
 }
 
 function q_line() { printf -- '- [%s](%s): %s' "$1" "$2" "$3"; }
@@ -48,7 +48,7 @@ function _q_put_before() {
     !done && ENVIRON["Q_ANCHOR"] != "" && $0 ~ ENVIRON["Q_ANCHOR"] { print ENVIRON["Q_NEW"]; done=1 }
     { print }
     END { if (!done) print ENVIRON["Q_NEW"] }' "$q" > "$tmp"
-  mv "$tmp" "$q"
+  cat "$tmp" > "$q"; rm -f "$tmp"
 }
 
 function q_append() {
@@ -61,6 +61,7 @@ function q_append() {
 function q_insert_before() {
   local q="$1" id="$2" file="$3" title="$4" target="$5"
   q_init "$q"
+  [[ "$id" == "$target" ]] && return 0  # self-target: leave position unchanged
   q_remove "$q" "$id"
   if [[ -n "$target" ]] && q_has "$q" "$target"; then
     _q_put_before "$q" "$(q_line "$id" "$file" "$title")" "^- \\[${target}\\]"
