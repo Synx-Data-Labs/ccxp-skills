@@ -160,8 +160,8 @@ Clean up the TODO backlog: sync the queue, fix stale blockers, then prune. Unlik
 
 ### Phase 1: Sync `queue.md` with `dev/TODO/`
 
-1. For every `dev/TODO/*.md` file whose task ID has no line in `queue.md`, append it via `bash ../_queue/queue.sh append dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"` (link target is the actual filename, title from the file's H1).
-2. For every line in `queue.md` whose task ID has no matching `dev/TODO/*.md` file (closed/parked by any means — a prior sweep's Phase 3, `/drive`, a manual move), remove it via `bash ../_queue/queue.sh remove dev/TODO/queue.md T{id}`.
+1. For every `dev/TODO/*.md` file whose task ID has no line in `queue.md`, append it via `bash <skills-root>/_queue/queue.sh append dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"` (link target is the actual filename, title from the file's H1).
+2. For every line in `queue.md` whose task ID has no matching `dev/TODO/*.md` file (closed/parked by any means — a prior sweep's Phase 3, `/drive`, a manual move), remove it via `bash <skills-root>/_queue/queue.sh remove dev/TODO/queue.md T{id}`.
 3. Report additions and removals.
 
 This is pure membership sync — it never reorders an existing, still-valid line.

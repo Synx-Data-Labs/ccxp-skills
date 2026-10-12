@@ -75,7 +75,7 @@ A task's hub repo (where its `dev/TODO/` file lives) and its implementation's ta
 
 When a SKILL.md workflow step is fully deterministic/mechanical (a parse, a lookup, a formatted report — no judgment calls), port it into a bundled, sourceable script under `<skill>/scripts/` that the workflow invokes, instead of re-deriving the logic in prose an LLM re-executes every run. Reuse §4's shared-library rule when 2+ skills need the same helper.
 
-**Script path rule** — never a repo-root-relative (`bash todo/scripts/x.sh`) or cwd-relative (`bash ../_gh/gh.sh`) path; both exit 127 from a consumer repo:
+**Script path rule** — never a repo-root-relative (`bash todo/scripts/x.sh`) or cwd-relative (`bash <skills-root>/_gh/gh.sh`) path; both exit 127 from a consumer repo:
 
 - Use `<skills-root>/<skill>/scripts/x.sh` or `<skills-root>/_lib/x.sh`.
 - `<skills-root>` = the harness "Base directory for this skill" minus its last component; each skill defines it in one line under its H1.
