@@ -29,7 +29,7 @@ Exit 2 means a pull-request URL: stop and say so. Exit 1: ask for a valid refere
 ### 2. Dedup
 
 ```bash
-grep -rl "^support-issue: <canonical-url>" dev/TODO dev/JOURNAL
+grep -rlFx "support-issue: <canonical-url>" dev/TODO dev/JOURNAL
 ```
 
 A hit means the issue is already tracked: print the existing task and stop.
