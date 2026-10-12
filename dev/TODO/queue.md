@@ -11,7 +11,6 @@ reprioritize.
 - [T20261010-151792](T20261010-151792-extract-queue-lib-and-land-helper.md): Extract `_queue/queue.sh` and a shared land-as-PR helper
 - [T20261010-762961](T20261010-762961-cloudflare-family-router-and-dedupe.md): Cloudflare family: router description, 'not for' lines, drop duplicated references
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
-- [T20260928-115329](../JOURNAL/2026-10-10-T20260928-115329-address-pr-free-claim-stomps-design-status.md): `address-pr`'s "free" claim procedure stomps `status: Design` back to `In Progress`
 - [T20260929-128287](T20260929-128287-changed-md-unquoted-splitting-not-portable-to-zsh.md): `$CHANGED_MD`-style unquoted word-splitting silently lints zero files under zsh
 - [T20261001-319589](T20261001-319589-replace-slack-mcp-with-bot-token-webapi.md): Retire MCP-based Slack access for ccxp automation — move to a bot-token Web API
 - [T20261001-350662](T20261001-350662-reality-stamp-monday-no-dedicated-helper.md): `lifecycle.md`'s reality-stamp `scheduled:` Monday has no dedicated helper, inviting `stamp-scheduled.sh` misuse
@@ -30,7 +29,6 @@ reprioritize.
 - [T20261012-383399](T20261012-383399-support-skill-p3-live-reporting.md): support skill P3: live reporting (manual-approved one-shot, then scheduled tick on one real task)
 - [T20261012-278418](T20261012-278418-support-skill-p4-ci-enforcement-and-tuning.md): support skill P4: CI enforcement of the regression-commit rule and cadence tuning
 - [T20261012-333879](T20261012-333879-epic-customer-support-skill-track-p1-p4.md): epic: customer support skill (track P1-P4)
-- [T20261012-220839](../JOURNAL/2026-10-12-T20261012-220839-repo-conventions-relative-link-check.md): Add relative-link existence check to the repo-conventions lint (hard-gate capable) for consumer repos
 - [T20261012-352228](T20261012-352228-model-invoked-skills-ask-permission-hook.md): Make model-invoked skills ask the user for permission instead of being blocked
 - [T20261012-342180](T20261012-342180-claimant-id-reverse-lookup-cache.md): Local reverse-lookup cache for claimant ids (who owns what on this box)
 - [T20261012-280694](T20261012-280694-lint-forbid-bare-gh-git-harden-gh-wrappers.md): lint: forbid bare network gh/git in skills + harden _gh wrappers
