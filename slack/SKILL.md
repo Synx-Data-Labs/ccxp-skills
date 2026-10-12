@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: "--channel <name> <message>"
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Send a Slack notification to a specified channel.
 
 ## Channels
@@ -57,7 +59,7 @@ SLACK_WEBHOOK_URL_DEV=https://hooks.slack.com/services/...    # --channel dev, e
 2. Run the script:
 
 ```bash
-bash ../slack/scripts/slack-send.sh [--channel <name>] <remaining args>
+bash <skills-root>/slack/scripts/slack-send.sh [--channel <name>] <remaining args>
 ```
 
 3. A named channel whose var is unset exits 1 with an error — it never falls back to the default.

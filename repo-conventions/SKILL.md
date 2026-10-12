@@ -82,7 +82,7 @@ Any other top-level key is a violation. `status` must lead with a known value (O
 
 ### Relative-link check (`lint_links.py`)
 
-`python3 "<base-dir>/scripts/lint_links.py" --all [repo]` fails (read-only, exit 1) when a relative link under `dev/**/*.md` points at a missing file. Links rot when a task moves out of `dev/TODO/` at close, so **link tasks by `T<id>`**, not by relative path.
+`python3 <skills-root>/repo-conventions/scripts/lint_links.py --all [repo]` fails (read-only, exit 1) when a relative link under `dev/**/*.md` points at a missing file. Links rot when a task moves out of `dev/TODO/` at close, so **link tasks by `T<id>`**, not by relative path.
 
 - Skipped: external URLs, `mailto:`, `#anchor`, code, and paths outside the repo (cross-repo).
 - `--fix` rewrites a missing target whose filename has a `T<id>` found in TODO/PARKING/JOURNAL.
@@ -126,7 +126,7 @@ To author or edit a SKILL.md, use the `/skill-conventions` skill — it document
 Run the lint script and report violations:
 
 ```bash
-bash ../repo-conventions/scripts/lint.sh
+bash <skills-root>/repo-conventions/scripts/lint.sh
 ```
 
 Checks (each is a separate exit-code-bearing assertion):
@@ -232,7 +232,7 @@ explicit choice for a repo that wants it.
    - Otherwise, use step 3's snapshot:
      - **`solo` or `team` snapshotted** (from doc `<snapshotted-doc>`):
        - Default to that value, and pass `--doc <snapshotted-doc>`
-         explicitly: `bash ../repo-conventions/scripts/mode.sh <resolved>
+         explicitly: `bash <skills-root>/repo-conventions/scripts/mode.sh <resolved>
          --doc <snapshotted-doc> [--skip-ci-check] [--yes]`.
        - The explicit `--doc` is required, not cosmetic — `mode.sh`
          always re-resolves its own target doc when `--doc` is omitted,
@@ -292,7 +292,7 @@ confirm-unless-`--yes` gate, and live-state-verified no-op as always.
 above) and forwards `--skip-ci-check`/`--yes` straight through:
 
 ```bash
-bash ../repo-conventions/scripts/mode.sh <solo|team> [--repo OWNER/NAME] [--doc PATH] [--skip-ci-check] [--yes]
+bash <skills-root>/repo-conventions/scripts/mode.sh <solo|team> [--repo OWNER/NAME] [--doc PATH] [--skip-ci-check] [--yes]
 ```
 
 ## Pointing a repo at this skill

@@ -15,6 +15,8 @@ holds one line per task currently in `dev/TODO/`, top = highest priority:
 ```markdown
 # TODO Queue
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Ordered priority queue. Top = highest priority. One line per task, kept in
 sync with `dev/TODO/` by `/todo sweep` (adds missing, strikes closed/parked).
 Reordered by `/stage` (append to the end if missing) and `/top` (move to the
@@ -81,7 +83,7 @@ If `$ARGUMENTS` is empty, default to `list`.
 
 ## Workflow: `list`
 
-Run `bash "<base-dir>/scripts/todo-list.sh"` and print its output verbatim — this
+Run `bash <skills-root>/todo/scripts/todo-list.sh` and print its output verbatim — this
 is a fully deterministic read of `queue.md` + task frontmatter (no
 judgment involved), so it costs no model call (T20260914-359646). The
 algorithm below is what the script implements; it stays documented here
@@ -124,7 +126,7 @@ a signal to run `/todo sweep` (which does the deeper analysis: fixing stale
 blockers, enforcing blocker order, pruning), not something this workflow
 tries to work around itself.
 
-Run `bash "<base-dir>/scripts/todo-next.sh"` and print its output verbatim — the
+Run `bash <skills-root>/todo/scripts/todo-next.sh` and print its output verbatim — the
 skip logic and claim-state check are fully deterministic (no judgment
 involved), so this costs no model call (T20260914-359646). One line is
 explicitly **not** ported to the script and stays a judgment call for
@@ -136,7 +138,7 @@ implements; it stays documented here for a human reading this skill.
 1. Read `dev/TODO/queue.md` for order — this is the walk order, top to bottom. Do not re-sort it by deadline, estimation, or anything else; if the order is wrong, that's a `/top`/`/stage`/hand-edit problem, not something this workflow second-guesses.
 2. **Walk the queue top to bottom, skipping only**:
    - `Done`, legacy `Revisit`/`Parked` — finished or not active backlog, never useful as "next" work.
-   - **By default (peer mode; disable with `CCXP_PEER_MODE=0`)** tasks **claimed by another live session**: read the frontmatter `claimed_by:` (`bash ../_session/task_claim.sh read <id>`) — if it is non-empty and not this session's id (`task_claim.sh claimant-id`), skip it *unless* `task_claim.sh reclaimable <id>` reports `reclaimable` (a stale claim — no open PR, no commits in N days). This keeps the recommendation off tickets another peer is actively driving. With `CCXP_PEER_MODE=0`: no claim filtering.
+   - **By default (peer mode; disable with `CCXP_PEER_MODE=0`)** tasks **claimed by another live session**: read the frontmatter `claimed_by:` (`bash <skills-root>/_session/task_claim.sh read <id>`) — if it is non-empty and not this session's id (`task_claim.sh claimant-id`), skip it *unless* `task_claim.sh reclaimable <id>` reports `reclaimable` (a stale claim — no open PR, no commits in N days). This keeps the recommendation off tickets another peer is actively driving. With `CCXP_PEER_MODE=0`: no claim filtering.
    - Nothing else is checked here — no dependency-graph walk, no lint-frozen probe. A task with `status: Blocked by T{id}` or one `/drive` would refuse to claim (lint-frozen frontmatter, e.g. the [T20260626-353630] schema-fork class) still counts toward the 3; its status column says so.
 3. Collect the first 3 tasks that survive the skips above, in queue order.
 4. Present the top 3 with:

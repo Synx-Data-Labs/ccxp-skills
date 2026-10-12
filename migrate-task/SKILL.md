@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: "T<id> <target-repo> [--dry-run]"
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Move a task file — and its `dev/TODO/queue.md` entry — from the current
 repo's `dev/TODO/` to another repo's, landing the destination first and
 removing the source second (see [`## Solution`](../../dev/TODO/T20260827-201400-migrate-task-skill.md#solution)
@@ -17,7 +19,7 @@ T20260827-420045's by-hand migration (3 tasks, `hub-repo` → `ccxp-skills`).
 soup beyond the one optional preview flag.
 
 - `<task-id>`: a `T<id>` that resolves to exactly one `dev/TODO/T<id>-*.md`
-  in the **current working repo** (found via `bash ../_taskid/in-this-repo.sh
+  in the **current working repo** (found via `bash <skills-root>/_taskid/in-this-repo.sh
   <id>`, same as `/stage`/`/drive`).
 - `<target-repo>`: a local sibling directory path, or a
   `Synx-Data-Labs/<repo>` slug (resolved to a clone URL via `gh repo view

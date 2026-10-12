@@ -7,6 +7,8 @@ argument-hint: show
 
 # Skill Conventions (ccxp-skills)
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 This suite's own conventions for authoring a SKILL.md, layered on top of generic skill-authoring guidance. For *generic* skill-authoring — what a skill is, skill types, description-as-trigger theory, RED-GREEN-REFACTOR subagent pressure-testing, frontmatter character limits — use **`superpowers:writing-skills`**. This skill documents only the deltas layered on top of it.
 
 ## Argument
@@ -73,6 +75,8 @@ A task's hub repo (where its `dev/TODO/` file lives) and its implementation's ta
 
 When a SKILL.md workflow step is fully deterministic/mechanical (a parse, a lookup, a formatted report — no judgment calls), port it into a bundled, sourceable script under `<skill>/scripts/` that the workflow invokes, instead of re-deriving the logic in prose an LLM re-executes every run. Reuse §4's shared-library rule when 2+ skills need the same helper.
 
+**Script path rule**: a SKILL.md never invokes a script by a repo-root-relative (`bash todo/scripts/x.sh`) or cwd-relative (`bash ../_gh/gh.sh`) path — both exit 127 from a consumer repo, whose cwd is neither the ccxp-skills root nor the skill's directory. Use `<skills-root>/<skill>/scripts/x.sh` or `<skills-root>/_lib/x.sh`, where `<skills-root>` is the harness-announced "Base directory for this skill" minus its last component. Each skill that uses it carries the one-line definition under its H1 (`ipm`/`ccxp` carry the long form); keep cwd on the working repo, never `cd` into `<skills-root>`.
+
 What stays in prose: logic that makes a real judgment call (a Park recommendation, a blocker-order decision) is not this convention's scope — only a deterministic read/transform is.
 
 **Required validation gate before switchover**: add tests (BATS/unit, per §5) that prove behavior parity — the script's output matches the skill's own prior real invocations (or a hand-verified fixture) — before rewriting the SKILL.md workflow section to invoke the script instead of the prose it replaces. This makes §5's existing test requirement explicit as a *port-safety* gate, not just "has tests."
@@ -89,9 +93,9 @@ Three deterministic instruments, all under `skill-conventions/scripts/`:
 
 | Instrument | Grades | Command |
 |---|---|---|
-| `skill_score.py` | Static structure, 0–100: trigger phrasing, context cost (full marks ≤ 8 KB body), broken in-repo refs, task-ID changelog noise, sections, long paragraphs, untested scripts | `python3 "<base-dir>/scripts/skill_score.py" [skill…]` |
-| `skill_eval.py` | Behavior: runs `<skill>/evals/evals.json` via `claude -p` in a throwaway fixture dir, grades with regex/file assertions (no LLM judge), N runs per case, pass at ≥ 90% | `python3 "<base-dir>/scripts/skill_eval.py" <skill> --record` |
-| `skill_feedback.py` | Real-use misbehavior log (`dev/quality/skill-feedback.jsonl`) | `python3 "<base-dir>/scripts/skill_feedback.py" add <skill> correction "<what went wrong>"` |
+| `skill_score.py` | Static structure, 0–100: trigger phrasing, context cost (full marks ≤ 8 KB body), broken in-repo refs, task-ID changelog noise, sections, long paragraphs, untested scripts | `python3 <skills-root>/skill-conventions/scripts/skill_score.py [skill…]` |
+| `skill_eval.py` | Behavior: runs `<skill>/evals/evals.json` via `claude -p` in a throwaway fixture dir, grades with regex/file assertions (no LLM judge), N runs per case, pass at ≥ 90% | `python3 <skills-root>/skill-conventions/scripts/skill_eval.py <skill> --record` |
+| `skill_feedback.py` | Real-use misbehavior log (`dev/quality/skill-feedback.jsonl`) | `python3 <skills-root>/skill-conventions/scripts/skill_feedback.py add <skill> correction "<what went wrong>"` |
 
 **Maturity ladder** — computed by `skill_score.py`, never self-declared:
 

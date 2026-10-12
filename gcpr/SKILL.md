@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: [commit-message-or-description]
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Group-Commit-PR — automates the branch workflow up to PR creation. Once the PR is open, hand off to the `/address-pr` skill, which owns CI watching, Copilot review handling, pre-merge gating, and merge. Keeping the split clean means each skill has one job.
 
 Also invocable as `/land` (see `land/SKILL.md`) — same skill, more natural name.
@@ -38,7 +40,7 @@ ahead of `main` with committed work that hasn't made it into a PR:
 ```bash
 git rev-parse --abbrev-ref HEAD                  # skip this check entirely if this is "main"
 git log --oneline main..HEAD                     # any commits ahead?
-bash ../_gh/gh.sh pr list --head <branch> --state all   # does a PR already exist?
+bash <skills-root>/_gh/gh.sh pr list --head <branch> --state all   # does a PR already exist?
 ```
 
 - **On `main`, no ahead-commits**: genuinely nothing to do — stop and tell the user "nothing
@@ -64,7 +66,7 @@ CHANGED_MD=$(git status --porcelain | awk '
 ' | grep -E '\.md$' || true)
 if [ -n "$CHANGED_MD" ]; then
   # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
-  bash ../_docs/lint-docs.sh $CHANGED_MD \
+  bash <skills-root>/_docs/lint-docs.sh $CHANGED_MD \
     || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
 fi
 ```
@@ -87,7 +89,7 @@ CHANGED_TASKS=$(git status --porcelain | awk '
   { line=substr($0,4); sub(/.* -> /, "", line); print line }
 ' | grep -E '^dev/(TODO|PARKING)/.*\.md$' || true)
 if [ -n "$CHANGED_TASKS" ]; then
-  python3 ../repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
+  python3 <skills-root>/repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
 fi
 ```
 
@@ -105,7 +107,7 @@ CHANGED_REFS=$(git status --porcelain | awk '
   { line=substr($0,4); sub(/.* -> /, "", line); print line }
 ' | grep -E '^dev/(TODO|JOURNAL)/.*\.md$' || true)
 if [ -n "$CHANGED_REFS" ]; then
-  python3 ../repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
+  python3 <skills-root>/repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
 fi
 ```
 
@@ -185,7 +187,7 @@ same way `_gh/gh.sh` does for `gh` calls (process-scoped `GH_TOKEN`, no global `
 switch`):
 
 ```bash
-bash ../_gh/git.sh push -u origin <branch>
+bash <skills-root>/_gh/git.sh push -u origin <branch>
 ```
 
 ### 6. Create PR
@@ -225,7 +227,7 @@ Task: https://github.com/<hub-owner>/<hub-repo>/blob/main/dev/TODO/T<id>-<slug>.
 
 Do not move the task file to JOURNAL in this PR — the task file lives in the hub repo, not this one. The `/drive` skill's Phase 7 opens a separate hub-repo PR for the journal move after this target PR merges.
 
-- Use: `bash ../_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
+- Use: `bash <skills-root>/_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
 
 ### 6.5 Task-file Status `Review` — do this before Step 4, not here
 
@@ -236,8 +238,8 @@ If the PR implements a tracked task whose `status:` is `In Progress`, flip it to
 Also right after `gh pr create` succeeds, if the work is tracked (the branch/PR maps to a `T<id>` task), append the PR ref to the task's Project item title so the board surfaces the task→PR mapping at a glance — e.g. `T20260510-285938: … (ccxp-skills#37)`:
 
 ```bash
-TASK_ID=$(bash ../_session/pr_task_id.sh <pr-number>)
-[ -n "$TASK_ID" ] && bash ../_session/set-pr-ref.sh "$TASK_ID" "<pr-url>"
+TASK_ID=$(bash <skills-root>/_session/pr_task_id.sh <pr-number>)
+[ -n "$TASK_ID" ] && bash <skills-root>/_session/set-pr-ref.sh "$TASK_ID" "<pr-url>"
 ```
 
 `<pr-url>` is the URL printed by `gh pr create`. Idempotent and best-effort — failures log to stderr and never block. `/address-pr` re-asserts the same stamp on entry, so a skipped or failed call here is recovered there. Skip silently for untracked work (no `T<id>`).

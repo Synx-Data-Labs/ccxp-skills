@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: <path-to-docx> [--target-lang en] [--cn-only|--en-only] [--no-proofread] [--no-pdf]
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Translate a Chinese patent DOCX into attorney-ready CN+EN markdown (and PDF) with text-based diagrams on both sides.
 
 ## Argument
@@ -147,16 +149,16 @@ Skip this step (and all remaining EN-side work) if `--cn-only` was passed.
 
 ### 8. Post-process CN and EN markdown
 
-Run `translate-patent/scripts/postprocess.py` on the CN `.md`:
+Run `<skills-root>/translate-patent/scripts/postprocess.py` on the CN `.md`:
 
 ```bash
-python3 "<base-dir>/scripts/postprocess.py" "<cn.md>" --lang zh --in-place
+python3 <skills-root>/translate-patent/scripts/postprocess.py "<cn.md>" --lang zh --in-place
 ```
 
 Unless `--cn-only` was passed, also run it on the EN `.md`:
 
 ```bash
-python3 "<base-dir>/scripts/postprocess.py" "<en.md>" --lang en --in-place
+python3 <skills-root>/translate-patent/scripts/postprocess.py "<en.md>" --lang en --in-place
 ```
 
 This applies, per language, in one deterministic pass:

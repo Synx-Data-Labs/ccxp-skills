@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: "<month>"
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Archive a completed month of `dev/JOURNAL/*.md` task-closure files into
 `archive/<month>/` and (re)generate `dev/JOURNAL/<month>-digest.md` — see
 `_journal/README.md` for the full algorithm.
@@ -21,7 +23,7 @@ Archive a completed month of `dev/JOURNAL/*.md` task-closure files into
 2. Run:
 
    ```bash
-   bash ../_journal/compact.sh <month> --repo-root "$(git rev-parse --show-toplevel)"
+   bash <skills-root>/_journal/compact.sh <month> --repo-root "$(git rev-parse --show-toplevel)"
    ```
 
 3. Review the printed summary (files archived, digest path), then commit

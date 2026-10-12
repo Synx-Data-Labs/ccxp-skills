@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: "<issue-url | owner/repo#N>"
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Turn a customer-reported GitHub issue into a staged `support` task in
 `dev/TODO/`. Intake only: this skill **never posts, comments, labels or
 edits anything on the issue** — outward status reporting is a later phase
@@ -20,8 +22,8 @@ are in [`_support/README.md`](../_support/README.md).
 ### 1. Parse
 
 ```bash
-bash ../_support/parse-issue-url.sh <ref>            # owner repo number
-bash ../_support/parse-issue-url.sh --canonical <ref> # stable URL for the key
+bash <skills-root>/_support/parse-issue-url.sh <ref>            # owner repo number
+bash <skills-root>/_support/parse-issue-url.sh --canonical <ref> # stable URL for the key
 ```
 
 Exit 2 means a pull-request URL: stop and say so. Exit 1: ask for a valid reference.
@@ -37,7 +39,7 @@ A hit means the issue is already tracked: print the existing task and stop.
 ### 3. Fetch (read-only)
 
 ```bash
-bash ../_gh/gh.sh issue view <number> -R <owner>/<repo> --json title,body,labels,state,url
+bash <skills-root>/_gh/gh.sh issue view <number> -R <owner>/<repo> --json title,body,labels,state,url
 ```
 
 - A 404 or auth error: report "no access to <owner>/<repo>" and stop; never retry with other credentials.

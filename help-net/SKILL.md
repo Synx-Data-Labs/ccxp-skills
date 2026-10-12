@@ -5,6 +5,8 @@ disable-model-invocation: false
 argument-hint: "[pre-trip | post-trip]  (no args = live diagnostic)"
 ---
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Triage a traveler's "the internet is slow/broken" problem on macOS. Produce a report with **primary classification**, evidence cited from probe output, concrete fixes, and explicit rule-outs (what is NOT the problem). Default mode runs live diagnostics; `pre-trip` and `post-trip` surface the relevant checklist.
 
 ## Known pattern: a company VPN-gated internal resource
@@ -24,7 +26,7 @@ Triage a traveler's "the internet is slow/broken" problem on macOS. Produce a re
 ### Step 1 — Run the probe
 
 ```bash
-bash ../help-net/scripts/probe.sh
+bash <skills-root>/help-net/scripts/probe.sh
 ```
 
 ~30 s, read-only, never hangs. Outputs `KEY: VALUE` under `[INTERFACE]`, `[DNS]`, `[PING]`, `[HTTP]`, `[EXIT]`, `[IPV6]`, `[VPN]`, `[META]`.

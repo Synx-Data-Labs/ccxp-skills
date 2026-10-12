@@ -7,6 +7,8 @@ argument-hint: "--task <T-id> (--range <git-range> | --files <csv>) [--repo-root
 
 # Quality Probe
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Measure code quality on a task's **touched files** (not the repo's legacy debt)
 and append one record per task to an append-only scoreboard
 `dev/quality/metrics.jsonl` in the **target (consumer) repo**, so quality trend
@@ -46,7 +48,7 @@ run with no `--files`, an un-writable scoreboard).
 ## Workflow
 
 ```bash
-bash ../quality-probe/scripts/probe.sh \
+bash <skills-root>/quality-probe/scripts/probe.sh \
   --task T20260610-123456 --repo-root /path/to/target-repo --design-score 86
 ```
 
