@@ -205,7 +205,7 @@ Progress** chosen for matching the industry convention this task already cites.
   Phase B, see its own code comment), and prose mentioning the legacy alias by name. No stray
   unconverted status-enum use found.
 - [x] Follow-up task filed and staged into the next iteration (2026-10-05):
-  [T20260925-283679](T20260925-283679-remove-legacy-coding-status-alias.md) — removes the legacy
+  [T20260925-283679](2026-10-06-T20260925-283679-remove-legacy-coding-status-alias.md) — removes the legacy
   `Coding` alias once hub-repo/build-pipeline-repo's active `dev/TODO/` tasks are confirmed
   migrated (external, out of reach from this clone; explicitly **left to flip naturally** until
   then, which is the decision the original Done-when criteria asked to have recorded)

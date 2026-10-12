@@ -203,7 +203,7 @@ Shipped in PR [#213](https://github.com/Synx-Data-Labs/ccxp-skills/pull/213).
   session's environment (the Skill tool's available-skill list appears
   fixed per session rather than rescanned per dispatch), not a finding
   about the flag itself — the same root class of problem as
-  [T20260922-201976](T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md)
+  [T20260922-201976](2026-10-01-T20260922-201976-skill-tool-stale-cached-content-vs-live-repo.md)
   (Skill tool serving stale/cached content vs. the live repo checkout),
   filed separately and still open. Per the design's own explicit
   fallback ("if blocked/unavailable: leave Bucket B at `false`, record the

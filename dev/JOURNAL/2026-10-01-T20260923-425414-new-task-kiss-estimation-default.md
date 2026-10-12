@@ -50,7 +50,7 @@ source: conversation with @shine, 2026-09-23
 ## Closed (2026-10-01)
 
 Superseded by
-[T20260924-232855](../TODO/T20260924-232855-estimation-to-story-points.md)
+[T20260924-232855](2026-10-01-T20260924-232855-estimation-to-story-points.md)
 (`/top`'d to the front of the queue the same day this was closed — see
 that PR). This task's entire concern — stop blocking task creation on an
 estimation question — is resolved as a side effect of T20260924-232855's

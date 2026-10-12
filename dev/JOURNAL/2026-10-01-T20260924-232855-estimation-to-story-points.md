@@ -71,7 +71,7 @@ scheduled: 2026-09-28
   out to be dead in practice, so tying velocity to "iteration boundaries"
   would bind this design to a ceremony nobody runs. Whether `/ccxp`'s IPM
   machinery itself should be simplified or retired is a separate question,
-  filed as [T20260924-252293](T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md).
+  filed as [T20260924-252293](2026-10-02-T20260924-252293-evaluate-ccxp-ipm-ritual-still-needed.md).
 
 ## Solution
 

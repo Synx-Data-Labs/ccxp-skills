@@ -126,6 +126,23 @@ else
   check "python3 available for identifier lint" "fail" "python3 not found"
 fi
 
+# 7. relative links under dev/ resolve (delegated to lint_links.py, read-only).
+#    Warn-only by default so upgrading consumers with link rot aren't broken;
+#    LINT_LINKS_HARD=1 makes a broken link a violation (CI template sets it).
+echo ""
+echo "dev/ relative links..."
+if command -v python3 >/dev/null 2>&1; then
+  if ! python3 "$(dirname "${BASH_SOURCE[0]}")/lint_links.py" --all "${REPO_DIR}"; then
+    if [[ "${LINT_LINKS_HARD:-0}" == "1" ]]; then
+      ERRORS=$((ERRORS + 1))
+    else
+      echo "  ⚠️  broken links (warn-only; set LINT_LINKS_HARD=1 to fail)"
+    fi
+  fi
+else
+  check "python3 available for link lint" "fail" "python3 not found"
+fi
+
 # Summary
 echo ""
 echo "=========================================="

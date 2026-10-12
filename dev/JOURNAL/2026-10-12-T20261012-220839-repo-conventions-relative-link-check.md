@@ -1,12 +1,12 @@
 ---
-status: Design
+status: Done
 estimation: 1
 scheduled: 2026-10-12
 source: "synxdb-team discussion 2026-10-12"
 related: PR #314
 description: Add relative-link existence validation to the repo-conventions lint (hard-gate capable) so consumer repos keep dev/ links current
-claimed_by: cc1-50ac6891:da7297ceb68effbb
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261012-220839: Add relative-link existence check to the repo-conventions lint
@@ -53,21 +53,21 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] Unit: `test_lint_links.py` covers broken/ok, fenced/inline code, external, cross-repo, fragment, allow-list, T-id suggestion, `--fix` idempotency, exit codes.
-- [ ] Integration: `tests/lint_links.bats` runs `lint.sh` on a fixture repo in warn and hard modes.
-- [ ] Local: run on this repo's own `dev/` and fix or allow-list what it finds.
-- [ ] CI: `tests` workflow passes (path filter covers `repo-conventions/scripts/**`).
+- [x] Unit: `test_lint_links.py` covers broken/ok, fenced/inline code, external, cross-repo, fragment, allow-list, T-id suggestion, `--fix` idempotency, exit codes.
+- [x] Integration: `tests/lint_links.bats` runs `lint.sh` on a fixture repo in warn and hard modes.
+- [x] Local: run on this repo's own `dev/` and fix or allow-list what it finds.
+- [x] CI: `tests` workflow passes (path filter covers `repo-conventions/scripts/**`).
 
 ## Done criteria
 
-- [ ] `lint_links.py` exits non-zero on a broken link, zero otherwise, read-only without `--fix` (`test_lint_links.py` exit-code and read-only tests).
-- [ ] Suggestion and `--fix` by `T-id`, idempotent (`test_lint_links.py` fix tests).
-- [ ] Allow-list documented and tested (`repo-conventions/SKILL.md` link-check section; `test_lint_links.py` allow tests).
-- [ ] Unit tests beside the `test_lint_*.py` siblings (`repo-conventions/scripts/test_lint_links.py`).
-- [ ] `lint.sh` invokes it with a hard mode (`repo-conventions/scripts/lint.sh` step 7; `tests/lint_links.bats`).
-- [ ] CI template added (`repo-conventions/templates/link-check.yml`).
-- [ ] Link-by-`T-id` convention documented (`lifecycle.md`, `repo-conventions/SKILL.md`).
-- [ ] Required-check and baseline/rollout docs (`repo-conventions/SKILL.md`).
+- [x] `lint_links.py` exits non-zero on a broken link, zero otherwise, read-only without `--fix` (`test_lint_links.py` exit-code and read-only tests).
+- [x] Suggestion and `--fix` by `T-id`, idempotent (`test_lint_links.py` fix tests).
+- [x] Allow-list documented and tested (`repo-conventions/SKILL.md` link-check section; `test_lint_links.py` allow tests).
+- [x] Unit tests beside the `test_lint_*.py` siblings (`repo-conventions/scripts/test_lint_links.py`).
+- [x] `lint.sh` invokes it with a hard mode (`repo-conventions/scripts/lint.sh` step 7; `tests/lint_links.bats`).
+- [x] CI template added (`repo-conventions/templates/link-check.yml`).
+- [x] Link-by-`T-id` convention documented (`lifecycle.md`, `repo-conventions/SKILL.md`).
+- [x] Required-check and baseline/rollout docs (`repo-conventions/SKILL.md`).
 
 ## Repo file references
 
@@ -81,3 +81,17 @@ claimed_role: interactive
 ## Follow-up
 
 - synxdb-team adoption (fix/baseline links, enable the required check) is filed separately in that repo, not here.
+
+## Closed (2026-10-12)
+
+- Shipped in PR #PRNUM: `lint_links.py`, `test_lint_links.py`, `tests/lint_links.bats`, `lint.sh` step 7, `templates/link-check.yml`, docs in `repo-conventions/SKILL.md` and `lifecycle.md`.
+- Dogfood: `--fix` repaired 6 rotted links in this repo's own `dev/` (5 JOURNAL files + `queue.md`).
+- Quality probe: no shellcheck findings; coverage/code-scanning unavailable locally.
+- External, not verified here: the `link-check.yml` template has not run in a consumer repo; synxdb-team adoption is filed in that repo.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — not invoked as a skill; unit and bats tests written alongside the code
+- Verification (`superpowers:verification-before-completion`): yes — local unittest, bats, lint run before the PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no — pending PR review

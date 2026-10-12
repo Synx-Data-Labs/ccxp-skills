@@ -80,6 +80,21 @@ Any other top-level key is a violation. `status` must lead with a known value (O
   place and never fails the commit; `lint_refs.py --all` (wired into `lint.sh`, read-only) reports
   and fails on any unlinked-but-linkable ref.
 
+### Relative-link check (`lint_links.py`)
+
+`repo-conventions/scripts/lint_links.py` fails when a relative `[text](path)` link under
+`dev/**/*.md` points at a missing file (T20261012-220839). Links rot when a task moves
+TODO -> JOURNAL/PARKING at close, so **link tasks by `T<id>`** (the mirror link `lint_refs.py` makes),
+not by relative path into `dev/TODO/`.
+
+- One command: `python3 repo-conventions/scripts/lint_links.py --all [repo]` (read-only, exit 1 on a broken link).
+- Skipped: external URLs, `mailto:`, `#anchor`, code spans/fences, and paths resolving outside the repo (cross-repo).
+- Repair: a missing target whose filename has a `T<id>` found in `dev/TODO|PARKING|JOURNAL` is reported with the new path; `--fix` rewrites it (idempotent).
+- Allow-list: `dev/.link-allowlist` (fnmatch globs, one per line, `#` comments) or `--allow GLOB`, matched against the target as written.
+- `lint.sh` runs it warn-only; `LINT_LINKS_HARD=1` makes it a violation.
+- **Rollout**: run `--fix`, fix the rest by hand, then baseline what remains with `--print-allowlist > dev/.link-allowlist`, then enable the hard gate.
+- **Required check**: copy `templates/link-check.yml` to `.github/workflows/`, then (repo admin) add `link-check` under the `main` ruleset's `required_status_checks`.
+
 ### Internal-identifier check (`lint_identifiers.py`)
 
 `repo-conventions/scripts/lint_identifiers.py` catches company-internal identifiers before they
@@ -127,6 +142,7 @@ Checks (each is a separate exit-code-bearing assertion):
 - `dev/guidelines.md` mentions "TODO Lifecycle"
 - each `dev/TODO/` + `dev/PARKING/` file conforms to the task-frontmatter schema (`lint_tasks.py --all`)
 - every `T<id>` / typed `PR #N`/`issue #N` reference in `dev/TODO/` + `dev/JOURNAL/` is a clickable link (`lint_refs.py --all`)
+- relative links under `dev/` resolve (`lint_links.py --all`; warn-only unless `LINT_LINKS_HARD=1`)
 - `dev/TODO/` + `dev/JOURNAL/` carry no internal identifier — company/personal denylist hit (config-driven, unset by default), private IPv4, credential token, or personal home path (`lint_identifiers.py --all`)
 
 Report `✅` per check or `❌ <reason>` and exit non-zero on any failure.

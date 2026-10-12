@@ -1,0 +1,20 @@
+# Copy to .github/workflows/link-check.yml in a consumer repo.
+# Fails the PR when a relative markdown link under dev/ points at a missing file.
+# Make it a required check: see "Relative-link check" in repo-conventions/SKILL.md.
+name: link-check
+on:
+  pull_request:
+    paths: ['dev/**']
+  push:
+    branches: [main]
+    paths: ['dev/**']
+jobs:
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      # Point at wherever ccxp-skills is vendored/checked out in this repo.
+      - run: python3 path/to/ccxp-skills/repo-conventions/scripts/lint_links.py --all .
