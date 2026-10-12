@@ -35,12 +35,13 @@ claimed_role: interactive
 ### Detector contract
 
 - **Input**: PR number (live: `gh pr view --json author,commits,comments,reviews` plus `pulls/N/comments`), or `--from-json <file>` for the pure decision (used by tests).
-- **Output**: exit 0 + login on stdout = qualifying LGTM; exit 1 + reason on stderr otherwise; exit 2 on usage or fetch error (treated as "no LGTM", fail-safe).
-- **Counts**: comments by the PR author (issue comment, review comment, or review body) created strictly after the head commit's `committedDate`.
+- **Output**: exit 0 + login on stdout = qualifying LGTM; exit 1 + reason on stderr otherwise; exit 2 on usage, fetch, malformed-JSON or missing-author error (treated as "no LGTM", fail-safe).
+- **Counts**: comments by the PR author (issue comment, review comment, or review body; current body, all pages, merged and sorted by timestamp across the three streams) created strictly after the push time. Optional `--after <iso>` raises that lower bound further.
 - **Match**: first non-empty line, case-insensitive, is `lgtm` plus optional `!`/`.`/`,` and an optional short tail (`thanks`, `ship it`, `merge it`); anything else (`LGTM but ...`, `not LGTM`, quoted `>`, fenced code) does not count.
-- **Never counts**: bot logins (`[bot]`) and any body starting `**Claude Code review:**`.
+- **Never counts**: bot logins (`[bot]` suffix or `app/` prefix) and any body starting `**Claude Code review:**`.
 - **Revoke**: first line starting `hold`, `do not merge`, `don't merge`, `wip`, `changes requested`, `needs changes`; the latest decisive comment (LGTM or hold) wins.
-- **Staleness proxy**: head commit `committedDate`; a commit-then-LGTM-then-push sequence can be misjudged, which is why LGTM never replaces the review pinned to `HEAD_SHA`.
+- **Push time** = the later of the newest commit `committedDate` and the newest `head_ref_force_pushed` timeline event (a rebase/amend keeps old commit dates, so the force-push event is needed). Residual gap: commit, then LGTM, then plain push can be misjudged; accepted because the review pinned to `HEAD_SHA` still has to exist.
+- **Pushback path**: when findings were answered by pushback (not fixed), the skill passes `--after <time of our latest pushback comment>`, so the LGTM must postdate the pushback and cannot be a stale or automated one. If the PR author is the automation account itself, the LGTM is taken as the human operator's (assumption).
 - **Guard stays platform-side**: the dispatch only requests a real `APPROVE`; `required_approving_review_count` and protection rules still decide merge.
 
 ### Alternatives rejected (alternative designs considered)
