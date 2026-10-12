@@ -1,8 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: "synxdb-team discussion 2026-10-12"
 description: Add relative-link existence validation to the repo-conventions lint (hard-gate capable) so consumer repos keep dev/ links current
+claimed_by: cc1-50ac6891:da7297ceb68effbb
+claimed_role: interactive
 ---
 
 # T20261012-220839: Add relative-link existence check to the repo-conventions lint
