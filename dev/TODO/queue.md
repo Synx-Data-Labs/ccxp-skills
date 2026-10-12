@@ -32,3 +32,4 @@ reprioritize.
 - [T20261012-278418](T20261012-278418-support-skill-p4-ci-enforcement-and-tuning.md): support skill P4: CI enforcement of the regression-commit rule and cadence tuning
 - [T20261012-333879](T20261012-333879-epic-customer-support-skill-track-p1-p4.md): epic: customer support skill (track P1-P4)
 - [T20261012-220839](../JOURNAL/2026-10-12-T20261012-220839-repo-conventions-relative-link-check.md): Add relative-link existence check to the repo-conventions lint (hard-gate capable) for consumer repos
+- [T20261012-352228](T20261012-352228-model-invoked-skills-ask-permission-hook.md): Make model-invoked skills ask the user for permission instead of being blocked
