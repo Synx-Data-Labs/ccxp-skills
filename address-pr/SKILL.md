@@ -23,7 +23,7 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 - If `<arg>` is a URL, extract the PR number from the path
 - If empty, auto-pick (note `--author @me` — only our own PRs are ever auto-picked). Rather than
   taking the single oldest open PR regardless of its ownership verdict (a permanently-owned-by-
-  another oldest PR would otherwise block every PR behind it forever — T20260919-266165), walk
+  another oldest PR would otherwise block every PR behind it forever), walk
   the oldest-first list and pick the first PR whose ownership (§1.6) resolves to
   `mine`/`free`/`new`/`untracked`, skipping `owned:<other>`/`unknown` candidates:
 
@@ -38,7 +38,8 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 
 ### 1.3. Authorship gate — only drive our OWN PRs (hard stop on foreign PRs)
 
-Auto-pick (§1) filters `--author @me`, but the explicit number/URL path does **not** — so a session handed `address-pr 877` (by a human, by `/drive`, or by the `/ccxp` cron) would otherwise run the full loop on a PR a *teammate* authored: posting a Claude Code review comment, editing the body, and **merging it**. That is "touching other people's PRs." Gate it before §1.5/§1.6:
+- Auto-pick (§1) filters `--author @me`, but the explicit number/URL path does **not** — so a session handed `address-pr 877` (by a human, by `/drive`, or by the `/ccxp` cron) would otherwise run the full loop on a PR a *teammate* authored: posting a Claude Code review comment, editing the body, and **merging it**.
+- That is "touching other people's PRs." Gate it before §1.5/§1.6:
 
 ```bash
 ME=$(bash <skills-root>/_gh/gh.sh api user --jq .login 2>/dev/null)
@@ -74,23 +75,30 @@ fi
 
 Both calls are best-effort: failures log to stderr and don't block the workflow. If `pr_task_id.sh` returns empty (untracked branch, no body Task: link, no T-id in commits), skip the Project writes — the file-driven mirror workflow will reconcile state on the next push.
 
-**Clone-locality note (informational only — T20260626-298293):** once `TASK_ID` is resolved you *may* run the guard for visibility:
+**Clone-locality note (informational only):** once `TASK_ID` is resolved you *may* run the guard for visibility:
 
 ```bash
 [ -n "$TASK_ID" ] && bash <skills-root>/_taskid/in-this-repo.sh "$TASK_ID" || true
 ```
 
-Unlike `/drive`, here a non-zero result is **expected and fine**: cross-repo `/address-pr` runs in the *target* clone (e.g. hub=hub-repo, target=ccxp-skills) where the task file is *not* present by design. So this is **warn-only/informational** in `/address-pr` — never refuse, and ignore `DRIVE_STRICT_CLONE` here. Its only purpose is to surface the rare case where you expected a same-repo PR but are standing in the wrong clone. `/address-pr` reads ownership (§1.6) and, on a `free` verdict, claims the task itself (see §1.6's `free` handling) — this note is about the *clone-locality* guard specifically, which stays informational-only here; the guard's harder, refusing teeth are in `/drive` and `/stage`.
+- Unlike `/drive`, here a non-zero result is **expected and fine**: cross-repo `/address-pr` runs in the *target* clone (e.g. hub=hub-repo, target=ccxp-skills) where the task file is *not* present by design. So this is **warn-only/informational** in `/address-pr` — never refuse, and ignore `DRIVE_STRICT_CLONE` here.
+- Its only purpose is to surface the rare case where you expected a same-repo PR but are standing in the wrong clone.
+- `/address-pr` reads ownership (§1.6) and, on a `free` verdict, claims the task itself (see §1.6's `free` handling) — this note is about the *clone-locality* guard specifically, which stays informational-only here; the guard's harder, refusing teeth are in `/drive` and `/stage`.
 
 `/address-pr` owns the `Review` transition (not `/drive` Phase 3) because `/drive` hands off to address-pr the moment the PR opens, and the entire multi-iteration PR loop (CI fixes, review back-and-forth, force-pushes, merge gate) belongs in the Review stage. Owning it here means re-invoking `/address-pr` from another session correctly re-asserts `Review` on every entry.
 
 ### 1.6. PR ownership — DERIVED from the task claim (authoritative anti-steal)
 
-The §1.5 Project-board writes (Status mirror + PR ref) are **soft visualization** (task-keyed, best-effort) — they are NOT a lock. Two CC sessions (e.g. an interactive session and the `/ccxp` cron) can otherwise drive the same PR concurrently because the PR lives on GitHub, reachable from every clone, and "one-session-per-clone" only protects working trees. That is how a PR got merged by the cron while a human was still (silently) waiting on a labrun.
+- The §1.5 Project-board writes (Status mirror + PR ref) are **soft visualization** (task-keyed, best-effort) — they are NOT a lock.
+- Two CC sessions (e.g. an interactive session and the `/ccxp` cron) can otherwise drive the same PR concurrently because the PR lives on GitHub, reachable from every clone, and "one-session-per-clone" only protects working trees.
+- That is how a PR got merged by the cron while a human was still (silently) waiting on a labrun.
 
 (The §1.3 authorship gate must already have passed — §1.6 applies only to PRs that are ours.)
 
-**PR ownership is NOT tracked separately on the PR (T20260622-404636).** There is no `cc-owned` label or marker comment. A PR is owned by whoever owns the **task it implements** — that task's `claimed_by: cc1-<machine-id>:<path-hash>` on `main`, which is durable, GitHub-persisted, and atomically arbitrated by the merge (the same (machine, clone) agent identity, and the release-on-pickup "≤1 task at a time", that `task_claim.sh` already enforces). The old per-PR marker stranded green PRs under dead sessions (#1361/#1326/#1386/#1524) and leaned on a verified-dead liveness probe that isn't feasible on stable signals (see T20260622-404636 JOURNAL). Deriving ownership from the task makes that whole failure class vanish: a dead agent's claim self-clears when its clone next picks up work (release-on-pickup), or via the reclaim sweep for a foreign dead clone.
+- **PR ownership is NOT tracked separately on the PR.** There is no `cc-owned` label or marker comment.
+- A PR is owned by whoever owns the **task it implements** — that task's `claimed_by: cc1-<machine-id>:<path-hash>` on `main`, which is durable, GitHub-persisted, and atomically arbitrated by the merge (the same (machine, clone) agent identity, and the release-on-pickup "≤1 task at a time", that `task_claim.sh` already enforces).
+- The old per-PR marker stranded green PRs under dead sessions (#1361/#1326/#1386/#1524) and leaned on a verified-dead liveness probe that isn't feasible on stable signals.
+- Deriving ownership from the task makes that whole failure class vanish: a dead agent's claim self-clears when its clone next picks up work (release-on-pickup), or via the reclaim sweep for a foreign dead clone.
 
 So before doing **any** work on the PR, resolve its owner from the task claim:
 
@@ -117,10 +125,11 @@ esac
 
 - **`mine`** — this clone holds the task claim (the normal `/drive` path: it claimed the task before opening the PR). Proceed.
 - **`free`** — the task exists **on `main`** but is unclaimed. **Claim it before doing anything else** — see below. Don't just "proceed"; a PR can sit open against an unclaimed task for weeks, during which the Project board reads `Open`/unclaimed even while a PR against it exists, and a peer session could pick the same task for duplicate work.
-- **`new`** (T20260918-404944) — the task file does **not exist on `main` yet**: this very PR introduces it (the `/stage` pattern — `queue.md` + the new task file committed together) and it's unclaimed. Distinct from `free` because the claim mechanics differ — see its own procedure below.
+- **`new`** — the task file does **not exist on `main` yet**: this very PR introduces it (the `/stage` pattern — `queue.md` + the new task file committed together) and it's unclaimed. Distinct from `free` because the claim mechanics differ — see its own procedure below.
 - **`untracked`** — the PR maps to no task (`fix/*` branch, no `Task:` link). No cross-session task to coordinate on; proceed.
 - **`owned:<agent>`** — a *different* (machine, clone) agent holds the task. Defer; do not drive or merge.
-- **`unknown`** — the task file couldn't be resolved (network / not found). Fail-safe: defer, never a silent merge. (A stale branch-name-vs-body-Task:-link mismatch can also surface as `unknown` on a rescoped PR — see T20260718-160579; that's a tooling bug to fix separately, not license to bypass the fail-safe. If you've manually confirmed the real current task from the PR body and claimed *that* task, you may proceed — but say so explicitly and file/link the tooling bug if not already tracked.)
+- **`unknown`** — the task file couldn't be resolved (network / not found). Fail-safe: defer, never a silent merge.
+- A stale branch-name-vs-body-Task:-link mismatch can also surface as `unknown` on a rescoped PR; that is a tooling bug to fix separately, not license to bypass the fail-safe. If you have manually confirmed the real current task from the PR body and claimed *that* task, you may proceed — but say so explicitly and file or link the tooling bug if not already tracked.
 
 **`free` → claim now, same mechanism as `/drive` Phase 1's Claim PR** (this is the one case where `/address-pr` *does* acquire, not just read):
 
@@ -144,7 +153,7 @@ fi
 - This is the stronger form of `/ipm` step 3.4's `acquire` then `status.sh <id> Design` (`ipm/SKILL.md`) — same intent, plus the frontmatter write.
 - `Open` and `In Progress` need no correction (`acquire`'s result is already right).
 
-**`new` → claim directly on the PR's own branch** (T20260918-404944) — unlike `free`, there is **no separate claim-branch/merge round-trip**, because `free`'s procedure above can't work here: `task_claim.sh acquire`'s file lookup (`_tc_find_file`) is a **local filesystem glob**, and a fresh branch cut off `main` does not have a file that exists only on this PR's own (not-yet-merged) branch. Instead:
+**`new` → claim directly on the PR's own branch** — unlike `free`, there is **no separate claim-branch/merge round-trip**, because `free`'s procedure above can't work here: `task_claim.sh acquire`'s file lookup (`_tc_find_file`) is a **local filesystem glob**, and a fresh branch cut off `main` does not have a file that exists only on this PR's own (not-yet-merged) branch. Instead:
 
 1. `git fetch && git checkout <the PR's headRefName>` — the **existing** PR branch, not a new one, so the just-added task file is present in the local working tree.
 2. `bash <skills-root>/_session/task_claim.sh release-others <id>` then `bash <skills-root>/_session/task_claim.sh acquire <id>` — now succeeds, since the file is right there on this checked-out branch.
@@ -154,18 +163,21 @@ fi
 
 **No heartbeat / release for the `mine`/`owned` cases.** Ownership is already established when the task was claimed; `/address-pr` only *reads* it there. There is no TTL marker to heartbeat, and nothing to release at merge — the task claim is released at task close (`/drive` Phase 7 / the journal-move PR, via `task_claim.sh release`).
 
-**Cross-repo ownership resolution (T20260626-195977).** For a cross-repo task (hub repo holds the task file + claim, e.g. `hub-repo`; target repo holds the PR, e.g. `ccxp-skills`/`example-website.com`), the claim is written from the **hub** clone (`/drive` Phase 1) but `/address-pr`'s cross-repo mode runs from the ephemeral **target** clone (Phase 1.5: `/tmp/<task-id>-<slug>-target`) — a different path on the same host. `_tc_claimant_id`'s exact identity match can never call that "mine" on its own, which without this recognition made every cross-repo PR fall through to `owned:<hub-clone>` (from the target clone) or `untracked`/wrong-PR (from the hub clone, since `gh pr view <n>` resolves against `$PWD`'s origin).
+- **Cross-repo ownership resolution.** For a cross-repo task (hub repo holds the task file + claim, e.g. `hub-repo`; target repo holds the PR, e.g. `ccxp-skills`/`example-website.com`), the claim is written from the **hub** clone (`/drive` Phase 1) but `/address-pr`'s cross-repo mode runs from the ephemeral **target** clone (Phase 1.5: `/tmp/<task-id>-<slug>-target`) — a different path on the same host.
+- `_tc_claimant_id`'s exact identity match can never call that "mine" on its own, which without this recognition made every cross-repo PR fall through to `owned:<hub-clone>` (from the target clone) or `untracked`/wrong-PR (from the hub clone, since `gh pr view <n>` resolves against `$PWD`'s origin).
 
 `_tc_pr_owner` closes this gap with `_tc_is_own_cross_repo_clone`, a pure check consulted only when `_tc_decide` itself said `other`:
 
 - **Host must match** — a genuinely foreign host is never "mine", cross-repo or not.
 - **The current clone's path must be *this task's* ephemeral target directory** — `basename` matches `<task-id>-*-target`, the exact naming convention Phase 1.5 creates for *this* task. A same-host clone working a *different* task (even one that also looks like an ephemeral target clone), or any path that isn't that naming convention, still falls through to `owned:`/defer.
 
-Net effect: a session driving its own cross-repo PR from the target clone now reads `mine` (proceed), while every foreign-host, foreign-task, or non-ephemeral same-host case is unchanged — the anti-steal guarantee above holds exactly as before. This does **not** address the secondary hub-clone-side symptom (`gh pr view <n>` resolving the wrong repo's PR # when invoked from the hub clone) — cross-repo `/address-pr` is already documented (§1.5 cwd-discipline note) to always run from `$TARGET`, so that path isn't exercised here.
+- Net effect: a session driving its own cross-repo PR from the target clone now reads `mine` (proceed), while every foreign-host, foreign-task, or non-ephemeral same-host case is unchanged — the anti-steal guarantee above holds exactly as before.
+- This does **not** address the secondary hub-clone-side symptom (`gh pr view <n>` resolving the wrong repo's PR # when invoked from the hub clone) — cross-repo `/address-pr` is already documented (§1.5 cwd-discipline note) to always run from `$TARGET`, so that path isn't exercised here.
 
 ### 2. Loop until hard gate passes
 
-**cwd discipline (cross-repo mode)**: If `/address-pr` is invoked on a PR that lives in a different repo than the maintainer's hub clone (typical for cross-repo /drive dispatches: hub=hub-repo, target=ccxp-skills / example-website.com / build-pipeline-repo), `cd` into the target repo's clone before any `git` / `gh pr` invocation, and verify `pwd` literally matches that path. `pre-merge-check.sh` reads files from cwd; the wrong cwd means the wrong file gets validated. Same gotcha class as `/drive` Phase 3 and `/gcpr` Step 4 — see those for the full discussion.
+- **cwd discipline (cross-repo mode)**: If `/address-pr` is invoked on a PR that lives in a different repo than the maintainer's hub clone (typical for cross-repo /drive dispatches: hub=hub-repo, target=ccxp-skills / example-website.com / build-pipeline-repo), `cd` into the target repo's clone before any `git` / `gh pr` invocation, and verify `pwd` literally matches that path.
+- `pre-merge-check.sh` reads files from cwd; the wrong cwd means the wrong file gets validated. Same gotcha class as `/drive` Phase 3 and `/gcpr` Step 4 — see those for the full discussion.
 
 **Each iteration:**
 
@@ -173,7 +185,8 @@ Net effect: a session driving its own cross-repo PR from the target clone now re
 
 (No ownership heartbeat — PR ownership is the durable task claim on `main`, §1.6, not a TTL marker to keep alive.)
 
-**Pre-gate verification (before the pre-merge check):** `pre-merge-check.sh` is a green-light script — it checks CI, review-comment resolution, and test-plan boxes, but does not challenge unstated assumptions. Before relying on its verdict, **invoke `superpowers:verification-before-completion`** on the current PR state. Gaps it catches that the script can't: test-plan items mechanically checked but never exercised; a pipeline that "passed" by skipping the failing job; commit/PR-body claims that drift from the actual diff; workflow-file changes that need *post*-merge dispatch, not pre-merge.
+- **Pre-gate verification (before the pre-merge check):** `pre-merge-check.sh` is a green-light script — it checks CI, review-comment resolution, and test-plan boxes, but does not challenge unstated assumptions. Before relying on its verdict, **invoke `superpowers:verification-before-completion`** on the current PR state.
+- Gaps it catches that the script can't: test-plan items mechanically checked but never exercised; a pipeline that "passed" by skipping the failing job; commit/PR-body claims that drift from the actual diff; workflow-file changes that need *post*-merge dispatch, not pre-merge.
 
 This fires **every iteration** of the §2 loop, not just the first — each push reset re-introduces stale-assumption risk. If verification surfaces a gap, fix it (commit + push triggers a fresh iteration) and re-run §2.a from the top. For docs-only PRs (same change-kind heuristic as `/drive` Phase 3.0), verification scope is lighter (links, frontmatter, render) but still gated.
 
@@ -183,9 +196,15 @@ This fires **every iteration** of the §2 loop, not just the first — each push
 bash <skills-root>/_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref = the PR's base branch
 ```
 
-If it flags docs the PR didn't touch, the change isn't done: push a commit updating them (a fresh §2 iteration), or — interactively — record an explicit "reviewed, no change needed". **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash <skills-root>/_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost. It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
+- If it flags docs the PR didn't touch, the change isn't done: push a commit updating them (a fresh §2 iteration), or — interactively — record an explicit "reviewed, no change needed".
+- **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash <skills-root>/_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost.
+- It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
 
-Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification. (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found. The actual enforcement of Claude Code review findings is step d's own in-loop discipline (fix or justify before continuing), not a persisted, externally-checkable state. A session that skips step d entirely is not caught by the hard gate the way an unresolved Copilot thread used to be — this is a known reduction in cross-session backstop coverage, not an oversight. Consumer repos wanting that backstop back need to teach their own `pre-merge-check.sh` to look for the `**Claude Code review:**` marker instead of `reviewThreads`.
+- Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification.
+- (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found.
+- The actual enforcement of Claude Code review findings is step d's own in-loop discipline (fix or justify before continuing), not a persisted, externally-checkable state.
+- A session that skips step d entirely is not caught by the hard gate the way an unresolved Copilot thread used to be — this is a known reduction in cross-session backstop coverage, not an oversight.
+- Consumer repos wanting that backstop back need to teach their own `pre-merge-check.sh` to look for the `**Claude Code review:**` marker instead of `reviewThreads`.
 
 ```bash
 bash <skills-root>/address-pr/scripts/pre-merge-check.sh <number>
@@ -221,9 +240,12 @@ bash <skills-root>/_gh/gh.sh pr checks <number>
 
 #### d. Address Claude Code review
 
-No external bot. The reviewer is a **fresh, independent Claude agent** dispatched via the `Agent` tool — it has no memory of why this change was made, which is the property that made Copilot's review useful in the first place (a second pair of eyes, not the same author grading their own work). This also drops the org-tier dependency (Copilot Enterprise / Code Review add-on) entirely — every repo gets the same review mechanism regardless of GitHub plan.
+- No external bot.
+- The reviewer is a **fresh, independent Claude agent** dispatched via the `Agent` tool — it has no memory of why this change was made, which is the property that made Copilot's review useful in the first place (a second pair of eyes, not the same author grading their own work).
+- This also drops the org-tier dependency (Copilot Enterprise / Code Review add-on) entirely — every repo gets the same review mechanism regardless of GitHub plan.
 
-State lives on the PR itself, not in local files — the same durability requirement §1.5/§1.6 already impose elsewhere in this skill (re-invoking `/address-pr` from a different clone or session must re-derive the same state, not restart blind). Keyed to the **head SHA the review actually covered**, not just a timestamp — a timestamp-only comparison has a TOCTOU gap (a push landing between the diff fetch and the comment post would date-order *after* the comment despite never having been reviewed):
+- State lives on the PR itself, not in local files — the same durability requirement §1.5/§1.6 already impose elsewhere in this skill (re-invoking `/address-pr` from a different clone or session must re-derive the same state, not restart blind).
+- Keyed to the **head SHA the review actually covered**, not just a timestamp — a timestamp-only comparison has a TOCTOU gap (a push landing between the diff fetch and the comment post would date-order *after* the comment despite never having been reviewed):
 
 ```bash
 OWNER=$(bash <skills-root>/_gh/gh.sh repo view --json owner --jq .owner.login)
@@ -275,7 +297,8 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
 - If the report is a clean bill (no real findings): review is complete — set `CLEAN_BILL=1`, dispatch the approval gate below, then continue to step e.
 - If the report describes real issues: **before responding**, invoke `superpowers:receiving-code-review`. It enforces: steelman the finding before deciding to push back; distinguish "wrong because I have context the reviewer lacked" from "wrong because I want to be done"; and when pushing back (not making a code change), post a follow-up PR comment with the specific design constraint or test that makes the finding incorrect — not "stylistic preference". Then address each per the skill's output: fix code (commit + push — the head SHA changes, so the check above no longer matches `$LAST_REVIEWED_SHA` and a fresh review re-triggers next iteration), or post the pushback comment and move on. **Never silently drop a finding without a comment explaining why.** This targets the same "argue with the reviewer to feel productive" anti-pattern the Copilot-era wording warned about — the skill is still the brake, just aimed at a different reviewer.
 
-**Dispatch the approval gate (only after a clean bill, only when the repo has one — T20260922-603756).** A repo with a `synx-merge-bot` App-auth `pr-approve.yml` workflow (`.github/workflows/pr-approve.yml` on its default branch — check once per run, not once per repo forever, since a repo can gain this later) uses that workflow to submit a real GitHub `APPROVE` review, pinned to the exact commit this step's review just covered — this is what makes `required_approving_review_count: 1` on such a repo satisfiable by automation without weakening what the review means (see `pr-approve.yml`'s own design comment: it is deliberately mechanical and never decides *whether* to approve — that judgment is entirely this step, right here). Repos without the workflow skip this block entirely; nothing else in `/address-pr` depends on it.
+- **Dispatch the approval gate.** A repo with a `synx-merge-bot` App-auth `pr-approve.yml` workflow (`.github/workflows/pr-approve.yml` on its default branch — check once per run, not once per repo forever, since a repo can gain this later) uses that workflow to submit a real GitHub `APPROVE` review, pinned to the exact commit this step's review just covered — this is what makes `required_approving_review_count: 1` on such a repo satisfiable by automation without weakening what the review means (see `pr-approve.yml`'s own design comment: it is deliberately mechanical and never decides *whether* to approve — that judgment is entirely this step, right here).
+- Repos without the workflow skip this block entirely; nothing else in `/address-pr` depends on it.
 
 **LGTM supplement.** The PR author's `LGTM` comment is a second trigger for this same dispatch — it is *not* an approval itself (the bot's real `APPROVE` review is what satisfies `required_approving_review_count`, and branch protection still decides merge). It supplements the independent review, never replaces it:
 
@@ -317,13 +340,15 @@ fi
 
 #### e. Verify test plan
 
-**Auto-record every out-of-band gate as a pre-merge item FIRST (Layer B — the single source of truth).** The moment you kick off any verification that is NOT a required GitHub check on the PR — a labrun, a `--ref <branch>` pipeline dispatch, an external/manual check — immediately write it into the PR body's `### Pre-merge` section as an unchecked item carrying the run URL, BEFORE you start waiting on it:
+- **Auto-record every out-of-band gate as a pre-merge item FIRST (Layer B — the single source of truth).** The moment you kick off any verification that is NOT a required GitHub check on the PR — a labrun, a `--ref <branch>` pipeline dispatch, an external/manual check — immediately write it into the PR body's `### Pre-merge` section as an unchecked item carrying the run URL, BEFORE you start waiting on it:
 
 ```bash
 bash <skills-root>/_gh/gh.sh pr edit <number> --body "$(...append '- [ ] labrun green — <run-url>'...)"
 ```
 
-Tick the box only once that run is green. This is what makes the gate **cross-session**: `pre-merge-check.sh` §3 (and the ccxp-skills manual fallback) already block merge on any unchecked pre-merge item, so the instant the gate is on the PR, *every* session — including the `/ccxp` cron — is blocked until it's satisfied. A PR merged out from under a human precisely because its labrun gate lived only in session-private context and never on the PR. If it's a gate, it goes on the PR.
+- Tick the box only once that run is green.
+- This is what makes the gate **cross-session**: `pre-merge-check.sh` §3 (and the ccxp-skills manual fallback) already block merge on any unchecked pre-merge item, so the instant the gate is on the PR, *every* session — including the `/ccxp` cron — is blocked until it's satisfied.
+- A PR merged out from under a human precisely because its labrun gate lived only in session-private context and never on the PR. If it's a gate, it goes on the PR.
 
 Then check the PR body for unchecked pre-merge items (`- [ ]`):
 
@@ -335,7 +360,8 @@ Then check the PR body for unchecked pre-merge items (`- [ ]`):
 
 **Post-merge items**: Do NOT verify before merge. List them in the report.
 
-**Never declare a PR ready with unchecked test-plan items.** Every verifiable `- [ ]` must actually be checked off (not just left for the maintainer to trust) before reporting the PR ready to merge — an item that "needs a workflow run" means trigger it and wait, not skip it. If an item genuinely can't be verified pre-merge, say so explicitly in the report rather than silently treating unchecked as checked.
+- **Never declare a PR ready with unchecked test-plan items.** Every verifiable `- [ ]` must actually be checked off (not just left for the maintainer to trust) before reporting the PR ready to merge — an item that "needs a workflow run" means trigger it and wait, not skip it.
+- If an item genuinely can't be verified pre-merge, say so explicitly in the report rather than silently treating unchecked as checked.
 
 **PR titles need a descriptive slug, not just the bare task ID.** `fix(rc-confirm-promote): stop gh workflow run's stdout leaking into run_id (T20260727-252437)` — never a title that's only `T20260727-252437`. A bare ID gives a reviewer no context without looking up the task file; this applies to claim PRs and journal-move PRs too, not just the main implementation PR.
 
@@ -377,7 +403,8 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
 
    Set Project Status=Done (intentional double-coverage with `/drive` Phase 7 — catches the merge-via-UI path where /drive never sees the close). Best-effort and idempotent; a no-op if `/drive` already wrote it.
 
-   **No PR-ownership release step.** Ownership is the task claim, not a per-PR marker — there is nothing to remove from the PR. The task claim is released at task close: `/drive` Phase 7 (the journal-move PR runs `task_claim.sh release <task-id> <final-status>`). On an early exit (safety valve §2.f, deferring in §1.6, or handing back to the user) there is likewise nothing to release — you never wrote PR-side ownership, so you can't strand it.
+   - **No PR-ownership release step.** Ownership is the task claim, not a per-PR marker — there is nothing to remove from the PR. The task claim is released at task close: `/drive` Phase 7 (the journal-move PR runs `task_claim.sh release <task-id> <final-status>`).
+   - On an early exit (safety valve §2.f, deferring in §1.6, or handing back to the user) there is likewise nothing to release — you never wrote PR-side ownership, so you can't strand it.
 
 ## Important Notes
 
