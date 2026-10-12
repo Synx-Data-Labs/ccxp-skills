@@ -60,3 +60,11 @@ EOS
   run bash "$LAND" --bogus
   [ "$status" -eq 2 ]
 }
+
+@test "an unrelated already-staged file is not swept into the commit" {
+  echo b >> tracked.md; echo y >> other.md; git add other.md
+  run bash "$LAND" --branch docs/x --message m --title T --body B -- tracked.md
+  [ "$status" -eq 0 ]
+  [ "$(git show --name-only --format= HEAD)" = tracked.md ]
+  git diff --cached --name-only | grep -q other.md
+}

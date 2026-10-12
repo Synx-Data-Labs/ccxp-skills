@@ -44,7 +44,7 @@ function land() {
 
   [[ "$(git rev-parse --abbrev-ref HEAD)" == "$branch" ]] || git checkout -q -b "$branch"
   git add -- "$@"
-  git commit -q -m "$message"
+  git commit -q -m "$message" -- "$@"
   $git_cmd push -q -u origin "$branch" >&2
 
   if [[ -n "$body_file" ]]; then
