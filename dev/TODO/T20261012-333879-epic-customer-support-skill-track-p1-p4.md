@@ -17,7 +17,7 @@ description: Epic tracking the four-phase customer-support skill (intake, dry-ru
 
 ## Children (ordered; chain P1 -> P2 -> P3 -> P4)
 
-- [ ] **T20261012-109735** (P1): intake, `support` task type, lint keys, repro and same-commit regression gates.
+- [x] **T20261012-109735** (P1): intake, `support` task type, lint keys, repro and same-commit regression gates.
 - [ ] **T20261012-949870** (P2): status reporter engine in dry-run (cadence, renderer, marker, tick).
 - [ ] **T20261012-383399** (P3): live reporting (manual-approved one-shot, then scheduled tick on one real task).
 - [ ] **T20261012-278418** (P4): CI enforcement of the regression-commit rule and cadence tuning.
