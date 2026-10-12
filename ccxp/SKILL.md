@@ -80,7 +80,7 @@ governs.) Before Phase 0's first command below, verify the substituted
 path is real and fail loudly if not:
 
 ```bash
-[ -x "<skills-root>/_gh/gh.sh" ] || { echo "ccxp: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
+[ -x <skills-root>/_gh/gh.sh" ] || { echo "ccxp: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
 ```
 
 ### Phase 0: Sync

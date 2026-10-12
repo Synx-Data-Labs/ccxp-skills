@@ -22,7 +22,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 
 ```bash
 # Get run details
-bash ../_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
+bash <skills-root>/_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
   --jq '{name: .name, branch: .headBranch, conclusion: .conclusion, jobs: [.jobs[] | {name: .name, conclusion: .conclusion}]}'
 ```
 
@@ -36,7 +36,7 @@ For each failed job:
 ```bash
 # Failed job/step names + a bounded error-context window in one shot
 # (replaces a hand-rolled grep repeated across several past RCAs — T20260719-204917)
-bash ../_gh/ci-triage.sh <run-id>
+bash <skills-root>/_gh/ci-triage.sh <run-id>
 ```
 
 **Dig deeper** — don't stop at the first error. Look for:
@@ -80,7 +80,7 @@ Only when step 3 matched a KB entry, Confirmed (else step 6). Determination only
 - Has it happened before? Check recent runs:
 
   ```bash
-  bash ../_gh/gh.sh run list --workflow <workflow> --branch main --limit 5 \
+  bash <skills-root>/_gh/gh.sh run list --workflow <workflow> --branch main --limit 5 \
     --json databaseId,conclusion --jq '.[] | "\(.databaseId) \(.conclusion)"'
   ```
 
@@ -131,14 +131,14 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
 1. Generate task ID with the shared helper (no inlined generator — same one every skill uses):
 
    ```bash
-   bash ../_taskid/new.sh --check ./dev
+   bash <skills-root>/_taskid/new.sh --check ./dev
    ```
 
 2. Create `dev/TODO/<id>-<slug>.md` with the RCA findings
 3. **Auto-promote to this iteration's mid-week additions** (red-pipeline rule — T20260513-155615). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes; see T20260604-194697):
 
    ```bash
-   IPM_FILE=$(bash ../_ipm/current.sh)
+   IPM_FILE=$(bash <skills-root>/_ipm/current.sh)
    ```
 
    If `$IPM_FILE` is non-empty, open it, locate the `## Mid-week additions` table, and add a new data row:
@@ -154,7 +154,7 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
 4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this it's mapped to no board iteration — the gap T20260626-190842 fixed). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
 
    ```bash
-   bash ../_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
+   bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
    ```
 
 5. Report the task ID, the `scheduled:` date the stamper printed, and that it was auto-promoted to the mid-week additions (or, if no committed IPM, deferred to the next iteration).
@@ -167,7 +167,7 @@ If classification is **Transient**:
 
 If classification is **Infrastructure**:
 
-- Retry the run: `bash ../_gh/gh.sh run rerun <run-id> --failed`
+- Retry the run: `bash <skills-root>/_gh/gh.sh run rerun <run-id> --failed`
 - If retry also fails: create task — and apply mid-week auto-promote + `scheduled:` stamp (steps 3–4 above)
 
 ### 7. Update the local knowledge base

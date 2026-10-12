@@ -7,6 +7,8 @@ argument-hint: on | off | status
 
 # Agent Pairing
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Pairing, XP-style, but with subagents as the drivers:
 
 - You stay the navigator — steering, prioritizing, deciding what's
@@ -36,7 +38,7 @@ now, plus what your own session's driver-agents are currently doing.
 ### `on`
 
 ```bash
-bash "<base-dir>/scripts/agent-pairing.sh" on
+bash <skills-root>/agent-pairing/scripts/agent-pairing.sh on
 ```
 
 - Installs `~/.claude/agents/dispatcher.md` (from this skill's bundled
@@ -54,7 +56,7 @@ session itself just became a dispatcher.
 ### `off`
 
 ```bash
-bash "<base-dir>/scripts/agent-pairing.sh" off
+bash <skills-root>/agent-pairing/scripts/agent-pairing.sh off
 ```
 
 Removes the `"agent"` key only when it's currently `"dispatcher"` — if
@@ -66,7 +68,7 @@ on-demand even with the default off.
 ### `status`
 
 ```bash
-bash "<base-dir>/scripts/agent-pairing.sh" status
+bash <skills-root>/agent-pairing/scripts/agent-pairing.sh status
 ```
 
 Reports on/off (and names the other agent if a non-dispatcher one is

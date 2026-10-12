@@ -7,6 +7,8 @@ argument-hint: "[task-id | free-text plan]"
 
 # Incept
 
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+
 Stress-test a plan through structured adversarial questioning before any
 code is written. Model the plan as a **design tree** — every decision
 branches into the decisions that hang off it — and interview the user in
@@ -117,8 +119,8 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
 - Lint the touched file, scoped, never repo-wide:
 
   ```bash
-  python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
-  bash ../_docs/lint-docs.sh dev/TODO/T<id>-*.md
+  python3 <skills-root>/repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-*.md
+  bash <skills-root>/_docs/lint-docs.sh dev/TODO/T<id>-*.md
   ```
 
 Leave the change uncommitted — the caller decides how it lands (`/ipm`

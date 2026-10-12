@@ -51,15 +51,17 @@ unchanged):
 ```bash
 git checkout main && git pull   # no-op locally if there's no remote work to pull
 git checkout -b t<id>-<slug>    # <slug> from the task title — this IS the "I'm on it" signal
-bash ../_session/task_claim.sh release-others T<id>
-bash ../_session/task_claim.sh acquire T<id>
+bash <skills-root>/_session/task_claim.sh release-others T<id>
+bash <skills-root>/_session/task_claim.sh acquire T<id>
 git add dev/TODO/*.md dev/PARKING/*.md 2>/dev/null
 git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
 
 # Land the claim on main immediately — durable, before any real work,
+
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
 # same intent as the PR auto-merging fast in peer mode. If this fails
 # because main moved, rebase the branch onto main first, then retry.
-git checkout main && git merge --ff-only t<id>-<slug> && bash ../_gh/git.sh push
+git checkout main && git merge --ff-only t<id>-<slug> && bash <skills-root>/_gh/git.sh push
 
 # ...then go BACK to the branch and stay there for the actual work, so
 # `branch:` in the statusline reads t<id>-<slug> for the task's duration,
@@ -73,10 +75,10 @@ the later `--ff-only` merge back safe). At close (`/drive` Phase 7 or a
 plain `/claim release`):
 
 ```bash
-bash ../_session/task_claim.sh release T<id> <final-status>
+bash <skills-root>/_session/task_claim.sh release T<id> <final-status>
 git add -A   # + any Closed-section / journal-move edits
 git commit -m "docs(tasks): close T<id>"   # or fold into the last work commit
-git checkout main && git merge --ff-only t<id>-<slug> && bash ../_gh/git.sh push
+git checkout main && git merge --ff-only t<id>-<slug> && bash <skills-root>/_gh/git.sh push
 git branch -d t<id>-<slug>   # clears the statusline's branch signal back to main
 ```
 
@@ -90,17 +92,17 @@ mode note there is kept in sync with this one.
 
 ### §1. `/claim T<id>` — claim, releasing everything else this clone holds
 
-1. **Clone-locality guard.** `bash ../_taskid/in-this-repo.sh T<id>`
+1. **Clone-locality guard.** `bash <skills-root>/_taskid/in-this-repo.sh T<id>`
    — exit 0 = the task file lives in this repo's `dev/TODO`/`dev/PARKING`;
    non-zero = wrong clone (it names the sibling clone that has it). Don't
    proceed past a non-zero result — `cd` there instead.
 2. **Free + claimable checks.**
-   - `bash ../_session/task_claim.sh read T<id>` — if
+   - `bash <skills-root>/_session/task_claim.sh read T<id>` — if
      `claimed_by` is set and is **not** this session's own id
      (`task_claim.sh claimant-id`), the task is held by another agent. Check
      `task_claim.sh reclaimable T<id>` — `live` means stop and report who
      holds it; `reclaimable` means a stale claim you may take over.
-   - `bash ../_session/lint_frozen.sh is-frozen dev/TODO/T<id>-*.md`
+   - `bash <skills-root>/_session/lint_frozen.sh is-frozen dev/TODO/T<id>-*.md`
      — exit 0 (frozen) means the claim PR cannot merge (a pre-existing
      frontmatter lint failure the changed-mode check will re-trip). Report
      the freeze reason and stop rather than opening an un-mergeable PR.
@@ -111,8 +113,8 @@ mode note there is kept in sync with this one.
    ```bash
    git checkout main && git pull
    git checkout -b t<id>-claim
-   bash ../_session/task_claim.sh release-others T<id>
-   bash ../_session/task_claim.sh acquire T<id>
+   bash <skills-root>/_session/task_claim.sh release-others T<id>
+   bash <skills-root>/_session/task_claim.sh acquire T<id>
    ```
 
    `release-others` frees every task this `cc1-<machine-id>:<path-hash>` identity
@@ -126,8 +128,8 @@ mode note there is kept in sync with this one.
    ```bash
    git add dev/TODO/*.md dev/PARKING/*.md 2>/dev/null
    git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
-   bash ../_gh/git.sh push -u origin t<id>-claim
-   bash ../_gh/gh.sh pr create --title "docs(claim): claim T<id>" --body "..."
+   bash <skills-root>/_gh/git.sh push -u origin t<id>-claim
+   bash <skills-root>/_gh/gh.sh pr create --title "docs(claim): claim T<id>" --body "..."
    ```
 
    Hand off to `/address-pr` — it auto-merges under the pure-status-change
@@ -146,7 +148,7 @@ Same branch/commit/PR shape as §1.3–§1.6 (or the Solo-repo mode equivalent),
 but only:
 
 ```bash
-bash ../_session/task_claim.sh release T<id> Open
+bash <skills-root>/_session/task_claim.sh release T<id> Open
 ```
 
 (pass a different final status — e.g. `Blocked by T...` — if that's why the
@@ -160,12 +162,12 @@ history note), producing a false positive. Use `task_claim.sh read`, which
 parses only the frontmatter fence, per candidate file:
 
 ```bash
-ME=$(bash ../_session/task_claim.sh claimant-id)
+ME=$(bash <skills-root>/_session/task_claim.sh claimant-id)
 for f in dev/TODO/*.md dev/PARKING/*.md; do
   [ -f "$f" ] || continue
   id=$(basename "$f" | grep -oP '^T\d{8}-\d{6}')
   [ -n "$id" ] || continue
-  out=$(bash ../_session/task_claim.sh read "$id" 2>/dev/null)
+  out=$(bash <skills-root>/_session/task_claim.sh read "$id" 2>/dev/null)
   [ "$(printf '%s' "$out" | cut -f2)" = "$ME" ] && echo "$id: $out"
 done
 ```

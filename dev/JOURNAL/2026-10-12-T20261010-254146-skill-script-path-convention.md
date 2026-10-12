@@ -32,8 +32,8 @@ claimed_role:
 
 ## Closed (2026-10-12)
 
-- **Rule**: `skill-conventions` §9 "Script path base-dir rule" — scripts resolve from `"<base-dir>/scripts/x.sh"` (the harness-announced base directory), siblings via `<base-dir>/../`.
-- **Applied**: `todo`, `agent-pairing`, `translate-patent`, `memory-to-skill`, `address-pr`, `retro`, `repo-conventions`, `skill-conventions` SKILL.md.
+- **Rule**: `skill-conventions` §9 "Script path rule" — reuse the existing `<skills-root>` placeholder (`ipm`/`ccxp`): `<skills-root>/<skill>/scripts/x.sh`, `<skills-root>/_lib/x.sh`; no repo-root-relative or cwd-relative (`../_gh/...`) paths.
+- **Applied**: all command invocations in 29 SKILL.md files (about 150 `../` and repo-root occurrences); each skill carries a one-line `<skills-root>` definition under its H1. Markdown links to `../` files left as is.
 - **Evidence**: `skill_eval.py todo` case `next-skips-done-and-is-read-only` 3/3 and `list-uses-script` 3/3 (was red). Overall todo eval 66.7% because `natural-language-trigger` is 0/3 — unrelated, not filed as a task (see note); the `--record` line was not committed since the suite is below 90%.
 - **Not covered**: README/`_taskid`/`_slack` README examples (repo-root commands for humans, not skill steps); `lifecycle.md:142` dev command.
 - **Follow-up**: `natural-language-trigger` eval failure left for a future task.

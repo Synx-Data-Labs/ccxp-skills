@@ -62,7 +62,7 @@ guessing.** A vague or wrong task file is worse than one more question.
 ### 3. Mint the ID and write the file
 
 ```bash
-bash ../_taskid/new.sh --check ./dev
+bash <skills-root>/_taskid/new.sh --check ./dev
 ```
 
 Write `dev/TODO/T<id>-<slug>.md` from
@@ -73,6 +73,8 @@ template's own instructions), then:
 
 ```markdown
 # T<id>: <title>
+
+> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
 
 ## Problem
 
@@ -94,10 +96,10 @@ repo-wide, so this never touches an unrelated pre-existing doc as a side
 effect of filing one task:
 
 ```bash
-python3 ../repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
-bash ../_docs/lint-docs.sh dev/TODO/T<id>-<slug>.md
-python3 ../repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
-python3 ../repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
+python3 <skills-root>/repo-conventions/scripts/lint_tasks.py --changed dev/TODO/T<id>-<slug>.md
+bash <skills-root>/_docs/lint-docs.sh dev/TODO/T<id>-<slug>.md
+python3 <skills-root>/repo-conventions/scripts/lint_paragraphs.py --changed dev/TODO/T<id>-<slug>.md
+python3 <skills-root>/repo-conventions/scripts/lint_refs.py --fix --changed dev/TODO/T<id>-<slug>.md
 ```
 
 `lint_tasks.py` is the hard gate — fix and re-check on any failure.

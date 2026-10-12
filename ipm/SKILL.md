@@ -29,7 +29,7 @@ the trailing `/ipm`, and substitute that literal absolute path.
 Before step 0's first command below, verify the substituted path is real and fail loudly if not:
 
 ```bash
-[ -x "<skills-root>/_gh/gh.sh" ] || { echo "ipm: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
+[ -x <skills-root>/_gh/gh.sh" ] || { echo "ipm: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
 ```
 
 ### 0 Capture this IPM's Scheduled date
