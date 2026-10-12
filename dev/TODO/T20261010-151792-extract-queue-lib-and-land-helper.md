@@ -1,10 +1,12 @@
 ---
-status: Open
+status: In Progress
 scheduled: 2026-10-12
 estimation: 5
 source: split from T20260928-101526
 related: [T20260928-101526]
 description: Extract `_queue/queue.sh` and a shared land-as-PR helper
+claimed_by: cc1-50ac6891:367a03e82acbfe81
+claimed_role: interactive
 ---
 
 # T20261010-151792: Extract `_queue/queue.sh` and a shared land-as-PR helper
