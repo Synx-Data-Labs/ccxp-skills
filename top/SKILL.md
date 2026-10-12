@@ -33,7 +33,7 @@ leapfrog everything else in the queue. Plain `/top` (no `--before`) is for
 
 Same resolution and hard-stop rules as `/stage` step 1 — glob
 `dev/TODO/T<id>-*.md`, delegate zero-match diagnosis to
-`bash ../_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
+`bash <skills-root>/_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
 that doesn't resolve to a file in this repo's `dev/TODO/`. Do not partially
 apply — resolve every ID before touching `queue.md`. **In `--before` mode**,
 the target `T<targetId>` must resolve the same way, **and** must already
@@ -92,7 +92,7 @@ truly first:
 
 ```
 for id in reversed(expanded_id_list):
-    bash ../_queue/queue.sh top dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
+    bash <skills-root>/_queue/queue.sh top dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
 ```
 
 `queue.sh top` removes the line if present and inserts it as the first entry (adds if new).
@@ -124,7 +124,7 @@ iteration — an earlier insert in the same batch shifts it down by one:
 
 ```
 for id in expanded_id_list:        # forward — NOT reversed
-    bash ../_queue/queue.sh insert-before dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}" T<targetId>
+    bash <skills-root>/_queue/queue.sh insert-before dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}" T<targetId>
 ```
 
 `queue.sh insert-before` removes the line if present and re-finds the target's position each call.
@@ -144,7 +144,9 @@ which would have pushed them down too.
 
 ```bash
 # Also pass any newly-untracked T<id> file (same fix as /stage) as an extra path.
-bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the top" \
+
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+bash <skills-root>/_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the top" \
   --title "docs(queue): move T<id> to the top" --body "Queue reorder." -- dev/TODO/queue.md [dev/TODO/T<id>-*.md ...]
 # --before mode message: "...to immediately before T<targetId>"
 ```

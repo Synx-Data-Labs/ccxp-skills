@@ -29,7 +29,7 @@ One or more `T<id>`s, space-separated. Each must match an existing file
 - **Zero matches** → delegate the diagnosis to the shared clone-locality guard (T20260626-298293) — DRY with `/drive`, and it adds cross-repo awareness (it names the sibling clone that actually holds the task):
 
   ```bash
-  bash ../_taskid/in-this-repo.sh "T<id>"   # exit 3 = closed here; 1/2 = cross-repo (names the clone that has it)
+  bash <skills-root>/_taskid/in-this-repo.sh "T<id>"   # exit 3 = closed here; 1/2 = cross-repo (names the clone that has it)
   ```
 
   Hard-fail after the guard prints its diagnosis:
@@ -45,7 +45,7 @@ Read `dev/TODO/queue.md`. For each resolved `T<id>`:
 
 - **Already listed** (anywhere in the file): no-op for this ID. Note its current 1-based position for the confirmation output.
 - **Missing**: check whether this task blocks something already queued (either direction of the convention — the new task's own frontmatter has `blocks: T<blockedId>`, or an already-queued task's `status:` reads `Blocked by T<id>`, prefix match, trailing notes ignored). Both checks are cheap grep-scale — run them before deciding where to place the line:
-  - **Blocks nothing queued:** `bash ../_queue/queue.sh append dev/TODO/queue.md T<id> T<id>-<slug>.md "<title>"` (adds `- [T<id>](T<id>-<slug>.md): <title>` at the end; no-op if already queued).
+  - **Blocks nothing queued:** `bash <skills-root>/_queue/queue.sh append dev/TODO/queue.md T<id> T<id>-<slug>.md "<title>"` (adds `- [T<id>](T<id>-<slug>.md): <title>` at the end; no-op if already queued).
   - **Blocks one or more already-queued tasks:** insert immediately before the *frontmost* one (lowest queue position) instead of appending — invoke `/top`'s `--before` mode directly (`/top T<id> --before T<blockedId>`) rather than reimplementing the insertion logic. If it blocks several queued tasks, `--before` the frontmost one — that's sufficient to make it precede everything it gates, since it's now ahead of the earliest of them.
 
   `<slug>.md` is the actual `dev/TODO/T<id>-*.md` filename (relative link —
@@ -63,10 +63,12 @@ If every given `T<id>` was already queued, skip straight to step 4 (nothing to l
 BRANCH="docs/stage-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH"
 # Newly-untracked task file being staged for the first time (e.g. /new-task
+
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 # just created it and called /stage): also pass THAT exact file as a path so it
 # gets committed instead of staying untracked. A file already on main is not
 # passed; only a currently-untracked one this invocation is staging.
-bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): stage T<id> [T<id> ...]" \
+bash <skills-root>/_gh/land.sh --branch "$BRANCH" --message "docs(queue): stage T<id> [T<id> ...]" \
   --title "docs(queue): stage T<id>" --body "Queue staging." -- dev/TODO/queue.md [dev/TODO/T<id>-*.md ...]
 ```
 

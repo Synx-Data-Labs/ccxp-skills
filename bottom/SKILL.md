@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: "T<id> [T<id> ...]"
 ---
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 Move one or more tasks to the back of `dev/TODO/queue.md` — the explicit
 "deprioritize this, work everything else first" override. Mirror image of
 `/top`: same mechanics, opposite extreme. Use it for tasks that turned out
@@ -25,7 +27,7 @@ extreme slot" contract as `/top`, just the opposite slot.)
 
 Same resolution and hard-stop rules as `/stage` step 1 — glob
 `dev/TODO/T<id>-*.md`, delegate zero-match diagnosis to
-`bash ../_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
+`bash <skills-root>/_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
 that doesn't resolve to a file in this repo's `dev/TODO/`. Do not partially
 apply — resolve every ID before touching `queue.md`.
 
@@ -37,7 +39,7 @@ the top:
 
 ```
 for id in reversed(argument_list):
-    bash ../_queue/queue.sh bottom dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
+    bash <skills-root>/_queue/queue.sh bottom dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
 ```
 
 `queue.sh bottom` removes the line if present and appends it as the last entry (adds if new).
@@ -58,7 +60,7 @@ to `/stage` first.
 
 ```bash
 BRANCH="docs/bottom-$(date +%Y%m%d-%H%M%S)"
-bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the bottom" \
+bash <skills-root>/_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the bottom" \
   --title "docs(queue): move T<id> to the bottom" --body "Queue reorder." -- dev/TODO/queue.md
 ```
 
