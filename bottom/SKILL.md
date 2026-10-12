@@ -62,7 +62,7 @@ bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id>
   --title "docs(queue): move T<id> to the bottom" --body "Queue reorder." -- dev/TODO/queue.md
 ```
 
-`land.sh` branches, stages only the listed paths, commits, pushes and prints the PR URL.
+`land.sh` (exit 3 = nothing to land; run it before creating a branch if you want no leftover) branches, stages only the listed paths, commits, pushes and prints the PR URL.
 
 Then drive the PR to merge with `/address-pr <number>`. Pure `queue.md`
 reorder — lifecycle bookkeeping, not a code change — auto-merges under the
