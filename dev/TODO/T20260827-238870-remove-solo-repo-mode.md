@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1h
+estimation: 1
 source: User request 2026-08-27 — reverses recent work (see below)
 ---
 
