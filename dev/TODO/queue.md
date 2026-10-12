@@ -36,3 +36,5 @@ reprioritize.
 - [T20261012-342180](T20261012-342180-claimant-id-reverse-lookup-cache.md): Local reverse-lookup cache for claimant ids (who owns what on this box)
 - [T20261012-280694](T20261012-280694-lint-forbid-bare-gh-git-harden-gh-wrappers.md): lint: forbid bare network gh/git in skills + harden _gh wrappers
 - [T20261012-151045](T20261012-151045-follow-ups-pr-308-drop-gh-board-dependency.md): follow-ups from PR #308 (drop gh board dependency)
+- [T20260827-238870](T20260827-238870-remove-solo-repo-mode.md): Remove solo-repo (no-CI) mode; always follow the team-repo (peer/CI) process
+- [T20260829-362863](T20260829-362863-solo-to-team-mode-conversion-checklist.md): Write the solo-mode → team-mode conversion checklist for any ccxp repo
