@@ -37,9 +37,10 @@ the top:
 
 ```
 for id in reversed(argument_list):
-    remove the line for `id` from queue.md if present (no-op if it's new)
-    append `- [T{id}](T{id}-{slug}.md): {title}` at the very bottom of the list
+    bash ../_queue/queue.sh bottom dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
 ```
+
+`queue.sh bottom` removes the line if present and appends it as the last entry (adds if new).
 
 `{slug}.md` is the actual `dev/TODO/T{id}-*.md` filename — same relative-link format `/stage`/`/top` use.
 

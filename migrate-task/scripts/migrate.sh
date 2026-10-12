@@ -7,6 +7,9 @@
 # feedback_ephemeral_clone_cross_repo guard, mirroring /drive Phase 1.5).
 set -euo pipefail
 
+# shellcheck source=../../_queue/queue.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../_queue/queue.sh"
+
 # --- frontmatter helpers (pure — touch only the leading '---' fence) --------
 
 # mt-fm-get <file> <field> — print the field's value, or empty if absent.
@@ -116,29 +119,11 @@ mt-target-blocked-by() {
 # --- queue.md append-or-insert-before (Solution — reuses /stage's algorithm) -
 
 # mt-queue-insert <queue-file> <task-id> <slug> <title> <blocks-task-id>
-# Appends "- [T<id>](<slug>): <title>" to queue-file, unless blocks-task-id
-# is non-empty and already queued — then inserts immediately before it.
+# Thin wrapper over the shared _queue/queue.sh: append, unless blocks-task-id
+# is non-empty and already queued — then insert immediately before it.
 mt-queue-insert() {
   local queue="$1" task_id="$2" slug="$3" title="$4" blocks="$5"
-  local line="- [${task_id}](${slug}): ${title}"
-
-  if [ ! -f "$queue" ]; then
-    printf '# TODO Queue\n\n' > "$queue"
-  fi
-
-  if [ -n "$blocks" ] && grep -qE "^- \[${blocks}\]" "$queue"; then
-    local tmp lineno
-    tmp="$(mktemp)"
-    lineno="$(grep -m1 -nE "^- \[${blocks}\]" "$queue" | cut -d: -f1)"
-    # MT_QUEUE_NEW_LINE via ENVIRON, not `awk -v` — awk -v assignments are
-    # escape-processed (a literal "\n" in a title would become a real
-    # newline and split one queue entry into two lines).
-    MT_QUEUE_NEW_LINE="$line" awk -v n="$lineno" \
-      'NR==n { print ENVIRON["MT_QUEUE_NEW_LINE"] } { print }' "$queue" > "$tmp"
-    mv "$tmp" "$queue"
-  else
-    printf '%s\n' "$line" >> "$queue"
-  fi
+  q_insert_before "$queue" "$task_id" "$slug" "$title" "$blocks"
 }
 
 # --- title extraction --------------------------------------------------------

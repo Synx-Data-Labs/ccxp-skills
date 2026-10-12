@@ -92,9 +92,10 @@ truly first:
 
 ```
 for id in reversed(expanded_id_list):
-    remove the line for `id` from queue.md if present (no-op if it's new)
-    insert `- [T{id}](T{id}-{slug}.md): {title}` at the very top of the list
+    bash ../_queue/queue.sh top dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
 ```
+
+`queue.sh top` removes the line if present and inserts it as the first entry (adds if new).
 
 `{slug}.md` is the actual `dev/TODO/T{id}-*.md` filename — same relative-link format `/stage` uses.
 
@@ -123,10 +124,10 @@ iteration — an earlier insert in the same batch shifts it down by one:
 
 ```
 for id in expanded_id_list:        # forward — NOT reversed
-    remove the line for `id` from queue.md if present
-    find T<targetId>'s current line number in queue.md
-    insert `- [T{id}](T{id}-{slug}.md): {title}` immediately above that line
+    bash ../_queue/queue.sh insert-before dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}" T<targetId>
 ```
+
+`queue.sh insert-before` removes the line if present and re-finds the target's position each call.
 
 Worked example — queue starts as `[W, X, Y, Z]`, running `/top A B --before Y`:
 
