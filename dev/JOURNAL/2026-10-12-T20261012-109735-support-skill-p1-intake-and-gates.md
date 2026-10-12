@@ -10,7 +10,7 @@ claimed_role:
 
 # T20261012-109735: support skill P1: intake, support task type, lint keys, repro + same-commit regression gates
 
-## Problem
+## Original requirement and scope
 
 - **Type**: feature
 - Requirement (user): take a customer-reported GitHub issue (e.g. `https://github.com/acme/support-repo/issues/24`), create a task to track it; support tasks (new type `support`) always get a simplified repro and a new e2e regression test, committed together with the fix. The skill must stay generic: no hardcoded org/repo.
