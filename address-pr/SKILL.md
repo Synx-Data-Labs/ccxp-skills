@@ -191,6 +191,8 @@ Then run the pre-merge check script. It is the single source of truth for CI, te
 bash scripts/pre-merge-check.sh <number>
 ```
 
+For a `support` task also run `bash ../_support/gate-pr.sh <number>` (same-commit regression test; no-op for other PRs; see [`_support/README.md`](../_support/README.md)); a non-zero exit blocks the merge like `❌ BLOCKED`.
+
 - If it outputs `✅ ALL CHECKS PASSED`: also check mergeability (`bash ../_gh/gh.sh pr view <number> --json mergeable`). If MERGEABLE → **exit the loop**. If CONFLICTING → rebase in step b.
 - If it outputs `❌ BLOCKED`: **read the failures and fix them in steps b-e below, then loop back to step a.**
 - **NEVER skip the hard gate. NEVER declare ready without it passing.**

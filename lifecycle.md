@@ -48,6 +48,7 @@ Optional metadata fields:
 - `blocks: [T{id1}, T{id2}]` — YAML list, records what this task is holding up (bidirectional)
 - `deadline: YYYY-MM-DD` — release or hard deadline
 - `scheduled: YYYY-MM-DD` — a Monday; set by `/ipm` step 5 at IPM commit, for whichever tasks land in that iteration. Update-forward-only — never removed (see the Iteration assignment section below)
+- `support-issue: <canonical issue URL>` + `support-report: on|off` — customer support tasks (`/support`; see `_support/README.md`). `support-report` is opt-in, absent means off.
 - `target-repo: <owner/name>` + `target-path: <abs-path>` — cross-repo dispatch (task lives in hub repo, implementation lands elsewhere; see `/drive` Phase 1.5). **Exact key spelling matters**: `lint_tasks.py`'s allowlist requires lowercase-hyphenated `target-repo`/`target-path` — not `Target repo`/`Target path`, even though some skill prose (e.g. `/drive`'s own illustrative bullet) formats the concept in that human-readable capitalized form. Verify against existing closed examples (`grep -rl "target-repo:" dev/JOURNAL/`) rather than a skill's prose example.
 
 There is no `priority:` field. Priority is a task's position in `dev/TODO/queue.md`

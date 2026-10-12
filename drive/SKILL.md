@@ -201,6 +201,7 @@ The design lives in the task file (`dev/TODO/T<id>-<slug>.md`). The first thing 
 4. **Create the design PR** — branch `t<id>-design`, commit ONLY the task-file changes, push, `gh pr create` (its stdout is the new PR's URL — `<design-pr-number>` is the trailing path segment, e.g. `${PR_URL##*/}`). PR body: 1-paragraph summary of the design + "Design-only PR — implementation lands in a follow-up after this merges." Run `/address-pr <design-pr-number>` — **never a bare `/address-pr` call**: bare re-triggers Phase 0's oldest-first backlog auto-pick, not this PR (CI will be green for docs-only; the independent review covers the design itself; the maintainer reviews and approves).
 5. **Wait for the design PR to merge.** This is a checkpoint — do NOT proceed to Phase 3 until the design PR is on `main`.
 6. After merge: `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**), flip the task file's status `Design` → `In Progress` (in a follow-up commit on the implementation branch — see Phase 3).
+6a. **Support tasks** (`bash ../_support/is-support-task.sh <id>`): the design needs non-empty `## Repro` and `## Regression test`; the gate below enforces it. Details: [`_support/README.md`](../_support/README.md).
 7. **Design-score gate (hard gate — Phase 2 → Phase 3, per T20260609-204303 D3).** Before any code, score the merged design deterministically:
 
    ```bash
@@ -404,6 +405,8 @@ bash ../quality-probe/scripts/probe.sh \
 - **Cross-repo:** run in `$TARGET`; the scoreboard lives in the target repo and lands in the target PR (not the hub).
 
 ### Phase 4: Create PR
+
+**Support tasks**: write the e2e test first and record its red output in the PR body; fix and test land in one commit. Before opening the PR run `bash ../_support/check-regression-commit.sh origin/main..HEAD` ([`_support/README.md`](../_support/README.md)).
 
 Use the `/gcpr` skill workflow:
 

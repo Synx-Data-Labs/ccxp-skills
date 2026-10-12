@@ -195,3 +195,31 @@ json_score() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
 }
+
+# --- support tasks (T20261012-109735) ----------------------------------------
+
+@test "support task without Repro / Regression test fails the gate despite a high score" {
+  run bash "$SCORE" "$FIX/support_incomplete.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"missing a '## Repro' section"* ]]
+  [[ "$output" == *"missing a '## Regression test' section"* ]]
+}
+
+@test "support task with both sections passes; json lists no problems" {
+  run bash "$SCORE" "$FIX/support_complete.md" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.support_problems | length' <<<"$output")" = "0" ]
+}
+
+@test "non-support docs are unaffected by the support gate" {
+  run bash "$SCORE" "$FIX/complete.md" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.support_problems | length' <<<"$output")" = "0" ]
+}
+
+@test "support task with a placeholder Repro fails" {
+  sed 's/scripts\/scan-runtime-libs.sh fixtures.*/TBD/' "$FIX/support_complete.md" > "$BATS_TEST_TMPDIR/s.md"
+  run bash "$SCORE" "$BATS_TEST_TMPDIR/s.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"placeholder"* ]]
+}

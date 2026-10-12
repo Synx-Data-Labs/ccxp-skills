@@ -271,6 +271,33 @@ ds-check-placeholder() {
   printf '%d' $(( count * -4 ))
 }
 
+# --- support-task gate (T20261012-109735) ------------------------------------
+
+# True (0) if the doc declares `- **Type**: support` (the TLDR/Problem bullet).
+ds-is-support() {
+  local body
+  body="$(ds-body "$1")"
+  grep -qE '^- \*\*Type\*\*:[[:space:]]*support([[:space:]]|$)' <<<"$body"
+}
+
+# Support tasks must carry a non-empty `## Repro` and `## Regression test`
+# (no placeholders). Prints one problem per line; empty output = ok. This is a
+# hard fail independent of the 0-100 score.
+ds-check-support() {
+  local file="$1" name txt
+  for name in 'Repro' 'Regression test'; do
+    if ! ds-has-section "$file" "$name"; then
+      echo "support task is missing a '## $name' section"; continue
+    fi
+    txt="$(ds-section "$file" "$name" | grep -v '^[[:space:]]*$' || true)"
+    if [[ -z "$txt" ]]; then
+      echo "'## $name' is empty"
+    elif grep -qiE '\bTBD\b|\bTODO\b|\bFIXME\b|\?\?\?|<[^<>]*\.\.\.[^<>]*>' <<<"$txt"; then
+      echo "'## $name' still has placeholder text"
+    fi
+  done
+}
+
 # --- change-kind auto-detect ------------------------------------------------
 
 # code-class if the doc has a Root cause / Repo file references heading OR the
@@ -351,8 +378,11 @@ design-score() {
   total=$(( pct + pen ))
   [[ "$total" -lt 0 ]] && total=0   # floor at 0
 
+  local support_problems=""
+  if ds-is-support "$file"; then support_problems="$(ds-check-support "$file")"; fi
+
   local pass="false" rc=1
-  if [[ "$total" -ge "$threshold" ]]; then pass="true"; rc=0; fi
+  if [[ "$total" -ge "$threshold" && -z "$support_problems" ]]; then pass="true"; rc=0; fi
 
   if [[ "$json" -eq 1 ]]; then
     jq -n \
@@ -363,9 +393,11 @@ design-score() {
       --argjson c1 "$c1" --argjson c2 "$c2" --argjson c3 "$c3" \
       --argjson c4 "$c4" --argjson c5 "$c5" --argjson c6 "$c6" \
       --argjson c7 "$c7" --argjson pen "$pen" \
+      --arg sp "$support_problems" \
       '{score:$score, threshold:$threshold, pass:$pass, kind:$kind,
         checks:{C1:$c1, C2:$c2, C3:$c3, C4:$c4, C5:$c5, C6:$c6, C7:$c7,
-                placeholder:$pen}}'
+                placeholder:$pen},
+        support_problems:($sp | split("\n") | map(select(length>0)))}'
   else
     local verdict="FAIL"; [[ "$pass" == "true" ]] && verdict="PASS"
     cat <<EOF
@@ -386,6 +418,7 @@ design-score: $file  (kind: $kind)
 
   $verdict
 EOF
+    [[ -n "$support_problems" ]] && sed 's/^/  support gate: /' <<<"$support_problems"
   fi
 
   return "$rc"
