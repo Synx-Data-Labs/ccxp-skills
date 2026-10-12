@@ -165,7 +165,7 @@ Net effect: a session driving its own cross-repo PR from the target clone now re
 
 ### 2. Loop until hard gate passes
 
-**cwd discipline (cross-repo mode)**: If `/address-pr` is invoked on a PR that lives in a different repo than the maintainer's hub clone (typical for cross-repo /drive dispatches: hub=hub-repo, target=ccxp-skills / example-website.com / build-pipeline-repo), `cd` into the target repo's clone before any `git` / `gh pr` invocation, and verify `pwd` literally matches that path. `bash scripts/pre-merge-check.sh` reads files from cwd; the wrong cwd means the wrong file gets validated. Same gotcha class as `/drive` Phase 3 and `/gcpr` Step 4 — see those for the full discussion.
+**cwd discipline (cross-repo mode)**: If `/address-pr` is invoked on a PR that lives in a different repo than the maintainer's hub clone (typical for cross-repo /drive dispatches: hub=hub-repo, target=ccxp-skills / example-website.com / build-pipeline-repo), `cd` into the target repo's clone before any `git` / `gh pr` invocation, and verify `pwd` literally matches that path. `pre-merge-check.sh` reads files from cwd; the wrong cwd means the wrong file gets validated. Same gotcha class as `/drive` Phase 3 and `/gcpr` Step 4 — see those for the full discussion.
 
 **Each iteration:**
 
@@ -188,7 +188,7 @@ If it flags docs the PR didn't touch, the change isn't done: push a commit updat
 Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification. (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found. The actual enforcement of Claude Code review findings is step d's own in-loop discipline (fix or justify before continuing), not a persisted, externally-checkable state. A session that skips step d entirely is not caught by the hard gate the way an unresolved Copilot thread used to be — this is a known reduction in cross-session backstop coverage, not an oversight. Consumer repos wanting that backstop back need to teach their own `pre-merge-check.sh` to look for the `**Claude Code review:**` marker instead of `reviewThreads`.
 
 ```bash
-bash scripts/pre-merge-check.sh <number>
+bash "<base-dir>/scripts/pre-merge-check.sh" <number>
 ```
 
 For a `support` task also run `bash ../_support/gate-pr.sh <number>` (same-commit regression test; no-op for other PRs; see [`_support/README.md`](../_support/README.md)); a non-zero exit blocks the merge like `❌ BLOCKED`.

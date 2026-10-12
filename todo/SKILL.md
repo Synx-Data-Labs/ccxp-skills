@@ -81,7 +81,7 @@ If `$ARGUMENTS` is empty, default to `list`.
 
 ## Workflow: `list`
 
-Run `bash todo/scripts/todo-list.sh` and print its output verbatim — this
+Run `bash "<base-dir>/scripts/todo-list.sh"` and print its output verbatim — this
 is a fully deterministic read of `queue.md` + task frontmatter (no
 judgment involved), so it costs no model call (T20260914-359646). The
 algorithm below is what the script implements; it stays documented here
@@ -124,7 +124,7 @@ a signal to run `/todo sweep` (which does the deeper analysis: fixing stale
 blockers, enforcing blocker order, pruning), not something this workflow
 tries to work around itself.
 
-Run `bash todo/scripts/todo-next.sh` and print its output verbatim — the
+Run `bash "<base-dir>/scripts/todo-next.sh"` and print its output verbatim — the
 skip logic and claim-state check are fully deterministic (no judgment
 involved), so this costs no model call (T20260914-359646). One line is
 explicitly **not** ported to the script and stays a judgment call for

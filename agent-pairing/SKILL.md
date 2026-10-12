@@ -36,7 +36,7 @@ now, plus what your own session's driver-agents are currently doing.
 ### `on`
 
 ```bash
-bash agent-pairing/scripts/agent-pairing.sh on
+bash "<base-dir>/scripts/agent-pairing.sh" on
 ```
 
 - Installs `~/.claude/agents/dispatcher.md` (from this skill's bundled
@@ -54,7 +54,7 @@ session itself just became a dispatcher.
 ### `off`
 
 ```bash
-bash agent-pairing/scripts/agent-pairing.sh off
+bash "<base-dir>/scripts/agent-pairing.sh" off
 ```
 
 Removes the `"agent"` key only when it's currently `"dispatcher"` — if
@@ -66,7 +66,7 @@ on-demand even with the default off.
 ### `status`
 
 ```bash
-bash agent-pairing/scripts/agent-pairing.sh status
+bash "<base-dir>/scripts/agent-pairing.sh" status
 ```
 
 Reports on/off (and names the other agent if a non-dispatcher one is
