@@ -62,21 +62,12 @@ If every given `T<id>` was already queued, skip straight to step 4 (nothing to l
 ```bash
 BRANCH="docs/stage-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH"
-git add dev/TODO/queue.md
-# Untracked task file being staged for the first time (e.g. /new-task just
-# created it and called /stage immediately): also add THAT exact file, so it
-# actually gets committed instead of silently staying untracked forever —
-# /stage's resolution step above already reads it (for the queue-line title),
-# but the commit historically only added queue.md. Does NOT widen scope for
-# the common case: a task file already committed on main is untouched here,
-# only a currently-untracked one this exact invocation is staging.
-for id in T<id> [T<id> ...]; do
-  f="$(git status --porcelain -- "dev/TODO/${id}-"*.md | awk '/^\?\?/{print $2}')"
-  [ -n "$f" ] && git add "$f"
-done
-git commit -m "docs(queue): stage T<id> [T<id> ...]"
-bash ../_gh/git.sh push -u origin "$BRANCH"
-bash ../_gh/gh.sh pr create --base main --head "$BRANCH" --title ... --body ...
+# Newly-untracked task file being staged for the first time (e.g. /new-task
+# just created it and called /stage): also pass THAT exact file as a path so it
+# gets committed instead of staying untracked. A file already on main is not
+# passed; only a currently-untracked one this invocation is staging.
+bash ../_gh/land.sh --branch "$BRANCH" --message "docs(queue): stage T<id> [T<id> ...]" \
+  --title "docs(queue): stage T<id>" --body "Queue staging." -- dev/TODO/queue.md [dev/TODO/T<id>-*.md ...]
 ```
 
 Then drive the PR to merge with `/address-pr <number>`. This is a pure
