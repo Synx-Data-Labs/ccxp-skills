@@ -22,6 +22,8 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 
 ```bash
 # Get run details
+
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 bash <skills-root>/_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
   --jq '{name: .name, branch: .headBranch, conclusion: .conclusion, jobs: [.jobs[] | {name: .name, conclusion: .conclusion}]}'
 ```

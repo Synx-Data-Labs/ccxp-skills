@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: "[T<id>] [--tz <IANA-zone>]"
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Report a projected finish time for a task: reads its `estimation:` points
 value, derives a start time from the git commit that set its `claimed_by:`

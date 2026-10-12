@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: "--channel <name> <message>"
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Send a Slack notification to a specified channel.
 

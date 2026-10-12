@@ -7,6 +7,8 @@ argument-hint: "<task-file> [--kind code|docs] [--threshold N] [--json]"
 
 # Design Score
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 Deterministically score a task/design doc against
 [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md)
 and gate `/drive` **Phase 2 → Phase 3** on the result: a design must clear the

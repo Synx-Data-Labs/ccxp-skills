@@ -15,7 +15,7 @@ holds one line per task currently in `dev/TODO/`, top = highest priority:
 ```markdown
 # TODO Queue
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Ordered priority queue. Top = highest priority. One line per task, kept in
 sync with `dev/TODO/` by `/todo sweep` (adds missing, strikes closed/parked).

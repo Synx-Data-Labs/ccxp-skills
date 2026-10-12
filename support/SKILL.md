@@ -5,7 +5,7 @@ disable-model-invocation: true
 argument-hint: "<issue-url | owner/repo#N>"
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Turn a customer-reported GitHub issue into a staged `support` task in
 `dev/TODO/`. Intake only: this skill **never posts, comments, labels or

@@ -7,7 +7,7 @@ argument-hint: show
 
 # Skill Conventions (ccxp-skills)
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 This suite's own conventions for authoring a SKILL.md, layered on top of generic skill-authoring guidance. For *generic* skill-authoring — what a skill is, skill types, description-as-trigger theory, RED-GREEN-REFACTOR subagent pressure-testing, frontmatter character limits — use **`superpowers:writing-skills`**. This skill documents only the deltas layered on top of it.
 
@@ -75,7 +75,11 @@ A task's hub repo (where its `dev/TODO/` file lives) and its implementation's ta
 
 When a SKILL.md workflow step is fully deterministic/mechanical (a parse, a lookup, a formatted report — no judgment calls), port it into a bundled, sourceable script under `<skill>/scripts/` that the workflow invokes, instead of re-deriving the logic in prose an LLM re-executes every run. Reuse §4's shared-library rule when 2+ skills need the same helper.
 
-**Script path rule**: a SKILL.md never invokes a script by a repo-root-relative (`bash todo/scripts/x.sh`) or cwd-relative (`bash ../_gh/gh.sh`) path — both exit 127 from a consumer repo, whose cwd is neither the ccxp-skills root nor the skill's directory. Use `<skills-root>/<skill>/scripts/x.sh` or `<skills-root>/_lib/x.sh`, where `<skills-root>` is the harness-announced "Base directory for this skill" minus its last component. Each skill that uses it carries the one-line definition under its H1 (`ipm`/`ccxp` carry the long form); keep cwd on the working repo, never `cd` into `<skills-root>`.
+**Script path rule** — never a repo-root-relative (`bash todo/scripts/x.sh`) or cwd-relative (`bash ../_gh/gh.sh`) path; both exit 127 from a consumer repo:
+
+- Use `<skills-root>/<skill>/scripts/x.sh` or `<skills-root>/_lib/x.sh`.
+- `<skills-root>` = the harness "Base directory for this skill" minus its last component; each skill defines it in one line under its H1.
+- Keep cwd on the working repo; never `cd` into `<skills-root>`.
 
 What stays in prose: logic that makes a real judgment call (a Park recommendation, a blocker-order decision) is not this convention's scope — only a deterministic read/transform is.
 
