@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 1d
+estimation: 1
 source: User request 2026-08-29; scope grown 2026-09-01 (maintainer
   direction, see "## Design update" below — was 2h for a markdown
   checklist, now includes a real skill implementation)
