@@ -82,18 +82,14 @@ Any other top-level key is a violation. `status` must lead with a known value (O
 
 ### Relative-link check (`lint_links.py`)
 
-`repo-conventions/scripts/lint_links.py` fails when a relative `[text](path)` link under
-`dev/**/*.md` points at a missing file (T20261012-220839). Links rot when a task moves
-TODO -> JOURNAL/PARKING at close, so **link tasks by `T<id>`** (the mirror link `lint_refs.py` makes),
-not by relative path into `dev/TODO/`.
+`python3 repo-conventions/scripts/lint_links.py --all [repo]` fails (read-only, exit 1) when a relative link under `dev/**/*.md` points at a missing file. Links rot when a task moves out of `dev/TODO/` at close, so **link tasks by `T<id>`**, not by relative path.
 
-- One command: `python3 repo-conventions/scripts/lint_links.py --all [repo]` (read-only, exit 1 on a broken link).
-- Skipped: external URLs, `mailto:`, `#anchor`, code spans/fences, and paths resolving outside the repo (cross-repo).
-- Repair: a missing target whose filename has a `T<id>` found in `dev/TODO|PARKING|JOURNAL` is reported with the new path; `--fix` rewrites it (idempotent).
-- Allow-list: `dev/.link-allowlist` (fnmatch globs, one per line, `#` comments) or `--allow GLOB`, matched against the target as written.
+- Skipped: external URLs, `mailto:`, `#anchor`, code, and paths outside the repo (cross-repo).
+- `--fix` rewrites a missing target whose filename has a `T<id>` found in TODO/PARKING/JOURNAL.
+- Allow-list: `dev/.link-allowlist` (fnmatch globs, `#` comments) or `--allow GLOB`.
 - `lint.sh` runs it warn-only; `LINT_LINKS_HARD=1` makes it a violation.
-- **Rollout**: run `--fix`, fix the rest by hand, then baseline what remains with `--print-allowlist > dev/.link-allowlist`, then enable the hard gate.
-- **Required check**: copy `templates/link-check.yml` to `.github/workflows/`, then (repo admin) add `link-check` under the `main` ruleset's `required_status_checks`.
+- Rollout: `--fix`, hand-fix the rest, baseline with `--print-allowlist > dev/.link-allowlist`, then go hard.
+- Required check: copy `templates/link-check.yml` to `.github/workflows/`, then add `link-check` to the `main` ruleset's `required_status_checks`.
 
 ### Internal-identifier check (`lint_identifiers.py`)
 
