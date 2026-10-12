@@ -45,7 +45,7 @@ Read `dev/TODO/queue.md`. For each resolved `T<id>`:
 
 - **Already listed** (anywhere in the file): no-op for this ID. Note its current 1-based position for the confirmation output.
 - **Missing**: check whether this task blocks something already queued (either direction of the convention — the new task's own frontmatter has `blocks: T<blockedId>`, or an already-queued task's `status:` reads `Blocked by T<id>`, prefix match, trailing notes ignored). Both checks are cheap grep-scale — run them before deciding where to place the line:
-  - **Blocks nothing queued:** append `- [T<id>](T<id>-<slug>.md): <title>` to the end, as before.
+  - **Blocks nothing queued:** `bash ../_queue/queue.sh append dev/TODO/queue.md T<id> T<id>-<slug>.md "<title>"` (adds `- [T<id>](T<id>-<slug>.md): <title>` at the end; no-op if already queued).
   - **Blocks one or more already-queued tasks:** insert immediately before the *frontmost* one (lowest queue position) instead of appending — invoke `/top`'s `--before` mode directly (`/top T<id> --before T<blockedId>`) rather than reimplementing the insertion logic. If it blocks several queued tasks, `--before` the frontmost one — that's sufficient to make it precede everything it gates, since it's now ahead of the earliest of them.
 
   `<slug>.md` is the actual `dev/TODO/T<id>-*.md` filename (relative link —
@@ -53,7 +53,7 @@ Read `dev/TODO/queue.md`. For each resolved `T<id>`:
   `# T<id>: <title>` heading from the task file (fall back to the legacy
   bullet-list title field if pre-2026-05-14 frontmatter).
 
-If `dev/TODO/queue.md` doesn't exist yet in this repo, create it with the header block documented in `/todo`'s "The queue" section, then append/insert as above.
+All queue edits go through the shared `_queue/queue.sh` (never hand-edit the lines). If `dev/TODO/queue.md` doesn't exist yet, `queue.sh` creates it with a header; copy the full header from `/todo`'s "The queue" section if you want the long form.
 
 ### 3. Commit, push, and merge — only if something actually changed
 

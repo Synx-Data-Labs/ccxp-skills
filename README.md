@@ -188,7 +188,7 @@ push here; other machines pick up changes with `git pull`, or with
 `.claude-plugin/plugin.json` declares `"skills": "."`, so the plugin's
 skill root is the repo root rather than a `skills/` subdirectory. That is
 deliberate: each skill sits beside the shared libs (`_gh/`, `_session/`,
-`_taskid/`, `_ipm/`, `_docs/`, `_journal/`) and reaches them through
+`_taskid/`, `_ipm/`, `_docs/`, `_journal/`, `_queue/`) and reaches them through
 `../_gh/gh.sh`-style relative references. Moving the skills under
 `skills/` would break every one of those and the symlink installer with
 them. `.claude-plugin/marketplace.json` makes the repo its own

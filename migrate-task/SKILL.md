@@ -97,8 +97,8 @@ soup beyond the one optional preview flag.
 - **Pure logic lives in `scripts/migrate.sh`**, sourceable and BATS-tested
   (`tests/migrate_task.bats`, repo root): frontmatter get/delete, the
   collision check, the bidirectional-blocking check, and the
-  append-or-insert-before queue algorithm (mirrors `/stage`'s insertion
-  logic — `/stage` has no shared script of its own to call, so the
-  algorithm is reimplemented here, not invoked). The live push/PR-opening
+  queue wrapper `mt-queue-insert` (delegates to the shared
+  `_queue/queue.sh`, the same implementation `/stage`, `/top`, `/bottom`
+  and `/todo sweep` use). The live push/PR-opening
   path is integration surface, not unit-tested — same convention as
   `_session/task_claim.sh`'s thin `gh`/git I/O wrappers.
