@@ -84,7 +84,7 @@ claimed_role:
 
 ## Closed (2026-10-12)
 
-- Shipped in PR #PRNUM: `lint_links.py`, `test_lint_links.py`, `tests/lint_links.bats`, `lint.sh` step 7, `templates/link-check.yml`, docs in `repo-conventions/SKILL.md` and `lifecycle.md`.
+- Shipped in PR #317: `lint_links.py`, `test_lint_links.py`, `tests/lint_links.bats`, `lint.sh` step 7, `templates/link-check.yml`, docs in `repo-conventions/SKILL.md` and `lifecycle.md`.
 - Dogfood: `--fix` repaired 6 rotted links in this repo's own `dev/` (5 JOURNAL files + `queue.md`).
 - Quality probe: no shellcheck findings; coverage/code-scanning unavailable locally.
 - External, not verified here: the `link-check.yml` template has not run in a consumer repo; synxdb-team adoption is filed in that repo.
