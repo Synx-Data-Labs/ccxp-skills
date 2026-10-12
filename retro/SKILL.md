@@ -37,22 +37,23 @@ Collect data from the last 7 days (or N*7 days if argument given). Do all reads 
 3. **Merged PRs**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>YYYY-MM-DD" --json number,title,mergedAt,additions,deletions --limit 500` — PR throughput. `gh`'s default page size is 30, which undercounts on any week with real throughput (confirmed 30 vs a true 83 on 2026-07-10) — always pass an explicit `--limit` well above expected weekly volume, same principle as step 6 below.
 4. **Open PRs**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,createdAt` — WIP that didn't land. Count entries where `createdAt` is older than 3 days from today for the Stale PRs row in Phase 3.
 5. **Current TODO backlog**: count files in `dev/TODO/` and `dev/PARKING/` — backlog health
-6. **CI failures**: `--limit 30` silently undercounts on any repo doing more than 30 runs/week — this recurred 3 retros running (2026-06-26, 2026-07-03, 2026-07-10; T20260702-279977) before being fixed here. Fetch with an explicit `--created` filter (same technique `/ccxp` Phase 1.2.1's nightly check already uses) so the API does the date filtering instead of a client-side slice of the newest N runs, and raise the fetch cap enough to comfortably cover a week's volume:
+6. **CI failures**: `--limit 30` silently undercounts on any repo doing more than 30 runs/week — this recurred 3 retros running (2026-06-26, 2026-07-03, 2026-07-10) before being fixed here. Fetch with an explicit `--created` filter (same technique `/ccxp` Phase 1.2.1's nightly check already uses) so the API does the date filtering instead of a client-side slice of the newest N runs, and raise the fetch cap enough to comfortably cover a week's volume:
 
    ```bash
    SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
    bash <skills-root>/_gh/gh.sh run list --created ">=$SINCE" --limit 1000 --json conclusion,name,createdAt
    ```
 
-   `--limit 1000` is `gh`'s API cap — if a single week's run volume ever exceeds it (check: the oldest returned `createdAt` should be ≤ `$SINCE`; if it's later, some of the window was dropped), note the gap explicitly in the retro rather than silently under-reporting, the same "no silent caps" principle as everywhere else. Group failures by `.name` and keep the top 3 by count for the Top failing workflows row in Phase 3.
+   - `--limit 1000` is `gh`'s API cap — if a single week's run volume ever exceeds it (check: the oldest returned `createdAt` should be ≤ `$SINCE`; if it's later, some of the window was dropped), note the gap explicitly in the retro rather than silently under-reporting, the same "no silent caps" principle as everywhere else.
+   - Group failures by `.name` and keep the top 3 by count for the Top failing workflows row in Phase 3.
 7. **Slack escalations**: Read `.claude/state/drive-threads.json` — what needed human intervention
 8. **Previous retro**: Read the most recent `dev/JOURNAL/*-retro-*.md` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
 9. **This week's IPM commit**: Read `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` — the focus list to grade. If the file is missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
 10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
 
-    Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by `/ipm` step 5; codified in T20260513-393048). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
+    Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by `/ipm` step 5). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
 
-11. **Cron utilization** (T20260605-862341 — the feedback loop for tuning cron frequency without extra tokens): locate the ccxp cron clone's log dir — `crontab -l` names the `daily-ccxp.sh` path; its repo root contains `.claude-ccxp-logs/`. Fall back to `<current-repo-root>/.claude-ccxp-logs` if crontab is unreadable; if neither exists, report "no cron logs reachable from this clone" and skip the Phase 3 cron rows. For each `ccxp-YYYYMMDD.log` in the window (gunzip `.log.gz` archives as needed):
+11. **Cron utilization** (the feedback loop for tuning cron frequency without extra tokens): locate the ccxp cron clone's log dir — `crontab -l` names the `daily-ccxp.sh` path; its repo root contains `.claude-ccxp-logs/`. Fall back to `<current-repo-root>/.claude-ccxp-logs` if crontab is unreadable; if neither exists, report "no cron logs reachable from this clone" and skip the Phase 3 cron rows. For each `ccxp-YYYYMMDD.log` in the window (gunzip `.log.gz` archives as needed):
 
     ```bash
     for f in "$CCXP_LOG_DIR"/ccxp-*.log; do
@@ -72,7 +73,9 @@ Collect data from the last 7 days (or N*7 days if argument given). Do all reads 
 
 Read all memory files from the auto-memory system. These live in the Claude Code per-project memory directory (outside the repo — managed by the Claude Code harness, not version-controlled).
 
-**Sweep every clone's memory, not just this session's own.** Memory is keyed by the encoded absolute path of the working directory, so an interactive clone (`~/<repo>`) and a cron clone (`~/focus/<repo>`) — or any other checkout of the same repo — each accumulate a *separate* memory pool. A retro invoked from only one clone silently leaves the others unswept indefinitely (confirmed 2026-08-24: the cron clone's memory stayed a disciplined ~20 files under weekly Phase 1b review, while the interactive clone's memory — never once reviewed by a retro — grew unchecked to 85 files since March). One retro run now sweeps ALL of them:
+- **Sweep every clone's memory, not just this session's own.** Memory is keyed by the encoded absolute path of the working directory, so an interactive clone (`~/<repo>`) and a cron clone (`~/focus/<repo>`) — or any other checkout of the same repo — each accumulate a *separate* memory pool.
+- A retro invoked from only one clone silently leaves the others unswept indefinitely (confirmed 2026-08-24: the cron clone's memory stayed a disciplined ~20 files under weekly Phase 1b review, while the interactive clone's memory — never once reviewed by a retro — grew unchecked to 85 files since March).
+- One retro run now sweeps ALL of them:
 
 ```bash
 REPO_BASENAME=$(basename "$(git rev-parse --show-toplevel)")
@@ -84,7 +87,8 @@ For each matched directory:
 1. **Index**: Read that directory's `MEMORY.md` to get the list of stored memories
 2. **All memory files**: Read each linked `.md` file. Memory types are: `user` (role/preferences), `feedback` (corrections and validated approaches), `project` (decisions, constraints, context), `reference` (pointers to external systems)
 
-**Stale-directory check first.** Before treating a matched directory as a live source, check whether it belongs to an abandoned session rather than an active clone — the strongest signal is a project-directory name containing an ephemeral-worktree marker (e.g. `.claude-worktrees-cc-<timestamp>-<pid>`) or any other one-off session naming pattern, especially if its files' mtimes cluster around a single old date with nothing since. Flag these as **stale-directory candidates** in the Phase 5 report for the human to confirm deletion of — do NOT sweep them as a live consolidation source (their content, if any, was almost certainly already captured or is irrelevant), and do NOT auto-delete them (a human should confirm the clone is truly gone, not just quiet).
+- **Stale-directory check first.** Before treating a matched directory as a live source, check whether it belongs to an abandoned session rather than an active clone — the strongest signal is a project-directory name containing an ephemeral-worktree marker (e.g. `.claude-worktrees-cc-<timestamp>-<pid>`) or any other one-off session naming pattern, especially if its files' mtimes cluster around a single old date with nothing since.
+- Flag these as **stale-directory candidates** in the Phase 5 report for the human to confirm deletion of — do NOT sweep them as a live consolidation source (their content, if any, was almost certainly already captured or is irrelevant), and do NOT auto-delete them (a human should confirm the clone is truly gone, not just quiet).
 
 For each memory entry, assess:
 
@@ -110,7 +114,8 @@ Include a **Memory Review** section in the retro report (Phase 5) summarizing:
 
 ### Phase 1c: Sweep stale-by-event escalations
 
-`.claude/state/drive-threads.json` accumulates entries that were never marked `resolved: true` even after the underlying work shipped. Common shape: a PR-approval thread (`T<id>-prN`) whose PR has since merged, or a thread whose task has moved into `dev/JOURNAL/`. The retro is the right place to reconcile these — left alone, they bloat the "open escalations" list in every standup and obscure the genuinely-pending design decisions.
+- `.claude/state/drive-threads.json` accumulates entries that were never marked `resolved: true` even after the underlying work shipped. Common shape: a PR-approval thread (`T<id>-prN`) whose PR has since merged, or a thread whose task has moved into `dev/JOURNAL/`.
+- The retro is the right place to reconcile these — left alone, they bloat the "open escalations" list in every standup and obscure the genuinely-pending design decisions.
 
 **Procedure** — for each entry in `.claude/state/drive-threads.json` where `resolved` is `false`:
 
@@ -149,11 +154,8 @@ jq '...' .claude/state/drive-threads.json > .claude/state/drive-threads.json.new
 
 ### Phase 1d: Chore index review
 
-The weekly retro **deterministically evaluates prior process-improvement chores on evidence**,
-not from memory. A repo opts in by maintaining
-`dev/chore.md` — a thin index, one row per chore: Goal + link to the chore's task file +
-Started date + Outcome (blank until evaluated). **Repo-agnostic**: a repo without `dev/chore.md`
-is a clean no-op — skip this phase entirely and report nothing for it.
+- The weekly retro **deterministically evaluates prior process-improvement chores on evidence**, not from memory. A repo opts in by maintaining `dev/chore.md` — a thin index, one row per chore: Goal + link to the chore's task file + Started date + Outcome (blank until evaluated).
+- **Repo-agnostic**: a repo without `dev/chore.md` is a clean no-op — skip this phase entirely and report nothing for it.
 
 1. **List due chores**:
 
@@ -176,14 +178,9 @@ is a clean no-op — skip this phase entirely and report nothing for it.
      `Category: process` action item via Phase 4's task-creation steps (do **not** silent-revert
      the underlying policy); update the Outcome cell pointing at the new task.
    - **Extended** — inconclusive, needs one more iteration of evidence. Update the Outcome cell
-     with `**Extended** — next review <today + 7d>` and the reason. `chore-review.sh` treats
-     `Extended` as terminal (same as `Kept`/`Revised`) — it will not auto-resurface the row.
-     Known v1 limitation: a genuinely multi-cycle chore needs a human/retro to manually reset
-     its Outcome cell to blank once the noted review date arrives, re-entering it into
-     `list-due`. Fine for now since no chore has needed a second extension yet; revisit if one
-     does.
-   Commit the `dev/chore.md` + task-file updates in the same PR as the rest of the retro's
-   docs changes (Phase 5).
+     - with `**Extended** — next review <today + 7d>` and the reason. `chore-review.sh` treats `Extended` as terminal (same as `Kept`/`Revised`) — it will not auto-resurface the row.
+     - Known v1 limitation: a genuinely multi-cycle chore needs a human/retro to manually reset its Outcome cell to blank once the noted review date arrives, re-entering it into `list-due`. Fine for now since no chore has needed a second extension yet; revisit if one does.
+     - Commit the `dev/chore.md` + task-file updates in the same PR as the rest of the retro's docs changes (Phase 5).
 
 3. **Creation safety-net scan** — flag process-looking `dev/*.md` changes with no matching row:
 
@@ -191,13 +188,8 @@ is a clean no-op — skip this phase entirely and report nothing for it.
    bash <skills-root>/retro/scripts/chore-review.sh scan-untracked --repo-root . --since "$(date -u -d '7 days ago' +%F)"
    ```
 
-   Prints repo-relative paths of `dev/*.md` files (root-level only — not `dev/TODO/`,
-   `dev/JOURNAL/`, `dev/PARKING/`, or `dev/chore.md` itself) changed in the window whose content
-   doesn't reference any task ID already linked from `dev/chore.md`. Each hit is a **prompt to
-   check, not an auto-file** — a genuine process/policy/guideline change gets a `dev/chore.md`
-   row added (if it's the kind of thing worth an evidence-based look-back) or an explicit
-   "confirmed not a chore" note; a false positive (e.g. a docs typo fix) is dismissed with no
-   action.
+   - Prints repo-relative paths of `dev/*.md` files (root-level only — not `dev/TODO/`, `dev/JOURNAL/`, `dev/PARKING/`, or `dev/chore.md` itself) changed in the window whose content doesn't reference any task ID already linked from `dev/chore.md`.
+   - Each hit is a **prompt to check, not an auto-file** — a genuine process/policy/guideline change gets a `dev/chore.md` row added (if it's the kind of thing worth an evidence-based look-back) or an explicit "confirmed not a chore" note; a false positive (e.g. a docs typo fix) is dismissed with no action.
 
 **Track counts for Phase 5 + Phase 6**:
 
@@ -210,9 +202,9 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 
 #### Focus list grade (the main accountability check)
 
-For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is (T20260924-252293): this grading pass, and the bump-counter below, are dormant by design wherever the ceremony isn't run, not broken.
+For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is: this grading pass, and the bump-counter below, are dormant by design wherever the ceremony isn't run, not broken.
 
-- **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case since T20260914-422854 — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
+- **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
 - **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will carry over automatically next IPM.
 - **Partial** — commits exist on a branch but no PR is open, or PR is open but stalled (no movement in last 3 days).
 - **Dropped** — not started (Status still `Open` or `Design`). It re-enters the candidate pool next IPM.
@@ -224,7 +216,9 @@ bash <skills-root>/retro/scripts/estimation-revisions.sh \
   --repo-root . --since "$(date -u -d '7 days ago' +%F)" T<id> T<id> ...
 ```
 
-It walks `git log --follow` over each task file (backlog + the post-close JOURNAL copy) and parses both metadata formats (frontmatter `estimation:` and the legacy `- **Estimation**:` bullet), windowed to the retro period. Read the four arc shapes as estimation-discipline signal: no revisions + actual ≈ est = good; no revisions + actual ≫ est = under-estimated; revised upward, actual ≈ latest = healthy discovery; revised downward = scope-cut to fit budget. Feed the per-task arc into the Phase 5 **Revisions** column.
+- It walks `git log --follow` over each task file (backlog + the post-close JOURNAL copy) and parses both metadata formats (frontmatter `estimation:` and the legacy `- **Estimation**:` bullet), windowed to the retro period.
+- Read the four arc shapes as estimation-discipline signal: no revisions + actual ≈ est = good; no revisions + actual ≫ est = under-estimated; revised upward, actual ≈ latest = healthy discovery; revised downward = scope-cut to fit budget.
+- Feed the per-task arc into the Phase 5 **Revisions** column.
 
 Cross-reference the previous 2 ipm-weekly files (Phase 1 step 10): if a Dropped task appeared in **all three** of this week, last week, and the week before, mark it **bumped 3x** and surface it under "What needs improvement" — repeated bumping means either the task is mis-prioritized, mis-estimated, or genuinely lower priority than it was filed at.
 
@@ -258,15 +252,9 @@ Things that are working adequately — not broken, not exceptional. Acknowledgin
 
 ### Phase 2b: Batch journal-move sweep (backstop, not the primary mechanism)
 
-**Why**: since T20260914-422854, `/drive` Phase 4/Phase 7 always journal-moves
-a task immediately on close (retiring the old in-place-only default from
-T20260513-189862) — so this phase is no longer where the *expected* weekly
-volume gets swept. It's a **backstop** for the paths that don't go through
-`/drive`'s close at all: a task closed by hand, one closed by a session that
-predates this change, or `/todo sweep`'s own out-of-band "already shipped
-outside `/drive`" case. Left unswept, a `dev/TODO/` file with `status: Done`
-from one of those paths would linger indefinitely rather than accumulating
-for a week — still worth a sweep, just a rarer one now.
+- **Why**: `/drive` Phase 4/Phase 7 always journal-moves a task immediately on close (retiring the old in-place-only default) — so this phase is no longer where the *expected* weekly volume gets swept.
+- It's a **backstop** for the paths that don't go through `/drive`'s close at all: a task closed by hand, one closed by a session that predates this change, or `/todo sweep`'s own out-of-band "already shipped outside `/drive`" case.
+- Left unswept, a `dev/TODO/` file with `status: Done` from one of those paths would linger indefinitely rather than accumulating for a week — still worth a sweep, just a rarer one now.
 
 1. Find every task in `dev/TODO/` whose frontmatter `status:` is `Done`:
 
@@ -293,8 +281,8 @@ for a week — still worth a sweep, just a rarer one now.
 
    ```bash
    # doc-lint guard, scoped to exactly the files just moved (lint-docs.sh
-   # requires an explicit path and is check-only — T20260928-608242) —
-   # shared script (T20260719-111051), see /gcpr Step 1.5 (T20260627-192311)
+   # requires an explicit path and is check-only) —
+   # shared script, see /gcpr Step 1.5
    bash <skills-root>/_docs/lint-docs.sh "${swept_paths[@]}" \
      || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
    git commit -m "docs(tasks): batch journal-move for $(date +%F) (Friday sweep)"
@@ -308,14 +296,10 @@ for a week — still worth a sweep, just a rarer one now.
 5. Record the swept task IDs in the Phase 5 report's `## Journal sweep` section
    (below) so the maintainer sees what moved.
 
-**Why most weeks find nothing to sweep**: since T20260914-422854, every task
-`/drive` closes journal-moves immediately at merge time (see Phase 2b's own
-header above) — so a task that went through `/drive`'s close never appears in
-this sweep, by design, not a miss. What this sweep actually catches is the
-backstop case: a task closed by hand, or by a session that predates that
-change.
+- **Why most weeks find nothing to sweep**: every task `/drive` closes journal-moves immediately at merge time (see Phase 2b's own header above) — so a task that went through `/drive`'s close never appears in this sweep, by design, not a miss.
+- What this sweep actually catches is the backstop case: a task closed by hand, or by a session that predates that change.
 
-### Phase 2c: Compute velocity (T20260924-232855)
+### Phase 2c: Compute velocity
 
 Run this **after** Phase 2b's sweep, so every task actually closed this
 window is in `dev/JOURNAL/` before computing over it (a task still sitting
@@ -374,7 +358,7 @@ Compute and report these metrics for the review period:
 | Tasks bumped 3x | comma-separated task IDs that appeared on this week's, last week's, AND the prior week's focus lists without shipping (or "None") |
 | Escalated via /top | `N tasks escalated` (Phase 4b — `/top`'d to the front of `queue.md`, tasks bumped 3×). Include the IDs if N > 0; pure-text "None" if N = 0 |
 | Cron active time | avg + range of active model min/day from Phase 1 step 11 (e.g. `27 min avg, 16–39`) — flag if trending down with a growing backlog (sessions starving) or up against flat throughput (churn) |
-| Cron cost | avg + range $/day (e.g. `$11.7 avg, $6.5–13.9`); flag a band shift vs the prior retro — the gate (T20260605-862341) should keep this flat while the hourly cron cuts latency |
+| Cron cost | avg + range $/day (e.g. `$11.7 avg, $6.5–13.9`); flag a band shift vs the prior retro — the gate should keep this flat while the hourly cron cuts latency |
 | Cron preflight ratio | `fires/total` hourly fires that launched claude (e.g. `3/24`); `n/a (pre-gate)` for pre-rollout days. A ratio near 1.0 means the gate never skips (signals always present — fine); near 0 with a stale backlog means probes may be missing real signals |
 | Cron stop reasons | histogram of `STOPPED reason=` in window (e.g. `no_actionable_items×6, rate_limit×1`) — anything other than `no_actionable_items` deserves a line in Phase 5 |
 
@@ -404,9 +388,11 @@ For each "needs improvement" finding, create a concrete, actionable task:
 
 `scheduled:` is **update-forward-only and is never cleared here** — it is the task's last-scheduling record, and a *past* `scheduled` already reads as a fresh candidate to `/todo next` (committed ⟺ `scheduled` ≥ current Monday), so no zombie-clearing hygiene pass is needed. Instead this phase acts on chronic deferral.
 
-**Rule**: For every task flagged **bumped 3×** by the bump-counter (Phase 1 step 10 / Phase 2 — cited in all 3 most-recent ipm-weekly files without shipping), run `/top <id>` to move it to the front of `dev/TODO/queue.md`. Idempotent — a no-op if it's already at the front. (There is no `priority:` field to set — `todo/SKILL.md` retired it; position in `queue.md` **is** priority, so `/top` is the escalation mechanism, matching `lifecycle.md`'s "Iteration assignment" section.)
+- **Rule**: For every task flagged **bumped 3×** by the bump-counter (Phase 1 step 10 / Phase 2 — cited in all 3 most-recent ipm-weekly files without shipping), run `/top <id>` to move it to the front of `dev/TODO/queue.md`.
+- Idempotent — a no-op if it's already at the front. (There is no `priority:` field to set — `todo/SKILL.md` retired it; position in `queue.md` **is** priority, so `/top` is the escalation mechanism, matching `lifecycle.md`'s "Iteration assignment" section.)
 
-**Why**: a task surfaced and cut three IPMs running that nobody parked is one the team keeps deciding matters but defers. Escalating it to the front of the queue forces it up `/todo next`'s pick order so the next IPM (or the next `/drive` pull, for a repo not running IPM) is likely to commit it; the human's release valve is to consciously park it (`/todo sweep`) if it genuinely shouldn't escalate.
+- **Why**: a task surfaced and cut three IPMs running that nobody parked is one the team keeps deciding matters but defers.
+- Escalating it to the front of the queue forces it up `/todo next`'s pick order so the next IPM (or the next `/drive` pull, for a repo not running IPM) is likely to commit it; the human's release valve is to consciously park it (`/todo sweep`) if it genuinely shouldn't escalate.
 
 **What this does NOT touch**: `scheduled:` on any task (never cleared); files in `dev/PARKING/` and `dev/JOURNAL/`; tasks not flagged by the bump-counter.
 
@@ -418,7 +404,7 @@ Grade the skills exercised this week and improve the single worst offender. This
 
 **Step 1 — gather candidate signals (graceful degradation; no signal is a hard dependency):**
 
-- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-T20260914-422854 task still sitting in `dev/TODO/`.
+- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-immediate-move task still sitting in `dev/TODO/`.
 - **Authoring (always available):** `python3 <skills-root>/skill-conventions/scripts/skill_score.py <skill…>` in the ccxp-skills checkout — deterministic 0–100 score, per-check breakdown, and maturity level (`skill-conventions` §10). Lowest score / broken refs escalate.
 - **Real-use feedback (when logged):** `python3 <skills-root>/skill-conventions/scripts/skill_feedback.py list` — open items are observed misbehavior; a skill with any is a strong candidate. The fix follows §10's loop: failing eval case first, then the prose edit, then `codify`.
 - **Compliance (when available):** grep the week's JOURNAL audit blocks for skills that should have fired but were skipped, or fired at the wrong phase. Absent the audit block, skip this signal.
@@ -439,7 +425,7 @@ Grade the skills exercised this week and improve the single worst offender. This
 
 **Report**: add a `## Skill quality` section to the retro report (Phase 5) and a `Skill quality:` line to the Slack summary (Phase 6).
 
-### Phase 4d: Quality-trend review — code-metrics scoreboard (T20260609-204303 D2)
+### Phase 4d: Quality-trend review — code-metrics scoreboard
 
 The **trailing** half of the code-quality bar. `/drive` Phase 3.8 appends one record per code-class task to each target repo's `dev/quality/metrics.jsonl`; this phase reads the rolling **3-week** window, gives per-task feedback, and files remediation chores for unresolved regressions. Pairs with Phase 4c — that grades *how we work*; this grades *what we shipped*.
 
@@ -473,11 +459,12 @@ Idempotent — skip if an open chore for that same `<metric> on <repo>` regressi
 
 **Report**: add a `Quality trend` row to the metrics table (Phase 3) — `hold N / regress M (3wk); gate-readiness X%` — a `## Quality trend` section to the retro report (Phase 5), and a `Quality trend:` line to the Slack summary (Phase 6).
 
-### Phase 4e: External skillset scan (T20260923-140360)
+### Phase 4e: External skillset scan
 
-Pairs with Phase 4c — that grades skills in *our own* marketplace(s); this looks **outward** at every other installed marketplace for a skill that already does something leaner/better than ours, so the comparison stops depending on a human happening to notice (the concrete case that motivated this phase: `ccxp-skills:grill-me` vs. the newly-installed `mattpocock-skills:grilling` implementing the same interview algorithm, found only by a human manually diffing the two).
+- Pairs with Phase 4c — that grades skills in *our own* marketplace(s); this looks **outward** at every other installed marketplace for a skill that already does something leaner/better than ours, so the comparison stops depending on a human happening to notice (the concrete case that motivated this phase: `ccxp-skills:grill-me` vs. the newly-installed `mattpocock-skills:grilling` implementing the same interview algorithm, found only by a human manually diffing the two).
 
-**Step 1 — enumerate external marketplaces.** Read `enabledPlugins` from `~/.claude/settings.json`, excluding **our own** marketplace(s) — whichever repo `/retro` is currently running in, plus any sibling marketplace that repo's own `CLAUDE.md`/`dev/guidelines.md` names as "ours" (in this hub repo: `ccxp-skills` and `synx-skills`; a different adopting repo names its own instead — never a hardcoded list). No external marketplaces enabled → report "no external marketplaces configured" and end the phase.
+- **Step 1 — enumerate external marketplaces.** Read `enabledPlugins` from `~/.claude/settings.json`, excluding **our own** marketplace(s) — whichever repo `/retro` is currently running in, plus any sibling marketplace that repo's own `CLAUDE.md`/`dev/guidelines.md` names as "ours" (in this hub repo: `ccxp-skills` and `synx-skills`; a different adopting repo names its own instead — never a hardcoded list).
+- No external marketplaces enabled → report "no external marketplaces configured" and end the phase.
 
 **Step 2 — list each external marketplace's skills.** For every remaining marketplace/plugin, read only the frontmatter `description:` (the trigger one-liner) from each `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/*/SKILL.md` — never the full body. This is the cheap side of the comparison, which is what keeps the phase affordable to run every week instead of on a slower cadence.
 
@@ -486,9 +473,11 @@ Pairs with Phase 4c — that grades skills in *our own* marketplace(s); this loo
 - A `## Skills invoked` audit block was present this week (`retro/SKILL.md:421`) → compare those exact skill names' descriptions against the Step 2 list.
 - No audit block (the common case) → compare the member skills of whichever coarse domain buckets Phase 4c step 1 fell back to (`drive`, `todo`, `address-pr`, …) against the Step 2 list — never skip the phase just because the week had no audit block.
 
-**Step 4 — trigger-overlap judgment.** For each skill from Step 3, scan the Step 2 description list for topic/trigger overlap — a judgment call, same nature as Phase 4c step 2's "pick the worst offender" (no formula). A hit is a **candidate**, not a verdict; reading the external skill's full body (going past the cheap Step 2 description) is reasonable at this point, scoped to just the candidate(s) that cleared this filter.
+- **Step 4 — trigger-overlap judgment.** For each skill from Step 3, scan the Step 2 description list for topic/trigger overlap — a judgment call, same nature as Phase 4c step 2's "pick the worst offender" (no formula).
+- A hit is a **candidate**, not a verdict; reading the external skill's full body (going past the cheap Step 2 description) is reasonable at this point, scoped to just the candidate(s) that cleared this filter.
 
-**Step 5 — report, never auto-adopt.** For each candidate, file a `Category: quality` action item (Source `Retro YYYY-MM-DD`) proposing a follow-up comparison/design pass — the same "needs real design" downgrade Phase 4c step 3 uses for its own bounded-vs-needs-design triage. Never draft a bounded fix here: adopting behavior from an independently-versioned external plugin is a materially different trust model than Phase 4c's own-repo bounded-edit path.
+- **Step 5 — report, never auto-adopt.** For each candidate, file a `Category: quality` action item (Source `Retro YYYY-MM-DD`) proposing a follow-up comparison/design pass — the same "needs real design" downgrade Phase 4c step 3 uses for its own bounded-vs-needs-design triage.
+- Never draft a bounded fix here: adopting behavior from an independently-versioned external plugin is a materially different trust model than Phase 4c's own-repo bounded-edit path.
 
 **Guards:**
 
@@ -515,7 +504,7 @@ Create `dev/JOURNAL/YYYY-MM-DD-retro-weekly.md` with:
 ## Focus list grade
 (skip if no IPM this week)
 
-Render every `Task` cell as a clickable markdown link (T20260608-353422), not bare text —
+Render every `Task` cell as a clickable markdown link, not bare text —
 `taskid-mdlink T<id>` (from `_taskid/url.sh`, `--issue` mode by default: this report is written
 once and never regenerated, so an issue-URL link that survives every future task-file move is the
 right choice, same as the IPM template).
@@ -599,9 +588,10 @@ Creation safety-net — process-looking docs with no matching `dev/chore.md` row
 
 Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`.
 
-**Webhook fallback on MCP send failure (T20260910-872316, same pattern as `ccxp/SKILL.md` Phase 1.4 / `ipm/SKILL.md` step 6, T20260717-433409).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result. Don't let a failed send silently drop the week's retro from Slack:
+- **Webhook fallback on MCP send failure (same pattern as `ccxp/SKILL.md` Phase 1.4 / `ipm/SKILL.md` step 6).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result.
+- Don't let a failed send silently drop the week's retro from Slack:
 
-1. Attempt `slack_send_message` once, then one retry on error — 2 attempts total, no further looping (same policy as T20260717-433409/Phase 1.4).
+1. Attempt `slack_send_message` once, then one retry on error — 2 attempts total, no further looping (same policy as Phase 1.4).
 2. If both attempts error, capture the retro summary text into a variable and fall back to the same underlying script the `/slack` skill's `dev` channel uses:
 
    ```bash
