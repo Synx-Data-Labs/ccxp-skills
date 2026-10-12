@@ -234,7 +234,7 @@ HEAD_SHA=$(bash <skills-root>/_gh/gh.sh pr view <NUMBER> --json headRefOid --jq 
 
 # Our own most recent "Claude Code review:" comment carries the SHA it
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 # reviewed in its body (posted in step 3 below) — extract it, not just the
 # comment's timestamp, so a push landing mid-dispatch can't be mistaken for
 # "already covered" by date ordering alone.

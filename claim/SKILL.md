@@ -58,7 +58,7 @@ git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
 
 # Land the claim on main immediately — durable, before any real work,
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 # same intent as the PR auto-merging fast in peer mode. If this fails
 # because main moved, rebase the branch onto main first, then retry.
 git checkout main && git merge --ff-only t<id>-<slug> && bash <skills-root>/_gh/git.sh push

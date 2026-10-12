@@ -7,6 +7,8 @@ argument-hint: "[path]"
 
 # 1Password Env Setup
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 Bootstraps a repo's local secrets flow on top of `.env.tpl` (an `op://`
 reference file your repo defines against your own 1Password vault):
 materializes `.env` via `op inject`, and writes a `.envrc` (direnv) that
@@ -50,7 +52,7 @@ directory.
 Run directly:
 
 ```bash
-bash 1password-env-setup/scripts/1password-env-setup.sh [path]
+bash <skills-root>/1password-env-setup/scripts/1password-env-setup.sh [path]
 ```
 
 ### The `.envrc` template

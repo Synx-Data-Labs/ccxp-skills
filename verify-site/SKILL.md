@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: "[PR number]"
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Start a local preview server, run automated checks against every route the PR touches, and tick test-plan items the automation can definitively verify. Items that need human judgement (visual hierarchy, copy review, "does this feel right") are left untouched and reported.
 

@@ -7,7 +7,7 @@ argument-hint: "[task-id | free-text plan]"
 
 # Incept
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Stress-test a plan through structured adversarial questioning before any
 code is written. Model the plan as a **design tree** — every decision

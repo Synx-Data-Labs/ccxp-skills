@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: <path-to-docx> [--target-lang en] [--cn-only|--en-only] [--no-proofread] [--no-pdf]
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Translate a Chinese patent DOCX into attorney-ready CN+EN markdown (and PDF) with text-based diagrams on both sides.
 

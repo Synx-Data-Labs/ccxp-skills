@@ -5,7 +5,7 @@ disable-model-invocation: false
 argument-hint: [commit-message-or-description]
 ---
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Group-Commit-PR — automates the branch workflow up to PR creation. Once the PR is open, hand off to the `/address-pr` skill, which owns CI watching, Copilot review handling, pre-merge gating, and merge. Keeping the split clean means each skill has one job.
 

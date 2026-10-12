@@ -419,8 +419,8 @@ Grade the skills exercised this week and improve the single worst offender. This
 **Step 1 — gather candidate signals (graceful degradation; no signal is a hard dependency):**
 
 - **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-T20260914-422854 task still sitting in `dev/TODO/`.
-- **Authoring (always available):** `python3 <skills-root>/skill-conventions/scripts/skill_score.py" <skill…>` in the ccxp-skills checkout — deterministic 0–100 score, per-check breakdown, and maturity level (`skill-conventions` §10). Lowest score / broken refs escalate.
-- **Real-use feedback (when logged):** `python3 <skills-root>/skill-conventions/scripts/skill_feedback.py" list` — open items are observed misbehavior; a skill with any is a strong candidate. The fix follows §10's loop: failing eval case first, then the prose edit, then `codify`.
+- **Authoring (always available):** `python3 <skills-root>/skill-conventions/scripts/skill_score.py <skill…>` in the ccxp-skills checkout — deterministic 0–100 score, per-check breakdown, and maturity level (`skill-conventions` §10). Lowest score / broken refs escalate.
+- **Real-use feedback (when logged):** `python3 <skills-root>/skill-conventions/scripts/skill_feedback.py list` — open items are observed misbehavior; a skill with any is a strong candidate. The fix follows §10's loop: failing eval case first, then the prose edit, then `codify`.
 - **Compliance (when available):** grep the week's JOURNAL audit blocks for skills that should have fired but were skipped, or fired at the wrong phase. Absent the audit block, skip this signal.
 
 **Step 2 — pick the single worst offender (judgment-assisted, no formula):** rank by outcome-pain first; use authoring + compliance to break ties and escalate. If no skill clears a "worth touching this week" bar, report "none flagged" and end the phase — a valid and common outcome.
@@ -504,7 +504,7 @@ Create `dev/JOURNAL/YYYY-MM-DD-retro-weekly.md` with:
 ```markdown
 # Weekly Retro: YYYY-MM-DD
 
-> **Script paths**: `<skills-root>` = the "Base directory for this skill" shown at load, minus its last path component (the ccxp-skills root). Substitute that literal absolute path in every `<skills-root>/...` command below; never run them cwd-relative (`skill-conventions` §9).
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 **Period**: YYYY-MM-DD to YYYY-MM-DD
 **IPM commit**: `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` (or "No IPM this week")
