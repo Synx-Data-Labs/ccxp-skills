@@ -2,6 +2,7 @@
 status: Design
 estimation: 1
 blocks: [T20261012-949870]
+related: [T20261012-333879]
 source: this conversation, 2026-10-12 (customer-support skill plan, phase 1 of 4)
 claimed_by: cc1-50ac6891:f926680a9bc26294
 claimed_role: interactive
@@ -30,9 +31,74 @@ claimed_role: interactive
 - Done: pointing `/support` at an issue URL files a staged `support` task; a support PR without fix+e2e test in one commit is blocked.
 - Source plan: scratchpad `support-skill-plan.md`, sections 2, 4, 7.
 
-## Open questions
+## TLDR
 
-- Q3: opt-in storage: new `support-report: on` frontmatter key (assumed) vs a separate config file? OK with the 2-key allowlist addition (`support-issue`, `support-report`)?
-- Q2: is `deadline:` date-only enough, or is a time plus timezone needed (would require a lint change to allow datetime)?
-- Q9: regression test location/glob and framework for the target product's e2e tests (which repo)? Is a single commit with fix+test truly required even for cross-repo fixes where the test lives in a different repo?
-- Q10: where does the due date come from in real support-repo issues (label, form field, comment)? One real sample issue is needed to define the parser.
+- **Type**: feature
+- **Problem**: customer-reported issues have no intake path, no `support` task type, and no gate forcing a repro plus a same-commit e2e regression test.
+- **Solution**: `/support <issue-url>` intake (posts nothing), `_support/` scripts (URL parser, task-type probe, same-commit check, PR gate), two new lint keys, and a `type == support` branch in `/drive`, `design-score` and `/address-pr`.
+
+## Assumptions (user-owned questions; conservative, reversible defaults)
+
+- **Q3 opt-in storage**: assume frontmatter `support-report: on|off` (absent = off) and add both `support-issue` and `support-report` to the allowlist. Nothing reads `support-report` in P1; P2 consumes it. Reversal: drop a key from `ALLOWED` plus its docs (one commit). Posting is OFF by default and P1 has no posting code at all.
+- **Q2 deadline**: keep date-only `deadline: YYYY-MM-DD` (existing key, no lint change). A datetime format is a P2 decision (only needed once cadence is hourly).
+- **Q9 e2e glob and cross-repo**: default `SUPPORT_E2E_GLOB` is a generic whitespace-separated glob list (`**/e2e/** **/tests/e2e/** **/*_e2e* **/*e2e_test*`), overridable per consumer by env var; no product or repo literal in this repo. Same-commit is required wherever the fix lands; when the test genuinely lives in another repo, the `No-regression-test: <reason>` trailer is the escape hatch, and the reason must carry the user's explicit approval (the script verifies only the trailer, not the approval).
+- **Q10 due date**: parser stays conservative: only a `due:YYYY-MM-DD` label or an exact `due: YYYY-MM-DD` line in the issue body; anything else leaves `deadline:` unset and `/support` tells the user instead of guessing. Needs one real sample issue to extend.
+- **Q1, Q4-Q8, Q11** (tone, quiet hours, past-due cadence, comment style, who posts, engine host, Slack mirror) concern the reporter and stay open for P2/P3; P1 neither decides nor depends on them.
+- **Estimation**: left at `1` per convention (only `/incept` revises it); realistic size is 5.
+
+## Problem
+
+- Requirement (user, 2026-10-12): file a task from a customer-reported GitHub issue URL; support tasks always get a simplified repro and a new e2e regression test committed with the fix; keep it generic.
+- Verified: no skill ingests an issue URL (`new-task/SKILL.md:30-36` type table has no `support`); the `lint_tasks.py:19-24` allowlist rejects an issue-link key (`lint_tasks.py:131-132` "unknown field"); nothing enforces test-with-fix (`drive/SKILL.md` Phase 4 and `address-pr/SKILL.md` section 2.a gate only CI, review and test plan).
+- Reproduction of the lint gap: a task file with `support-issue: https://example.com/o/r/issues/1` fails `python3 repo-conventions/scripts/lint_tasks.py` with `unknown field 'support-issue'`; the red test in `test_lint_tasks.py` proves it before the fix.
+
+## Solution
+
+- **Intake**: `support/SKILL.md` (`disable-model-invocation: true`, outward-facing family). Steps: parse URL, fetch via `_gh/gh.sh issue view`, reject PRs, warn on closed, dedup by `grep -r "support-issue: <canonical>" dev/TODO dev/JOURNAL`, file the task like `/new-task` (`status: Open`, `estimation: 1`, `support-issue:` key, `source:` line), stage via `/stage`, end with "run `/drive T<id>`". It posts nothing and never calls `gh issue comment`. Issue text is untrusted data: quoted only inside a fenced block under `## Problem`.
+- **`_support/` lib** (idempotent, sourceable, function-wrapped bash): `parse-issue-url.sh`, `is-support-task.sh` (body `- **Type**: support` or a `support-issue:` key), `check-regression-commit.sh <range>`, `gate-pr.sh <pr>` (resolves the task via `_session/pr_task_id.sh`, fetches `pull/N/head`, runs the check), `README.md` (env vars, escape hatch, wiring).
+- **Same-commit rule**: for every commit in the range touching non-test source (not docs, not `dev/**`, not an e2e-glob path), the same commit must touch an e2e-glob path or carry a `No-regression-test:` trailer; otherwise exit 1 (fails closed; bad range exits 2). Docs-only and task-file-only commits (claim, design, journal-move PRs of a support task) pass, so the merge-gate hook does not block them.
+- **Gate wiring**: `drive/SKILL.md` gets one short `type == support` paragraph per Phase 2/3/4 linking to `_support/README.md`; `address-pr/SKILL.md` section 2.a calls `_support/gate-pr.sh`; `design-score/scripts/score.sh` adds a support check (hard fail when `## Repro` or `## Regression test` is missing, empty or a placeholder, independent of the 0-100 score).
+- **Lint and docs**: `ALLOWED` +2 keys, message "18-key", tests, plus `lifecycle.md`, `repo-conventions/SKILL.md`, `templates/task.md`, `todo/SKILL.md`, `README.md`, `new-task/SKILL.md` type row, `design-doc.md` Type enum and support-only section.
+- **Alternatives rejected**: (a) a separate gate skill: duplicates `/drive`; (b) store the issue URL in `source:`: not machine-readable, so the dedup grep would be fragile; (c) enforce only in CI: P4 adds that, but the local gate must exist first; (d) one squashed-commit rule over the whole PR: per-commit is stricter and matches "committed together with the fix".
+
+## Root cause
+
+- Not a defect: the capability was never built (introduced-in: n/a, new feature). Deliberate: the lint allowlist (`lint_tasks.py:19`) was made closed on purpose (T20260626-353630), so each new key needs an explicit entry; this task adds them rather than loosening the lint.
+
+## Repo file references
+
+| File | Change |
+|---|---|
+| `_support/*.sh`, `_support/README.md` | new |
+| `support/SKILL.md` | new |
+| `repo-conventions/scripts/lint_tasks.py:19-24,131` | +2 keys, "18-key" |
+| `repo-conventions/scripts/test_lint_tasks.py:123` | new cases |
+| `design-score/scripts/score.sh` | support check |
+| `drive/SKILL.md`, `address-pr/SKILL.md` | short support paragraphs |
+| `new-task/SKILL.md:30-36`, `repo-conventions/templates/design-doc.md:66`, `templates/task.md`, `lifecycle.md`, `todo/SKILL.md`, `repo-conventions/SKILL.md:55`, `README.md` | docs |
+| `tests/support_parse_url.bats`, `tests/support_regression_commit.bats`, `tests/support_neutrality.bats` | new |
+
+## Test plan
+
+- [ ] `tests/support_parse_url.bats`: URL, `owner/repo#N`, GHES host, fragment, PR URL rejected, garbage rejected.
+- [ ] `tests/support_regression_commit.bats`: fix+test same commit passes; fix then test in a later commit fails; docs-only passes; trailer exempts; custom `SUPPORT_E2E_GLOB`; bad range exits 2.
+- [ ] `repo-conventions/scripts/test_lint_tasks.py`: `support-issue` and `support-report` accepted, an unrelated key still rejected.
+- [ ] `tests/design_score.bats`: support doc without Repro or Regression test fails; complete one passes; non-support docs unchanged.
+- [ ] `tests/support_neutrality.bats`: no company-specific literals under `support/` and `_support/`, and no issue-posting calls.
+- [ ] Full `bats tests/*.bats`, skill-quality and markdown lint green in CI.
+
+## Done criteria
+
+- [ ] Pointing `/support` at an issue URL files a staged `support` task: `support/SKILL.md` steps plus `tests/support_parse_url.bats` (the scripted part).
+- [ ] A support PR without fix+e2e test in one commit is blocked: `tests/support_regression_commit.bats` and `_support/gate-pr.sh` wired in `address-pr/SKILL.md`.
+- [ ] Allowlist accepts both keys: `repo-conventions/scripts/test_lint_tasks.py`.
+- [ ] Support design gate: `tests/design_score.bats`.
+- [ ] Nothing posts to any issue: `tests/support_neutrality.bats`.
+
+## Closed
+
+(filled at close)
+
+## Skills invoked
+
+(filled at close)
