@@ -357,9 +357,9 @@ resolves. "Nothing merged yesterday" if empty — never an empty section.}
 
 ## Epic progress
 (From `epic-status.sh render` — token-free, deterministic; reads
-this repo's own local `dev/EPICS.md` (no hub repo). Paste
+this repo's own local `dev/EPICS/E*.md` (no hub repo). Paste
 its stdout verbatim; the script itself prints a one-line note instead of the
-heading's body when `dev/EPICS.md` is missing/unreadable, or no epics are
+heading's body when `dev/EPICS/E*.md` is missing/unreadable, or no epics are
 defined yet — so this section, like Resolved/Nightly/Attention/Top-5, is
 never simply omitted.)
 
@@ -553,7 +553,7 @@ bash <skills-root>/ccxp/scripts/epic-status.sh render --slack
 ```
 
 - Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md` exists yet. Omit the whole `*📊 Attribution*` block on a no-data day.
-- Omit the whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack` emits no lines (`dev/EPICS.md` missing/unreadable, or no epics defined) — same optional-block class as Weekly focus/Attribution, not one of the four always-render headline sections.
+- Omit the whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack` emits no lines (`dev/EPICS/E*.md` missing/unreadable, or no epics defined) — same optional-block class as Weekly focus/Attribution, not one of the four always-render headline sections.
 - Every other section — Resolved, Nightly, Needs your attention, Top 5 next — always renders, using its "None"/"Nothing"/"all green" fallback rather than being cut; those four are the sections a reader scans for first, so a missing one reads as broken rather than empty.
 - **Blockers always renders** (unlike Weekly focus/Attribution) — "None" is itself the informative answer to "is anything stuck," so cutting the section on a clean day would read as unchecked, not clean.
 
@@ -585,11 +585,11 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
    - Write a retro report to `dev/JOURNAL/`
    - Slack a summary
 3. Report: "Retro filed. {N} action items created. Starting focused work."
-4. **Optionally propose an `EPICS.md` update** (new task IDs discovered under
+4. **Optionally propose an epic update** (new task IDs discovered under
    an epic this week, an epic newly done): edit this repo's own local
-   `dev/EPICS.md` directly (no hub repo, no ephemeral
-   clone) and fold the change into the retro's own commit/PR. This is the
-   **only** write path for `EPICS.md` — Phase 1.3/1.4's daily render stays
+   `dev/EPICS/E*.md` directly (no hub repo, no ephemeral
+   clone) — member lines use the link form (`bash <skills-root>/_taskid/epic-links.sh add E<n> T<id>`, then `sync`) — and fold the change into the retro's own commit/PR. This is the
+   **only** write path for the epic files — Phase 1.3/1.4's daily render stays
    strictly read-only. Skip silently when there's nothing to propose; never
    block the retro on this step.
 

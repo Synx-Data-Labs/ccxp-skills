@@ -237,7 +237,7 @@ repo's cwd, not this repo's. Scripts must:
 - Read shared config (e.g. `SLACK_WEBHOOK_URL`) from `~/.claude/.env`
   first, then `$(pwd)/.env`.
 
-### `dev/EPICS.md` / `dev/ROADMAP.md` format (local to each repo)
+### `dev/EPICS/E*.md` / `dev/ROADMAP.md` format (local to each repo)
 
 Every repo owns its own `dev/ROADMAP.md` and `dev/EPICS.md` — there is no
 shared hub repo and no `ROADMAP_TARGET_REPO` config (T20261005-639913
@@ -255,9 +255,12 @@ Per epic:
 Goal: <one line — the standing goal this epic exists for>
 Done when: <one line — the concrete completion condition>
 Deadline: YYYY-MM-DD          # optional
-- T20260101-000001            # any task id; local tasks resolve from
-- T20260101-000002            # this repo's own dev/TODO|PARKING|JOURNAL
+- [T20260101-000001](../TODO/T20260101-000001-slug.md) — <title>   # link form
+- T20260101-000002            # legacy plain form, still accepted
 ```
+
+- One file per epic under `dev/EPICS/`; the legacy single `dev/EPICS.md` is still read when the directory is absent.
+- Link paths are relative to `dev/EPICS/` and must follow the task file when it moves (close → `../JOURNAL/<date>-…`, park → `../PARKING/…`): `_taskid/epic-links.sh sync` does it, `lint` checks it.
 
 - No status rows in the file — status is always derived at standup time
   (from each task's own frontmatter + PR state), so the file can never drift

@@ -88,6 +88,17 @@ file into the full `design-doc.md` structure, its `## TLDR` gets its own
 **Type** line (per that template's enum, which matches step 1's table
 exactly) — fold this bullet into that line then, don't leave both.
 
+**If the task names an epic** (`E<n>`, from the user or conversation), append
+its member line to that epic file — link format, title taken from the H1:
+
+```bash
+bash <skills-root>/_taskid/epic-links.sh add E<n> T<id>
+```
+
+It is a no-op when the task is already listed, and fails (non-zero) when no
+`dev/EPICS/E<n>*.md` exists — report that, don't invent the epic. Stage the
+epic file in step 5's commit alongside the task file.
+
 ### 4. Lint before proceeding
 
 Mirror the canonical pre-commit doc-lint bundle (`gcpr/SKILL.md`'s Step

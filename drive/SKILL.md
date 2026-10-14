@@ -427,7 +427,7 @@ Use the `/gcpr` skill workflow:
 **Same-repo mode:**
 
 1. Group changes into logical commits
-2. If this PR completes the task: flip the task file's frontmatter `status:` to `Done` via `bash <skills-root>/_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; observed once, where a hand-edit close needed a follow-up release PR), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`, **before** writing the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks — see the order-of-operations guard in Phase 7.0) as part of the commits. Always immediate, every close — retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep (`/retro` Phase 2b), because that default made most of the week's just-closed tasks invisible to `/retro`'s own Phase 2 classification, which runs *before* Phase 2b's sweep in the same invocation.
+2. If this PR completes the task: flip the task file's frontmatter `status:` to `Done` via `bash <skills-root>/_session/task_claim.sh release <id> Done` (clears `claimed_by` in the same step — do **not** hand-edit the `status:` line directly, or the claim silently survives the close; observed once, where a hand-edit close needed a follow-up release PR), then do the journal move (`git mv dev/TODO/{id}.md dev/JOURNAL/{date}-{id}.md`, **before** writing the `## Closed (YYYY-MM-DD)` and "Skills invoked" blocks — see the order-of-operations guard in Phase 7.0) as part of the commits. Always immediate, every close — retired the old in-place-only default that deferred the move to the Friday retro's batch journal-sweep (`/retro` Phase 2b), because that default made most of the week's just-closed tasks invisible to `/retro`'s own Phase 2 classification, which runs *before* Phase 2b's sweep in the same invocation. After the move, run `bash <skills-root>/_taskid/epic-links.sh sync` and `git add dev/EPICS` so the task's link in any `dev/EPICS/E*.md` follows it to `JOURNAL/` (no-op when the repo has no epics or the task is in none).
 3. Push to feature branch
 4. Create PR with summary + test plan
 
@@ -573,6 +573,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
    git mv dev/TODO/T<id>-<slug>.md dev/JOURNAL/$(date +%F)-T<id>-<slug>.md
    # Add a short "## Closed (YYYY-MM-DD)" section pointing at the target PR URL
    # (mv FIRST then edit, as above — else `git add` the JOURNAL path before committing)
+   bash <skills-root>/_taskid/epic-links.sh sync && git add dev/EPICS   # repoint epic member links to the JOURNAL path (no-op without epics)
    bash <skills-root>/_docs/lint-docs.sh "dev/JOURNAL/$(date +%F)-T<id>-<slug>.md" \
      || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"   # doc-lint guard, scoped to just this file, check-only — shared script, see /gcpr Step 1.5
    git add dev/JOURNAL/$(date +%F)-T<id>-<slug>.md

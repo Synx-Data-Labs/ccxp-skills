@@ -280,6 +280,7 @@ Things that are working adequately — not broken, not exceptional. Acknowledgin
 3. Otherwise, commit and open one PR with all the renames:
 
    ```bash
+   bash <skills-root>/_taskid/epic-links.sh sync && git add dev/EPICS   # epic member links follow the moved files (no-op without epics)
    # doc-lint guard, scoped to exactly the files just moved (lint-docs.sh
    # requires an explicit path and is check-only) —
    # shared script, see /gcpr Step 1.5

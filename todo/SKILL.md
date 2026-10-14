@@ -211,7 +211,7 @@ Recommendation is always **Park** — move to `dev/PARKING/`.
 
 3. **Ask the user for approval** before acting. The user may override individual recommendations. This is the one step in `sweep` that always waits for a human: moving something out of the active backlog (even to the parking lot, not JOURNAL) is a call about whether it's still worth tracking, not a fact `sweep` can read off the file.
 
-4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md` — in the same commit, so `queue.md` never drifts out of sync with what Phase 3 just did.
+4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md` — in the same commit, so `queue.md` never drifts out of sync with what Phase 3 just did. Also run `bash <skills-root>/_taskid/epic-links.sh sync` and `git add dev/EPICS` in that commit so epic member links follow the file to `dev/PARKING/` (no-op without epics).
 
 5. Show final summary: queue sync (Phase 1) + blockers fixed (Phase 2) + tasks auto-closed (Step A) + tasks parked (Step B) + remaining open count + parking lot count.
 

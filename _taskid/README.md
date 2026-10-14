@@ -78,6 +78,14 @@ Consumers: `/ccxp` daily-standup Slack message. (In-repo markdown digests use
 *relative* links + a move-rewrite instead — see the build-pipeline task
 `T20260608-353422`; this lib is for *absolute* links on external surfaces like Slack.)
 
+### `epic-links.sh` — clickable epic member lines
+
+- Member line: `- [T<id>](../TODO|PARKING|JOURNAL/<file>.md) — <title>` in `dev/EPICS/E*.md` (path relative to `dev/EPICS/`); legacy plain `- T<id> — <title>` still accepted.
+- `epic-links.sh sync` — repoint every link to the task's current file (via `taskid-path`); idempotent; converts plain lines; a task with no file stays plain and is reported on stderr.
+- `epic-links.sh lint` — exit 1 if a link target is missing.
+- `epic-links.sh add <E1|file> <Tid> [title]` — append a member line (title defaults to the task H1); no-op if listed.
+- Run `sync` wherever a task file moves (`/drive` close, `/todo sweep` park, `/retro` journal sweep).
+
 ## Tests
 
-`tests/taskid_url.bats`, `tests/taskid_check_orphaned_refs.bats` (run with `bats tests/`).
+`tests/taskid_url.bats`, `tests/taskid_check_orphaned_refs.bats`, `tests/epic_links.bats` (run with `bats tests/`).
