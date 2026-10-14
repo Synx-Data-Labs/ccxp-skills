@@ -84,8 +84,9 @@ Consumers: `/ccxp` daily-standup Slack message. (In-repo markdown digests use
 - `epic-links.sh sync` — repoint every link to the task's current file (via `taskid-path`); idempotent; converts plain lines; a task with no file stays plain and is reported on stderr.
 - `epic-links.sh lint` — exit 1 if a link target is missing.
 - `epic-links.sh add <E1|file> <Tid> [title]` — append a member line (title defaults to the task H1); no-op if listed.
+- `/epic refresh` wraps `sync` + `lint` and proposes missing members; `/epic drive` reads the member list this file maintains.
 - Run `sync` wherever a task file moves (`/drive` close, `/todo sweep` park, `/retro` journal sweep).
 
 ## Tests
 
-`tests/taskid_url.bats`, `tests/taskid_check_orphaned_refs.bats`, `tests/epic_links.bats` (run with `bats tests/`).
+`tests/taskid_url.bats`, `tests/taskid_check_orphaned_refs.bats`, `tests/epic_links.bats`, `tests/epic.bats` (run with `bats tests/`).
