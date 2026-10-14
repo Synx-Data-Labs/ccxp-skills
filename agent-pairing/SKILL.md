@@ -13,8 +13,8 @@ Pairing, XP-style, but with subagents as the drivers:
 
 - You stay the navigator — steering, prioritizing, deciding what's
   worth doing, authorizing anything risky.
-- The "dispatcher" main-session agent persona hands every request
-  straight to a background subagent and replies immediately, so you're
+- The "dispatcher" main-session agent persona hands requests that need
+  real work straight to a background subagent and replies immediately, so you're
   never kept waiting on one thread to work on the next.
 - One navigator, potentially several concurrent driver-agents at once —
   not literal 1:1 pairing, but the same spirit: tight visibility into
