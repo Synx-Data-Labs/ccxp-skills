@@ -74,11 +74,16 @@ _epic_iso_to_epoch() {
 # --- fetch -------------------------------------------------------------------
 
 epic_fetch() {
-  # stdout: path to the local dev/EPICS.md; return 1 (silent — no stderr) if
-  # it doesn't exist or isn't readable. Pure I/O primitive — the
-  # human-readable "epics unavailable" note is epic_render's job, not this
-  # function's.
-  local f="dev/EPICS.md"
+  # stdout: one path per line — every readable dev/EPICS/E*.md, else the
+  # legacy single dev/EPICS.md; return 1 (silent — no stderr) if neither
+  # exists. Pure I/O primitive — the human-readable "epics unavailable" note
+  # is epic_render's job, not this function's.
+  local f found=0
+  for f in dev/EPICS/E*.md; do
+    if [ -r "$f" ]; then printf '%s\n' "$f"; found=1; fi
+  done
+  if [ "$found" -eq 1 ]; then return 0; fi
+  f="dev/EPICS.md"
   [ -r "$f" ] || return 1
   printf '%s\n' "$f"
 }
@@ -92,14 +97,15 @@ epic_parse_file() {
   [ -r "$file" ] || return 1
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in
-      "### E"*)
-        cur="$(printf '%s' "$line" | sed -E 's/^### (E[0-9]+) .*/\1/')"
-        title="$(printf '%s' "$line" | sed -E 's/^### E[0-9]+ — //')"
+      "### E"[0-9]*|"## E"[0-9]*|"# E"[0-9]*)
+        cur="$(printf '%s' "$line" | sed -E 's/^#+ (E[0-9]+).*/\1/')"
+        title="$(printf '%s' "$line" | sed -E 's/^#+ E[0-9]+ — //')"
         printf 'EPIC\t%s\t%s\n' "$cur" "$title" ;;
       "Goal:"*)      [ -n "$cur" ] && { val="${line#Goal:}";      printf 'GOAL\t%s\t%s\n'     "$cur" "${val#"${val%%[![:space:]]*}"}"; } ;;
       "Done when:"*) [ -n "$cur" ] && { val="${line#Done when:}"; printf 'DONE\t%s\t%s\n'     "$cur" "${val#"${val%%[![:space:]]*}"}"; } ;;
       "Deadline:"*)  [ -n "$cur" ] && { val="${line#Deadline:}";  printf 'DEADLINE\t%s\t%s\n' "$cur" "${val#"${val%%[![:space:]]*}"}"; } ;;
-      "- T"*)
+      "- T"*|"- [T"*)
+        # Both member-line forms: legacy `- T<id> …` and `- [T<id>](path) — title`.
         if [ -n "$cur" ]; then
           # NOT `... | grep -oE ... | head -1`: a live producer piped into a
           # consumer that can exit before reading everything (`head -1`, an
@@ -235,9 +241,9 @@ epic_render() {
   local mode="text"
   [ "${1:-}" = "--slack" ] && mode="slack"
 
-  local reason="" epics_file=""
+  local reason="" epics_file="" ef
   if ! epics_file="$(epic_fetch)"; then
-    reason="dev/EPICS.md not found or unreadable"
+    reason="dev/EPICS/E*.md not found or unreadable"
   fi
 
   if [ -n "$reason" ]; then
@@ -245,15 +251,18 @@ epic_render() {
     return 0
   fi
 
-  local parsed
-  parsed="$(epic_parse_file "$epics_file")" || true
+  local parsed="" part
+  while IFS= read -r ef; do
+    part="$(epic_parse_file "$ef")" || part=""
+    parsed="${parsed}${part}"$'\n'
+  done <<<"$epics_file"
   # dev/EPICS.md is a real repo file now (not a downloaded tmp copy) — never
   # rm it.
 
   # Here-string, not `printf ... | grep -q` — see epic_parse_file's SIGPIPE
   # note (grep -q exits on its first match, the exact hazard).
   if ! grep -q $'EPIC\t' <<<"$parsed"; then
-    [ "$mode" = "text" ] && printf 'No epics defined in dev/EPICS.md.\n'
+    [ "$mode" = "text" ] && printf 'No epics defined in dev/EPICS/.\n'
     return 0
   fi
 

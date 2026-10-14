@@ -256,7 +256,7 @@ _split_resolve() {
   rm dev/EPICS.md
   run bash -c "source '$SCRIPT'; epic_render"
   [ "$status" -eq 0 ]
-  [[ "$output" == "Epics unavailable — dev/EPICS.md not found or unreadable."* ]]
+  [[ "$output" == "Epics unavailable — dev/EPICS/E*.md not found or unreadable."* ]]
 }
 
 @test "epic_render text: zero epics -> one-line note, exit 0" {
