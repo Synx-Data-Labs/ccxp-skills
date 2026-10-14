@@ -1,7 +1,10 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: this conversation, 2026-10-12 (Job 28 research on whether Claude Code supports "ask" for skills)
+claimed_by: cc1-50ac6891:5bcdaab043adb8e7
+claimed_role: interactive
+scheduled: 2026-10-12
 ---
 
 # T20261012-352228: Make model-invoked skills ask the user for permission instead of being blocked
