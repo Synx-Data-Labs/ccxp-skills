@@ -97,7 +97,7 @@ function epic_links_add() {
   if [ -f "$epic" ]; then
     f="$epic"
   else
-    f="$(find "${EPIC_LINKS_DIR:-dev/EPICS}" -maxdepth 1 -name "${epic}*.md" 2>/dev/null | sort | head -n1)"
+    f="$(find "${EPIC_LINKS_DIR:-dev/EPICS}" -maxdepth 1 -name "${epic}-*.md" -o -maxdepth 1 -name "${epic}.md" 2>/dev/null | sort | head -n1)"
   fi
   if [ -z "$f" ] || [ ! -f "$f" ]; then
     echo "epic-links: no epic file for '$epic'" >&2
