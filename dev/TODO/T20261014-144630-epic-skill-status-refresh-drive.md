@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: conversation 2026-10-14 (user: "i like /epic, we can add command like drive|status|refresh")
 related: [T20261012-333879]
 description: New /epic skill — status, refresh, and a sequential epic-driven /drive loop
+claimed_by: cc1-50ac6891:e68b46eab14758b1
+claimed_role: interactive
+scheduled: 2026-10-12
 ---
 
 # T20261014-144630: /epic skill (status | refresh | drive)
