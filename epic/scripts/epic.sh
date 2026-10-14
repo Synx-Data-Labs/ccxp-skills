@@ -114,7 +114,7 @@ function epic-next() {
     if [ "$v" = "drive" ] && [[ " $* " != *" $id "* ]]; then
       printf '%s\n' "$id"; return 0
     fi
-  done < <(epic-plan "$epic")
+  done < <(epic-plan "$epic" 2>/dev/null)   # stdout must be the bare id; claim probes may warn on stderr
   return 1
 }
 

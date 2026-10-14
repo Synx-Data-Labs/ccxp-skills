@@ -44,13 +44,13 @@ Sequential: one task at a time, never parallel, a fresh sub-agent per task. Fail
    - `skip` (reason recorded): `done`, `parked`, `peer:<who>`, `blocked:<Tid>`, `supervised`.
    - `external`: no task file here (other repo) — listed as "not driveable from here".
    - Show the plan to the user, then start. No confirmation gate: the user invoking `drive` is the go-ahead.
-2. **Loop.** `results=$(mktemp)`; `attempted=""`. Repeat:
-   - `id=$(bash <skills-root>/epic/scripts/epic.sh next E<n> $attempted)`; exit 1 means exhausted, go to step 3. It re-reads live state every call, so a merged task that unblocks another is picked up.
+2. **Loop.** Bash state does not persist between calls: run `mktemp` once, keep its literal path as `<results>` and the attempted ids as a literal list in your notes (substitute them in every command). Repeat:
+   - `bash <skills-root>/epic/scripts/epic.sh next E<n> <attempted ids>` (prints the id); exit 1 means exhausted, go to step 3. It re-reads live state every call, so a merged task that unblocks another is picked up.
    - Dispatch one fresh sub-agent (Agent tool, foreground): *"Run `/drive <id>` to completion in this repo. Reply with only: `MERGED #<pr>` or `FAILED` or `NEEDS INPUT: <question>`, then one paragraph (what happened, where it stopped, the next concrete action)."*
-   - Map the reply and record it: `epic.sh record "$results" <id> merged|failed|escalated "<one-line summary>"`; append `<id>` to `attempted`.
+   - Map the reply and record it: `epic.sh record <results> <id> merged|failed|escalated '<one-line summary>'` (single-quote the free-text summary; strip any single quotes first); add `<id>` to the attempted list.
    - On `FAILED`/`NEEDS INPUT`: summarize, do **not** stop, do not retry, do not ask the user. Take the next member.
    - Before the next task make sure the checkout is on `main`, up to date, and clean (`/drive` leaves it so; if not, record the leftover and stop dispatching — never stash or reset).
-3. **Report.** `bash <skills-root>/epic/scripts/epic.sh report E<n> "$results"` and print verbatim:
+3. **Report.** `bash <skills-root>/epic/scripts/epic.sh report E<n> <results>` and print verbatim:
    - Merged list, then "for the next iteration" ordered by priority (task `deadline` first, then `queue.md` position), each with its failure/skip reason and next action; then "Not driveable from here".
    - Add a one-line summary of anything that did not fit the table (e.g. leftover checkout state).
 
