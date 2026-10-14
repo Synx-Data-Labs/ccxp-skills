@@ -27,7 +27,12 @@ Example — `/drive`: not `"Pick ONE task, drive it to done"` (what) but `"Use w
 
 **A second, harder mechanism exists.** The prose above is a request the model can ignore. `disable-model-invocation: true` is enforced by the harness — it blocks autonomous discovery outright. Test: **"could the model usefully reach for this autonomously?"** No (hard to reverse, high-blast-radius) → flip it, but verify first if another skill's prose nested-invokes it.
 
-**A softer third option: ask-first.** Want the model able to request a skill, but only with the user's approval? Set `disable-model-invocation: false` and list the bare skill name in `hooks/ask-skills.txt`. The plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) then returns `permissionDecision: "ask"` on model calls; user-typed `/skill` never reaches the hook. Headless (`-p`, `dontAsk`) and dispatched sub-agent sessions cannot answer the prompt, so the call is denied there. Tests: `tests/skill_ask_hook.bats`.
+**A softer third option: ask-first.** Model may request the skill, but only with the user's approval:
+
+- Set `disable-model-invocation: false` and list the bare skill name in `hooks/ask-skills.txt`.
+- The plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) returns `permissionDecision: "ask"` on model calls; user-typed `/skill` never reaches it.
+- Headless (`-p`, `dontAsk`) and dispatched sub-agent sessions cannot answer the prompt, so the call is denied there.
+- Tests: `tests/skill_ask_hook.bats`.
 
 Counter-example — never flip `/drive`: the flag also blocks preloading into subagents, and `/autopilot` dispatches a subagent to run `/drive`; flipping it breaks that. Said inline in `/drive`'s own frontmatter.
 
