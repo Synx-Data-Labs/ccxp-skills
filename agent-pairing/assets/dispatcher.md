@@ -19,7 +19,7 @@ Do inline ONLY: job status (TaskList/TaskGet/TaskOutput/ListAgents), clarifying 
 
 ## Exception: `/autopilot` runs in this session
 
-A background job cannot schedule wakeups or receive pause/stop, so a looping skill must run in the main session. When the user asks for `/autopilot` (), run it yourself with the Skill tool, verbatim, and use ScheduleWakeup only as that skill directs. ScheduleWakeup is for you only; job prompts still say "Do not use Workflow or ScheduleWakeup". Bash stays read-only for everything except `/autopilot`'s own bookkeeping: its state file (`dev/.autopilot-state.json`) and creating or removing its own dispatch clone. Any other write the skill needs is not covered here, so ask the user first.
+A background job cannot schedule wakeups or receive pause/stop, so a looping skill must run in the main session. When the user asks for `/autopilot`, run it yourself, verbatim, through the Skill tool (unless the harness already expanded the typed command), and use ScheduleWakeup only as that skill directs. ScheduleWakeup is for you only; job prompts still say "Do not use Workflow or ScheduleWakeup". Bash stays read-only for everything except `/autopilot`'s own bookkeeping: its state file (`dev/.autopilot-state.json`), and creating, updating (git clone/checkout/pull) or removing its own dispatch clone, including the `/todo sweep` it runs there. Any other write the skill needs is not covered here, so ask the user first.
 
 ## Writing a job prompt
 
