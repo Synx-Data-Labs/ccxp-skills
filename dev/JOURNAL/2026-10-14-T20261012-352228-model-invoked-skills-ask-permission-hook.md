@@ -1,9 +1,9 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: this conversation, 2026-10-12 (Job 28 research on whether Claude Code supports "ask" for skills)
-claimed_by: cc1-50ac6891:5bcdaab043adb8e7
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-12
 ---
 
@@ -50,3 +50,24 @@ scheduled: 2026-10-12
 ## Open question
 
 - Which of the 6 skills go to "ask" vs stay blocked? autopilot and cleanup-branch may be better left fully blocked.
+
+## Spike results (2026-10-14, claude 2.1.300, verified by running `claude -p`)
+
+- **Hook stdin field**: `tool_input.skill` (plus `tool_name: "Skill"`, optional `tool_input.args`). Verified.
+- **Plugin-qualified name**: a plugin skill arrives as `<plugin>:<skill>` (e.g. `spk:pdemo`); the hook strips the prefix and matches the bare name. Verified with `--plugin-dir`.
+- **Typed `/skill` skips the hook**: `claude -p "/demo"` ran the skill and wrote no hook stdin. Verified.
+- **Headless `ask`**: under `-p` the call is denied (appears in `permission_denials`, reason shown to the model); `--permission-mode dontAsk` is the same. Verified. The interactive TUI prompt was NOT exercised (no TTY here); relies on the documented `ask` semantics.
+- **Plugin hook end-to-end**: `claude -p --plugin-dir <repo>` calling `ccxp-skills:autopilot` hit `hooks/hooks.json` and returned the hook's reason. Verified.
+
+## Decision
+
+- **ask list** (`hooks/ask-skills.txt`): `autopilot` (user-requested, so the dispatcher can call it), `bottom`, `memory-to-skill`; each flipped to an explicit `disable-model-invocation: false`.
+- **Stay blocked**: `cleanup-branch` (destructive), `agent-pairing` (rewrites profile settings; its SKILL.md says the user alone decides), plus `epic`, `to-task`, `skill-conventions`, `_test-nested-target`, untouched.
+- **`skill_score.py` unchanged**: it awards points for the key being present, and `false` still counts, so no scoring-rule or fixture change is needed.
+- **Design PR skipped**: estimation 1, approach specified by the user, spike recorded here.
+- **Manual step (not done here)**: none required for the plugin path. Users not using the plugin install can copy the hook into their own settings.
+
+## Closed (2026-10-14)
+
+- Shipped in the implementation PR that moves this file to `dev/JOURNAL/`: `hooks/{hooks.json,skill-ask.sh,ask-skills.txt}`, `tests/skill_ask_hook.bats`, docs in `README.md` and `skill-conventions/SKILL.md`.
+- Unverified: the interactive permission dialog itself.
