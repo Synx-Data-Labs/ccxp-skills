@@ -172,3 +172,8 @@ EOF
   run bash "$SCRIPT" bogus --claude-dir "$CLAUDE_DIR"
   [ "$status" -ne 0 ]
 }
+
+@test "asset: dispatcher tools include Skill and ScheduleWakeup, and the /autopilot exception exists" {
+  grep -E '^tools:.*\bSkill\b.*\bScheduleWakeup\b' "$REPO_ROOT/agent-pairing/assets/dispatcher.md"
+  grep -q 'Exception: `/autopilot`' "$REPO_ROOT/agent-pairing/assets/dispatcher.md"
+}
