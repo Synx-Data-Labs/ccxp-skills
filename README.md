@@ -103,6 +103,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `drive` | Pick ONE task, drive it to done — recurse into blockers, never switch laterally |
 | `todo` | List open tasks, pick the next actionable, reorder/clean up the backlog |
 | `claim` | Claim/check/release a task outside the full `/drive` loop |
+| `epic` | `status`/`refresh`/`drive` a standing epic in `dev/EPICS/` — `drive` runs its member tasks one at a time via `/drive` (user-invoked; merges PRs) |
 | `stage` | Ensure a task is present in `dev/TODO/queue.md` |
 | `migrate-task` | Move a task file (and its `queue.md` entry) from one repo's `dev/TODO/` to another's |
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
@@ -261,6 +262,7 @@ Deadline: YYYY-MM-DD          # optional
 
 - One file per epic under `dev/EPICS/`; the legacy single `dev/EPICS.md` is still read when the directory is absent.
 - Link paths are relative to `dev/EPICS/` and must follow the task file when it moves (close → `../JOURNAL/<date>-…`, park → `../PARKING/…`): `_taskid/epic-links.sh sync` does it, `lint` checks it.
+- `/epic` (`epic/scripts/epic.sh`) is the operator surface over these files: `status` (read-only), `refresh` (sync + lint + propose missing members), `drive <E<n>>` (member tasks in epic-file order, one `/drive` each, failures summarized and skipped, final report by priority).
 
 - No status rows in the file — status is always derived at standup time
   (from each task's own frontmatter + PR state), so the file can never drift

@@ -361,7 +361,7 @@ this repo's own local `dev/EPICS/E*.md` (no hub repo). Paste
 its stdout verbatim; the script itself prints a one-line note instead of the
 heading's body when `dev/EPICS/E*.md` is missing/unreadable, or no epics are
 defined yet — so this section, like Resolved/Nightly/Attention/Top-5, is
-never simply omitted.)
+never simply omitted.) To act on an epic rather than report it, see `/epic` (`status | refresh | drive`).
 
 {verbatim output of `bash <skills-root>/ccxp/scripts/epic-status.sh render`}
 
