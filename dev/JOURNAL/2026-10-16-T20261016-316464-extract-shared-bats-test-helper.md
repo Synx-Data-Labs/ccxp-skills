@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-10-12
 estimation: 1
 source: this conversation, 2026-10-16
 related: T20261016-393753
-claimed_by: cc1-50ac6891:21294cd91b2eccea
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261016-316464 — Extract a shared tests/test_helper.bash for the BATS suite
@@ -165,9 +165,32 @@ claimed_role: interactive
   so each new `.bats` file's author copied the nearest existing file's
   boilerplate rather than factoring out a shared helper.
 
-## Closed
+## Closed (2026-10-16)
 
-Filled at merge — see the PR this task ships in.
+- Shipped in **PR #358** (`https://github.com/Synx-Data-Labs/ccxp-skills/pull/358`),
+  merge commit `75fcf4214cd01095f374b5594ad5e99283a0608f`.
+- CI's `bats` job passed all 1074 tests on the final commit (GitHub Actions
+  run `38980336084`) — the authoritative before/after proof: identical test
+  count, zero regressions, matching the pre-change baseline on `main`.
+- All Done-criteria items met except the local-sandbox verification of
+  `tests/git.bats` (that file's `run bash .../git.sh ...` subprocess-exec
+  tests hang under this session's shell sandboxing — confirmed
+  **pre-existing**, unrelated to this change, by reverting the file and
+  reproducing the identical hang; CI's plain Ubuntu runner has no such
+  restriction and is the authoritative gate for it).
+- Independent review (`/address-pr` §2.d) found the implementation
+  correct — no instance of the "helper called without `load test_helper`"
+  bug class remained (one such instance, `tests/quality_probe.bats`, was
+  caught by CI on an earlier commit in this PR and fixed before merge) —
+  and flagged one deliberate, documented behavior widening
+  (`git_identity` unconditionally disables `commit.gpgsign`, which ~9
+  files didn't previously set) as worth a sign-off rather than a fix; see
+  the PR's review comment thread for the full justification (a strictly
+  safer, already-documented superset behavior, proven zero-regression by
+  the same CI run).
+- Follow-up task filed: **T20261016-360850** (pre-existing, unrelated
+  `tests/chore_review.bats` "list-due" test failure found during
+  verification) — staged in `dev/TODO/queue.md`, not yet worked.
 
 ## Skills invoked
 
