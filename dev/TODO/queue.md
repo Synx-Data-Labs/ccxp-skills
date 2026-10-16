@@ -35,3 +35,4 @@ reprioritize.
 - [T20261014-144630](T20261014-144630-epic-skill-status-refresh-drive.md): /epic skill (status | refresh | drive)
 - [T20261016-393753](T20261016-393753-parallelize-bats-test-suite-with-jobs.md): parallelize bats test suite with --jobs to cut CI wall-clock
 - [T20261016-316464](T20261016-316464-extract-shared-bats-test-helper.md): Extract a shared tests/test_helper.bash for the BATS suite
+- [T20261016-360850](T20261016-360850-fix-chore-review-list-due-test-failure.md): Fix pre-existing failure in chore_review.bats "list-due" test
