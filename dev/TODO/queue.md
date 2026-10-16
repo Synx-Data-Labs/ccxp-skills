@@ -33,3 +33,5 @@ reprioritize.
 - [T20260827-238870](T20260827-238870-remove-solo-repo-mode.md): Remove solo-repo (no-CI) mode; always follow the team-repo (peer/CI) process
 - [T20260829-362863](T20260829-362863-solo-to-team-mode-conversion-checklist.md): Write the solo-mode → team-mode conversion checklist for any ccxp repo
 - [T20261014-144630](T20261014-144630-epic-skill-status-refresh-drive.md): /epic skill (status | refresh | drive)
+- [T20261016-393753](T20261016-393753-parallelize-bats-test-suite-with-jobs.md): parallelize bats test suite with --jobs to cut CI wall-clock
+- [T20261016-316464](T20261016-316464-extract-shared-bats-test-helper.md): Extract a shared tests/test_helper.bash for the BATS suite
