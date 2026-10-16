@@ -2,13 +2,14 @@
 # Tests for _gh/land.sh — branch/add/commit/push/PR helper. push and gh are
 # stubbed through LAND_GIT / LAND_GH; git itself is real (local bare origin).
 
+load test_helper
 setup() {
   LAND="$BATS_TEST_DIRNAME/../_gh/land.sh"
   git init -q --bare "$BATS_TEST_TMPDIR/origin.git"
   R="$BATS_TEST_TMPDIR/repo"
   git init -q -b main "$R"
   cd "$R"
-  git config user.email t@t; git config user.name t
+  git_identity "$R" t@t t
   echo a > tracked.md; echo x > other.md
   git add .; git commit -qm init
   git remote add origin "$BATS_TEST_TMPDIR/origin.git"

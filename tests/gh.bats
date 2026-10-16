@@ -12,8 +12,8 @@
 # exercised by sourcing the script (its CLI dispatch is BASH_SOURCE-guarded,
 # so sourcing is side-effect-free).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   CWD_REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$CWD_REPO"
   cd "$CWD_REPO"
@@ -123,11 +123,7 @@ setup() {
 # account or network call is involved.
 
 _gh_bats_use_fake_gh() {
-  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"
-  mkdir -p "$FAKEBIN"
-  cp "$REPO_ROOT/tests/fixtures/gh/fake-gh.sh" "$FAKEBIN/gh"
-  chmod +x "$FAKEBIN/gh"
-  PATH="$FAKEBIN:$PATH"
+  use_fake_bin "$REPO_ROOT/tests/fixtures/gh/fake-gh.sh" gh
   _gh_cache_file="$BATS_TEST_TMPDIR/cache"
   rm -f "$_gh_cache_file"
 }

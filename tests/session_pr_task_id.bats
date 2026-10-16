@@ -10,8 +10,8 @@
 # _tc_resolve_task_location tests for the same pattern) so no network call
 # fires.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_session/_lib.sh"
 }
 

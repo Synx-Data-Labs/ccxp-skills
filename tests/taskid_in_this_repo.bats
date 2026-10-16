@@ -5,8 +5,8 @@
 # "own clone, always" policy — build-pipeline-repo
 # dev/JOURNAL/2026-05-13-T20260513-403409-focus-phase-1.5-ephemeral-clone.md).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_taskid/in-this-repo.sh"
 
   # Hermetic sandbox: cwd repo + one sibling repo, as peer dirs.

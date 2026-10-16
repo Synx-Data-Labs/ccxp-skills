@@ -4,8 +4,8 @@
 # key-level jq edit of settings.json (never a text replace -- that file also
 # carries hooks/permissions/plugin config that must survive untouched).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/agent-pairing/scripts/agent-pairing.sh"
   CLAUDE_DIR="$BATS_TEST_TMPDIR/claude-home"
   mkdir -p "$CLAUDE_DIR"

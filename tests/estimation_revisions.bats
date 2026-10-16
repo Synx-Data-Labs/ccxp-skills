@@ -5,14 +5,13 @@
 # windowed by --since. Deterministic: commit dates are injected via
 # GIT_AUTHOR_DATE/GIT_COMMITTER_DATE, and --since is passed explicitly.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/retro/scripts/estimation-revisions.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$WORK/dev/TODO" "$WORK/dev/JOURNAL"
   git -C "$WORK" init -q
-  git -C "$WORK" config user.email t@example.com
-  git -C "$WORK" config user.name tester
+  git_identity "$WORK" t@example.com tester
 }
 
 # commit everything with an injected date. $1=YYYY-MM-DD $2=message

@@ -3,14 +3,13 @@
 # archive/YYYY-MM/ + a YYYY-MM-digest.md summary (T20260515-128802).
 # Isolated tmp git repos only — never touches the real ccxp-skills/hub-repo repos.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/_journal/compact.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$WORK/dev/JOURNAL"
   git -C "$WORK" init -q
-  git -C "$WORK" config user.email t@example.com
-  git -C "$WORK" config user.name tester
+  git_identity "$WORK" t@example.com tester
 }
 
 commit_dated() {
@@ -67,8 +66,7 @@ EOF
   local WORK2="$BATS_TEST_TMPDIR/repo2"
   mkdir -p "$WORK2/dev/JOURNAL"
   git -C "$WORK2" init -q
-  git -C "$WORK2" config user.email t@example.com
-  git -C "$WORK2" config user.name tester
+  git_identity "$WORK2" t@example.com tester
   cp "$WORK/dev/JOURNAL/archive/2026-05/2026-05-01-T20260501-000001-x.md" \
      "$WORK2/dev/JOURNAL/2026-05-01-T20260501-000001-x.md" 2>/dev/null || true
   git -C "$WORK2" add -A
@@ -334,8 +332,7 @@ EOF
   local NOJ="$BATS_TEST_TMPDIR/no-journal-repo"
   mkdir -p "$NOJ"
   git -C "$NOJ" init -q
-  git -C "$NOJ" config user.email t@example.com
-  git -C "$NOJ" config user.name tester
+  git_identity "$NOJ" t@example.com tester
 
   run bash "$SCRIPT" 2026-04 --repo-root "$NOJ" --dry-run
   [ "$status" -eq 0 ]

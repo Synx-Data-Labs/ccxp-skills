@@ -3,8 +3,8 @@
 # curl I/O is injected via the CS_CURL seam (mirrors _gh/ci-triage.sh's
 # CI_TRIAGE_GH convention).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/deliver_gate.sh"
   cd "$BATS_TEST_TMPDIR"
 }

@@ -15,8 +15,8 @@
 #     cache (normally a real /tmp file, shared across processes) can't leak
 #     between tests.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/ccxp/scripts/epic-status.sh"
   FIXTURES="$BATS_TEST_DIRNAME/fixtures/epics"
 
@@ -24,11 +24,7 @@ setup() {
 
   export TMPDIR="$BATS_TEST_TMPDIR"
 
-  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"
-  mkdir -p "$FAKEBIN"
-  cp "$FIXTURES/fake-gh.sh" "$FAKEBIN/gh"
-  chmod +x "$FAKEBIN/gh"
-  export PATH="$FAKEBIN:$PATH"
+  use_fake_bin "$FIXTURES/fake-gh.sh" gh
   export EPIC_FAKE_GH_CALLLOG="$BATS_TEST_TMPDIR/gh-calls.log"
   : > "$EPIC_FAKE_GH_CALLLOG"
 
@@ -37,8 +33,7 @@ setup() {
   (
     cd "$LOCAL_REPO"
     git init -q .
-    git config user.email t@example.com
-    git config user.name t
+    git_identity "$LOCAL_REPO" t@example.com t
     git remote add origin git@github.com:local-org/local-repo.git
     cp "$FIXTURES/task-open.md"         dev/TODO/T20260101-000001-open.md
     cp "$FIXTURES/task-design.md"       dev/TODO/T20260101-000002-design.md

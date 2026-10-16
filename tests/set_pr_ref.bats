@@ -8,8 +8,8 @@
 # is integration surface — for the high-level session_append_pr_ref tests we
 # stub those two functions so no network call fires.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # _lib.sh is a pure library (no dispatch block), so sourcing is side-effect-free.
   source "$REPO_ROOT/_session/_lib.sh"
 }

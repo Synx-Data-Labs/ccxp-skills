@@ -10,8 +10,8 @@
 # _taskid/url.sh's TASKID_GH, typed #N -> gh api via LINT_REFS_GH) hit the
 # same fixture: no real network calls, hermetic like taskid_url.bats.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   LINT_REFS_PY="$REPO_ROOT/repo-conventions/scripts/lint_refs.py"
 
   cd "$BATS_TEST_TMPDIR"

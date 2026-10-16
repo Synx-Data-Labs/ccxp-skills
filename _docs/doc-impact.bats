@@ -5,17 +5,15 @@
 # initial state (the "base"), then creates the change and runs the script
 # against the base commit SHA so we don't rely on any remote ref.
 
+load ../tests/test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/_docs/doc-impact.sh"
   # Each test gets its own isolated repo under $BATS_TEST_TMPDIR.
   TESTREPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$TESTREPO"
   cd "$TESTREPO"
   git init -q
-  git config user.email t@t
-  git config user.name t
-  git config commit.gpgsign false
+  git_identity "$TESTREPO" t@t t
 }
 
 # ---------------------------------------------------------------------------

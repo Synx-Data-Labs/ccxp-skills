@@ -12,8 +12,8 @@
 # fixture cases exercise the REAL repo-conventions/scripts/lint_tasks.py and so
 # pin LINT_TASKS_PY to the in-repo linter (CI has no ~/.claude/skills).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_session/lint_frozen.sh"
   LINT="$REPO_ROOT/repo-conventions/scripts/lint_tasks.py"
   export LINT_TASKS_PY="$LINT"

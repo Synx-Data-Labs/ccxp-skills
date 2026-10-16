@@ -3,8 +3,8 @@
 # Pure identity gate — accept is support-team-only, never self-applied by
 # the delivering engineer.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/accept_gate.sh"
 }
 

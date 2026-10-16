@@ -3,8 +3,8 @@
 # dev/EPICS/E*.md support in ccxp/scripts/epic-status.sh.
 # Hermetic: throwaway repo under $BATS_TEST_TMPDIR; no network, no gh.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/_taskid/epic-links.sh"
   STATUS="$REPO_ROOT/ccxp/scripts/epic-status.sh"
   R="$BATS_TEST_TMPDIR/repo"

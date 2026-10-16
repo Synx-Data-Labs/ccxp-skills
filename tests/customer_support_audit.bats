@@ -3,8 +3,8 @@
 # Pure invariant check (cs-audit-check) plus the gh-stubbed end-to-end path
 # (CS_GH seam, mirrors labels.sh/ci-triage.sh's convention).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/audit.sh"
   cd "$BATS_TEST_TMPDIR"
 }

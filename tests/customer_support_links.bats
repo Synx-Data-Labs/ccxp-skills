@@ -3,8 +3,8 @@
 # Token bridging (ENTITLEMENT_TOKEN -> SYNX_PARTNER_TOKEN) and the
 # --clone-dir fixture path (no real network/git clone needed).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/links.sh"
   cd "$BATS_TEST_TMPDIR"
 }

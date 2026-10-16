@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # Tests for todo/scripts/todo-list.sh (T20260914-359646).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/todo/scripts/todo-list.sh"
   WORK="$BATS_TEST_TMPDIR/work"
   mkdir -p "$WORK/dev/TODO" "$WORK/dev/PARKING"

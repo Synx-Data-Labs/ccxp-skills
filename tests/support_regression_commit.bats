@@ -1,13 +1,14 @@
 #!/usr/bin/env bats
 # Tests for _support/check-regression-commit.sh (T20261012-109735).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   C="$REPO_ROOT/_support/check-regression-commit.sh"
   unset SUPPORT_E2E_GLOB
   R="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$R" && cd "$R"
-  git init -q -b main . && git config user.email t@e.x && git config user.name t
+  git init -q -b main .
+  git_identity "$R" t@e.x t
   mkdir -p src tests/e2e dev/TODO
   echo base > src/a.sh && git add -A && git commit -qm base
   git checkout -q -b fix

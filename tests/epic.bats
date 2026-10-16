@@ -2,8 +2,8 @@
 # Tests for epic/scripts/epic.sh — member resolution, drive filtering,
 # refresh report, final report ordering. Hermetic: throwaway repo, no gh.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/epic/scripts/epic.sh"
   export CCXP_PEER_MODE=1
   R="$BATS_TEST_TMPDIR/repo"

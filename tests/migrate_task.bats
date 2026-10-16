@@ -10,8 +10,8 @@
 # live push/PR-opening path is untested integration surface, same convention
 # as task_claim.sh's thin gh/git I/O wrappers.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/migrate-task/scripts/migrate.sh"
 }
 
@@ -239,9 +239,7 @@ _git_init_repo() {
   local dir="$1"
   mkdir -p "$dir"
   git -C "$dir" init -q
-  git -C "$dir" config user.email t@t
-  git -C "$dir" config user.name t
-  git -C "$dir" config commit.gpgsign false
+  git_identity "$dir" t@t t
 }
 
 @test "--dry-run prints both diffs and mutates neither repo" {

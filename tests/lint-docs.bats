@@ -21,8 +21,8 @@
 # tool via npx (already used elsewhere in this suite) for an end-to-end proof
 # that scoping actually works, not just that the flag was passed.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   CWD_REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$CWD_REPO/dev/JOURNAL" "$CWD_REPO/dev/TODO"
   cd "$CWD_REPO"

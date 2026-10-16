@@ -8,8 +8,8 @@
 # "today" is dependency-injected via the IPM_TODAY env var (per the guidelines'
 # I/O-injection rule) so tests are deterministic without mocking the `date` tool.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_ipm/current.sh"
   JDIR="$BATS_TEST_TMPDIR/journal"
   mkdir -p "$JDIR"

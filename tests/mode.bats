@@ -6,8 +6,8 @@
 # GH_SH is stubbed to a fake script that records every invocation's args (and
 # stdin, for the PUT body) to a file, so tests never call real GitHub.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   MODE_SH="$REPO_ROOT/repo-conventions/scripts/mode.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$WORK/dev"

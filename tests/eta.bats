@@ -4,15 +4,14 @@
 # read from dev/velocity.json — T20260924-232855) and the git-log-S-derived
 # start time of its claimed_by: line (T20260922-453135).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/eta/scripts/eta.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
-  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  isolate_claimant_state state
   mkdir -p "$WORK/dev/TODO"
   git -C "$WORK" init -q
-  git -C "$WORK" config user.email t@example.com
-  git -C "$WORK" config user.name tester
+  git_identity "$WORK" t@example.com tester
   source "$REPO_ROOT/_session/claimant-id.sh"
 }
 

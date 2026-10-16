@@ -8,14 +8,13 @@
 # quality-probe/scripts/probe.sh). The stdin entrypoint statusline-command is
 # tested end-to-end by piping a synthetic hook-input JSON payload.
 
-SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+load test_helper
 SCRIPT="$REPO_ROOT/statusline-setup/scripts/statusline-command.sh"
 
 setup() {
   # The machine-id/secret cache lives under ~/.claude/state by default; tests
   # must neither read the developer's real identity nor write to their home.
-  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/claimant-state"
+  isolate_claimant_state
   # Same isolation for the last-user-input cache (T20260924-366770).
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
 }

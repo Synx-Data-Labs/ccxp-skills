@@ -9,12 +9,12 @@
 # _tc_days_since_last_commit, _tc_resolve_task_location, _tc_fetch_fm_field) are
 # integration surface; _tc_pr_owner's DECISION is exercised by stubbing them.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # Per-test claimant state: the machine-id and secret are cached under
   # ~/.claude/state by default, and tests must neither read the developer's
   # real identity nor write to their home directory.
-  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/claimant-state"
+  isolate_claimant_state
   # Dispatch block is guarded by [ "${BASH_SOURCE[0]}" = "${0}" ], so sourcing
   # is side-effect-free.
   source "$REPO_ROOT/_session/task_claim.sh"
@@ -627,8 +627,7 @@ print('ok')
   mkdir -p "$repo/dev/TODO"
   cd "$repo"
   git init -q
-  git config user.email t@t; git config user.name t
-  git config commit.gpgsign false
+  git_identity "$repo" t@t t
   _mk_task_file "$repo/dev/TODO/T1-demo.md"
   git add -A && git commit -qm base   # T0: claimed_by empty on main
   base="$(git rev-parse HEAD)"
@@ -665,8 +664,7 @@ print('ok')
   mkdir -p "$repo/dev/TODO"
   cd "$repo"
   git init -q
-  git config user.email t@t; git config user.name t
-  git config commit.gpgsign false
+  git_identity "$repo" t@t t
   _mk_task_file "$repo/dev/TODO/T1-demo.md"
   git add -A && git commit -qm base
   base="$(git rev-parse HEAD)"
