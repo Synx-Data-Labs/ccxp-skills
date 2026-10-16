@@ -182,7 +182,7 @@ scheduled: 2026-10-12
   repo-wide `bats tests/*.bats` regression sweep also run (see PR for CI
   result).
 - Follow-up filed: **T20261016-278922** (lint forbid bare network `gh`/`git`
-  + migrate existing bare-call sites + remaining wrapper hardening —
+  calls, migrate existing bare-call sites, and remaining wrapper hardening —
   ambient `GITHUB_TOKEN`, `clone`/`fetch`/`ls-remote` outside a repo),
   staged into the next iteration and promoted to the front of the queue.
 - External/unverified: none — the fix was reproduced and verified live
