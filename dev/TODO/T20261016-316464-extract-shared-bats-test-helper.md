@@ -28,9 +28,12 @@ source: this conversation, 2026-10-16
 - Test plan: full `bats tests/` suite must pass with identical pass/fail
   results before and after the refactor. Done-criterion: zero change in
   test outcomes (same tests pass, same tests fail, same counts).
-- Note for whoever drives this: touches ~55-76 files mechanically. This is
-  expected full-suite scope by design, not scope creep — the whole point
-  is touching many files identically with the same one-line change.
+- Note for whoever drives this: touches ~55-72 files mechanically (the
+  categories above overlap — e.g. a file needing the git-fixture bootstrap
+  also needs the REPO_ROOT line — so the union across 72 total files, not
+  their 55+17+4+4 sum, bounds the actual count). This is expected
+  full-suite scope by design, not scope creep — the whole point is
+  touching many files identically with the same one-line change.
   Declare this explicitly in the design PR so the `/drive` skill's own
   ">8 files beyond design scope" escalation trigger doesn't misfire on an
   intentional, declared mechanical refactor.
