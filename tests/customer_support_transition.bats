@@ -5,8 +5,8 @@
 # unbypassable, applies the specific reject-reason label before closing,
 # and clears blocked/needs-upstream on close).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/customer-support/scripts/transition.sh"
   cd "$BATS_TEST_TMPDIR"
 }

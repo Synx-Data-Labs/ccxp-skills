@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # Tests for _support/is-support-task.sh and the gate-pr usage guard (T20261012-109735).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   cd "$BATS_TEST_TMPDIR" && mkdir -p dev/TODO dev/JOURNAL
   printf -- '---\nstatus: Open\nestimation: 1\n---\n\n# T20260101-000001: a\n\n## Problem\n\n- **Type**: support\n' > dev/TODO/T20260101-000001-a.md
   printf -- '---\nstatus: Open\nestimation: 1\nsupport-issue: https://example.com/o/r/issues/1\n---\n\n# T20260101-000002: b\n' > dev/TODO/T20260101-000002-b.md

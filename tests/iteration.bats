@@ -4,8 +4,8 @@
 # "today" is injected via SESSION_TODAY. What's exercised is the pure date-window
 # selection logic that maps today -> current/next iteration startDate.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # Dispatch block is guarded, so sourcing is side-effect-free.
   source "$REPO_ROOT/_session/iteration.sh"
   # Stub project resolution + GraphQL (canned 3-iteration config: It10/11/12).

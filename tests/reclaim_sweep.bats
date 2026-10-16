@@ -13,8 +13,8 @@
 # by `_tc_pr_activity_days` — open PRs are now reclaimable when their OWN
 # activity is stale, not auto-excluded.)
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # Sourcing is side-effect-free (guarded dispatch). This also pulls in
   # task_claim.sh + _lib.sh.
   source "$REPO_ROOT/_session/reclaim_sweep.sh"

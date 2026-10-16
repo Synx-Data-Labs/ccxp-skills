@@ -5,8 +5,8 @@
 # (T20260810-922807). Falls back to plain `gh` when no sibling is present
 # (e.g. a caller that sparse-clones just _session/).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_session/_lib.sh"
   SCRATCH="$BATS_TEST_TMPDIR/scratch"
   mkdir -p "$SCRATCH/_session"

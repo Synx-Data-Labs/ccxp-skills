@@ -32,9 +32,7 @@
 # against both the real repo tree and a throwaway fixture tree under
 # $BATS_TEST_TMPDIR.
 
-setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-}
+load test_helper
 
 # _scan_gh_token_sites <root>
 #

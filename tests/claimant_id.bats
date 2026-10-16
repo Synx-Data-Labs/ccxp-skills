@@ -9,9 +9,9 @@
 #   - the YAML guard (the written line must survive yaml.safe_load, which
 #     sync.py and lint_tasks.py both depend on)
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
-  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/state"
+  isolate_claimant_state state
   source "$REPO_ROOT/_session/claimant-id.sh"
 }
 

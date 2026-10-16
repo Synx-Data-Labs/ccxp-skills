@@ -4,8 +4,8 @@
 # CI_TRIAGE_GH convention). Records every gh invocation to gh-calls.log so
 # tests can assert the right command shape was issued.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/labels.sh"
   cd "$BATS_TEST_TMPDIR"
 }

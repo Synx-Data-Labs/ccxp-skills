@@ -12,8 +12,8 @@
 # side-effect-free). I/O is hermetic: a throwaway git repo in $BATS_TEST_TMPDIR
 # supplies `origin` and the dev/ fixture tree; `gh` is a PATH stub.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_taskid/url.sh"
 
   # Hermetic repo so `git remote get-url origin` resolves a known slug.

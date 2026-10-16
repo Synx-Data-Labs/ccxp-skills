@@ -9,8 +9,8 @@
 # "today" is injected via IPM_TODAY; the API tier is injected via STAMP_ITER_HELPER
 # so tests are deterministic without a token or network.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   STAMP="$REPO_ROOT/_ipm/stamp-scheduled.sh"
   JDIR="$BATS_TEST_TMPDIR/journal"
   mkdir -p "$JDIR"

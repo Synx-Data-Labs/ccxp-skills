@@ -2,8 +2,8 @@
 # Tests for customer-support/scripts/state_machine.sh (T20261012-373882).
 # Pure logic — every row of the Transition rules table.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/customer-support/scripts/state_machine.sh"
 }
 

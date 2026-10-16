@@ -4,8 +4,8 @@
 #
 # Pure file-enumeration logic — no gh/git I/O to stub, unlike reclaim_sweep.sh.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # Sourcing is side-effect-free (guarded dispatch). Pulls in task_claim.sh +
   # _lib.sh transitively.
   source "$REPO_ROOT/_session/claim_gap.sh"

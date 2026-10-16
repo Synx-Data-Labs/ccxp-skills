@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # lint.sh step 7 (lint_links.py): warn by default, hard with LINT_LINKS_HARD=1.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   LINT="$REPO_ROOT/repo-conventions/scripts/lint.sh"
   cd "$BATS_TEST_TMPDIR"
   mkdir -p dev/TODO dev/JOURNAL

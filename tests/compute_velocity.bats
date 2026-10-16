@@ -3,14 +3,13 @@
 # (points_per_week, hours_per_point) from dev/JOURNAL/ completion history
 # into dev/velocity.json (T20260924-232855).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/retro/scripts/compute-velocity.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$WORK/dev/JOURNAL" "$WORK/dev/TODO"
   git -C "$WORK" init -q
-  git -C "$WORK" config user.email t@example.com
-  git -C "$WORK" config user.name tester
+  git_identity "$WORK" t@example.com tester
 }
 
 commit_dated() {

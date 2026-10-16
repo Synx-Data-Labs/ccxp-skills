@@ -3,8 +3,8 @@
 # one-time, idempotent duration-bucket -> Fibonacci-points migration
 # (T20260924-232855 Migration §4).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/repo-conventions/scripts/migrate-estimation-to-points.sh"
   WORK="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$WORK/dev/TODO" "$WORK/dev/PARKING" "$WORK/dev/JOURNAL"

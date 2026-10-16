@@ -367,8 +367,7 @@ _mk_git_repo() {
   local repo="$1" script="${2:-scripts/new.sh}"
   mkdir -p "$repo"
   git -C "$repo" init -q
-  git -C "$repo" config user.email t@example.com
-  git -C "$repo" config user.name tester
+  git_identity "$repo" t@example.com tester
   printf 'base\n' > "$repo/README.md"
   git -C "$repo" add -A
   git -C "$repo" commit -qm base

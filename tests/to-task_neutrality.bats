@@ -3,7 +3,7 @@
 # company-neutral and never post. (Renamed from support_neutrality.bats
 # when /support -> /to-task.)
 
-setup() { REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"; }
+load test_helper
 
 @test "no company-specific literals under to-task/ and _support/" {
   run grep -rniE 'synx|hashdata|synxdb|xinzweb' "$REPO_ROOT/to-task" "$REPO_ROOT/_support"

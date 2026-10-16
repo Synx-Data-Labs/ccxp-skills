@@ -19,8 +19,8 @@
 # the old "${HOME}/.claude/skills" default is caught rather than
 # accidentally passing against the real machine's layout.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT_SRC="$REPO_ROOT/ccxp/scripts/sync-and-prune-branches.sh"
 
   # Neutralize $HOME so the legacy default (~/.claude/skills) can never

@@ -2,8 +2,8 @@
 # Tests for todo/scripts/_lib.sh — shared parsing helpers for todo-list.sh
 # and todo-next.sh (T20260914-359646).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/todo/scripts/_lib.sh"
 }
 

@@ -18,8 +18,8 @@
 # sourced, since main_git() ends in `exec` — sourcing it into the bats
 # process itself would replace the test runner.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   REAL_GIT="$(command -v git)"
   CWD_REPO="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$CWD_REPO"

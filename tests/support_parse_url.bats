@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # Tests for _support/parse-issue-url.sh (T20261012-109735).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   P="$REPO_ROOT/_support/parse-issue-url.sh"
 }
 

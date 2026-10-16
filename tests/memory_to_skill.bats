@@ -3,8 +3,8 @@
 # resolution of the current clone's Claude Code auto-memory directory from
 # its working-directory path (see memory-to-skill/SKILL.md).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/memory-to-skill/scripts/find-memory-dir.sh"
 
   CLAUDE_HOME="$BATS_TEST_TMPDIR/dot-claude"

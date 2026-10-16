@@ -7,8 +7,8 @@
 # TASKID_GH) — a stub script that branches on its argv to simulate
 # `run view --json jobs` vs `run view --log-failed`.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_gh/ci-triage.sh"
   cd "$BATS_TEST_TMPDIR"
 }

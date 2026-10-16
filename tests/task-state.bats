@@ -9,13 +9,13 @@
 # DI point taskid_url.bats uses) — task-state.sh calls `taskid-gh` for PR
 # lookups, so no new seam was needed.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_session/task-state.sh"
 
   cd "$BATS_TEST_TMPDIR"
   git init -q .
-  git config user.email t@t; git config user.name t
+  git_identity "$BATS_TEST_TMPDIR" t@t t
   git remote add origin https://github.com/your-org/build-pipeline-repo.git
 
   mkdir -p dev/TODO dev/PARKING dev/JOURNAL

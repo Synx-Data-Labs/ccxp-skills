@@ -4,8 +4,8 @@
 # file (the "minted an ID, used it, never filed the task" mistake — see
 # the incident that motivated this check).
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   source "$REPO_ROOT/_taskid/check-orphaned-refs.sh"
 
   cd "$BATS_TEST_TMPDIR"

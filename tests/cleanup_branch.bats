@@ -22,8 +22,8 @@
 # `_gh/gh.sh` that reports a merged PR for whichever branch names the test
 # lists in $FAKE_GH_MERGED_BRANCHES — no real `gh`/GitHub involved.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT_SRC="$REPO_ROOT/cleanup-branch/scripts/cleanup-branch.sh"
 
   export GIT_AUTHOR_NAME="bats" GIT_AUTHOR_EMAIL="bats@example.com"

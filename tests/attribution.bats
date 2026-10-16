@@ -7,8 +7,8 @@
 # end-to-end table over a git-backed dev/ tree where the JOURNAL stub's live
 # `claimed_by` is empty and must be recovered from history.
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   # Sourcing is side-effect-free (CLI is under the direct-exec guard).
   source "$REPO_ROOT/_session/attribution.sh"
   # Deterministic classification default for the unit tests.
@@ -41,8 +41,7 @@ _mk_git_dev() {
   local repo="$BATS_TEST_TMPDIR/repo"
   mkdir -p "$repo/dev/TODO" "$repo/dev/JOURNAL"
   git -C "$repo" init -q
-  git -C "$repo" config user.email "test@example.com"
-  git -C "$repo" config user.name "Test"
+  git_identity "$repo" "test@example.com" "Test"
   # A shipped JOURNAL task: claimed by the cron clone, then cleared at close.
   local j="$repo/dev/JOURNAL/2026-06-28-T20260601-111111-shipped.md"
   _mk_task "$j" Done "cdw:/home/ci/focus/some-repo"
@@ -145,7 +144,7 @@ _mk_git_dev() {
   local repo="$BATS_TEST_TMPDIR/repo3"
   mkdir -p "$repo/dev/JOURNAL"
   git -C "$repo" init -q
-  git -C "$repo" config user.email "t@e.com"; git -C "$repo" config user.name "T"
+  git_identity "$repo" "t@e.com" "T"
   local A="$repo/dev/JOURNAL/2026-06-20-T20260601-333333-design.md"
   _mk_task "$A" Done "cdw:/box-A"
   git -C "$repo" add -A && git -C "$repo" commit -q -m "A claim"
@@ -221,7 +220,7 @@ _mk_git_dev() {
   local repo="$BATS_TEST_TMPDIR/repo2"
   mkdir -p "$repo/dev/JOURNAL"
   git -C "$repo" init -q
-  git -C "$repo" config user.email "t@e.com"; git -C "$repo" config user.name "T"
+  git_identity "$repo" "t@e.com" "T"
   _mk_task "$repo/dev/JOURNAL/2026-06-28-T20260601-999999-orphan.md" Done ""
   git -C "$repo" add -A && git -C "$repo" commit -q -m "orphan, never claimed"
   run attribution_table "$repo/dev" "2026-06-28" "2026-06-29"

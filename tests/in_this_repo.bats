@@ -15,8 +15,8 @@
 
 ID="T20260626-190842"
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 
   # Parent "workspace" dir so sibling-clone discovery has something to scan.
   WORKSPACE="$BATS_TEST_TMPDIR/workspace"

@@ -4,8 +4,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load test_helper
 setup() {
-  REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   SCRIPT="$REPO_ROOT/_gh/gh-app-token.sh"
   cd "$BATS_TEST_TMPDIR"
   LOG="$BATS_TEST_TMPDIR/curl.log"
