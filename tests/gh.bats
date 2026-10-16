@@ -116,6 +116,46 @@ setup() {
   [ "$output" = "slugB	user2" ]
 }
 
+# --- _gh_list_accounts: no dependency on an external `awk` (T20261012-280694) -
+#
+# Observed on a real machine: a mis-linked Homebrew `gawk` symlink earlier on
+# $PATH than the system `awk` had a dynamic-regex engine that silently never
+# matched ANY pattern (even `/[0-9]/` against "abc123" — no error, exit 0, no
+# match). The old implementation piped `gh auth status` into
+# `awk '/pattern/ {...}'`, so on that machine it always returned zero
+# accounts, which cascaded into `_gh_pick_account` failing with "no
+# authenticated gh account has access to <slug>" even though every account
+# WAS authenticated and DID have access — confirmed with a direct,
+# non-wrapped `gh api` call on that same machine. This test puts an `awk`
+# that behaves exactly that way (every pattern match reports "no match") at
+# the front of $PATH and asserts `_gh_list_accounts` is unaffected, proving
+# it no longer shells out to `awk` at all.
+
+@test "_gh_list_accounts parses accounts correctly even with a broken awk on PATH" {
+  FAKEBIN="$BATS_TEST_TMPDIR/fakebin"
+  mkdir -p "$FAKEBIN"
+  cp "$REPO_ROOT/tests/fixtures/gh/fake-gh.sh" "$FAKEBIN/gh"
+  chmod +x "$FAKEBIN/gh"
+
+  BROKENAWKBIN="$BATS_TEST_TMPDIR/brokenawkbin"
+  mkdir -p "$BROKENAWKBIN"
+  cat > "$BROKENAWKBIN/awk" <<'EOF'
+#!/usr/bin/env bash
+# Simulates the real-world broken gawk: reads stdin, never matches any
+# pattern, prints nothing, exits 0 — exactly the failure mode observed.
+cat >/dev/null
+exit 0
+EOF
+  chmod +x "$BROKENAWKBIN/awk"
+
+  export FAKE_GH_ACCOUNTS="alice bob"
+  PATH="$BROKENAWKBIN:$FAKEBIN:$PATH"
+
+  run _gh_list_accounts
+  [ "$status" -eq 0 ]
+  [ "$output" = $'alice\nbob' ]
+}
+
 # --- _gh_pick_account: write-aware picking (T20260911-140914) --------------
 #
 # Exercises the real _gh_pick_account() sourced above against a fake `gh`
