@@ -11,8 +11,8 @@
 # Pure parse functions (fed mock tool output on stdin) are tested directly by
 # sourcing probe.sh. The tool-runner skip path stubs the tool off PATH.
 
-SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+load test_helper
+SCRIPT_DIR="$BATS_TEST_DIRNAME"
 PROBE="$REPO_ROOT/quality-probe/scripts/probe.sh"
 FIX="$SCRIPT_DIR/fixtures/quality-probe"
 
