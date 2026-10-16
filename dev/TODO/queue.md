@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261016-278922](T20261016-278922-lint-forbid-bare-gh-git-remaining-wrapper-hardening.md): lint forbid bare network gh/git in skills + remaining `_gh` wrapper hardening
 - [T20261010-762961](T20261010-762961-cloudflare-family-router-and-dedupe.md): Cloudflare family: router description, 'not for' lines, drop duplicated references
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
 - [T20260929-128287](T20260929-128287-changed-md-unquoted-splitting-not-portable-to-zsh.md): `$CHANGED_MD`-style unquoted word-splitting silently lints zero files under zsh
@@ -28,7 +29,6 @@ reprioritize.
 - [T20261012-333879](T20261012-333879-epic-customer-support-skill-track-p1-p4.md): epic: customer support skill (track P1-P4)
 - [T20261012-352228](T20261012-352228-model-invoked-skills-ask-permission-hook.md): Make model-invoked skills ask the user for permission instead of being blocked
 - [T20261012-342180](T20261012-342180-claimant-id-reverse-lookup-cache.md): Local reverse-lookup cache for claimant ids (who owns what on this box)
-- [T20261012-280694](T20261012-280694-lint-forbid-bare-gh-git-harden-gh-wrappers.md): lint: forbid bare network gh/git in skills + harden _gh wrappers
 - [T20261012-151045](T20261012-151045-follow-ups-pr-308-drop-gh-board-dependency.md): follow-ups from PR #308 (drop gh board dependency)
 - [T20260827-238870](T20260827-238870-remove-solo-repo-mode.md): Remove solo-repo (no-CI) mode; always follow the team-repo (peer/CI) process
 - [T20260829-362863](T20260829-362863-solo-to-team-mode-conversion-checklist.md): Write the solo-mode → team-mode conversion checklist for any ccxp repo
