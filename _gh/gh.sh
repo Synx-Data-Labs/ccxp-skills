@@ -61,10 +61,29 @@ _gh_repo_slug() {
 _gh_list_accounts() {
   # Parse `gh auth status` for "Logged in to github.com account <name> (...)".
   # The status output is on stderr in some gh versions, hence 2>&1.
-  gh auth status 2>&1 | awk '
-    /Logged in to github.com account/ {
-      for (i = 1; i <= NF; i++) if ($i == "account") { print $(i + 1); break }
-    }'
+  #
+  # Pure-bash parsing (no `awk`) — deliberately, not just style. On a machine
+  # where PATH resolves `awk` to a mis-linked/incompatible binary (observed:
+  # Homebrew's gawk gnubin symlink, whose dynamic-regex engine silently never
+  # matches ANY pattern — `/[0-9]/` against "abc123" returns no match, no
+  # error, exit 0), the old `awk '/pattern/ {...}'` here returned nothing for
+  # every account, every time. `_gh_pick_account` then saw an empty account
+  # list and failed with "no authenticated gh account has access to <slug>"
+  # — even though every account WAS authenticated and DID have access
+  # (confirmed with a direct, non-wrapped `gh api` call). Plain ambient `gh`/
+  # `git` never go through this function at all, which is why they kept
+  # working on the exact same machine while the wrapper didn't
+  # (T20261012-280694). Bash's own `[[ ... == *pattern* ]]` has no external
+  # dependency to get out of sync with, so this can't recur the same way.
+  local line
+  while IFS= read -r line; do
+    case "$line" in
+      *"Logged in to github.com account"*)
+        local rest="${line#*account }"
+        printf '%s\n' "${rest%% *}"
+        ;;
+    esac
+  done < <(gh auth status 2>&1)
 }
 
 _gh_token_for() {
