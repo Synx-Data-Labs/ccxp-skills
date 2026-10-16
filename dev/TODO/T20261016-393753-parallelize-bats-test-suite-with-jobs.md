@@ -1,59 +1,158 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: CI wall-clock analysis, this conversation, 2026-10-16
+claimed_by: cc1-50ac6891:5e1f014a92f728aa
+claimed_role: interactive
+scheduled: 2026-10-12
 ---
 
 # T20261016-393753: parallelize bats test suite with --jobs to cut CI wall-clock
 
-## Problem
+- Design approved in-conversation 2026-10-16: filed with the design
+  (problem, fix, test plan) already spelled out and explicitly authorized
+  by the maintainer as a trial to drive end-to-end.
+- Design PR skipped per `/drive` Phase 2's "design already in file AND
+  maintainer has explicitly approved it in conversation" carve-out.
+- Expanded to the full design-doc template below to clear the Phase 2
+  step 7 design-score gate, which still applies even when the design PR
+  itself is skipped.
+
+## TLDR
 
 - **Type**: chore
-- The `bats` job in `.github/workflows/tests.yml` runs `bats tests/*.bats
-  _docs/*.bats _slack/*.bats` serially — 1075 tests, ~89s wall-clock.
-- Analysis attributes the ~89s almost entirely to per-test fork overhead
-  (~83ms/test), not test logic — this job is fork-overhead-bound, not
-  compute-bound.
-- `bats --jobs N` (backed by GNU parallel, typically preinstalled on
-  GitHub-hosted ubuntu runners) could cut wall-clock roughly linearly with
-  N, with zero test-content changes and zero coverage risk — **provided**
-  there are no cross-test fixture collisions outside `$BATS_TEST_TMPDIR`.
-- A spot-check suggested tests already neutralize `$HOME` per-test
-  (encouraging), but this is NOT yet confirmed by an actual CI run — only
-  by static review. Parallel execution can expose hidden shared-state
-  collisions (shared fixture paths outside `$BATS_TEST_TMPDIR`, shared
-  global env vars, port binding, etc.) that serial execution never
-  triggers.
-- Secondary, low-risk, bundle-if-convenient: the `bats` job does
-  `sudo apt-get update && sudo apt-get install -y bats` fresh every run;
-  caching or pinning the bats install instead is estimated to save
-  ~15-19s per run with very low risk.
+- **Problem**: the `bats` CI job runs 1074 tests serially in
+  `.github/workflows/tests.yml:109`, taking ~89s wall-clock, dominated by
+  per-test fork overhead (~83ms/test) rather than test logic.
+- **Solution**: add `bats --jobs N` to parallelize that job, trialed live
+  on a branch (not just reasoned about statically) to confirm it's safe
+  and actually faster before merging.
 
-## Fix
+## Problem
 
-- Add `--jobs N` to the bats invocation in the `bats` job of
-  `.github/workflows/tests.yml` (currently:
-  `bats tests/*.bats _docs/*.bats _slack/*.bats`). Pick a reasonable N
-  (e.g. 4, or derive from `nproc` on the runner).
-- If convenient, also cache/pin the bats install step instead of
-  apt-get installing fresh each run; otherwise file as a tiny separate
-  follow-up.
+- The `bats` job (`.github/workflows/tests.yml:101-109`) runs
+  `bats tests/*.bats _docs/*.bats _slack/*.bats` serially.
+- 1074 `@test` blocks counted directly (`grep -rh '^@test' tests/*.bats
+  _docs/*.bats _slack/*.bats | wc -l`), matching the ~1075 figure from the
+  originating CI wall-clock analysis.
+- That analysis attributes the ~89s run time almost entirely to per-test
+  fork overhead (~83ms/test), not test logic — i.e. this job is
+  fork-overhead-bound, not compute-bound, which is exactly the profile
+  `bats --jobs N` (GNU-parallel-backed) is built to fix.
+- This costs ~89s of CI wall-clock on every push/PR touching the paths
+  listed in `tests.yml`'s `on:` filters (`dev/TODO/**`, `**/SKILL.md`,
+  `tests/**`, etc.) — a frequent trigger set, so the serial cost is paid
+  often, not just occasionally.
+
+## Context
+
+- Verified: `nproc` on this environment reports 8 cores; GitHub-hosted
+  `ubuntu-latest` runners are documented as 4-core by default, so `N=4` is
+  the safe, conservative pick (matches reported run time without
+  eagerly offering more concurrency than runner's baseline).
+- Verified (git archaeology): the `bats` job has been serial (no
+  `--jobs`) since it was introduced in `5afe835` ("Initial public
+  release", 2026-09-28) — plain default usage, not a deliberate decision
+  against parallelism; nothing in history explains why it was never
+  parallelized, so this reads as an oversight / unexplored option, not an
+  intentional constraint.
+- Assumed, flagged by the originating analysis as unconfirmed by a real
+  run: BATS tests in this repo already appear to neutralize `$HOME`
+  per-test (a spot-check finding, not exhaustively verified) — encouraging
+  for parallel-safety, but cross-test fixture collisions **outside**
+  `$BATS_TEST_TMPDIR` (shared files/dirs, shared global env vars, port
+  binding) could still exist and would only surface under real parallel
+  execution, not static review.
+
+## Solution
+
+- Add `--jobs N` to the bats invocation in `.github/workflows/tests.yml`'s
+  `bats` job (`tests.yml:109`): `bats --jobs 4 tests/*.bats _docs/*.bats
+  _slack/*.bats`. `N=4` matches the standard GitHub-hosted runner's core
+  count — see Context.
+- Bundled, low-risk secondary fix: cache/pin the bats install step
+  (`tests.yml:105-106`, currently a fresh `apt-get install` every run) via
+  `actions/cache` keyed on the bats version, to also save the estimated
+  ~15-19s/run noted by the originating analysis. Bundled here rather than
+  filed separately since it's a one-line addition to the same job in the
+  same file.
+- **Alternatives considered and rejected**:
+  - *Split tests across a GitHub Actions matrix (multiple jobs) instead of
+    `--jobs`*: rejected — more invasive (new job definitions, artifact/log
+    fan-out to reconcile) for the same fork-overhead-bound problem that
+    `--jobs` solves with a one-line change; no evidence the extra
+    complexity buys anything `--jobs` doesn't already give here.
+  - *Reduce test count / merge redundant tests*: rejected — this is a
+    coverage change in disguise (the slow part isn't excess tests, it's
+    per-test fork overhead on tests that are each individually fast),
+    and the user explicitly ruled out any test-content change for this
+    task.
+  - *Do nothing (89s is "fine")*: rejected — it's paid on every push/PR
+    matching the workflow's trigger paths, a frequent set, and the fix is
+    a one-line, reversible trial.
 
 ## Test plan
 
 This is a TRIAL/experiment, not a guaranteed-safe mechanical change — done
 criteria are evidence-based, not just "the diff looks right":
 
-- Run the modified workflow for real on a branch (push or
-  `workflow_dispatch`), not just a dry run or static review.
-- Confirm ALL 1075 tests still pass, with no flaky or order-dependent
-  failures introduced by parallel execution.
-- Confirm wall-clock time actually drops versus the ~89s serial baseline.
-- If fixture collisions or flakiness surface: either fix the specific
-  collision (e.g. isolate a shared fixture path) or revert the `--jobs`
-  change and document in the task/journal why parallelization isn't safe
-  yet — do not force it through.
-- Because this changes `.github/workflows/tests.yml`, it requires the
-  `/drive` Phase 3 "Workflow verification" step: trigger the modified
-  workflow on the feature branch and observe a full green run before
-  opening the PR.
+- [ ] Run the modified workflow for real on a branch (push or
+      `workflow_dispatch`), not just a dry run or static review.
+- [ ] Confirm ALL 1074 tests still pass, with no flaky or order-dependent
+      failures introduced by parallel execution.
+- [ ] Confirm wall-clock time actually drops versus the ~89s serial
+      baseline (measure the branch run's `bats` job duration).
+- [ ] If fixture collisions or flakiness surface: either fix the specific
+      collision (e.g. isolate a shared fixture path) or revert the
+      `--jobs` change and document in the task/journal why
+      parallelization isn't safe yet — do not force it through.
+- [ ] `/drive` Phase 3 step 7 "Workflow verification": trigger the
+      modified workflow on the feature branch and observe a full green
+      run before opening the PR (required because this touches
+      `.github/workflows/tests.yml`).
+
+## Done criteria
+
+- [ ] `.github/workflows/tests.yml`'s `bats` job invokes `bats --jobs 4
+      ...` — `file:line` after the change: `.github/workflows/tests.yml`
+      (bats step).
+- [ ] A live CI run of the modified workflow on the feature branch shows
+      all 1074 tests passing — the triggered run's own log/summary is the
+      evidence (linked in the PR and in `## Closed` below).
+- [ ] The same run's `bats` job duration is measurably lower than the
+      ~89s serial baseline — the run's own duration field is the
+      evidence.
+- [ ] No test marked flaky/order-dependent across the trial run(s) — if
+      any surfaces, either a fix is committed (and re-verified green) or
+      the change is reverted with the reason documented here before
+      close.
+
+## Root cause
+
+- Not a bug — this is a chore/perf task, so "root cause" here is "why
+  this was never parallelized": the `bats` job has run with plain
+  `bats <globs>` since it was introduced in `5afe835` ("Initial public
+  release", 2026-09-28) — a default/unexplored option, not a deliberate
+  decision against `--jobs`. Nothing in the commit history or this
+  repo's docs documents a reason parallel execution was avoided.
+- Mechanism: per-test fork overhead (bats forks a subshell per `@test`)
+  dominates at ~83ms/test × 1074 tests ≈ 89s — exactly the profile
+  `--jobs N` (GNU parallel under the hood) addresses by running N test
+  processes concurrently instead of one at a time.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `.github/workflows/tests.yml` | `101-109` | The `bats` job: installs bats (apt-get, fresh every run) then runs the full suite serially — both the `--jobs` change and the bundled install-caching change land here |
+| `tests/*.bats`, `_docs/*.bats`, `_slack/*.bats` | n/a | The 1074 test cases being parallelized; no test-content changes intended |
+
+## Closed
+
+Filled in once the implementation PR merges — see Phase 7 (PR number, live
+trial run link, wall-clock before/after, and whether the secondary
+bats-install-caching fix landed in the same PR or as its own follow-up).
+
+## Skills invoked
+
+Filled in once the implementation PR merges (Phase 7.0 audit block).
