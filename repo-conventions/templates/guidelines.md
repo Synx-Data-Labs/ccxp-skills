@@ -18,6 +18,7 @@ The `main` branch is the source of truth. Never push directly to `main`.
 4. **CI must pass** — all checks green before merge
 5. **Merge method** — rebase and merge, via the ccxp-skills `_gh/gh.sh` wrapper (`pr merge --rebase --delete-branch`) — resolve its path relative to wherever the ccxp-skills plugin is installed, not a hardcoded location
 6. **Delete the branch after merge**
+7. **Approval gate** — a repo with `.github/workflows/pr-approve.yml` gets a real GitHub approval from `synx-merge-bot`: `/address-pr` dispatches the workflow (pinned to the reviewed commit) after a clean independent review, then arms `gh pr merge --auto`. Enable `required_approving_review_count: 1` with dismiss-stale-reviews and an **empty bypass list**
 
 ## TODO Lifecycle
 
