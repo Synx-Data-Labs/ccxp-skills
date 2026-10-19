@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: this conversation, 2026-10-19 (machine restart left a task claimed by a dead session)
 related: T20261012-342180
 description: Evaluate PID-based claim ids; recommend keeping the clone-stable id and adding a local liveness record so orphaned claims reclaim immediately
+claimed_by: cc1-50ac6891:79b7bb9124eb6646
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261019-187676: Change claim-id from host-hash:path-hash to host-hash:PID so orphaned claims can be reclaimed
