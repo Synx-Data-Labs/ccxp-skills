@@ -344,11 +344,7 @@ if { [ "${CLEAN_BILL:-0}" = 1 ] || { [ -n "$LGTM_BY" ] && [ "${FINDINGS_OPEN:-0}
         && APPROVED=1
     fi
   fi
-  if [ -n "$APPROVED" ]; then
-    # Arm auto-merge so GitHub merges once approval + required checks are satisfied.
-    bash <skills-root>/_gh/gh.sh pr merge <NUMBER> --auto --rebase --delete-branch \
-      || echo "::warning::could not arm auto-merge (repo without protection/auto-merge?) — the §3 merge step merges as before."
-  else
+  if [ -z "$APPROVED" ]; then
     echo "::warning::no landed approval at ${HEAD_SHA} (dispatch within the poll window, then the local-mint fallback) — the mergeability check in step a will surface whether this blocks merge."
   fi
 fi
@@ -356,7 +352,7 @@ fi
 
 - Standard route: the dispatched `pr-approve.yml` (App secrets stay in GitHub). Local minting via `_gh/gh-app-token.sh` is a fallback only, taken solely when `GH_APP_ID` and a private key are already in the environment; no bypass list is ever used.
 - Trust model: anyone who can dispatch workflows on the repo can obtain a bot approval for any PR and SHA; the approval means something only because this step dispatches after a clean independent review.
-- After an approval lands, `gh pr merge --auto` arms the merge; it fires once branch protection's required approval and checks pass. Where `--auto` is unavailable (no protection on the repo), the §3 merge step merges as before.
+- Auto-merge is armed in §3.3 (`gh pr merge --auto`), only after the hard gate and step e pass, so GitHub cannot merge ahead of the test plan; it then fires once branch protection's required approval and checks pass. Where `--auto` is refused (no protection on the repo), §3.3 merges as before.
 
 #### e. Verify test plan
 
@@ -411,7 +407,7 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
    - Test plan status (all checked / N items need manual verification)
    - Current branch
 
-3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --rebase --delete-branch` for auto-merge tier, or notify for wait-for-approval tier.
+3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused), or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
 
 4. **Status=Done** (after merge succeeds):
 

@@ -15,7 +15,7 @@ SKILL="$REPO_ROOT/address-pr/SKILL.md"
 
 @test "address-pr step d dispatches with commit_sha then arms --auto merge" {
   grep -q 'workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"' "$SKILL"
-  grep -q 'pr merge <NUMBER> --auto --rebase --delete-branch' "$SKILL"
+  grep -q 'pr merge --auto --rebase --delete-branch' "$SKILL"
 }
 
 @test "address-pr documents gh-app-token.sh as fallback only" {
