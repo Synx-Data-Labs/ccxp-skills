@@ -26,7 +26,21 @@ scheduled: 2026-10-12
   per-test fork overhead (~83ms/test) rather than test logic.
 - **Solution**: add `bats --jobs N` to parallelize that job, trialed live
   on a branch (not just reasoned about statically) to confirm it's safe
-  and actually faster before merging.
+  and actually faster before merging, **with a memory/parallelism cap**
+  (default job count derived from CPU and RAM, env override, optional
+  watchdog) so a local run cannot freeze the dev box (see Feedback).
+
+## Feedback (2026-10-19)
+
+- **Observed** (reported by the maintainer; not re-measured here): running
+  the suite in parallel locally exhausted all memory on the macOS dev
+  machine and froze it. Each bats job forks a subshell per `@test`, so
+  N jobs multiply the resident footprint; unbounded `--jobs` (or `--jobs
+  $(nproc)`-style defaults) is unsafe on a laptop that also runs an IDE,
+  Claude sessions, etc.
+- **New requirement**: the parallel path must have a way to limit
+  parallelism and memory so it cannot freeze the dev box. Safe-by-default
+  locally; CI may be more aggressive.
 
 ## Problem
 
@@ -43,6 +57,11 @@ scheduled: 2026-10-12
   listed in `tests.yml`'s `on:` filters (`dev/TODO/**`, `**/SKILL.md`,
   `tests/**`, etc.) — a frequent trigger set, so the serial cost is paid
   often, not just occasionally.
+- **Memory-safety gap (feedback 2026-10-19)**: plain `--jobs N` has no
+  memory bound. Verified by the maintainer's report: a local parallel run
+  froze macOS. Unverified: which tests/process trees dominate memory (a
+  few heavy tests vs. N x baseline) — measure before choosing the
+  per-job budget.
 
 ## Context
 
@@ -91,6 +110,29 @@ scheduled: 2026-10-12
     matching the workflow's trigger paths, a frequent set, and the fix is
     a one-line, reversible trial.
 
+- **Memory-cap options evaluated** (design-level; feasibility on macOS
+  is from general knowledge, not tested here — verify in the trial):
+  - *Bound job count by RAM* (**primary**): `jobs = min(cpus,
+    floor(avail_ram / per_job_budget), hard_cap)`. RAM via `sysctl -n
+    hw.memsize` (macOS) / `/proc/meminfo` (Linux); CPUs via `sysctl -n
+    hw.ncpu` / `nproc`. Per-job budget (assumed ~512 MB-1 GB) to be
+    measured. Portable, no privileges.
+  - *Env override*: `BATS_JOBS=<n>` (explicit wins, still clamped by the
+    hard cap unless `BATS_JOBS_FORCE=1`).
+  - *Wrapper script* (e.g. `scripts/run-bats.sh`) that computes the above,
+    execs `bats --jobs`, and is what `make test`/docs/CI call, so the
+    default lives in one place.
+  - *Per-process limit*: macOS has no cgroups and `ulimit -v` is
+    unreliable/ignored there (assumed; confirm), so do **not** rely on it.
+    Use `ulimit -v` only on Linux CI if useful (optional).
+  - *Watchdog*: background loop in the wrapper polling free memory
+    (`vm_stat` / `memory_pressure` on macOS, `/proc/meminfo` on Linux);
+    below a floor (e.g. <10% free) kill the bats process group and fail
+    with a clear message. Last-line defence, not primary.
+  - *Local vs CI defaults*: local = RAM-bounded and low (e.g. max 2-4,
+    default `min(cpus/2, RAM-derived)`); CI (`CI=true`) = `--jobs 4`
+    matching the 4-core runner (7 GB RAM, assumed from GitHub docs).
+
 ## Test plan
 
 This is a TRIAL/experiment, not a guaranteed-safe mechanical change — done
@@ -106,6 +148,15 @@ criteria are evidence-based, not just "the diff looks right":
       collision (e.g. isolate a shared fixture path) or revert the
       `--jobs` change and document in the task/journal why
       parallelization isn't safe yet — do not force it through.
+- [ ] Memory cap (feedback 2026-10-19): on a macOS machine, run the
+      suite via the wrapper with defaults and record peak memory (e.g.
+      `/usr/bin/time -l`, Activity Monitor/`memory_pressure`); the box
+      stays responsive and no swap storm occurs.
+- [ ] Unit-test the job-count computation (bats test with mocked
+      RAM/CPU inputs: low RAM clamps jobs, `BATS_JOBS` override,
+      `CI=true` default, floor of 1).
+- [ ] Watchdog: simulate low-memory (stubbed free-memory probe) and
+      confirm it kills the run and exits non-zero with a message.
 - [ ] `/drive` Phase 3 step 7 "Workflow verification": trigger the
       modified workflow on the feature branch and observe a full green
       run before opening the PR (required because this touches
@@ -122,6 +173,14 @@ criteria are evidence-based, not just "the diff looks right":
 - [ ] The same run's `bats` job duration is measurably lower than the
       ~89s serial baseline — the run's own duration field is the
       evidence.
+- [ ] A single entry point (wrapper or Makefile target) computes a
+      conservative default job count from CPU and RAM, honours a
+      `BATS_JOBS` env override, and uses a distinct CI default; the
+      default never exceeds a hard cap. Documented in the README/guidelines
+      test section.
+- [ ] A watchdog (or documented decision to omit it, with reason) guards
+      against memory exhaustion on macOS; peak memory of a default local
+      run is recorded in `## Closed`.
 - [ ] No test marked flaky/order-dependent across the trial run(s) — if
       any surfaces, either a fix is committed (and re-verified green) or
       the change is reverted with the reason documented here before
