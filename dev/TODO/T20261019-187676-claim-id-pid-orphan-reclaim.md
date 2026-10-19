@@ -21,7 +21,7 @@ scheduled: 2026-10-19
   - When a claim on `main` names this machine, its clone's lock tells whether the owner is alive. A dead holder or a changed boot id makes the claim reclaimable at once through the normal release plus acquire path, with no staleness-window wait.
   - Foreign-host claims, id format, `pr-owner`, `release`, `release-others` and the statusline are unchanged.
   - The lock logic lives in one shared library, `_session/clone-lock.sh`; scripts and skills are thin callers.
-- Scope also includes deleting the solo-repo mode handling: the "Solo-repo mode" section of `claim/SKILL.md` and the matching bullet in `drive/SKILL.md` Phase 1 (`:137-139`).
+- Scope also includes deleting the solo-repo mode handling: the "Solo-repo mode" section of `claim/SKILL.md` and the matching bullet in `drive/SKILL.md` Phase 1 (`:137-139`), including the `/claim` "Solo-repo mode" cross-reference at `drive/SKILL.md:139` and every other solo-mode mention in `claim/SKILL.md` (about lines 25, 48, 88, 111, 147).
 - Done looks like: after a restart or crash, the next pick on this host reclaims the dead holder's claim immediately; a second session in the same clone is refused; cross-host behavior is unchanged.
 
 ## 1. Current behavior of `/claim` (and `task_claim.sh`)
@@ -49,7 +49,7 @@ scheduled: 2026-10-19
 ### Solo-repo mode (`claim/SKILL.md`, "Solo-repo mode") - to be deleted by this task
 
 - Today: detected via "no CI" and "direct-to-main" in `dev/guidelines.md` or `CLAUDE.md`; replaces steps 3 to 6 with a branch, `release-others` plus `acquire`, and an immediate `--ff-only` merge and push of the claim.
-- Decision: remove it (and the matching `drive/SKILL.md:137-139` bullet). Under the host-local lock design a pickup no longer commits anything, so the mode has no job.
+- Decision: remove it (and the matching `drive/SKILL.md:137-139` bullet). The lock design keeps the claim PR and the `claimed_by` write on `main` unchanged, so the reason for deleting is not that pickup stops committing; it is that the mode is unused scope that the lock would otherwise have to accommodate. All solo-mode cross-references in `claim/SKILL.md` and `drive/SKILL.md:139` go with it.
 
 ### The verbs in `_session/task_claim.sh` (line numbers as of this commit)
 
@@ -70,7 +70,7 @@ scheduled: 2026-10-19
 
 - After the reboot the new session's id differed from the dead one's (a different clone path hash, as the incident description says), so `_tc_decide` returned `other` and `acquire` printed `claimed:<cur>`, rc 3.
 - The sweep returned `live` because the staleness test needs both signals old:
-  - `_tc_days_since_last_commit` (`:384`) runs `git log -1 --grep=<id>`, which matches **any** commit mentioning the id, including the claim commit itself (`docs(claim): claim T<id>`). A claim younger than the window can never look stale.
+  - `_tc_days_since_last_commit` (`:367`) runs `git log -1 --grep=<id>`, which matches **any** commit mentioning the id, including the claim commit itself (`docs(claim): claim T<id>`). A claim younger than the window can never look stale.
   - `_tc_pr_activity_days` (`:474`) uses the open PR's `updatedAt`, which any comment, review, bot push or CI update bumps, even when the owner is dead.
   - `_tc_has_live_run` (`:448`) treats any in-progress CI run on the PR branch as live.
 - Nothing in the decision knows the owner's process is gone. This is the design gap; the staleness window is the only mechanism.
@@ -128,6 +128,7 @@ Same clone means same path hash, therefore the same claimant id; `_tc_decide` al
 Rejected: A (breaks clone-stable identity, reasons below), C, D, G. B, E and F are superseded by H, which gives the same dead-session detection with a simpler mechanism and also refuses a second session in the same clone.
 
 Why A fails, in one place:
+
 - It breaks "same clone = same claimant". After every restart, resume or cron tick the new PID sees its own earlier claims as `other`.
   - `release-others` matches `claimed_by = mine`, so the clone's older tasks are never freed and the one-claim-per-clone invariant fails.
   - The statusline (`statusline-command.sh:38-70`) greps `claimed_by` equal to the clone id and stops finding the task.
@@ -145,6 +146,8 @@ Why A fails, in one place:
 - Scope per clone: exactly one agent plus its subagents. Subagents share `CLAUDE_PID` and the session id with the parent (verified), so the holder is the parent `claude` process and subagents are covered. A second independent session in the same clone is unsupported: the lock refuses it, it does not coordinate it. "At most one claim per clone" keeps its meaning (it is still enforced by `release-others`); the lock adds "at most one live agent per clone".
 - Out of scope: the statusline (interactive-only, unchanged); any cron hand-off protocol (a new tick takes over when the previous holder's pid is dead, or boot id changed, and never steals from a live holder).
 - Solo-repo mode is deleted (scope item above); nothing here accommodates it.
+- `CCXP_PEER_MODE=0` (opt-out, `drive/SKILL.md:135`, guard at `reclaim_sweep.sh:56`): `lock_acquire`, rc 4 and the lock-state consult are all skipped, so behavior is exactly today's.
+- Each git worktree has its own toplevel path, hence its own key and its own lock: a worktree is a separate seat.
 
 ### 4.2 Lock format
 
@@ -216,7 +219,7 @@ acquired_at=2026-10-19T13:00:00Z
 | human or legacy shape | any | unchanged (never reclaimable, or window) |
 | host-part is another machine | not consulted | today's window rules |
 | host-part is this machine | `held` or `mine` | `live` |
-| host-part is this machine | `stale:dead`, `stale:rebooted`, `stale:incomplete` | `reclaimable` at once, skipping the commit and PR windows |
+| host-part is this machine | `stale:dead`, `stale:rebooted`, `stale:incomplete` | `reclaimable` at once, skipping the commit and PR windows, unless the grace rule in 4.6 applies (status `Review` or an open PR: window rules) |
 | host-part is this machine | `none` | migration rule: window rules until the rollout marker is older than `TASK_CLAIM_STALE_DAYS`, then `reclaimable` |
 
 - The takeover is the existing flow: `/claim` §1.2 and `/drive` Phase 1 step 1 see `reclaimable`, then `release T<id> <status>` plus `acquire` in the claim PR. The sweep applies the same release. Only the waiting time changes.
@@ -226,7 +229,9 @@ acquired_at=2026-10-19T13:00:00Z
 
 - Live holder: never auto-stolen. A hung and a waiting-for-human session look identical. Human override: `task_claim.sh unlock T<id>` prints the holder and, with `--force`, removes the lock; killing the hung process instead turns the lock `stale:dead` with no override.
 - Second independent session in a clone: `acquire` returns rc 4 and prints holder pid and session. Read-only verbs (`read`, `reclaimable`, `claimant-id`) are not guarded.
-- Cron or autopilot tick: previous tick's pid is dead, so the new tick takes over silently. A tick that finds a live holder gets rc 4 and skips the clone, like any second session.
+- Cron or autopilot tick: previous tick's pid is dead, so the new tick takes over silently. Caveat: between ticks that clone's in-flight claims read `stale:dead` and `/ccxp` Phase 0.5 `reclaim_sweep --apply` could free them. Mitigation: see the grace rule below. A tick that finds a live holder gets rc 4 and skips the clone, like any second session.
+
+- Grace rule (clean exit and between-tick gap): a `stale:dead` verdict skips the staleness window only when the task status is not `Review` and there is no open PR for the task; a claim in `Review` or with an open PR keeps today's window rules. This protects a user who closes `claude` while a PR or auto-merge is pending, and autopilot clones between ticks.
 
 ### 4.7 Failure modes
 
@@ -273,7 +278,7 @@ acquired_at=2026-10-19T13:00:00Z
 - Interpretation chosen: lock key is the clone path-hash, so the guard answers "is this clone's agent alive" rather than "who holds task T"; this relies on "at most one claim per clone" staying enforced by `release-others`.
 - Interpretation chosen: the lock persists for the life of the agent (no release at task close), because there is no session-end hook; a dead pid cleans it up lazily.
 - Interpretation chosen: `live_signal` (in-progress CI run) still wins over a stale-holder verdict, to keep existing precedence.
-- Is `CLAUDE_PID` set in every launch mode (`claude -p`, SDK, dispatched agents)? Verified only for an interactive session and its subagent; the PPID fallback needs a test per mode.
+- Is `CLAUDE_PID` set (and does a `claude -p` cron tick count as a live holder across its gap) in every launch mode (`claude -p`, SDK, dispatched agents)? Verified only for an interactive session and its subagent; the PPID fallback needs a test per mode.
 - Library name: `_session/clone-lock.sh` with `lock_*` functions (hyphenated like `claimant-id.sh`); rename if a different convention is preferred.
 - Rollout marker window length: `TASK_CLAIM_STALE_DAYS` assumed.
 - Share the host-local state dir and `CLAUDE_CONFIG_DIR` handling with `T20261012-342180` and `T20261002-303999`.
