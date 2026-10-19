@@ -407,7 +407,7 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
    - Test plan status (all checked / N items need manual verification)
    - Current branch
 
-3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused), or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
+3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused); `--auto` returns before the merge happens, so poll `pr view --json state` until `MERGED` before step 4 and any branch cleanup, or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
 
 4. **Status=Done** (after merge succeeds):
 
