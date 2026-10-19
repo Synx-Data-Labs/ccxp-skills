@@ -10,12 +10,16 @@ description: Evaluate PID-based claim ids; recommend keeping the clone-stable id
 
 ## Problem
 
-- **Type**: feature (research done at filing; design to be confirmed at `/incept`)
-- Incident: a machine restart left a task `In Progress` under a dead session's `claimed_by`. It had to be reclaimed by hand.
-- The claim is "heartbeat-free by design" (`ccxp/SKILL.md:92`): a dead session's claim is only freed by a staleness window, so a restart can strand work for days.
-- Done looks like: a claim whose owning session is provably gone (same host) is reclaimable at the next sweep or pick, not after the window. Foreign-host claims and live-but-idle sessions behave as today, with no auto-steal.
-- User proposal (as stated): change `claimed_by` from `cc1-<machine-id>:<path-hash>` to `cc1-<machine-id>:<PID>` (no hash). Reasoning: same host + different PID means a different session; if the PID is gone the claim is an orphan and can be reclaimed.
-- **Recommendation: adopt with modifications.** Keep the clone-stable id and add a machine-local liveness record. Sections 1 to 4 below follow: current behavior, the detection question, options, design.
+- **Type**: feature (design to be confirmed at `/incept`)
+- Today every claim goes through git: `claimed_by` on `main`, a claim PR, and a staleness window (`TASK_CLAIM_STALE_DAYS`, default 2) as the only way to notice a dead owner.
+  - A machine restart or crash leaves the task `In Progress` under a dead session. Nothing on the host knows the owner is gone, so it was reclaimed by hand.
+  - Same-host exclusion ("one agent per task") needs no git at all, yet pays the claim-PR round-trip, `main` churn, and the 2-day wait.
+- Direction (design in section 4):
+  - **Same-host exclusion = a host-local lock** per task (atomic `mkdir` under a host-local state dir; holder = pid + start time + boot id + session id). A dead holder or a changed boot id is taken over at once, with no git round-trip.
+  - **`main` is only for cross-host visibility.** `claimed_by` is written when the work first goes public (first push or PR), not at pickup. A claim whose host-part is another machine is foreign and keeps today's staleness window; a claim whose host-part is this machine is governed by the local lock.
+  - The id format stays `cc1-<machine-id>:<path-hash>`; no new frontmatter keys.
+- Scope also includes deleting the solo-repo mode handling: the "Solo-repo mode" section of `claim/SKILL.md` and the matching bullet in `drive/SKILL.md` Phase 1 (`:137-139`). Without per-pickup claim PRs there is nothing for it to shortcut.
+- Done looks like: two agents on one host cannot work the same task; a dead or rebooted owner is reclaimed on the next pick or sweep; cross-host behavior is unchanged.
 
 ## 1. Current behavior of `/claim` (and `task_claim.sh`)
 
@@ -39,11 +43,10 @@ description: Evaluate PID-based claim ids; recommend keeping the clone-stable id
 5. A merge conflict on the `claimed_by:` line means another session got there first. The conflict is the lock (`task_claim.sh:8`); do not retry.
 6. Report the claimed task, anything released, and the PR URL.
 
-### Solo-repo mode (`claim/SKILL.md`, "Solo-repo mode")
+### Solo-repo mode (`claim/SKILL.md`, "Solo-repo mode") - to be deleted by this task
 
-- Detected by a repo's `dev/guidelines.md` or `CLAUDE.md` declaring "no CI" and "direct-to-main".
-- Replaces steps 3 to 6: branch `t<id>-<slug>`, `release-others` plus `acquire`, commit, `git merge --ff-only` into `main` and push immediately, then go back to the branch so the statusline shows `branch:` and `TASK:`.
-- Close: `release T<id> <final-status>`, fast-forward merge, delete the branch.
+- Today: detected via "no CI" and "direct-to-main" in `dev/guidelines.md` or `CLAUDE.md`; replaces steps 3 to 6 with a branch, `release-others` plus `acquire`, and an immediate `--ff-only` merge and push of the claim.
+- Decision: remove it (and the matching `drive/SKILL.md:137-139` bullet). Under the host-local lock design a pickup no longer commits anything, so the mode has no job.
 
 ### The verbs in `_session/task_claim.sh` (line numbers as of this commit)
 
@@ -115,10 +118,11 @@ Same clone means same path hash, therefore the same claimant id; `_tc_decide` al
 | C. Frontmatter `claimed_pid:` / `claimed_at:` | annotate claim in git | small code; two new keys | stale as soon as the session restarts; PID meaningless off-host | same | one extra line per claim; rewritten on takeover | new keys in `lint_tasks.py:23-26` and `sync.py:614` allowlists |
 | D. Heartbeat or lease timestamp on `main` | owner commits `claimed_at` every N minutes | owner loop, auth, CI per heartbeat | commit flood; conflicts with the lock line; contradicts `ccxp/SKILL.md:92`; stalls if owner is frozen but pushes | works everywhere | very high | new key |
 | E. Boot id only | record `boot_id` at acquire; differs now means orphan | smallest | misses crash or kill; misses a dead session after the user restarted only the CLI | same-host only | none | none |
-| F. B with E first (combination, **picked**) | ship E's boot check and the PID check in one record; add idle visibility | B plus a transcript-mtime read | as B; F-vs-I stays a human call | same-host fast path, others unchanged | none | none |
+| F. B with E first (combination) | one record with boot check and PID check, plus idle visibility | B plus a transcript-mtime read | as B; still needs grace tables and a role exemption; F-vs-I stays a human call | same-host fast path, others unchanged | none | none |
+| **H. Host-local lock; `main` only for cross-host (picked)** | atomic `mkdir` lock per task under a host-local state dir (pid, start, boot id, session); `claimed_by` committed only at first push | one helper plus about 6 call sites; claim PR and solo-repo mode deleted | state dir shared across hosts (unsupported); `$CLAUDE_PID` unset (refuse); two hosts can start the same task before a push (conflict at PR time) | foreign claims keep today's staleness window | lowest: one `claimed_by` write per task, none at pickup | none |
 | G. B plus C | local record for liveness, frontmatter hint for other hosts | B plus allowlists | the hint rots; little value because remote hosts cannot check a PID | marginal | extra line | new keys |
 
-Rejected: A (breaks clone-stable identity, the three strongest reasons below), C, D, G. E alone is kept only as the first slice of F.
+Rejected: A (breaks clone-stable identity, reasons below), C, D, G. B, E and F are superseded by H, which gives the same dead-session detection with a simpler mechanism and also stops two agents on one host from taking the same task.
 
 Why A fails, in one place:
 - It breaks "same clone = same claimant". After every restart, resume or cron tick the new PID sees its own earlier claims as `other`.
@@ -129,101 +133,136 @@ Why A fails, in one place:
 - A bare PID is recyclable (macOS wraps at 99999); it needs start time and boot id, which is option B's record anyway.
 - One real gain of A: `_tc_is_own_cross_repo_clone` (`:860`) would be unnecessary when `/address-pr` runs in the same process. Cron or autopilot dispatches start a new process, so the path rule is still needed.
 
-## 4. Design of the picked option (F: local liveness record)
+## 4. Design of the picked option (H: host-local lock, `main` only for cross-host)
 
-### 4.1 Liveness record
+### 4.1 Principle
 
-- Location: `$CLAIMANT_STATE_DIR/claims/<task-id>.json` (default `~/.claude/state/claims/`; honors `CLAIMANT_STATE_DIR` and, via `T20261002-303999`, `CLAUDE_CONFIG_DIR`). Mode 600, never committed, written with temp file plus rename.
-- Keyed by task id, machine-wide, so the hub clone and an ephemeral cross-repo target clone see the same record.
-- Format:
+- Two layers, each answering one question:
+  - **Host-local lock** (new): "which agent on THIS host is working task T?" Atomic, instant, no git.
+  - **`claimed_by` on `main`** (kept): "is some OTHER host working task T?" Written once the work is cross-host-visible; read with today's rules.
+- Decision: a same-host claim is **not** written to `main` at pickup. `claimed_by` (and `status: In Progress`) is committed with the task's first push, as part of the implementation branch and PR; there is no separate claim PR.
+  - Why: the claim PR existed to arbitrate agents, and the lock now does that for the same host. Other hosts only need to see a claim once there is something to collide with (a pushed branch or PR).
+  - Cost: two hosts can both start the same task before either pushes; the loser hits the `claimed_by` merge conflict at PR time (the existing lock rule, just later). Accepted because cross-host overlap is rare; the alternative (write at pickup, as today) is listed under open questions.
+- Id format unchanged: `cc1-<machine-id>:<path-hash>` is still what lands on `main`; it is only used there for host-part comparison and display.
+
+### 4.2 The lock
+
+- Location: `$CLAIMANT_STATE_DIR/locks/<task-id>/` (default `~/.claude/state/locks/`), outside every repo, never committed. Keyed by task id, so a hub clone and a cross-repo target clone share it.
+- Atomicity: `mkdir` of the lock dir. Success means acquired; `EEXIST` means held.
+- Contents: `holder.json` written right after `mkdir`:
 
 ```json
-{"v":1,"task":"T20261019-187676","claimant":"cc1-50ac6891:5e1f014a92f728aa",
- "claude_pid":2217,"pid_start":"Mon Oct 19 12:30:28 2026",
- "boot_id":"1792430967","session_id":"b4e03d23-...","role":"interactive",
- "transcript":"<abs path or empty>","acquired_at":"2026-10-19T13:00:00Z"}
+{"v":1,"pid":2217,"pid_start":"Mon Oct 19 12:30:28 2026","boot_id":"1792430967",
+ "session_id":"b4e03d23-...","clone":"5e1f014a92f728aa","acquired_at":"2026-10-19T13:00:00Z"}
 ```
 
-- No heartbeat writes. "Last activity" is read from the transcript file's mtime, so nothing writes on a timer.
-- PID source: `$CLAUDE_PID`; fallback is the first `claude` ancestor in the PPID chain; if neither is found, write no record (state `unknown`, today's behavior).
+- Holder pid is `$CLAUDE_PID` (verified to be the `claude` process, shared by subagents); fallback is the first `claude` ancestor in the PPID chain; if none is found, acquire refuses with a clear message (fail closed, like `claimant-id.sh`).
+- Holder states, computed by one pure helper `lock_holder_state`:
 
-### 4.2 Who writes and reads
-
-| actor | action |
-|---|---|
-| `_tc_acquire` (`none` and `mine` branches) | write or refresh the record (takeover by a resumed session updates `claude_pid` and `pid_start`) |
-| `_tc_release`, `_tc_release_others` | remove the record for each freed task |
-| `_tc_reclaimable` | compute the state (4.3) and pass it to `_tc_reclaim_decide` as a new 7th argument |
-| `_tc_release_others` | skip, and warn about, a task whose record shows another **live** session in this clone (case P) |
-| `reclaim_sweep.sh` | prints the reason (`restarted-host`, `dead`) in its reclaimed line and Slack summary; also reports `idle` claims it did not touch |
-| `/claim`, `/drive`, `/todo` | no flow change; their `reclaimable` check now returns `reclaimable` sooner |
-
-### 4.3 State computed from the record (`claim_liveness_state`, pure helper, prints one word)
-
-| record | boot id | PID | transcript idle | state |
-|---|---|---|---|---|
-| none, unreadable, or claimant machine-id differs from this host | | | | `unknown` |
-| present | differs | any | any | `rebooted` |
-| present | same | dead, or alive with a different start time (PID reuse) | any | `dead` |
-| present | same | alive, start matches | below `IDLE_MIN` | `alive` |
-| present | same | alive, start matches | at or above `IDLE_MIN` | `alive-idle` |
-
-### 4.4 Decision table for `_tc_reclaim_decide` (new rows run after the existing status and shape pre-checks, before the staleness window)
-
-| state | role | extra condition | verdict |
+| holder.json | boot id | pid | state |
 |---|---|---|---|
-| `unknown` | any | | today's rules unchanged (foreign host, old claims, missing record) |
-| `rebooted` | any | `live_signal` not set | `reclaimable` immediately (restarted host, case R3) |
-| `dead` | `interactive` | time since the record's `acquired_at` and transcript mtime both at least `GRACE_DEAD` (default 15 min) | `reclaimable` (case D) |
-| `dead` | `ccxp` | same, but `GRACE_DEAD_CCXP` (default 3 h, longer than the hourly tick) | `reclaimable` |
-| `dead` | any | grace not elapsed | `live` |
-| `alive` | any | | `live`, skip the window (healthy session) |
-| `alive-idle` | any | | falls through to today's staleness window; nothing new auto-steals (case F or I) |
-| any | any | CI run live | `live` (existing `live_signal` precedence kept) |
+| session id equals mine | any | any | `mine` (re-entrant; refresh pid and start for a resumed session) |
+| other session | differs | any | `stale` (rebooted) |
+| other session | same | dead, or alive with a different start time (PID reuse) | `stale` (dead) |
+| other session | same | alive, start matches | `held` |
+| missing or unparsable, dir mtime older than 10 s | | | `stale` (crash between `mkdir` and write) |
+| missing or unparsable, dir mtime within 10 s | | | `held` (writer still in progress) |
 
-- Same-host `rebooted` and `dead` skip the commit and PR windows on purpose: those signals are polluted by the claim commit and by bots (section 1).
-- `human override` and non-session shapes remain never reclaimable (existing pre-check).
+### 4.3 Lifecycle
 
-### 4.5 Frozen and idle handling
+- **Acquire** (`task_claim.sh acquire T`): `mkdir`; on success write `holder.json`, print `acquired`. On `EEXIST` evaluate the holder state: `mine` prints `mine`, rc 0; `held` prints `claimed:local:<session>`, rc 3; `stale` takes over.
+- **Takeover**: `mv` the stale dir to `locks/.stale-<task>-<rand>`; only the process whose `mv` succeeds retries `mkdir`, so two racing takers cannot both win. The old dir is deleted afterwards. A takeover also clears any `claimed_by` on the task file that names this host (it is now orphaned) before the new holder re-stamps it at push time.
+- **Release** (`release T`, at close): `rm -r` the lock dir and clear `claimed_by` and `claimed_role` in the task file as today.
+- **Switching tasks** (`release-others T`): now means "release every lock whose holder session is mine, except T". It no longer scans task files by clone id. The old "at most one claim per clone" rule becomes "one active lock per session"; it is kept only as hygiene so a session that moves on frees its previous task. It can be dropped later without correctness loss, because a dead session's lock is taken over lazily.
+- **Session exit without release** (crash, kill, reboot): the lock dir remains and is `stale` the next time anyone looks. No cleanup daemon.
 
-- No rule auto-steals from a live process; a hung and a waiting-for-human session look identical.
-- Visibility: the sweep lists `idle <task> <hours>` for `alive-idle` claims past `IDLE_NOTIFY` (default 24 h) in the same Slack message, so a human decides.
-- Human path: a documented manual step (`/claim release T<id>` run by whoever confirms the session is gone, or killing the hung process, which turns the state into `dead`). No new verb is needed in the first slice.
-- Existing staleness window still reclaims a claim whose PID is alive but whose commits and PR have been quiet for the full window; unchanged behavior, now explicitly the only path for frozen sessions.
-- Defaults to confirm at `/incept`: `IDLE_MIN` 30 min, `GRACE_DEAD` 15 min, `GRACE_DEAD_CCXP` 3 h, `IDLE_NOTIFY` 24 h.
+### 4.4 Decision tables
 
-### 4.6 Edits per file (no scripts change in this task; list for the implementation task)
+Pick or acquire on the same host, then the `main` claim, evaluated in this order:
 
-- New `_session/claim_liveness.sh` (side-effect-free, sourceable, like `claimant-id.sh`): `claim_live_write`, `claim_live_rm`, `claim_live_read`, `claim_liveness_state`, `claim_boot_id`, `claim_pid_start`.
-- `_session/task_claim.sh`: `_tc_acquire` (`:552-575`) writes the record; `_tc_release` (`:582`) and `_tc_release_others` (`:592-640`) remove it, the latter also skips live foreign sessions; `_tc_reclaimable` (`:642`) computes the state; `_tc_reclaim_decide` (`:288-340`) gets the 7th argument and the new rows; header comment `:12-39` and usage text updated.
-- `_session/reclaim_sweep.sh` (`:73-110`): print reason; list `alive-idle` claims.
-- Docs: `claim/SKILL.md` (note under §1.2 that `reclaimable` is now liveness-aware), `_session/README.md:93-109`, `ccxp/SKILL.md:92-107` (retire "heartbeat-free by design" wording: still no heartbeat, but local liveness), `glossary.md:23,29`, `lifecycle.md` if it names the window.
-- No change: `claimant-id.sh` (id format), `lint_tasks.py`, `sync.py`, statusline, attribution, `todo/scripts/_lib.sh`.
+| local lock | `claimed_by` on `main` | result |
+|---|---|---|
+| free, or `stale` (taken over) | empty | acquire, proceed |
+| `mine` | any | proceed |
+| `held` by another session | any | `owned:local`, stop (same-host exclusion, even for a second agent in the same clone) |
+| free or `stale` | host-part is this machine | orphaned claim of a dead or rebooted session: take over, clear, proceed |
+| free or `stale` | host-part is another machine | foreign: today's `reclaimable` rules (staleness window, CI live run, human overrides never reclaimable); otherwise `owned:<by>` |
+| any | legacy or non-session shape | unchanged |
 
-### 4.7 Tests to add (`tests/claim_liveness.bats`, plus rows in `tests/task_claim.bats`)
+`_tc_reclaim_decide` change (the sweep and `reclaimable`):
 
-- Helper, with injectable `CLAIM_BOOT_ID` and `CLAIM_PS` overrides: `rebooted`, `dead` (spawn and kill a `sleep`), PID reuse (same PID, different start), `alive`, `alive-idle` (`touch -t` on a fake transcript), `unknown` for no record and for another machine-id.
-- `_tc_reclaim_decide` truth table: every row of 4.4, including `live_signal` precedence and the ccxp grace; existing tests must pass untouched (7th argument defaults empty).
-- `acquire` writes the record; `release` and `release-others` remove it; a resumed session (same session id, new PID) refreshes it.
-- `release-others` skips a task held by another live session in the same clone and prints a warning.
-- `reclaim_sweep` end to end: rebooted claim is freed with the reason in its output; `alive-idle` claim is listed, not freed; foreign-host claim behaves as before.
-- Doc lint and the `cc1-` shape tests stay green (no format change).
+| claim on `main` | local lock | verdict |
+|---|---|---|
+| host-part is this machine | `held` | `live` (never auto-steal a live pid) |
+| host-part is this machine | free or `stale` | `reclaimable` at once (restarted, dead, or never locked after the migration window) |
+| host-part is another machine | not consulted | today's window rules unchanged |
 
-### 4.8 Migration and compatibility
+### 4.5 Who reads it
 
-- No frontmatter or id change, so no migration of task files and no one-way-door reader needed.
-- Claims acquired before the change have no record, so they read `unknown` and keep today's behavior. The incident's own claim would not have been fixed by this change; only future claims are covered. An optional one-time `task_claim.sh adopt` could stamp a record for currently held claims; not planned in the first slice.
-- Rollback is deleting the helper call sites; the record files are inert.
-- Cross-platform: boot id and `ps lstart` differ on macOS and Linux; the helper must handle both and fall back to `unknown` on any error (fail toward today's behavior, never toward a steal).
+| consumer | change |
+|---|---|
+| `/claim`, `/drive` Phase 1 | `acquire` is local and instant; no claim PR, no solo-repo branch; `claimed_by` is committed with the first push (a small `task_claim.sh stamp T` step run before that push) |
+| `/address-pr` (`pr-owner`) | PR to task to `claimed_by` on `main`: same-host host-part is checked against the local lock (`mine`, `owned:local`, or free); another host's claim is `owned:<by>` as today. The cross-repo path special case (`_tc_is_own_cross_repo_clone`) becomes unnecessary when the target clone runs in the same session; keep it until verified for dispatched `address-pr` runs |
+| `release-others` | see 4.3 |
+| statusline | finds the task by the lock whose holder `clone` equals this clone's path-hash and whose pid is alive (assumed: the statusline process cannot rely on `CLAUDE_CODE_SESSION_ID`, so use the clone hash); falls back to the old `claimed_by` grep |
+| `/todo next`, `todo/scripts/_lib.sh:33-66` | claim state adds `peer-local` when a live lock is held by another session; foreign hosts as today |
+| `reclaim_sweep.sh` | uses the second table above; no longer waits for the window on this host |
+
+### 4.6 Frozen sessions
+
+- A live holder pid is never auto-stolen. A hung and a waiting-for-human session look identical, so no timeout steals from it.
+- Human override: `task_claim.sh unlock T<id> --force`. It prints the holder (pid, start, session, acquired time) and takes over only when run with `--force`; killing the hung process instead turns the lock `stale` and needs no override.
+
+### 4.7 Failure modes
+
+| failure | handling |
+|---|---|
+| state dir on a network home shared by several hosts | unsupported: pid and boot id are host-local and `machine-id` is shared too; the state dir must be host-local. Documented; helper refuses to run if `CLAIMANT_STATE_DIR` is not writable |
+| lock dir on another filesystem than the clone | irrelevant; the lock is keyed by task id, not path |
+| two clones on one host racing | same lock dir, `mkdir` arbitrates; the loser gets `owned:local` |
+| crash between `mkdir` and `holder.json` | 10 s grace by dir mtime, then `stale` |
+| PID reuse after wrap | pid alive but start time differs, so `stale` |
+| `$CLAUDE_PID` missing (unknown launch mode) | acquire refuses; test the PPID fallback per launch mode |
+| lock deleted by hand | next acquire simply succeeds; same as a release |
+| `mv` takeover interrupted | leftover `.stale-*` dirs are ignored and swept on the next acquire |
+
+### 4.8 Edits per file (no scripts change in this task; list for the implementation task)
+
+- New `_session/claim_lock.sh` (sourceable, side-effect-free): `lock_acquire`, `lock_release`, `lock_holder_state`, `lock_force`, `claim_boot_id`, `claim_pid_start`.
+- `_session/task_claim.sh`: `_tc_acquire` (`:552-575`) takes the lock first and stops writing `claimed_by` at pickup; new `stamp` verb writes `claimed_by` and `status` at first push; `_tc_release` (`:582`) releases the lock; `_tc_release_others` (`:592-640`) rewritten around lock holders; `_tc_decide` (`:240`) gains the local-lock input; `_tc_reclaim_decide` (`:288-340`) gets the host-part rows; `_tc_pr_owner` (`:918-947`) reads the lock for same-host claims; new `unlock` verb; usage and header comment (`:12-39`).
+- `_session/reclaim_sweep.sh` (`:73-110`): report reason (`rebooted`, `dead`).
+- Skills: `claim/SKILL.md` (delete Solo-repo mode, drop the claim-PR steps, document `unlock`), `drive/SKILL.md` Phase 1 (`:116-139`: drop claim PR and solo bullet, add the `stamp` step), `address-pr/SKILL.md` `pr-owner` flow (`:99-167`), `todo/SKILL.md` (`:105,141`), `ccxp/SKILL.md:92-107` ("heartbeat-free" wording), `_session/README.md:93-109`, `glossary.md:23,29`, `statusline-setup/scripts/statusline-command.sh:24-70`.
+- No change: `claimant-id.sh` id format, `lint_tasks.py`, `sync.py` (no new frontmatter key).
+
+### 4.9 Tests (`tests/claim_lock.bats`, plus rows in `tests/task_claim.bats`)
+
+- Lock: acquire, re-entrant `mine`, `held` by a live second process, `stale` after the holder is killed, PID reuse (injected start time), reboot (injected `CLAIM_BOOT_ID`), crash-before-write (empty dir, aged with `touch -t`), racing takers (two background acquires, exactly one wins), release removes the dir.
+- Decision tables 4.4: every row, including `owned:local` for a second agent in the same clone, and foreign-host rows matching today's results.
+- `release-others` frees only my session's locks; `unlock --force` output and takeover.
+- Sweep end to end: rebooted same-host claim freed at once; foreign-host claim waits for the window; live holder is `live`.
+- `pr-owner` for same-host and cross-repo target clone; statusline finds the locked task.
+- Existing `cc1-` shape tests stay green (no format change).
+
+### 4.10 Migration
+
+- No id or frontmatter change. Existing `claimed_by` values on `main` keep their meaning: host-part this machine means "governed by the local lock", another machine means foreign.
+- Rollout window: the first run creates `locks/.v1` (marker). A same-host claim with no lock, made by an older version, falls back to the old staleness window until the marker is older than `TASK_CLAIM_STALE_DAYS`; after that a missing lock means free. A claim whose id equals mine is adopted (lock created) on the next `acquire`.
+- Legacy `<host>:<path>`, `<sid>@<machine>` and human overrides: unchanged.
+- Rollback: remove the lock calls; the lock dirs are inert.
+
+### 4.11 Dropped from the earlier design
+
+- Grace-period tables (`GRACE_DEAD`, `GRACE_DEAD_CCXP`), the ccxp-role exemption, idle thresholds and transcript-mtime reads, the per-task liveness record with a separate decision state machine, and the claim PR for pickup: the lock plus pid-start-boot check makes them unnecessary. A cron `claude -p` tick that dies between ticks simply releases nothing and is taken over cleanly by its next tick (same clone) or by a peer after the pid is dead.
 
 ## Open questions
 
-- Confirm the default timings (`IDLE_MIN`, `GRACE_DEAD`, `GRACE_DEAD_CCXP`, `IDLE_NOTIFY`).
-- Is `CLAUDE_PID` set in every launch mode (`claude -p`, SDK, dispatched agents)? Verified only for an interactive session and its subagent; the PPID fallback needs a test.
-- Is the transcript path layout (`projects/<cwd-slug>/<session-id>.jsonl`) stable enough, or should the record store the resolved path at acquire (as drafted)?
-- Should `claimed_role: ccxp` claims also be exempt from the `dead` fast path (rely on `rebooted` only)?
-- Share the machine-local store with `T20261012-342180` (claimant reverse lookup), including its `CLAUDE_CONFIG_DIR` handling (`T20261002-303999`)?
-- Do we still want the original ask (id literally `host:PID`) after reading section 3? If yes, record the decision to drop clone-stable ids and the one-claim-per-clone invariant explicitly.
+- Interpretation chosen from the feedback: `claimed_by` is written at first push, not at pickup (4.1). Alternative: write at pickup as today, which keeps early cross-host visibility but keeps the claim PR.
+- Interpretation chosen: the lock is keyed by task id and host, so two agents in one clone are also mutually exclusive.
+- Is `CLAUDE_PID` set in every launch mode (`claude -p`, SDK, dispatched agents)? Verified only for an interactive session and its subagent.
+- Can the statusline get the session id, or must it use the clone hash (4.5)?
+- Does a cron tick that resumes a task whose previous tick died need an explicit hand-off, or is takeover by pid-dead enough?
+- Share the host-local state dir and `CLAUDE_CONFIG_DIR` handling with `T20261012-342180` (claimant reverse lookup) and `T20261002-303999`.
+- Marker window length for migration: `TASK_CLAIM_STALE_DAYS` assumed.
 
 ## Appendix: change surface if option A were adopted as written (for the record)
 
