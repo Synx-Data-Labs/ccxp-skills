@@ -34,9 +34,9 @@ scheduled: 2026-10-12
 
 - **Observed** (reported by the maintainer; not re-measured here): running
   the suite in parallel locally exhausted all memory on the macOS dev
-  machine and froze it. Each bats job forks a subshell per `@test`, so
-  N jobs multiply the resident footprint; unbounded `--jobs` (or `--jobs
-  $(nproc)`-style defaults) is unsafe on a laptop that also runs an IDE,
+  machine and froze it. Hypothesis (unverified): N concurrent jobs multiply the
+  resident footprint (per-test process trees, not subshell forks alone);
+  unbounded `--jobs` (or core-count-sized defaults) is unsafe on a laptop that also runs an IDE,
   Claude sessions, etc.
 - **New requirement**: the parallel path must have a way to limit
   parallelism and memory so it cannot freeze the dev box. Safe-by-default
@@ -58,7 +58,7 @@ scheduled: 2026-10-12
   `tests/**`, etc.) — a frequent trigger set, so the serial cost is paid
   often, not just occasionally.
 - **Memory-safety gap (feedback 2026-10-19)**: plain `--jobs N` has no
-  memory bound. Verified by the maintainer's report: a local parallel run
+  memory bound. Reported by the maintainer: a local parallel run
   froze macOS. Unverified: which tests/process trees dominate memory (a
   few heavy tests vs. N x baseline) — measure before choosing the
   per-job budget.
@@ -113,8 +113,9 @@ scheduled: 2026-10-12
 - **Memory-cap options evaluated** (design-level; feasibility on macOS
   is from general knowledge, not tested here — verify in the trial):
   - *Bound job count by RAM* (**primary**): `jobs = min(cpus,
-    floor(avail_ram / per_job_budget), hard_cap)`. RAM via `sysctl -n
-    hw.memsize` (macOS) / `/proc/meminfo` (Linux); CPUs via `sysctl -n
+    floor(ram / per_job_budget), hard_cap)`. `ram` = total RAM via
+    `sysctl -n hw.memsize` (macOS) / `MemTotal` in `/proc/meminfo`
+    (Linux; `MemAvailable` is an alternative); CPUs via `sysctl -n
     hw.ncpu` / `nproc`. Per-job budget (assumed ~512 MB-1 GB) to be
     measured. Portable, no privileges.
   - *Env override*: `BATS_JOBS=<n>` (explicit wins, still clamped by the
@@ -125,12 +126,16 @@ scheduled: 2026-10-12
   - *Per-process limit*: macOS has no cgroups and `ulimit -v` is
     unreliable/ignored there (assumed; confirm), so do **not** rely on it.
     Use `ulimit -v` only on Linux CI if useful (optional).
-  - *Watchdog*: background loop in the wrapper polling free memory
-    (`vm_stat` / `memory_pressure` on macOS, `/proc/meminfo` on Linux);
-    below a floor (e.g. <10% free) kill the bats process group and fail
+  - *Watchdog*: background loop in the wrapper polling memory
+    pressure (`memory_pressure`'s system-wide free percentage on macOS;
+    raw `vm_stat` free pages are misleading there because macOS keeps
+    them low by design; `MemAvailable` in `/proc/meminfo` on Linux);
+    below a floor (e.g. <10% free, to be tuned) kill the bats process group and fail
     with a clear message. Last-line defence, not primary.
-  - *Local vs CI defaults*: local = RAM-bounded and low (e.g. max 2-4,
-    default `min(cpus/2, RAM-derived)`); CI (`CI=true`) = `--jobs 4`
+  - *Local vs CI defaults*: local = RAM-bounded and low: the same formula
+    with a lower local hard cap (e.g. 2-4) and `cpus/2` in place of
+    `cpus` (exact values settled by the trial); CI (`CI=true`) = 4 jobs (the wrapper
+    resolves it to `--jobs 4`)
     matching the 4-core runner (7 GB RAM, assumed from GitHub docs).
 
 ## Test plan
@@ -164,8 +169,9 @@ criteria are evidence-based, not just "the diff looks right":
 
 ## Done criteria
 
-- [ ] `.github/workflows/tests.yml`'s `bats` job invokes `bats --jobs 4
-      ...` — `file:line` after the change: `.github/workflows/tests.yml`
+- [ ] `.github/workflows/tests.yml`'s `bats` job runs with 4 jobs
+      (via the wrapper's `CI=true` default, or a literal `bats --jobs 4
+      ...` if no wrapper is adopted) — `file:line` after the change: `.github/workflows/tests.yml`
       (bats step).
 - [ ] A live CI run of the modified workflow on the feature branch shows
       all 1074 tests passing — the triggered run's own log/summary is the
