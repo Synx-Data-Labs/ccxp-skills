@@ -22,7 +22,7 @@ scheduled: 2026-10-19
   - Foreign-host claims, id format, `pr-owner`, `release`, `release-others` and the statusline are unchanged.
   - The lock logic lives in one shared library, `_session/clone-lock.sh`; scripts and skills are thin callers.
 - Scope also includes deleting the solo-repo mode handling: the "Solo-repo mode" section of `claim/SKILL.md` and the matching bullet in `drive/SKILL.md` Phase 1 (`:137-139`), including the `/claim` "Solo-repo mode" cross-reference at `drive/SKILL.md:139` and every other solo-mode mention in `claim/SKILL.md` (about lines 25, 48, 88, 111, 147).
-- Done looks like: after a restart or crash, the next pick on this host reclaims the dead holder's claim immediately; a second session in the same clone is refused; cross-host behavior is unchanged.
+- Done looks like: after a restart or crash, the next pick on this host reclaims the dead holder's claim immediately (unless the task is in Review or has an open PR, or a CI run is live: those keep today's window rules); a second session in the same clone is refused; cross-host behavior is unchanged.
 
 ## 1. Current behavior of `/claim` (and `task_claim.sh`)
 
@@ -58,12 +58,12 @@ scheduled: 2026-10-19
 | `claimant-id` / `_tc_claimant_id` (`:106`) | prints `cc1-<machine-id>:<path-hash>` from `claimant-id.sh:90-96`; machine-id is a random 8 hex cached under `~/.claude/state`, path-hash is `sha256(secret + clone toplevel)[0:16]` |
 | `_tc_decide` (`:240`) | `none` (empty), `mine` (exact string equality with my id), else `other`. "Mine" therefore means same machine and same clone path, not same session |
 | `acquire` / `_tc_acquire` (`:552-575`) | `mine`: prints `mine`, rc 0. `none`: sets `claimed_by`, `claimed_role`, `status: In Progress`, stamps `scheduled`, prints `acquired`. `other`: prints `claimed:<cur>` and returns **rc 3**. A legacy plaintext self-claim is re-stamped in place |
-| `release` / `_tc_release` (`:582`) | clears `claimed_by` and `claimed_role`, sets the given status (default Open) |
+| `release` / `_tc_release` (`:583`) | clears `claimed_by` and `claimed_role`, sets the given status (default Open) |
 | `release-others` (`:592-640`) | release-on-pickup: frees every task in `dev/TODO` and `dev/PARKING` whose `claimed_by` equals my id, except the kept id; `In Progress` and `Design` fall back to `Open`, other statuses are kept. Enforces at most one claim per clone |
 | `read` | prints `status` and `claimed_by` |
 | `reclaimable` / `_tc_reclaimable` (`:642`) | gathers `commit_days`, `pr_days`, and a CI live-run signal, then calls `_tc_reclaim_decide` |
-| `_tc_reclaim_decide` (`:288-340`) | pure: `live` unless status is `In Progress` or `Review`, `claimed_by` is session-shaped (current `cc1-` form or legacy `<sid>@<machine>`; a human override like `Alex` is never reclaimable), no CI run is live, and **both** `commit_days >= stale` and `pr_days >= stale` (`TASK_CLAIM_STALE_DAYS`, default 2) |
-| `pr-owner` / `_tc_pr_owner` (`:918`) | PR to task to `claimed_by` on `main`, then `_tc_decide`; yields `mine`, `free`, `new`, `owned:<by>`, `untracked`, or `unknown`. `_tc_is_own_cross_repo_clone` (`:860`) upgrades `other` to `mine` when the clone is the ephemeral `<task-id>-*-target` clone on the same machine |
+| `_tc_reclaim_decide` (`:250-337`) | pure: `live` unless status is `In Progress` or `Review`, `claimed_by` is session-shaped (current `cc1-` form or legacy `<sid>@<machine>`; a human override like `Alex` is never reclaimable), no CI run is live, and **both** `commit_days >= stale` and `pr_days >= stale` (`TASK_CLAIM_STALE_DAYS`, default 2) |
+| `pr-owner` / `_tc_pr_owner` (`:904-949`) | PR to task to `claimed_by` on `main`, then `_tc_decide`; yields `mine`, `free`, `new`, `owned:<by>`, `untracked`, or `unknown`. `_tc_is_own_cross_repo_clone` (`:860`) upgrades `other` to `mine` when the clone is the ephemeral `<task-id>-*-target` clone on the same machine |
 | `reclaim_sweep.sh` (`:73-110`) | Phase 0.5 of `/ccxp`: for each `In Progress` or `Review` task with a claim that is not mine, ask `_tc_reclaimable`; with `--apply`, `_tc_release` it. It opens a PR and Slacks each reclaim |
 
 ### Why the restart case got `live` and `acquire` rc=3 (inferred from the code, not observed)
@@ -85,7 +85,7 @@ Same clone means same path hash, therefore the same claimant id; `_tc_decide` al
 |---|---|---|
 | R1 restarted session | process exited, user started a new `claude` in the same clone | new session continues; old claim is its own |
 | R2 resumed session | `claude --resume <id>`: same session id, new PID | same as R1 |
-| R3 rebooted machine | all processes gone, boot id changed | claim is orphaned; anyone (any clone) may reclaim at once |
+| R3 rebooted machine | all processes gone, boot id changed | claim is orphaned; reclaimable at once by any clone, subject to the grace rule (4.6) and a live CI run |
 | D dead session | process crashed or was killed, no reboot | orphan after a short grace; peers may reclaim |
 | F frozen or hung | process alive, not progressing | do not auto-steal; surface to a human |
 | I idle but healthy | process alive, waiting for a human answer (hours is normal) | must look `live`; indistinguishable from F by activity alone |
@@ -199,7 +199,7 @@ acquired_at=2026-10-19T13:00:00Z
 |---|---|---|
 | `task_claim.sh acquire` (`:552-575`) | before touching the claim, take this clone's lock; new rc 4 `seat-held:<pid>:<session>` when another live session holds this clone | `lock_acquire` |
 | `task_claim.sh release`, `release-others` | unchanged; the lock is the clone's seat and persists while the agent lives | none |
-| `task_claim.sh reclaimable` (`:642`) and `_tc_reclaim_decide` (`:288-340`) | when `claimed_by`'s host-part is this machine, ask the claimant clone's lock and pass the result as a new 7th argument | `lock_key_of`, `lock_state` |
+| `task_claim.sh reclaimable` (`:642`) and `_tc_reclaim_decide` (`:250-337`) | when `claimed_by`'s host-part is this machine, ask the claimant clone's lock and pass the result as a new 7th argument | `lock_key_of`, `lock_state` |
 | `reclaim_sweep.sh` (`:73-110`) | unchanged code path through `reclaimable`; its output line adds the reason (`dead`, `rebooted`) | via `reclaimable` |
 | `task_claim.sh unlock <T<id>\|key>` (new verb) | human override for a frozen live holder | `lock_force_unlock` |
 | `task_claim.sh pr-owner`, `_tc_decide`, `claim-state` in `todo/scripts/_lib.sh` | no change; `/todo next` already uses `reclaimable`, so it benefits automatically | none |
@@ -286,7 +286,7 @@ acquired_at=2026-10-19T13:00:00Z
 ## Appendix: change surface if option A were adopted as written (for the record)
 
 - Producers: `claimant_id` (`_session/claimant-id.sh:90-96`), `_tc_claimant_id` (`task_claim.sh:106-123`), statusline copy (`statusline-command.sh:24-70`).
-- Parsers and comparers: `claimant_is_current_shape` (`claimant-id.sh:102`), `claimant_display` (`:114`), `_tc_decide` (`task_claim.sh:240`), `_tc_reclaim_decide` (`:288-340`), `_tc_is_legacy_self_claim` (`:493-517`), `_tc_acquire`, `_tc_release_others`, `_tc_is_own_cross_repo_clone` (`:860-890`), `_tc_pr_owner` (`:918-947`), `reclaim_sweep.sh:73-110`, `claim_gap.sh`, `task-state.sh:78-158`, `attribution.sh:106-160,218-241`, `todo/scripts/_lib.sh:33-66`, `epic/scripts/epic.sh`, `ccxp/scripts/epic-status.sh:151-167`, `retro/scripts/compute-velocity.sh:78-108`, `_ipm/ipm-iteration-drain-check.sh`, `migrate-task/scripts/migrate.sh`, `actions/sync-tasks/sync.py:614-636,790-795`.
+- Parsers and comparers: `claimant_is_current_shape` (`claimant-id.sh:102`), `claimant_display` (`:114`), `_tc_decide` (`task_claim.sh:240`), `_tc_reclaim_decide` (`:250-337`), `_tc_is_legacy_self_claim` (`:493-517`), `_tc_acquire`, `_tc_release_others`, `_tc_is_own_cross_repo_clone` (`:860-890`), `_tc_pr_owner` (`:904-949`), `reclaim_sweep.sh:73-110`, `claim_gap.sh`, `task-state.sh:78-158`, `attribution.sh:106-160,218-241`, `todo/scripts/_lib.sh:33-66`, `epic/scripts/epic.sh`, `ccxp/scripts/epic-status.sh:151-167`, `retro/scripts/compute-velocity.sh:78-108`, `_ipm/ipm-iteration-drain-check.sh`, `migrate-task/scripts/migrate.sh`, `actions/sync-tasks/sync.py:614-636,790-795`.
 - Docs: `lifecycle.md:93`, `glossary.md:23,29`, `_session/README.md:95-103`, `drive/SKILL.md:123-133`, `claim/SKILL.md:42-122,165-189`, `address-pr/SKILL.md:99-167`, `todo/SKILL.md:105,141`, `ccxp/SKILL.md:92-107,317,403`, `autopilot/SKILL.md:107`, `statusline-setup/SKILL.md:13`, `eta/SKILL.md:43-74`, `ipm/SKILL.md:66`.
 - Tests: `tests/task_claim.bats` (~100 matches), `tests/claimant_id.bats` (~48), `tests/statusline_setup.bats`, `tests/attribution.bats`, `tests/todo-next.bats`, `tests/reclaim_sweep.bats`, `tests/claim_gap.bats`, `tests/task-state.bats`, `actions/sync-tasks/test_sync.py`.
 - Prior decision to respect: the `T20260911-698434` journal ("Format alternatives considered") chose the two-field `cc1-<mid>:<hash>` shape because the value is parsed by YAML, grepped as a regex by the statusline, and split on the first `:`.
