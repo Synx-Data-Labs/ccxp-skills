@@ -16,7 +16,7 @@ related: [migrate-task]
   - A dispatcher, or a new `ccxp-agent`, creates a worktree and works one task/PR there.
   - Open question the user asked: can this be achieved at all? Answer it, then design it.
 - **Current state**:
-  - Tasks are organized per repo (`dev/TODO` queue each), under `/Users/xlj/workspace/synx-data-labs`: ccxp-skills, synx-skills, synxdb-team, synxdb-build-pipeline, synxdb-cloud-omnistrate, synxdb-devenv-launcher, synxdata.com.
+  - Tasks are organized per repo (`dev/TODO` queue each), in one shared parent workspace directory: ccxp-skills, synx-skills, synxdb-team, synxdb-build-pipeline, synxdb-cloud-omnistrate, synxdb-devenv-launcher, synxdata.com.
   - `/migrate-task` moves tasks between repos (triage between teams).
   - `/drive` and `/address-pr` create their own branch/clone and work in it, so the checkout is switched.
   - Sibling worktrees already exist (`ccxp-skills-wt-*`, `.claude/worktrees/*`) with no shared convention.
