@@ -42,6 +42,19 @@ STUB
   [[ "$output" == *"--add-label accepted"* ]]
 }
 
+@test "triage --task: posts a tracking-link comment before the label moves (T20261019-181127)" {
+  _stub_gh '{"labels":[{"name":"triage"}]}'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
+  [ "$status" -eq 0 ]
+  run cat gh-calls.log
+  [[ "$output" == *"comment 5 --repo acme/synxdb-support --body Tracked internally as synxdb-build-pipeline#T20261016-412473"* ]]
+  [[ "$output" == *"--add-label accepted"* ]]
+  comment_line=$(grep -n -- "comment 5" gh-calls.log | head -1 | cut -d: -f1)
+  label_line=$(grep -n -- "--add-label accepted" gh-calls.log | head -1 | cut -d: -f1)
+  [ "$comment_line" -lt "$label_line" ]
+}
+
 @test "deliver --urls: a verified URL moves the label" {
   _stub_gh '{"labels":[{"name":"in-progress"}]}'
   _stub_curl 200

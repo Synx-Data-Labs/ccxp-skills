@@ -27,7 +27,7 @@ support team — the delivering engineer can never close their own delivery.
 
 | Subcommand | Transition | Notes |
 |---|---|---|
-| `triage` | `triage` -> `accepted` | Confirmed real, in scope, queued. To reject at triage time, use `reject` instead. |
+| `triage` | `triage` -> `accepted` | Confirmed real, queued. To reject at triage time, use `reject` instead. If tracked, post `Tracked internally as <repo>#T<id>` (`--task`). |
 | `start` | `accepted` -> `in-progress`, or `delivered` -> `in-progress` | The second form is the revert path (customer reports the delivery didn't work); `deliver --revert` is an alias for this. |
 | `deliver` | `in-progress` -> `delivered` | **Evidence-gated** — see below. |
 | `links` | (no transition) | Standalone cross-repo worker: resolves + HTTP-verifies every partner download link for a released SBOM. Callable any time to refresh links, not just from `deliver`. |
