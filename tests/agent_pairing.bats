@@ -187,6 +187,14 @@ EOF
   grep -qi 'never a per-job judgment call' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
 }
 
+@test "status: calls out a stale pre-rename agent=dispatcher distinctly from an unrelated custom agent" {
+  mk_settings_with_agent dispatcher
+  run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -qi "stale"
+  echo "$output" | grep -qi "ccxp-agent"
+}
+
 @test "on: a pre-existing legacy dispatcher.md is reported as stale, never touched or auto-migrated" {
   mk_settings_with_agent dispatcher
   mkdir -p "$CLAUDE_DIR/agents"
