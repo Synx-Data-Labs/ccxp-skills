@@ -119,6 +119,8 @@ case "$ACTION" in
     AGENT="$(current_agent)"
     if [ "$AGENT" = "ccxp-agent" ]; then
       echo "agent-pairing: ON"
+    elif [ "$AGENT" = "dispatcher" ]; then
+      echo "agent-pairing: OFF (stale pre-rename agent \"dispatcher\" still set -- re-run 'on' to upgrade to ccxp-agent)"
     elif [ -n "$AGENT" ]; then
       echo "agent-pairing: OFF (current default agent: $AGENT)"
     else
