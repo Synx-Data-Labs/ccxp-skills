@@ -133,20 +133,56 @@ scheduled: 2026-10-19
   staleness problem this task must not make worse.)
 - **Detection: skip self-isolation when already isolated**, instead of
   blindly nesting a worktree inside a worktree every time. Checked in
-  order: (a) explicit opt-out (below); (b) cwd already under
-  `.claude/worktrees/` (the `ccxp-agent`/platform dispatch convention)
-  or matching `/tmp/autopilot-clone-*` / `/tmp/T*-target` (the existing
-  dedicated-clone conventions) — skip, operate in place. (*Alternative
-  rejected*: track isolation state only via an explicit env var set by
-  every caller, never path sniffing — rejected because it requires
-  every existing caller, including historical `ccxp-agent` dispatches
-  and `/autopilot`'s current `--auto-selected` dispatch — neither of
-  which sets any such var today — to be updated in lockstep before the
-  safety net engages; path-based detection degrades safely, worst case
-  a harmless redundant nested worktree, never a missed isolation.)
-  `/autopilot` additionally passes the signal explicitly when
-  dispatching `/drive` (defense-in-depth for its own known case, not
-  reliance on path-sniffing alone).
+  order:
+  1. **Explicit opt-out** — `WS_NO_ISOLATE=1` / `DRIVE_NO_ISOLATE=1` (the
+     same variable serves the interactive opt-out below AND is the
+     *authoritative* signal for `/autopilot`'s own dispatch — see below,
+     not a separate mechanism).
+  2. **cwd already under `.claude/worktrees/`** — the one check that is
+     path-based, and deliberately: it covers every `ccxp-agent`/platform
+     `isolation: "worktree"` dispatch uniformly, *including* `/drive`
+     Phase 6's own `--dispatch-blockers` sub-case (`drive/SKILL.md:483-485`,
+     which already creates exactly this kind of platform worktree for its
+     one-off blocker dispatch) — one check, two existing call sites, no
+     special-casing either.
+  3. **Cross-repo mode is structural, not detected** — when the task's
+     `Target repo` is set, Phase 1.5 already owns isolation via its own
+     `$TARGET` ephemeral clone; the new same-repo logic below is gated on
+     `Target repo` being *unset* and never runs at all in cross-repo mode,
+     so there is nothing to sniff for it.
+  - (*Alternative rejected, revised after design review*: the original
+    draft of this check also pattern-matched `$PWD`'s bare basename
+    against `autopilot-clone-*` / `T*-target` as a passive fallback for
+    `/autopilot`'s dispatched `/drive` runs. Dropped: `/autopilot`'s own
+    dedicated-clone identity (`_session/claimant-id.sh` hashes the
+    clone's toplevel path, and `autopilot/SKILL.md:106-107` is explicit
+    that *reusing one clone across cycles* is what keeps that identity
+    stable) means a *missed* detection here would not just cost a
+    harmless redundant worktree — it would silently create a *new*
+    worktree with a *different* toplevel path, hence a different
+    `claimant_id`, breaking peer-mode task-claim continuity across
+    cycles. `$PWD` basename is also strictly weaker than the toplevel
+    check used by #2 above — fragile to the exact cwd-drift failure mode
+    `autopilot/SKILL.md:116-117` already documents and defends against
+    by convention ("a dispatched sub-agent's Bash tool does not keep a
+    `cd` across separate calls... every bash command... must begin with
+    `cd "$CLONE_PATH" &&`"). Silent, passive detection is the wrong tool
+    for a case this consequential — `/autopilot` instead asserts #1
+    explicitly, below, the same way it already asserts `cd
+    "$CLONE_PATH"` explicitly on every command; nothing is left to
+    inference.)
+  - **`/autopilot`'s explicit signal, named precisely**: the existing
+    mandatory per-command prefix at `autopilot/SKILL.md:117` (`cd
+    "$CLONE_PATH" &&` before every bash call in its dispatched `/drive`
+    run) is extended to `WS_NO_ISOLATE=1 cd "$CLONE_PATH" &&` — the exact
+    same opt-out variable #1 defines, asserted on every command for the
+    life of the dispatched run, not inferred from its path. This is
+    `/autopilot` opting itself out of the *new* same-repo self-isolation
+    layer on the strength of its own pre-existing, already-isolated
+    clone — not a new or separate signal, and not a new failure mode:
+    if that per-command prefix convention itself fails, `/autopilot`
+    already has that exact exposure today (documented, accepted), and
+    this task does not change it.
 - **Same-repo self-isolation mechanism (new)**, for `/drive` and
   `/address-pr`: a new shared helper, `_worktree/self-isolate.sh`
   (mirrors the `_session/`, `_gh/` sourceable-helper convention) with:
@@ -240,7 +276,7 @@ scheduled: 2026-10-19
 |---|---|---|
 | `drive/SKILL.md` | 64-145 (Phase 1), 146-208 (Phase 1.5), 210-241 (Phase 2), 514-591 (Phase 7) | add same-repo `$WORK` self-isolation (`acquire` in Phase 1, `release` in Phase 7), `--no-isolate` flag |
 | `address-pr/SKILL.md` | 78-86 (clone-locality note), entry point | add standalone self-isolation + nested-detection |
-| `autopilot/SKILL.md` | 95-117 (dispatch clone + `/drive` dispatch) | doc update: explicit already-isolated signal passed to dispatched `/drive`; note interaction |
+| `autopilot/SKILL.md` | 117 (dispatch's mandatory per-command cd-prefix) | extend prefix to `WS_NO_ISOLATE=1 cd "$CLONE_PATH" &&`; explicit, not inferred, per design-review finding (clone-identity risk) |
 | `agent-pairing/assets/ccxp-agent.md` | 42 (carve-out line) | correct wording to match actual post-change state; external hard mandate unchanged |
 | `_worktree/self-isolate.sh` (new) | — | `acquire`/`release` helper, BATS-tested |
 | `tests/self_isolate.bats` (new) | — | acquire/release/idempotency/already-isolated-detection coverage |
@@ -252,15 +288,20 @@ scheduled: 2026-10-19
 Script Standards):
 
 - **`ws_already_isolated`** — no args. Returns 0 (already isolated —
-  caller should skip `acquire`) when any of, checked in order:
-  1. `WS_NO_ISOLATE=1` or `DRIVE_NO_ISOLATE=1` is set (explicit opt-out
-     — checked first so it always wins over path-sniffing).
-  2. `$(git rev-parse --show-toplevel)` contains `/.claude/worktrees/`.
-  3. `$PWD` basename matches `autopilot-clone-*` (glob) — autopilot's
-     own dedicated-clone convention (`autopilot/SKILL.md:100`).
-  4. `$PWD` basename matches `T*-target` (glob) — `/drive` Phase 1.5's
-     existing cross-repo ephemeral-clone convention.
-  Returns 1 (not isolated — caller should `acquire`) otherwise.
+  caller should skip `acquire`) when either, checked in order:
+  1. `WS_NO_ISOLATE=1` or `DRIVE_NO_ISOLATE=1` is set — the interactive
+     opt-out AND `/autopilot`'s own explicit signal (see Solution
+     "Detection" above for why `/autopilot` asserts this on every
+     command rather than relying on check 2 to infer it).
+  2. `$(git rev-parse --show-toplevel)` contains `/.claude/worktrees/` —
+     covers every `ccxp-agent`/platform `isolation: "worktree"` dispatch,
+     including `/drive` Phase 6's own `--dispatch-blockers` sub-case.
+  Returns 1 (not isolated — caller should `acquire`) otherwise. Does
+  *not* path-sniff `/tmp/autopilot-clone-*` or `/tmp/T*-target` — the
+  design-review-caught reason is in the Solution's "Detection" bullet:
+  `/autopilot` asserts #1 explicitly instead, and cross-repo mode never
+  calls `ws_already_isolated`/`ws_acquire` at all (it's gated on `Target
+  repo` being unset, a structural branch, not a sniffed case).
 - **`ws_acquire <id> <slug>`** — `<id>` is a task id (`/drive`) or PR
   number (`/address-pr`); `<slug>` a short filesystem-safe label.
   - Path is deterministic: `<repo-root>/.claude/worktrees/t<id>-<slug>`
@@ -334,8 +375,10 @@ Script Standards):
       clone-locality note) calls `acquire`/already-isolated-detection
       for the standalone case, and reuses the caller's `$WORK` for the
       nested case.
-- [ ] `autopilot/SKILL.md:111` (the `/drive` dispatch call) documents
-      the explicit already-isolated signal it now passes.
+- [ ] `autopilot/SKILL.md:117`'s mandatory per-command prefix changes
+      from `cd "$CLONE_PATH" &&` to `WS_NO_ISOLATE=1 cd "$CLONE_PATH"
+      &&`, with a one-line rationale note citing `_session/claimant-id.sh`'s
+      clone-identity dependency.
 - [ ] `agent-pairing/assets/ccxp-agent.md:42` carve-out line corrected
       to describe the actual post-change state; `git diff` on that file
       shows the hard `isolation: "worktree"` mandate sentence
