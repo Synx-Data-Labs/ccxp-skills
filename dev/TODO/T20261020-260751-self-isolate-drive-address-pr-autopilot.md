@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: this conversation, 2026-10-20 (maintainer direct instruction — "file it and start driving", design PR still required, not skipped, per explicit instruction below)
 related: [T20261019-554821, T20261019-174788]
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261020-260751: Self-isolate ccxp-skills write-operations (worktree) inside `/drive`, `/address-pr`, `/autopilot` — not just at dispatcher level
