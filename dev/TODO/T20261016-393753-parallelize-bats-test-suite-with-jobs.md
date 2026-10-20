@@ -1,9 +1,9 @@
 ---
-status: In Progress
+status: Open
 estimation: 1
 source: CI wall-clock analysis, this conversation, 2026-10-16
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-12
 ---
 

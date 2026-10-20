@@ -1,7 +1,10 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: synxdb-support#30 triage, 2026-10-19 — triaged/accepted with no comment linking it to its tracking task, maintainer had to ask for and manually trigger that comment afterward
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261019-181127: `triage` has no tracking-link comment requirement, unlike `block`/`needs-upstream`
