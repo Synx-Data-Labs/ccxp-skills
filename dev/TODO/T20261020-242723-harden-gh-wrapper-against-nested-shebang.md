@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: Maintainer session, 2026-10-20 — suspected macOS kernel leak investigation
 related: T20261020-231370
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-19
 ---
 
@@ -147,22 +147,32 @@ committing to any fix:
 
 ## Test plan
 
-- [ ] `bats tests/gh-wrapper-shebang-invocation.bats` — new test file, all cases pass locally
-- [ ] `bats tests/gh.bats tests/git.bats tests/gh-wrapper-usage.bats` — no regressions in the
+- [x] `bats tests/gh-wrapper-shebang-invocation.bats` — new test file, all cases pass locally
+- [x] `bats tests/gh.bats tests/git.bats tests/gh-wrapper-usage.bats` — no regressions in the
       sibling wrapper test suites
-- [ ] CI `bats` workflow green on the implementation PR
+- [x] CI `bats` workflow green on the implementation PR (PR #378)
 
 ## Done criteria
 
-- [ ] `tests/gh-wrapper-shebang-invocation.bats` added, asserting explicit-invocation-only for
+- [x] `tests/gh-wrapper-shebang-invocation.bats` added, asserting explicit-invocation-only for
       `gh.sh`/`git.sh`'s call graph, passing in CI (`bats tests/gh-wrapper-shebang-invocation.bats`)
 - [x] This task file documents the investigation and "no rewrite" finding (`## Solution` /
       `## Root cause` above)
 - [x] A follow-up task filed for the deprioritized Go rewrite, cross-linked via `related:`,
       status `Open`, not driven as part of this task (`T20261020-231370`)
-- [ ] `dev/JOURNAL/` entry on completion summarizing the investigation outcome (Phase 7 journal
+- [x] `dev/JOURNAL/` entry on completion summarizing the investigation outcome (Phase 7 journal
       move)
 
-## Closed
+## Closed (2026-10-20)
+
+- Shipped in PR #378 (`tests/gh-wrapper-shebang-invocation.bats`, 18 cases, all pass locally).
+- Investigation finding (no rewrite needed) is in `## Solution` / `## Root cause`.
+- Follow-up `T20261020-231370` (Go rewrite) stays deprioritized, untouched.
+- Journal entry: this file, moved to `dev/JOURNAL/` by the Friday retro sweep.
 
 ## Skills invoked
+
+- TDD: no - tests landed with PR #378 before this drive; this PR is close-out only (docs-class)
+- Verification: yes - reran the new bats file (18/18 ok) before closing
+- Systematic debugging: no - did not get stuck
+- Receiving code review: no - docs-only close PR
