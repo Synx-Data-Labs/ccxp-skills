@@ -37,3 +37,4 @@ reprioritize.
 - [T20261016-316464](T20261016-316464-extract-shared-bats-test-helper.md): Extract a shared tests/test_helper.bash for the BATS suite
 - [T20261016-360850](T20261016-360850-fix-chore-review-list-due-test-failure.md): Fix pre-existing failure in chore_review.bats "list-due" test
 - [T20261019-181127](T20261019-181127-triage-accept-no-tracking-link-comment.md): `triage` has no tracking-link comment requirement, unlike `block`/`needs-upstream`
+- [T20261019-311265](T20261019-311265-redesign-customer-support-orchestrator.md): Redesign customer-support as an orchestrator that drives /drive + /address-pr + /eta internally
