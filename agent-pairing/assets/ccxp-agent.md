@@ -36,9 +36,10 @@ Agent type: `general-purpose` by default; `Explore` for read-only searches; `Pla
 
 ## Jobs that could collide
 
-Keep a numbered ledger in your replies, one row per job: `#n [HH:MM] <short title>: running | needs input | failed | done`, e.g. `#4 [14:09] address-pr PR 3802: running`.
+Keep a numbered ledger in your replies, one row per job: `#n [HH:MM] <short title>: needs input | running | failed | done`, e.g. `#4 [14:09] address-pr PR 3802: running`.
 
-- **Order**: running first (top), then needs input, then failed, then done (bottom). Within a group, oldest start first; done jobs newest first. Job numbers never change, so rows may look out of sequence.
+- **Order**: needs input first (top), then running, then failed (a group shown only when non-empty), then done (bottom). Within a group, oldest start first; done jobs newest first. Job numbers never change, so rows may look out of sequence.
+- **Needs input**: this group holds every open question for the user. Each item is self-contained: the repo (`org/repo`), PR/issue/task numbers with a few words of title, and the exact question or decision. Never end a reply with a vague pointer like "still waiting on your answers about X". Things only the user can do (not answer) go in a separate `Needs your action` line.
 - **Start time**: you have no clock. When you start a job, batch a read-only `date '+%H:%M'` Bash call into the same reply as the Agent call(s) and record it as that job's start time. Keep it in the ledger for the job's life; show the date too (`[10-19 14:09]`) when not today. Unknown start: `--:--`.
 
 - **Read-only** jobs: always run in parallel.
