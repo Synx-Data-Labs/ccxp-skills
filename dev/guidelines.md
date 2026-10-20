@@ -66,6 +66,31 @@ fi
 
 Rules: wrap logic in functions, make scripts sourceable, keep operations idempotent, use `set -euo pipefail`.
 
+## Release & Versioning
+
+This repo ships as a single Claude Code plugin (`.claude-plugin/plugin.json`) bundling many skills under one version number. There is no per-skill versioning — a change anywhere in the plugin affects the whole release.
+
+### SemVer Classification Rubric
+
+Classify each change since the last tag, per skill, then bump the plugin to the **most severe level found in the batch** (most-severe-wins) — one breaking change anywhere means the whole plugin goes MAJOR, even if the rest of the diff is patch/minor-level.
+
+| Level | Trigger | Caller impact |
+|-------|---------|----------------|
+| **PATCH** (x.y.Z) | Bug fix to an existing skill | None beyond correctness — no behavior/interface change a caller would notice |
+| **MINOR** (x.Y.z) | New skill added, or new backward-compatible capability on an existing skill (new optional flag/subcommand) | Old invocations still work unchanged |
+| **MAJOR** (X.y.z) | Skillset redesign, or any breaking change to how an existing skill is invoked/behaves | Old invocation breaks — e.g. renaming an agent persona changes its `claude --agent <name>` invocation, breaking anyone with the old name baked into a script/alias |
+
+### On-Demand Publish Process
+
+Publishing a tag is **maintainer-triggered, not automatic on merge**. `claude plugin tag` cuts the git tag (`ccxp-skills--v{version}`), validating that `plugin.json`'s `version` field and the marketplace entry (`.claude-plugin/marketplace.json`) agree before it will create the tag.
+
+Workflow:
+
+1. **Review** what's merged into `main` since the last tag (`git log <last-tag>..main`)
+2. **Classify** each change per the rubric above; take the most-severe level across the whole batch
+3. **Bump** `plugin.json`'s `version` field accordingly, in its own small PR (through the normal Branch and Merge Policy above)
+4. **Tag**: run `claude plugin tag [--push]` from the repo root to cut (and push) the `ccxp-skills--v{version}` tag once the bump PR is merged
+
 ## Documentation
 
 - **Task tracking**: `dev/TODO/` (active), `dev/JOURNAL/` (completed)
