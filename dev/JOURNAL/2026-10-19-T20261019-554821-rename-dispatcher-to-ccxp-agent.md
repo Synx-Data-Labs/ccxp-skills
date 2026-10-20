@@ -97,4 +97,4 @@ claimed_role:
 
 ## Closed
 
-- PR: (filled in after opening)
+- PR: [ccxp-skills#368](https://github.com/Synx-Data-Labs/ccxp-skills/pull/368)
