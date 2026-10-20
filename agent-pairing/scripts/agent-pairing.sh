@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # agent-pairing.sh <on|off|status> [--claude-dir DIR]
 #
-# Toggles the "dispatcher" main-session agent persona as a Claude Code
-# profile's default (~/.claude unless --claude-dir overrides it): every
-# future session hands requests to background subagents instead of working
-# inline. A jq-based settings.json edit, never a text replace -- that file
-# also carries hooks/permissions/plugin config that must survive untouched.
+# Toggles the "ccxp-agent" main-session agent persona (a dispatcher) as a
+# Claude Code profile's default (~/.claude unless --claude-dir overrides
+# it): every future session hands requests to background subagents instead
+# of working inline. A jq-based settings.json edit, never a text replace --
+# that file also carries hooks/permissions/plugin config that must survive
+# untouched.
 #
 # `on`/`off` only ever touch the `.agent` key, and only when it's ours to
 # touch: `off` never deletes a *different* custom agent someone else set.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ASSET="$SCRIPT_DIR/../assets/dispatcher.md"
+ASSET="$SCRIPT_DIR/../assets/ccxp-agent.md"
 
 usage() {
   echo "usage: agent-pairing.sh <on|off|status> [--claude-dir DIR]" >&2
@@ -40,7 +41,8 @@ fi
 
 SETTINGS="$CLAUDE_DIR/settings.json"
 AGENTS_DIR="$CLAUDE_DIR/agents"
-DISPATCHER="$AGENTS_DIR/dispatcher.md"
+AGENT_FILE="$AGENTS_DIR/ccxp-agent.md"
+LEGACY_AGENT_FILE="$AGENTS_DIR/dispatcher.md"
 
 if [ ! -f "$SETTINGS" ]; then
   echo "agent-pairing.sh: $SETTINGS not found -- not a Claude Code profile directory" >&2
@@ -84,25 +86,28 @@ write_agent_key() {
 case "$ACTION" in
   on)
     mkdir -p "$AGENTS_DIR"
-    if [ -f "$DISPATCHER" ]; then
-      if ! cmp -s "$ASSET" "$DISPATCHER"; then
-        echo "agent-pairing.sh: $DISPATCHER already exists and differs from the bundled dispatcher.md -- leaving it as-is (not overwriting a hand-edited file)" >&2
+    if [ -f "$AGENT_FILE" ]; then
+      if ! cmp -s "$ASSET" "$AGENT_FILE"; then
+        echo "agent-pairing.sh: $AGENT_FILE already exists and differs from the bundled ccxp-agent.md -- leaving it as-is (not overwriting a hand-edited file)" >&2
       fi
     else
-      cp "$ASSET" "$DISPATCHER"
-      echo "agent-pairing.sh: installed $DISPATCHER"
+      cp "$ASSET" "$AGENT_FILE"
+      echo "agent-pairing.sh: installed $AGENT_FILE"
+    fi
+    if [ -f "$LEGACY_AGENT_FILE" ]; then
+      echo "agent-pairing.sh: note: $LEGACY_AGENT_FILE (the pre-rename \"dispatcher\" agent) is still present and now unused -- safe to remove once you've switched to ccxp-agent" >&2
     fi
 
-    if [ "$(current_agent)" = "dispatcher" ]; then
+    if [ "$(current_agent)" = "ccxp-agent" ]; then
       echo "agent-pairing.sh: already ON (takes effect at the next session start)"
       exit 0
     fi
-    write_agent_key '. + {agent: "dispatcher"}' || exit 1
+    write_agent_key '. + {agent: "ccxp-agent"}' || exit 1
     echo "agent-pairing.sh: ON -- takes effect at the next session start (this session is unaffected)"
     ;;
 
   off)
-    if [ "$(current_agent)" != "dispatcher" ]; then
+    if [ "$(current_agent)" != "ccxp-agent" ]; then
       echo "agent-pairing.sh: already OFF"
       exit 0
     fi
@@ -112,7 +117,7 @@ case "$ACTION" in
 
   status)
     AGENT="$(current_agent)"
-    if [ "$AGENT" = "dispatcher" ]; then
+    if [ "$AGENT" = "ccxp-agent" ]; then
       echo "agent-pairing: ON"
     elif [ -n "$AGENT" ]; then
       echo "agent-pairing: OFF (current default agent: $AGENT)"

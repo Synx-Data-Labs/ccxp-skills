@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for agent-pairing/scripts/agent-pairing.sh -- toggles the "dispatcher"
+# Tests for agent-pairing/scripts/agent-pairing.sh -- toggles the "ccxp-agent"
 # main-session agent persona as a Claude Code profile's default, via a
 # key-level jq edit of settings.json (never a text replace -- that file also
 # carries hooks/permissions/plugin config that must survive untouched).
@@ -42,13 +42,13 @@ mk_settings_with_agent() {
 EOF
 }
 
-@test "on: installs dispatcher.md and sets agent=dispatcher, preserving unrelated keys" {
+@test "on: installs ccxp-agent.md and sets agent=ccxp-agent, preserving unrelated keys" {
   mk_settings
   run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
-  [ -f "$CLAUDE_DIR/agents/dispatcher.md" ]
-  cmp -s "$CLAUDE_DIR/agents/dispatcher.md" "$REPO_ROOT/agent-pairing/assets/dispatcher.md"
-  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "dispatcher" ]
+  [ -f "$CLAUDE_DIR/agents/ccxp-agent.md" ]
+  cmp -s "$CLAUDE_DIR/agents/ccxp-agent.md" "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "ccxp-agent" ]
   [ "$(jq -r '.model' "$CLAUDE_DIR/settings.json")" = "sonnet" ]
   [ "$(jq -r '.theme' "$CLAUDE_DIR/settings.json")" = "dark" ]
   [ "$(jq -r '.hooks.SessionStart[0].hooks[0].command' "$CLAUDE_DIR/settings.json")" = "/some/hook" ]
@@ -63,9 +63,9 @@ EOF
 }
 
 @test "on: idempotent re-entry when already on reports already-ON, settings unchanged" {
-  mk_settings_with_agent dispatcher
+  mk_settings_with_agent ccxp-agent
   mkdir -p "$CLAUDE_DIR/agents"
-  cp "$REPO_ROOT/agent-pairing/assets/dispatcher.md" "$CLAUDE_DIR/agents/dispatcher.md"
+  cp "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md" "$CLAUDE_DIR/agents/ccxp-agent.md"
   before="$(cat "$CLAUDE_DIR/settings.json")"
   run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
@@ -73,25 +73,25 @@ EOF
   [ "$(cat "$CLAUDE_DIR/settings.json")" = "$before" ]
 }
 
-@test "on: a pre-existing hand-edited dispatcher.md is never overwritten, but agent still flips" {
+@test "on: a pre-existing hand-edited ccxp-agent.md is never overwritten, but agent still flips" {
   mk_settings
   mkdir -p "$CLAUDE_DIR/agents"
-  echo "custom hand-edited content" > "$CLAUDE_DIR/agents/dispatcher.md"
+  echo "custom hand-edited content" > "$CLAUDE_DIR/agents/ccxp-agent.md"
   run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
-  [ "$(cat "$CLAUDE_DIR/agents/dispatcher.md")" = "custom hand-edited content" ]
-  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "dispatcher" ]
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "custom hand-edited content" ]
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "ccxp-agent" ]
 }
 
-@test "off: removes the agent key, preserves unrelated keys, leaves dispatcher.md installed" {
-  mk_settings_with_agent dispatcher
+@test "off: removes the agent key, preserves unrelated keys, leaves ccxp-agent.md installed" {
+  mk_settings_with_agent ccxp-agent
   mkdir -p "$CLAUDE_DIR/agents"
-  cp "$REPO_ROOT/agent-pairing/assets/dispatcher.md" "$CLAUDE_DIR/agents/dispatcher.md"
+  cp "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md" "$CLAUDE_DIR/agents/ccxp-agent.md"
   run bash "$SCRIPT" off --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
   [ "$(jq -r 'has("agent")' "$CLAUDE_DIR/settings.json")" = "false" ]
   [ "$(jq -r '.model' "$CLAUDE_DIR/settings.json")" = "sonnet" ]
-  [ -f "$CLAUDE_DIR/agents/dispatcher.md" ]
+  [ -f "$CLAUDE_DIR/agents/ccxp-agent.md" ]
 }
 
 @test "off: idempotent re-entry when already off (no agent key) reports already-OFF" {
@@ -109,8 +109,8 @@ EOF
   [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "some-other-agent" ]
 }
 
-@test "status: reports ON when agent=dispatcher" {
-  mk_settings_with_agent dispatcher
+@test "status: reports ON when agent=ccxp-agent" {
+  mk_settings_with_agent ccxp-agent
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "ON"
@@ -173,7 +173,30 @@ EOF
   [ "$status" -ne 0 ]
 }
 
-@test "asset: dispatcher tools include Skill and ScheduleWakeup, and the /autopilot exception exists" {
-  grep -E '^tools:.*\bSkill\b.*\bScheduleWakeup\b' "$REPO_ROOT/agent-pairing/assets/dispatcher.md"
-  grep -q 'Exception: `/autopilot`' "$REPO_ROOT/agent-pairing/assets/dispatcher.md"
+@test "asset: ccxp-agent tools include Skill and ScheduleWakeup, and the /autopilot exception exists" {
+  grep -E '^tools:.*\bSkill\b.*\bScheduleWakeup\b' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'Exception: `/autopilot`' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+}
+
+@test "asset: name frontmatter is ccxp-agent, not the old dispatcher name" {
+  [ "$(grep -m1 '^name:' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md")" = "name: ccxp-agent" ]
+}
+
+@test "asset: mandates worktree isolation for repo-changing jobs as a hard rule" {
+  grep -q 'Repo-changing jobs MUST be dispatched with `isolation: "worktree"`' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -qi 'never a per-job judgment call' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+}
+
+@test "on: a pre-existing legacy dispatcher.md is reported as stale, never touched or auto-migrated" {
+  mk_settings_with_agent dispatcher
+  mkdir -p "$CLAUDE_DIR/agents"
+  echo "old dispatcher content" > "$CLAUDE_DIR/agents/dispatcher.md"
+  run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_DIR/agents/dispatcher.md")" = "old dispatcher content" ]
+  [ -f "$CLAUDE_DIR/agents/ccxp-agent.md" ]
+  echo "$output" | grep -qi "dispatcher.*stale\|stale.*dispatcher\|unused"
+  # The old "dispatcher" value no longer matches the managed name, so `on`
+  # flips it forward to ccxp-agent rather than treating it as already-on.
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "ccxp-agent" ]
 }
