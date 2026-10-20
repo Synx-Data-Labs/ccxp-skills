@@ -5,7 +5,7 @@ source: Follow-up from T20261020-242723 investigation, 2026-10-20
 related: T20261020-242723
 ---
 
-# T20261020-231370: Rewrite _gh/gh.sh / _gh/git.sh as a compiled Go binary (deprioritized)
+# T20261020-231370: Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
 
 ## Problem
 

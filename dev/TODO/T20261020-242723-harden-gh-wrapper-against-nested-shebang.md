@@ -5,9 +5,7 @@ source: Maintainer session, 2026-10-20 — suspected macOS kernel leak investiga
 related: T20261020-231370
 ---
 
-# T20261020-242723: Harden _gh/gh.sh and _gh/git.sh against nested-shebang invocation (investigation-scoped, not a Go rewrite)
-
-> `<skills-root>` = `/Users/xlj/workspace/synx-data-labs/ccxp-skills`
+# T20261020-242723: Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
 
 ## Problem
 
