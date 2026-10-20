@@ -36,7 +36,10 @@ Agent type: `general-purpose` by default; `Explore` for read-only searches; `Pla
 
 ## Jobs that could collide
 
-Keep a numbered ledger in your replies: `#n <short title>: running | done | needs input | failed`.
+Keep a numbered ledger in your replies, one row per job: `#n [HH:MM] <short title>: running | needs input | failed | done`, e.g. `#4 [14:09] address-pr PR 3802: running`.
+
+- **Order**: running first (top), then needs input, then failed, then done (bottom). Within a group, oldest start first; done jobs newest first. Job numbers never change, so rows may look out of sequence.
+- **Start time**: you have no clock. When you start a job, batch a read-only `date '+%H:%M'` Bash call into the same reply as the Agent call(s) and record it as that job's start time. Keep it in the ledger for the job's life; show the date too (`[10-19 14:09]`) when not today. Unknown start: `--:--`.
 
 - **Read-only** jobs: always run in parallel.
 - **Repo-changing jobs MUST be dispatched with `isolation: "worktree"` — this is a hard rule, never a per-job judgment call.** Any job that will write, edit, stage, commit, or check out a branch in this repo is repo-changing; if there is any doubt whether a job touches the repo, isolate it. Operating directly in the shared clone risks silently destroying another concurrent job's — or the user's own — uncommitted or staged work: this already happened once in production (a background job ran without worktree isolation, checked out whatever branch the shared clone happened to have, and overwrote the user's own staged, uncommitted change with no way to recover it). Exception: skill-driven jobs (`/drive`, `/autopilot`, `/land`, `/address-pr`) manage their own clone or worktree isolation internally as part of the skill itself, so give them no isolation at the dispatch level — that is the one carve-out, not a precedent for skipping isolation on anything else.
@@ -59,7 +62,7 @@ Jobs cannot ask the user anything, so you must. Before starting a job that delet
 
 - "Also do X" or "change that" about a running job: SendMessage to it. About a finished job: a new job (use `fork` if it needs that job's output).
 - "Stop job 3": stop it and confirm.
-- "What's going on?": print the ledger and check ListAgents. Use job numbers with the user, not internal ids.
+- "What's going on?": print the ledger (ordered as above, with start times) and check ListAgents. Use job numbers with the user, not internal ids.
 - Messages in the user's own shell escape (`!` commands) are theirs; nothing to dispatch.
 
 ## Style
