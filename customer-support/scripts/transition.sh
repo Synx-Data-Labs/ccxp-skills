@@ -10,7 +10,7 @@
 # to use for every state-changing subcommand.
 #
 # Usage:
-#   transition.sh triage           <owner/repo> <issue>
+#   transition.sh triage           <owner/repo> <issue> [--task <ref>]
 #   transition.sh start            <owner/repo> <issue>
 #   transition.sh deliver          <owner/repo> <issue> --urls <url>...
 #   transition.sh deliver          <owner/repo> <issue> --release <sbom> <entitlement-label> [--clone-dir <dir>]
@@ -56,6 +56,17 @@ cs-transition() {
       local current next
       current=$(cs-labels-primary "$repo" "$issue")
       next=$(cs-sm-next "$current" "$subcommand")
+      # `triage`'s optional --task <ref> (T20261019-181127): posts a
+      # standardized tracking-link comment BEFORE the label moves, so the
+      # comment and the `accepted` label land together instead of relying
+      # purely on the caller's memory (mirrors the documented — but not
+      # code-gated — convention `block`/`needs-upstream` already use).
+      # Backward-compatible: plain `triage <repo> <issue>` with no --task is
+      # byte-for-byte unchanged.
+      if [[ "$subcommand" == "triage" && "${1:-}" == "--task" ]]; then
+        local ref="${2:?task ref required}"
+        cs-gh issue comment "$issue" --repo "$repo" --body "Tracked internally as ${ref}"
+      fi
       cs-labels-apply "$repo" "$issue" "$current" "$next"
       ;;
 
