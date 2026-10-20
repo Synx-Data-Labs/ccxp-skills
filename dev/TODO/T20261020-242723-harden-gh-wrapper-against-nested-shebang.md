@@ -160,7 +160,7 @@ committing to any fix:
       `## Root cause` above)
 - [x] A follow-up task filed for the deprioritized Go rewrite, cross-linked via `related:`,
       status `Open`, not driven as part of this task (`T20261020-231370`)
-- [x] `dev/JOURNAL/` entry on completion summarizing the investigation outcome (Phase 7 journal
+- [ ] `dev/JOURNAL/` entry (pending: Friday retro sweep moves this Done file; investigation outcome is in Solution/Root cause) on completion summarizing the investigation outcome (Phase 7 journal
       move)
 
 ## Closed (2026-10-20)
