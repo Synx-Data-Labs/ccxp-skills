@@ -96,21 +96,29 @@ scheduled: 2026-10-19
 
 ## Test plan
 
-- [x] Bats test: `transition.sh triage <repo> <issue> --task <ref>` posts
+**Design-time only — none of the implementation items below are done yet**
+(this is a design-only PR; no code or test changes land in it). Each is
+written as a checkbox to be ticked during the implementation PR, not now.
+
+- [ ] Bats test: `transition.sh triage <repo> <issue> --task <ref>` posts
   a `gh issue comment` containing `<ref>` **before** the label moves from
   `triage` to `accepted` — `tests/customer_support_transition.bats`.
-- [x] Bats test: `transition.sh triage <repo> <issue>` with no `--task` is
+- [ ] Bats test: `transition.sh triage <repo> <issue>` with no `--task` is
   byte-for-byte unchanged from current behavior (no comment posted, label
   still moves) — confirms the fix is additive, not a new hard gate —
   `tests/customer_support_transition.bats`.
-- [x] Full existing `tests/customer_support_transition.bats` suite still
+- [ ] Full existing `tests/customer_support_transition.bats` suite still
   green (no regression on `start`/`deliver`/`accept`/`reject`/`block`/
   `unblock`/`needs-upstream`).
 - [ ] CI's `bats` GitHub Actions job passes on the implementation PR
   (post-merge/CI item).
-- [x] Doc lint on the updated `SKILL.md`: `_docs/lint-docs.sh
+- [ ] Doc lint on the updated `SKILL.md`: `_docs/lint-docs.sh
   customer-support/SKILL.md` and `repo-conventions/scripts/lint_paragraphs.py
-  --changed customer-support/SKILL.md` pass.
+  --changed customer-support/SKILL.md` pass (implementation PR).
+- [x] Doc lint on *this* design doc, verified now: `_docs/lint-docs.sh
+  <this-file>` and `repo-conventions/scripts/lint_paragraphs.py --changed
+  <this-file>` both pass, and `design-score/scripts/score.sh` on this file
+  scores 92/100 (threshold 70).
 
 ## Done criteria
 
