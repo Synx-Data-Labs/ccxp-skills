@@ -89,14 +89,12 @@ drivers doing right now."
   changes a profile's default behavior for every future session, which
   is squarely the user's call to make explicitly, never a model
   judgment call mid-task.
-- **Upgrading from the old "dispatcher" name**: installations from
-  before this rename have `~/.claude/agents/dispatcher.md` and possibly
-  `settings.json`'s `"agent": "dispatcher"`. Just re-run `/agent-pairing
-  on`: it installs `agents/ccxp-agent.md` alongside the old file (never
-  touching it) and flips `"agent"` from `"dispatcher"` to `"ccxp-agent"`,
-  since `"dispatcher"` no longer matches the name this script manages.
-  Remove the now-unused `agents/dispatcher.md` by hand once you've
-  confirmed the new one works — the script never deletes it for you.
+- **Upgrading from the old "dispatcher" name**: just re-run
+  `/agent-pairing on`. It installs `agents/ccxp-agent.md` alongside any
+  old `agents/dispatcher.md` (never touching that file) and flips
+  `"agent"` forward to `"ccxp-agent"`, since `"dispatcher"` no longer
+  matches the managed name. Remove the stale `dispatcher.md` by hand
+  once the new one works.
 
 ## Cross-references
 
