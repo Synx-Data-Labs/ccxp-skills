@@ -107,9 +107,10 @@ scheduled: 2026-10-19
   still moves) — pre-existing test `"triage: accepted label applied via
   the single entrypoint"` still passes verbatim, confirming the fix is
   additive, not a new hard gate.
-- [x] Full existing `tests/customer_support_*.bats` suite still green — 70/70
+- [x] Full existing `tests/customer_support_*.bats` suite still green — 71/71
   passing locally (no regression on `start`/`deliver`/`accept`/`reject`/
-  `block`/`unblock`/`needs-upstream`).
+  `block`/`unblock`/`needs-upstream`; count includes the argv-boundary-safety
+  test added per review).
 - [ ] CI's `bats` GitHub Actions job passes on the implementation PR
   (post-merge/CI item).
 - [x] Doc lint on the updated `SKILL.md`: `_docs/lint-docs.sh
@@ -140,7 +141,8 @@ scheduled: 2026-10-19
   existing bats test `"triage: accepted label applied via the single
   entrypoint"` in `tests/customer_support_transition.bats` still passes
   verbatim.
-- [x] `bats tests/customer_support_transition.bats` green locally (11/11);
+- [x] `bats tests/customer_support_transition.bats` green locally (12/12,
+  after the argv-boundary-safety test added per review);
   CI confirmation is the one remaining post-merge/CI test-plan item above.
 
 ## Repo file references
@@ -162,14 +164,19 @@ scheduled: 2026-10-19
 
 ## Closed (2026-10-19)
 
-- Shipped in **PR #TBD-filled-below** (`customer-support/SKILL.md`,
-  `customer-support/scripts/transition.sh`, `tests/customer_support_transition.bats`).
+- Shipped in **PR #369** (`https://github.com/Synx-Data-Labs/ccxp-skills/pull/369`)
+  (`customer-support/SKILL.md`, `customer-support/scripts/transition.sh`,
+  `tests/customer_support_transition.bats`); design in PR #366
+  (`https://github.com/Synx-Data-Labs/ccxp-skills/pull/366`), claim in PR #365.
 - All Done criteria met: `SKILL.md` documents the `triage` tracking-link
   convention, `transition.sh triage --task <ref>` posts the comment before
   the label write, the no-`--task` path is byte-for-byte unchanged, and
-  `tests/customer_support_*.bats` is 70/70 green locally.
-- One remaining external item: CI's `bats` job green on the PR (the
-  authoritative full-suite confirmation) — ticked once CI passes.
+  `tests/customer_support_*.bats` is 71/71 green locally.
+- CI's `bats` job green on the PR (GitHub Actions run `39357832633`).
+- Independent review (`/address-pr` #369, two rounds) found two real,
+  non-blocking record-accuracy gaps (the SKILL.md usage-example claim, and
+  a stale test count) and one real test-coverage gap (argv-boundary safety
+  for `--task`'s ref) — all three fixed in follow-up commits before merge.
 - No follow-up tasks filed — the explicit out-of-scope item (promoting
   `triage`/`block`/`needs-upstream` to a real hard gate) is intentionally
   left as a future, separate, bigger decision per this doc's own
@@ -181,7 +188,7 @@ scheduled: 2026-10-19
   `"triage --task"` bats test first, watched it fail for the right reason
   (missing `--task` handling), then implemented the minimal `transition.sh`
   change to turn it green, then ran the full `customer_support_*.bats`
-  suite (70/70) as the refactor-safety check.
+  suite (71/71) as the refactor-safety check.
 - Verification (`superpowers:verification-before-completion`): yes — ran
   `design-score`, `_docs/lint-docs.sh`, `lint_paragraphs.py`,
   `test_skill_quality.py`, and the `skill_score.py --check` ratchet before
