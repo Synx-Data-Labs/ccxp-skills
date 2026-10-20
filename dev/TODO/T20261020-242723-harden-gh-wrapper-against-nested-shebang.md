@@ -1,11 +1,17 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Maintainer session, 2026-10-20 — suspected macOS kernel leak investigation
 related: T20261020-231370
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261020-242723: Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
+
+> Design approved in-conversation 2026-10-20 — maintainer authorized filing and driving this
+> task directly, with the investigation above standing in as the design; design PR skipped.
 
 ## Problem
 
