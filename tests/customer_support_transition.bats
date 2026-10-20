@@ -42,6 +42,36 @@ STUB
   [[ "$output" == *"--add-label accepted"* ]]
 }
 
+@test "triage --task: a ref with embedded spaces/shell metacharacters is passed as a single argv element (T20261019-181127, no injection)" {
+  # Independent review of /address-pr #369 flagged that the injection-safety
+  # property (verified by code reading: cs-gh exec's "$@" with no eval/shell
+  # re-parsing) wasn't actually test-covered. This proves it: if `${ref}`
+  # were ever word-split or shell-re-interpreted, the comment call would
+  # receive more than 7 argv elements, or `cmd.log`'s recorded body would be
+  # truncated at the first unescaped metacharacter.
+  cat > gh-argv-stub.sh <<'STUB'
+#!/usr/bin/env bash
+if [[ "$1" == "issue" && "$2" == "view" ]]; then
+  echo '{"labels":[{"name":"triage"}]}'
+  exit 0
+fi
+echo "$#" >> argc.log
+if [[ "$1" == "issue" && "$2" == "comment" ]]; then
+  printf '%s\n' "${@: -1}" >> body.log
+fi
+STUB
+  chmod +x gh-argv-stub.sh
+  ref='synxdb-build-pipeline#T1 2 3 && echo pwned; `id`'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-argv-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "$ref"
+  [ "$status" -eq 0 ]
+  # issue comment 5 --repo acme/synxdb-support --body <one-element> = 7 argv.
+  comment_argc=$(head -1 argc.log)
+  [ "$comment_argc" -eq 7 ]
+  run cat body.log
+  [ "$output" = "Tracked internally as ${ref}" ]
+}
+
 @test "triage --task: posts a tracking-link comment before the label moves (T20261019-181127)" {
   _stub_gh '{"labels":[{"name":"triage"}]}'
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" \

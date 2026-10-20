@@ -124,8 +124,13 @@ scheduled: 2026-10-19
 
 - [x] `customer-support/SKILL.md` documents the `triage` tracking-link
   convention, same pattern as `block`/`needs-upstream` —
-  `customer-support/SKILL.md:30` (workflow table row) + `:60` (usage
-  example).
+  `customer-support/SKILL.md:30` (workflow table row). **Correction**
+  (independent review, `/address-pr` #369): the § 2 usage-example block
+  (`SKILL.md:59`) was NOT also updated with a `--task` example line, unlike
+  every other flag-taking subcommand shown there — cut during the
+  `skill_score.py` byte-budget trim (see Root cause) and not restored. The
+  table row is the single source of the convention; not blocking, noted
+  for accuracy.
 - [x] `transition.sh triage ... --task <ref>` posts the tracking-link
   comment before the label write — `customer-support/scripts/transition.sh`
   (the `triage|start|request-confirm` case) + new bats test in
