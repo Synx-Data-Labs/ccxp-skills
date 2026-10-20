@@ -245,6 +245,57 @@ scheduled: 2026-10-19
 | `_worktree/self-isolate.sh` (new) | — | `acquire`/`release` helper, BATS-tested |
 | `tests/self_isolate.bats` (new) | — | acquire/release/idempotency/already-isolated-detection coverage |
 
+## Appendix
+
+`_worktree/self-isolate.sh` contract (mirrors the `_session/`,
+`_taskid/` sourceable/function-wrapped convention — `guidelines.md`
+Script Standards):
+
+- **`ws_already_isolated`** — no args. Returns 0 (already isolated —
+  caller should skip `acquire`) when any of, checked in order:
+  1. `WS_NO_ISOLATE=1` or `DRIVE_NO_ISOLATE=1` is set (explicit opt-out
+     — checked first so it always wins over path-sniffing).
+  2. `$(git rev-parse --show-toplevel)` contains `/.claude/worktrees/`.
+  3. `$PWD` basename matches `autopilot-clone-*` (glob) — autopilot's
+     own dedicated-clone convention (`autopilot/SKILL.md:100`).
+  4. `$PWD` basename matches `T*-target` (glob) — `/drive` Phase 1.5's
+     existing cross-repo ephemeral-clone convention.
+  Returns 1 (not isolated — caller should `acquire`) otherwise.
+- **`ws_acquire <id> <slug>`** — `<id>` is a task id (`/drive`) or PR
+  number (`/address-pr`); `<slug>` a short filesystem-safe label.
+  - Path is deterministic: `<repo-root>/.claude/worktrees/t<id>-<slug>`
+    (`<repo-root>` from `git rev-parse --show-toplevel`, run from
+    *outside* any existing worktree the caller might already be in —
+    same reasoning as Phase 1.5's always-fresh-path rule).
+  - **Idempotent**: if that path already exists AND is a registered
+    worktree of this repo (`git worktree list --porcelain` lists it),
+    print the existing path and return 0 — no error, no second
+    creation (needed across a Phase 6 park/resume cycle).
+  - Otherwise: `git worktree add <path> -b t<id>-<slug> main` (fails
+    loudly if the branch `t<id>-<slug>` already exists un-merged
+    elsewhere — same "claim-PR conflict = lost the race" philosophy as
+    `task_claim.sh`, not silently force-reset).
+  - Prints the absolute path on stdout on success; nothing else on
+    stdout (callers capture it directly, `WORK=$(ws_acquire ...)`).
+  - Exit non-zero + stderr message on any git failure (dirty submodule
+    state, path collision with a non-worktree file, etc.) — never
+    silently falls back to operating in the ambient clone, which would
+    defeat the whole point.
+- **`ws_release <path>`** — `git worktree remove <path> --force` (force
+  needed because the caller's own uncommitted-but-pushed-and-merged
+  state can otherwise block a clean worktree; the branch itself is
+  already merged/deleted upstream by this point in every call site)
+  then `git worktree prune`. No-op, exit 0, if `<path>` is already not
+  a registered worktree (idempotent close, mirrors `task_claim.sh
+  release`'s tolerance of an already-cleared field).
+- **Orphan sweep extension** — a new `ws_sweep [--days N]` (default 7),
+  invoked from the same optional weekly ccxp Phase 0 hook that already
+  globs `/tmp/T*-target/` (`drive/SKILL.md:208`): lists
+  `.claude/worktrees/t*` worktrees older than N days via `git worktree
+  list --porcelain` + branch mtime, cross-checks each against
+  `dev/TODO/*.md` for a live `claimed_by` on the same task id, and
+  `ws_release`s only the ones with no live claim.
+
 ## Test plan
 
 - [ ] `bats tests/self_isolate.bats` (new): `acquire` creates a worktree
@@ -271,10 +322,10 @@ scheduled: 2026-10-19
       `acquire creates worktree` / `acquire is idempotent` /
       `release removes worktree` / `release is idempotent` /
       `already-isolated detection skips`).
-- [ ] `drive/SKILL.md:~70` (new call, same-repo Phase 1, right after
-      the clone-locality guard at `drive/SKILL.md:80-92`) invokes
-      `acquire`; `drive/SKILL.md:~551` (same-repo Phase 7 close, after
-      `drive/SKILL.md:551`) invokes `release $WORK` as the last step.
+- [ ] `drive/SKILL.md:93` (new call, same-repo Phase 1, right after the
+      clone-locality guard ends at `drive/SKILL.md:92`) invokes
+      `acquire`; `drive/SKILL.md:549-563` (same-repo Phase 7 close) gets
+      a new step invoking `release $WORK`, ordered before step 6 (Exit).
 - [ ] `drive/SKILL.md:19` (the Argument section, alongside the existing
       `--dispatch-blockers`/`--auto-selected` bullets at
       `drive/SKILL.md:25-33`) documents the new `--no-isolate` flag and
