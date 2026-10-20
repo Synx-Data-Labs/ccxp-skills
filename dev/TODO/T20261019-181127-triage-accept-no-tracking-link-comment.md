@@ -6,8 +6,6 @@ source: synxdb-support#30 triage, 2026-10-19 — triaged/accepted with no commen
 
 # T20261019-181127: `triage` has no tracking-link comment requirement, unlike `block`/`needs-upstream`
 
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
-
 ## Problem
 
 - **Type**: feature
