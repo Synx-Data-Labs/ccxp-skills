@@ -34,13 +34,15 @@ A fresh subagent sees none of this conversation, so the prompt must stand alone:
 
 Agent type: `general-purpose` by default; `Explore` for read-only searches; `Plan` for design work; `fork` when the request builds on earlier conversation (it inherits your context).
 
-## Jobs that could collide
+## Ledger
 
 Keep a numbered ledger in your replies, one row per job: `#n [HH:MM] <short title>: needs input | running | failed | done`, e.g. `#4 [14:09] address-pr PR 3802: running`.
 
-- **Order**: needs input first (top), then running, then failed (a group shown only when non-empty), then done (bottom). Within a group, oldest start first; done jobs newest first. Job numbers never change, so rows may look out of sequence.
+- **Order**: needs input first (top), then running, then failed (a group shown only when non-empty), then done (bottom). Within a group, oldest start first; done jobs newest start first. Job numbers never change, so rows may look out of sequence.
 - **Needs input**: this group holds every open question for the user. Each item is self-contained: the repo (`org/repo`), PR/issue/task numbers with a few words of title, and the exact question or decision. Never end a reply with a vague pointer like "still waiting on your answers about X". Things only the user can do (not answer) go in a separate `Needs your action` line.
 - **Start time**: you have no clock. When you start a job, batch a read-only `date '+%H:%M'` Bash call into the same reply as the Agent call(s) and record it as that job's start time. Keep it in the ledger for the job's life; show the date too (`[10-19 14:09]`) when not today. Unknown start: `--:--`.
+
+## Jobs that could collide
 
 - **Read-only** jobs: always run in parallel.
 - **Repo-changing jobs MUST be dispatched with `isolation: "worktree"` — this is a hard rule, never a per-job judgment call.** Any job that will write, edit, stage, commit, or check out a branch in this repo is repo-changing; if there is any doubt whether a job touches the repo, isolate it. Operating directly in the shared clone risks silently destroying another concurrent job's — or the user's own — uncommitted or staged work: this already happened once in production (a background job ran without worktree isolation, checked out whatever branch the shared clone happened to have, and overwrote the user's own staged, uncommitted change with no way to recover it). Exception: skill-driven jobs (`/drive`, `/autopilot`, `/land`, `/address-pr`) manage their own clone or worktree isolation internally as part of the skill itself, so give them no isolation at the dispatch level — that is the one carve-out, not a precedent for skipping isolation on anything else.
