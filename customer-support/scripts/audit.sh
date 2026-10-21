@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # audit.sh — read-only invariant check for /customer-support audit
-# (T20261012-373882). Checks "exactly one primary-state label, consistent
-# with open/closed state" across open issues in a synxdb-support-shaped
+# (T20261012-373882). Checks "exactly one status:* label, consistent
+# with open/closed state" across issues in a synxdb-support-shaped
 # repo. Never writes anything — this is the mechanism that would have
 # caught synxdb-support#20/#21/#24/#25/#27's real label gaps.
 #
@@ -45,20 +45,21 @@ cs-audit-check() {
       fi
     done
     if [[ "$count" -eq 0 ]]; then
-      echo "#${n}: no primary-state label (expected exactly one of: ${CS_PRIMARY_LABELS// /, })"
+      echo "#${n}: no status label (expected exactly one of: ${CS_STATUS_LABELS// /, })"
       violations=$((violations + 1))
     elif [[ "$count" -gt 1 ]]; then
-      echo "#${n}: multiple primary-state labels (${matched}) — invariant violated"
+      echo "#${n}: multiple status labels (${matched}) — invariant violated"
       violations=$((violations + 1))
     fi
   done
   [[ "$violations" -eq 0 ]]
 }
 
-# cs-audit-main <owner/repo> — fetches open issues and runs the check above.
+# cs-audit-main <owner/repo> — fetches ALL issues (open and closed: a closed
+# issue keeps its one status label) and runs the check above.
 cs-audit-main() {
   local repo="${1:?owner/repo required}" json
-  json=$(cs-audit-gh issue list --repo "$repo" --state open --json number,labels --limit 200)
+  json=$(cs-audit-gh issue list --repo "$repo" --state all --json number,labels --limit 1000)
   cs-audit-check "$json"
 }
 

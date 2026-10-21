@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # sweep.sh — delivered-timeout sweep for /customer-support (T20261021-266225).
-# An open issue that has sat in `delivered` for >= --days (default 14) with no
+# An open issue that has sat in `status:delivered` for >= --days (default 14) with no
 # rejection is closed (completed) with a marked "NOT an acceptance" comment,
 # so support/customer can reopen it (a reopen routes through `start`,
 # delivered -> in-progress).
@@ -52,16 +52,30 @@ cs-sweep-timeline() {
     | jq 'if (length > 0 and (.[0]|type)=="array") then add else . end'
 }
 
+# cs-sweep-has-any <label-names-newline-separated> <current-label> — exit 0 if
+# the list contains the label under its current name or any retired alias.
+cs-sweep-has-any() {
+  local n
+  for n in $(cs-label-names "$2"); do
+    grep -qxF "$n" <<<"$1" && return 0
+  done
+  return 1
+}
+
 # cs-sweep-eval <timeline-json> <label-names-newline-separated> <now-epoch> <days>
 # Pure decision, no I/O. Prints CLOSE <age>d | SKIP <reason> | FLAG <reason>.
 cs-sweep-eval() {
   local timeline="${1:?timeline json}" labels="${2-}" now="${3:?now epoch}" days="${4:?days}"
-  if ! grep -qxF "$CS_L_DELIVERED" <<<"$labels"; then echo "SKIP not in ${CS_L_DELIVERED}"; return 0; fi
-  if grep -qxF "$CS_L_BLOCKED" <<<"$labels"; then echo "SKIP ${CS_L_BLOCKED}"; return 0; fi
-  if grep -qxF "$CS_L_NEEDS_UPSTREAM" <<<"$labels"; then echo "SKIP ${CS_L_NEEDS_UPSTREAM}"; return 0; fi
-  jq -r --arg d "$CS_L_DELIVERED" --arg m "$CS_AUTOCLOSE_MARKER" \
+  local dn
+  dn=$(cs-label-names-json "$CS_L_DELIVERED")
+  if ! cs-sweep-has-any "$labels" "$CS_L_DELIVERED"; then echo "SKIP not in ${CS_L_DELIVERED}"; return 0; fi
+  # Single-status scheme: blocked/needs-upstream replace delivered, so these
+  # only fire on a dirty issue carrying both; skip it rather than close it.
+  if cs-sweep-has-any "$labels" "$CS_L_BLOCKED"; then echo "SKIP ${CS_L_BLOCKED}"; return 0; fi
+  if cs-sweep-has-any "$labels" "$CS_L_NEEDS_UPSTREAM"; then echo "SKIP ${CS_L_NEEDS_UPSTREAM}"; return 0; fi
+  jq -r --arg d "$CS_L_DELIVERED" --argjson dn "$dn" --arg m "$CS_AUTOCLOSE_MARKER" \
     --argjson now "$now" --argjson days "$days" '
-    ([.[] | select(.event=="labeled" and .label.name==$d)] | last) as $l
+    ([.[] | select(.event=="labeled" and (.label.name as $x | $dn | index($x) != null))] | last) as $l
     | if $l == null then "FLAG no `\($d)` label event on the timeline (cannot date the delivery)"
       else
         ($l.created_at) as $t
@@ -85,8 +99,8 @@ cs-sweep-eval() {
 # for the CURRENT delivery cycle (after the last `delivered` label event), so
 # a second timeout after reopen -> start -> deliver still gets its comment.
 cs-sweep-has-marker() {
-  jq -e --arg m "$CS_AUTOCLOSE_MARKER" --arg d "$CS_L_DELIVERED" \
-    '([.[] | select(.event=="labeled" and .label.name==$d)] | last | .created_at // "") as $t
+  jq -e --arg m "$CS_AUTOCLOSE_MARKER" --argjson dn "$(cs-label-names-json "$CS_L_DELIVERED")" \
+    '([.[] | select(.event=="labeled" and (.label.name as $x | $dn | index($x) != null))] | last | .created_at // "") as $t
      | [.[] | select(.event=="commented" and .created_at > $t and ((.body // "") | contains($m)))] | length > 0' \
     <<<"${1:?timeline json}" >/dev/null
 }
@@ -124,7 +138,11 @@ cs-sweep-main() {
 
   local list n labels timeline verdict closes=0 flags=0 now
   now=$(cs-sweep-now)
-  list=$(cs-sweep-gh issue list --repo "$repo" --state open --label "$CS_L_DELIVERED" --json number,labels --limit 200)
+  # No --label filter: the delivered label may still carry its pre-rename
+  # name, so filter on current name + aliases here.
+  list=$(cs-sweep-gh issue list --repo "$repo" --state open --json number,labels --limit 1000)
+  list=$(jq -c --argjson dn "$(cs-label-names-json "$CS_L_DELIVERED")" \
+    '[.[] | select(any(.labels[]; .name as $x | $dn | index($x) != null))]' <<<"$list")
   for n in $(jq -r '.[].number' <<<"$list"); do
     labels=$(jq -r --argjson n "$n" '.[] | select(.number==$n) | .labels[].name' <<<"$list")
     timeline=$(cs-sweep-timeline "$repo" "$n")

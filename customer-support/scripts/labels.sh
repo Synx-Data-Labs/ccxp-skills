@@ -21,15 +21,15 @@ cs-gh() {
 }
 
 # cs-labels-primary <owner/repo> <issue-number>
-# Prints the single current primary label, or "none" if the issue carries
-# none (e.g. already closed and cleared). Fails loudly if MORE than one
+# Prints the single current status label, or "none" if the issue carries
+# none (e.g. a legacy issue). Fails loudly if MORE than one
 # primary label is present — that is the exact invariant violation `audit`
 # exists to catch; a transition should never proceed against a dirty state.
 cs-labels-primary() {
   local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
   local json names found="" n
-  # Current names plus retired aliases (a stale `triage`/`accepted` issue is
-  # still a valid primary; the label actually present is printed so a later
+  # Current status names plus retired aliases (a not-yet-renamed issue is
+  # still valid; the label actually present is printed so a later
   # --remove-label hits the real one).
   json=$(cs-gh issue view "$issue" --repo "$repo" --json labels)
   names=$(echo "$json" | jq -r '.labels[].name')
@@ -46,13 +46,17 @@ cs-labels-primary() {
 }
 
 # cs-labels-apply <owner/repo> <issue> <old-primary|none> <new-primary|CLOSED:reason>
-# Removes the old primary label (if any), adds the new one, or closes the
-# issue with the given reason when new starts with CLOSED:.
+# Removes the old status label (if any), adds the new one, or closes the
+# issue when new starts with CLOSED: (completed|timeout keep the label;
+# wontfix|duplicate swap in the terminal status label).
 cs-labels-apply() {
   local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
   local old="${3:?old state required}" new="${4:?new state required}"
 
-  if [[ -n "$old" && "$old" != "none" && "$new" != "CLOSED:timeout" ]]; then
+  # accept/timeout closes keep the delivered status label (it is the one
+  # status an accepted/timed-out issue carries); every other transition
+  # removes the old status first.
+  if [[ -n "$old" && "$old" != "none" && "$new" != "CLOSED:timeout" && "$new" != "CLOSED:completed" ]]; then
     cs-gh issue edit "$issue" --repo "$repo" --remove-label "$old"
   fi
 
@@ -66,10 +70,15 @@ cs-labels-apply() {
       # so a reopen routes through `start` (delivered -> in-progress).
       cs-gh issue close "$issue" --repo "$repo" --reason completed
       ;;
-    CLOSED:rejected)
-      # Caller (reject.sh) is responsible for also adding the specific
-      # wontfix/invalid/duplicate label before this call.
+    CLOSED:wontfix)
+      # Terminal status label replaces the old status BEFORE closing, so a
+      # closed issue still carries exactly one status:* label.
+      cs-gh issue edit "$issue" --repo "$repo" --add-label "$CS_L_WONTFIX"
       cs-gh issue close "$issue" --repo "$repo" --reason "not planned"
+      ;;
+    CLOSED:duplicate)
+      cs-gh issue edit "$issue" --repo "$repo" --add-label "$CS_L_DUPLICATE"
+      cs-gh issue close "$issue" --repo "$repo" --reason "duplicate"
       ;;
     *)
       cs-gh issue edit "$issue" --repo "$repo" --add-label "$new"
