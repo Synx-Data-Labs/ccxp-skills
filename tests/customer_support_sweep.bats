@@ -41,7 +41,7 @@ _labeled() { echo "{\"event\":\"labeled\",\"label\":{\"name\":\"$CS_L_DELIVERED\
 _comment() { echo "{\"event\":\"commented\",\"actor\":{\"login\":\"$1\"},\"created_at\":\"$2\",\"body\":\"${3:-hi}\"}"; }
 
 @test "old delivered issue is eligible: dry-run reports WOULD CLOSE and writes nothing" {
-  _issue 30 "delivered,sev2" "[$(_labeled 2026-10-01T00:00:00Z)]"
+  _issue 30 "delivered,severity:2" "[$(_labeled 2026-10-01T00:00:00Z)]"
   run bash "$SWEEP" acme/synxdb-support
   [ "$status" -eq 0 ]
   [[ "$output" == *"#30: WOULD CLOSE (delivered 19d ago)"* ]]
@@ -68,11 +68,12 @@ _comment() { echo "{\"event\":\"commented\",\"actor\":{\"login\":\"$1\"},\"creat
 }
 
 @test "blocked and needs-upstream issues are skipped" {
-  _issue 1 "delivered,blocked" "[$(_labeled 2026-09-01T00:00:00Z)]"
-  _issue 2 "delivered,needs-upstream" "[$(_labeled 2026-09-01T00:00:00Z)]"
+  # Dirty issues carrying a stale stacked blocked/needs-upstream next to delivered.
+  _issue 1 "${CS_L_DELIVERED},${CS_L_BLOCKED}" "[$(_labeled 2026-09-01T00:00:00Z)]"
+  _issue 2 "${CS_L_DELIVERED},${CS_L_NEEDS_UPSTREAM}" "[$(_labeled 2026-09-01T00:00:00Z)]"
   run bash "$SWEEP" acme/synxdb-support
-  [[ "$output" == *"#1: SKIP blocked"* ]]
-  [[ "$output" == *"#2: SKIP needs-upstream"* ]]
+  [[ "$output" == *"#1: SKIP ${CS_L_BLOCKED}"* ]]
+  [[ "$output" == *"#2: SKIP ${CS_L_NEEDS_UPSTREAM}"* ]]
   [[ "$output" != *"WOULD CLOSE (delivered"* ]]
 }
 
@@ -183,4 +184,15 @@ _comment() { echo "{\"event\":\"commented\",\"actor\":{\"login\":\"$1\"},\"creat
   run bash "$SWEEP" acme/synxdb-support --days 08
   [ "$status" -eq 0 ]
   [[ "$output" == *"#15: WOULD CLOSE"* ]]
+}
+
+@test "sweep finds a delivered issue under the new name and the old alias alike (status:delivered / delivered)" {
+  _issue 40 "$CS_L_DELIVERED" "[$(_labeled 2026-10-01T00:00:00Z)]"
+  _issue 41 "delivered" "[$(_labeled 2026-10-01T00:00:00Z)]"
+  _issue 42 "$CS_L_TRIAGED" "[]"
+  run bash "$SWEEP" acme/synxdb-support
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#40: WOULD CLOSE"* ]]
+  [[ "$output" == *"#41: WOULD CLOSE"* ]]
+  [[ "$output" != *"#42"* ]]
 }

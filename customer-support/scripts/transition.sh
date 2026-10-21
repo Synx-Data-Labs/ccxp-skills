@@ -16,17 +16,18 @@
 #   transition.sh deliver          <owner/repo> <issue> --release <sbom> <entitlement-label> [--clone-dir <dir>]
 #   transition.sh request-confirm  <owner/repo> <issue>
 #   transition.sh accept           <owner/repo> <issue> --actor <login> --allowed <comma-list>
-#   transition.sh reject           <owner/repo> <issue> --reason <wontfix|invalid|duplicate>
+#   transition.sh reject           <owner/repo> <issue> --reason <wontfix|duplicate>
 #   transition.sh autoclose        <owner/repo> <issue> [--days N]   (delivered-timeout close, NOT an acceptance)
-#   transition.sh block            <owner/repo> <issue>
-#   transition.sh unblock          <owner/repo> <issue>
+#   transition.sh block            <owner/repo> <issue>   (status -> status:blocked)
+#   transition.sh unblock          <owner/repo> <issue>   (restores the previous status)
 #   transition.sh needs-upstream   <owner/repo> <issue> <on|off>
 #
-# `reject` applies the given reason label itself (folded in here, rather
-# than a separate reject.sh — the specific wontfix/invalid/duplicate label
-# is always applied before closing, never left to a caller's memory).
-# `accept`/`reject` also clear any `blocked`/`needs-upstream` modifier on
-# close, so a closed issue never carries a stale pre-close modifier.
+# Scheme v2 (T20261021-421263): blocked/needs-upstream are statuses, not
+# modifiers. block/needs-upstream-on REPLACE the current status; unblock/off
+# restore the previous status read from the issue's label timeline (fallback
+# status:triaged). `reject` swaps in the terminal status:wontfix|duplicate
+# label itself and closes ("not planned" / "duplicate"), so a closed issue
+# always carries exactly one status:* label. `accept` keeps status:delivered.
 set -euo pipefail
 
 CS_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,13 +44,20 @@ source "${CS_SCRIPTS_DIR}/sweep.sh"
 # shellcheck source=./task_url.sh
 source "${CS_SCRIPTS_DIR}/task_url.sh"
 
-# cs-transition-clear-modifiers <repo> <issue> — best-effort; a modifier not
-# present is a harmless no-op failure from gh's own `--remove-label`, so
-# errors here are swallowed (never block a close over a missing modifier).
-cs-transition-clear-modifiers() {
-  local repo="$1" issue="$2"
-  cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" off 2>/dev/null || true
-  cs-labels-toggle "$repo" "$issue" "$CS_L_NEEDS_UPSTREAM" off 2>/dev/null || true
+# cs-transition-previous-status <repo> <issue> <from-label> — prints the
+# status the issue had before it last got <from-label> (the last status label
+# removed before the last add of <from-label>, per the timeline), or nothing.
+cs-transition-previous-status() {
+  local repo="$1" issue="$2" from="$3" timeline
+  timeline=$(cs-sweep-timeline "$repo" "$issue") || return 0
+  jq -r --argjson from "$(cs-label-names-json "$from")" \
+    --argjson st "$(cs-label-primary-names | jq -R . | jq -sc .)" '
+    (to_entries | map(select(.value.event=="labeled"
+        and (.value.label.name as $x | $from | index($x) != null))) | last | .key) as $i
+    | if $i == null then empty else
+        ([.[:$i][] | select(.event=="unlabeled"
+            and (.label.name as $x | $st | index($x) != null))] | last | .label.name // empty)
+      end' <<<"$timeline" 2>/dev/null || true
 }
 
 cs-transition() {
@@ -121,7 +129,6 @@ cs-transition() {
       current=$(cs-labels-primary "$repo" "$issue")
       next=$(cs-sm-next "$current" accept)
       cs-labels-apply "$repo" "$issue" "$current" "$next"
-      cs-transition-clear-modifiers "$repo" "$issue"
       ;;
 
     reject)
@@ -129,25 +136,22 @@ cs-transition() {
       while [[ $# -gt 0 ]]; do
         case "$1" in
           --reason) reason="$2"; shift 2 ;;
-          *) echo "usage: transition.sh reject <owner/repo> <issue> --reason <wontfix|invalid|duplicate>" >&2; return 2 ;;
+          *) echo "usage: transition.sh reject <owner/repo> <issue> --reason <wontfix|duplicate>" >&2; return 2 ;;
         esac
       done
       case "$reason" in
-        wontfix|invalid|duplicate) ;;
+        wontfix|duplicate) ;;
         *)
-          echo "error: --reason must be one of wontfix, invalid, duplicate (got '${reason}')" >&2
+          echo "error: --reason must be one of ${CS_REJECT_REASONS// /, } (got '${reason}'; a not-a-bug rejection is wontfix)" >&2
           return 2
           ;;
       esac
       local current next
       current=$(cs-labels-primary "$repo" "$issue")
-      next=$(cs-sm-next "$current" reject)
-      # Apply the specific rejection reason BEFORE closing, never left to
-      # the caller to remember separately (the gap the independent review
-      # of ccxp-skills#346 found: a bare CLOSED:rejected applies no label).
-      cs-labels-toggle "$repo" "$issue" "$reason" on
+      next=$(cs-sm-next "$current" reject "$reason")
+      # cs-labels-apply swaps the old status for the terminal status label
+      # (status:wontfix|duplicate) BEFORE closing — never left to the caller.
       cs-labels-apply "$repo" "$issue" "$current" "$next"
-      cs-transition-clear-modifiers "$repo" "$issue"
       ;;
 
     autoclose)
@@ -177,15 +181,28 @@ ${CS_AUTOCLOSE_MARKER}"
       cs-labels-apply "$repo" "$issue" "$current" "$next"
       ;;
 
-    block)
-      cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" on
-      ;;
-    unblock)
-      cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" off
-      ;;
-    needs-upstream)
-      local mode="${1:?on|off required}"
-      cs-labels-toggle "$repo" "$issue" "$CS_L_NEEDS_UPSTREAM" "$mode"
+    block|unblock|needs-upstream)
+      local sm="$subcommand" current next from prev=""
+      if [[ "$subcommand" == "needs-upstream" ]]; then
+        local mode="${1:?on|off required}"
+        case "$mode" in
+          on) ;;
+          off) sm="needs-upstream-off" ;;
+          *) echo "usage: transition.sh needs-upstream <owner/repo> <issue> <on|off>" >&2; return 2 ;;
+        esac
+      fi
+      current=$(cs-labels-primary "$repo" "$issue")
+      case "$sm" in
+        unblock) from="$CS_L_BLOCKED" ;;
+        needs-upstream-off) from="$CS_L_NEEDS_UPSTREAM" ;;
+        *) from="" ;;
+      esac
+      # Restore path: only read the timeline when we really are in <from>.
+      if [[ -n "$from" && "$(cs-label-canon "$current")" == "$from" ]]; then
+        prev=$(cs-transition-previous-status "$repo" "$issue" "$from")
+      fi
+      next=$(cs-sm-next "$current" "$sm" "$prev")
+      cs-labels-apply "$repo" "$issue" "$current" "$next"
       ;;
 
     *)
