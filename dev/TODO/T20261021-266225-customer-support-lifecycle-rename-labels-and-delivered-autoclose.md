@@ -46,7 +46,8 @@ scheduled: 2026-10-19
 
 ## Solution
 
-- **A. Rename.** `CS_PRIMARY_LABELS="new triaged in-progress delivered"` in `labels.sh`/`audit.sh`; `CS_LABEL_ALIASES="triage=new accepted=triaged"`.
+- **Central label mapping** (coordinator request: another rename, e.g. `domain:value`, is being proposed but is NOT decided — do not implement it): new `customer-support/scripts/label_names.sh` is the ONLY place label names appear: `CS_L_NEW`, `CS_L_TRIAGED`, `CS_L_IN_PROGRESS`, `CS_L_DELIVERED`, `CS_L_BLOCKED`, `CS_L_NEEDS_UPSTREAM`, reject labels, the alias list and `CS_PRIMARY_LABELS`. `state_machine.sh`, `labels.sh`, `transition.sh`, `audit.sh`, `sweep.sh` source it; tests read the same variables where practical. A future rename = edit that one file (plus adding the previous names to the alias list).
+- **A. Rename.** `CS_PRIMARY_LABELS="new triaged in-progress delivered"` defined in `label_names.sh`; `CS_LABEL_ALIASES="triage=new accepted=triaged"`.
   - `cs-sm-canon <label>` (state_machine.sh) maps an old name to the new one; `cs-sm-next` canonicalises `current` first, so `triage` on an issue still labelled `triage` works.
   - Readers (`cs-labels-primary`, `cs-audit-check`) recognise old names as primaries; `cs-labels-primary` prints the label actually present (so `--remove-label` hits the real label) and the state machine canonicalises it. Writers only ever add new names.
   - Alternative rejected: one-shot relabel script (would touch real issues; aliases are enough for stale ones).
