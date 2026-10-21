@@ -55,7 +55,7 @@ scheduled: 2026-10-19
   - D. Keep opt-in only (devs who want it build it): zero distribution work, no fleet benefit.
   - Recommendation: B with mandatory bash fallback, then C if Go is not universally present. Choosing needs the maintainer (it decides what the plugin ships).
 - **Known scope limits (stage 1)**:
-  - Real callers are `bash`-invoked (`_session/_lib.sh:89-91` runs `bash "$wrapper" "$@"`), so they reach `main()` and take the Go path when the switch is on; their stdout/stderr must stay parity-safe.
+  - Real callers are `bash`-invoked (`_session/_lib.sh:92` runs `bash "$wrapper" "$@"`), so they reach `main()` and take the Go path when the switch is on; their stdout/stderr must stay parity-safe.
   - Only `source`-ers keep the bash internals: `git.sh` sources `gh.sh`, and `tests/gh.bats:22`, `tests/git.bats:114`/`:140`. The bash path also keeps `awk` for cache lookup/invalidate (`_gh/gh.sh:112`, `:154`) - same tool-drift class as the gawk bug - so "no external-tool parsing" holds for the Go path only.
   - `gh auth status --json` needs a recent gh: the Go binary detects an unsupported flag and exits with a clear "upgrade gh or unset CCXP_GH_GO" error; only gh 2.101.0 is verified so far.
 - **`--json hosts` parsing rules** (pinned here, tested in impl):
@@ -66,7 +66,7 @@ scheduled: 2026-10-19
   - child inherits stdin; `GH_TOKEN` replaces (not duplicates) any existing entry in the child env;
   - exit code: 128+N when the child dies on signal N (bash behavior), not Go's -1;
   - stderr buffered and relayed after the command, as today (`_gh/gh.sh` `main()`), a deliberate parity choice;
-  - `git` mode keeps today's order and tolerance: credential wiring runs only after a successful pick and before the token read, errors swallowed, always succeeds (`_gh/git.sh:31-65`); `git` is resolved from `PATH` as bash does;
+  - `git` mode keeps today's order and tolerance: credential wiring runs only after a successful pick and before the token read, errors swallowed, always succeeds (`_gh/git.sh:31-76`); `git` is resolved from `PATH` as bash does;
   - cache path built from `$TMPDIR`/`$USER` env, not `os/user`; appends are not atomic across bash and Go, harmless since the cache is best-effort.
 - **Alternatives considered and rejected**:
   - Replace the wrappers in one step - rejected: every skill calls them; hard limit is additive + staged.
