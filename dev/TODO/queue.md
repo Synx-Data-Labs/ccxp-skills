@@ -41,4 +41,3 @@ reprioritize.
 - [T20261020-260751](T20261020-260751-self-isolate-drive-address-pr-autopilot.md): Self-isolate ccxp-skills write-operations (worktree) inside /drive, /address-pr, /autopilot — not just at dispatcher level
 - [T20261020-242723](T20261020-242723-harden-gh-wrapper-against-nested-shebang.md): Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
 - [T20261020-131330](T20261020-131330-customer-support-skill-automate-full-support-issue-lifecycle.md): customer-support skill: automate the full lifecycle of a support issue (triage -> deliver)
-- [T20261021-332125](T20261021-332125-customer-support-deliver-clickable-links.md): customer-support deliver: post clickable download links, not a fenced code block
