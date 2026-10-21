@@ -8,7 +8,7 @@ claimed_role:
 scheduled: 2026-10-19
 ---
 
-# T20261021-421263: customer-support: move to the status:* / type:* / severity:* / kb:* label scheme
+- Scheme: `status:new|triaged|in-progress|blocked|needs-upstream|delivered|wontfix|duplicate` (exactly one per issue, open or closed); `type:bug|enhancement|question`; `severity:1..4`; `kb:candidate|published`; the `area`, `family`, `substrate` families and `track:poc` are unchanged. `invalid` dropped.
 
 ## Problem
 
@@ -19,11 +19,11 @@ scheduled: 2026-10-19
 ## TLDR
 
 - `customer-support/scripts/label_names.sh` is the one mapping: new names, old names as read aliases (`cs-label-canon`, `cs-label-names`), `CS_STATUS_LABELS` for audit.
-- `reject --reason wontfix|duplicate` swaps in the terminal `status:*` label, closes "not planned" / "duplicate". `invalid` rejected (exit 2).
+- `reject --reason wontfix|duplicate` swaps in the terminal `status` label, closes "not planned" / "duplicate". `invalid` rejected (exit 2).
 - `blocked`/`needs-upstream` are statuses: `block` / `needs-upstream on` replace the status; `unblock` / `needs-upstream off` restore the previous status from the label timeline (fallback `status:triaged`).
 - `accept` and the 14-day timeout close keep `status:delivered`; `sweep` matches delivered by current name or alias.
 - `triage` accepts an issue with no status label (state `none` treated as new): covers legacy #20, #21, #23, #24, #25, #27.
-- `audit` checks exactly one `status:*` across `--state all`.
+- `audit` checks exactly one status across `--state all`.
 
 ## Test Plan
 
