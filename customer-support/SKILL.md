@@ -106,6 +106,17 @@ working in this suite) — `links.sh` fails fast, before cloning, if it
 isn't. The `.env`-file fallback only applies when `--clone-dir` points at
 an existing, already-populated checkout.
 
+**Comment format (clickable links).** `links.sh` prints Markdown, not the
+render script's fenced block — GitHub does not linkify URLs inside a code
+fence. `scripts/format_links.sh` (stdin to stdout) drops the fence and the
+`====`/`----` rules and emits `### RPM` / `### DEB` / `### RAW` headings with
+one bullet per package, `- **name** (`file`): <bare URL>`. Post that output
+as the delivery comment body. It refuses (non-zero, empty stdout) when the
+URL multiset differs from the render output, when no URL is present, or when
+a fence survives; pass `--raw` to `links.sh` for the unmodified render output
+(logs only — never post it). `format_links.sh check` is the standalone
+guard: it exits 1 if a body contains a fence.
+
 ### 5. `accept` — support-team-only (identity gate)
 
 `transition.sh accept` runs `accept_gate.sh` against `SUPPORT_TEAM_LOGINS`
