@@ -28,7 +28,6 @@ reprioritize.
 - [T20261012-949870](T20261012-949870-support-skill-p2-reporter-dry-run.md): support skill P2: status reporter engine in dry-run (cadence, renderer, marker, tick)
 - [T20261012-383399](T20261012-383399-support-skill-p3-live-reporting.md): support skill P3: live reporting (manual-approved one-shot, then scheduled tick on one real task)
 - [T20261012-278418](T20261012-278418-support-skill-p4-ci-enforcement-and-tuning.md): support skill P4: CI enforcement of the regression-commit rule and cadence tuning
-- [T20261012-333879](T20261012-333879-epic-customer-support-skill-track-p1-p4.md): epic: customer support skill (track P1-P4)
 - [T20261012-342180](T20261012-342180-claimant-id-reverse-lookup-cache.md): Local reverse-lookup cache for claimant ids (who owns what on this box)
 - [T20261012-151045](T20261012-151045-follow-ups-pr-308-drop-gh-board-dependency.md): follow-ups from PR #308 (drop gh board dependency)
 - [T20260827-238870](T20260827-238870-remove-solo-repo-mode.md): Remove solo-repo (no-CI) mode; always follow the team-repo (peer/CI) process
