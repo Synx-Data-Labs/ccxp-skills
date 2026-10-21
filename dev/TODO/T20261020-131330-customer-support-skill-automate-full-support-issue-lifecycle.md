@@ -37,6 +37,7 @@ T20261019-311265 ("Redesign customer-support as an orchestrator that drives /dri
 ### Overlap with epic T20261012-333879 (P2 T20261012-949870, P3 T20261012-383399)
 
 The ETA/status-reporting part of this orchestrator overlaps P2 (reporter engine in dry-run: `_support/cadence.sh`, `render-comment.sh`, `marker.sh`, `tick.sh`) and P3 (live reporting: `/customer-support report|status|stop`, scheduled tick via `actions/support-report`, consent at intake). Those phases assume the passive-mirror shape with an external cadence, so the design must reconcile them. Proposed split, to be confirmed by the design:
+
 - **Orchestrator calls** (control flow): `/drive`, `/address-pr`, `transition.sh` subcommands, and `report`/`tick` as a step at milestones and on stall detection.
 - **Orchestrator reuses, does not rebuild**: P2's cadence function, renderer with whitelist and deny-list lint, hidden marker dedup, and `tick.sh`; ETA numbers from `eta/scripts/eta.sh` as P2 already specifies; P3's per-task opt-in and first-comment human approval, and its scheduled tick (the scheduling answer for hourly updates).
 - **Reshaped by this task**: P3's open "who runs the tick" question (Q7/Q8) is informed by the schedule-skill finding; if milestone-triggered posting is chosen, P2/P3 keep their engine but the scheduled tick becomes a stall-alert/heartbeat only. Update P2/P3 scope in the design PR rather than here.
