@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: user request in this conversation, 2026-10-21
 related: T20261019-181127
+claimed_by: cc1-50ac6891:2c66f4d3357f511f
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261021-289402: customer-support triage: the tracking comment must carry a full clickable URL to the task file
