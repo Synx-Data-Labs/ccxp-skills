@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: this conversation, 2026-10-21 (user request)
 related: T20261012-373882
+claimed_by: cc1-50ac6891:aa0777f53e013582
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261021-266225: customer-support lifecycle: rename labels (accepted->triaged, triage->new) and auto-close delivered issues after 14 days
