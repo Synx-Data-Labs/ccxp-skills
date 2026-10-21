@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: CI secret audit, this conversation, 2026-10-21
 description: Least-privilege permissions and SHA-pinned actions for ccxp-skills workflows; CODEOWNERS for .github/
+claimed_by: cc1-50ac6891:03e07097482518d6
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261021-373941: Harden ccxp-skills workflow permissions and action pins
