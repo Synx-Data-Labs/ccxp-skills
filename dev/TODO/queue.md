@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261020-231370](T20261020-231370-go-rewrite-gh-git-wrappers-deprioritized.md): Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
 - [T20261016-278922](T20261016-278922-lint-forbid-bare-gh-git-remaining-wrapper-hardening.md): lint forbid bare network gh/git in skills + remaining `_gh` wrapper hardening
 - [T20261010-762961](T20261010-762961-cloudflare-family-router-and-dedupe.md): Cloudflare family: router description, 'not for' lines, drop duplicated references
 - [T20260928-101526](T20260928-101526-fix-skill-review-2026-09-28-findings.md): Fix the 2026-09-28 skill-review findings (bugs → script paths → concision)
@@ -39,5 +40,4 @@ reprioritize.
 - [T20261019-174788](T20261019-174788-multi-repo-worktree-dispatcher.md): Make the ccxp skillset multi-repo aware: a dispatcher/agent that works each task/PR in its own git worktree while all repos stay on main
 - [T20261020-260751](T20261020-260751-self-isolate-drive-address-pr-autopilot.md): Self-isolate ccxp-skills write-operations (worktree) inside /drive, /address-pr, /autopilot — not just at dispatcher level
 - [T20261020-242723](T20261020-242723-harden-gh-wrapper-against-nested-shebang.md): Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
-- [T20261020-231370](T20261020-231370-go-rewrite-gh-git-wrappers-deprioritized.md): Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
 - [T20261020-131330](T20261020-131330-customer-support-skill-automate-full-support-issue-lifecycle.md): customer-support skill: automate the full lifecycle of a support issue (triage -> deliver)
