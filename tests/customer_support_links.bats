@@ -140,3 +140,24 @@ EOF2
   [[ "$output" == *'- **c** (`f.rpm`): https://dl.cloudsmith.io/FAKETOKEN/f+1.rpm'* ]]
   [[ "$output" != *'```'* ]]
 }
+
+@test "main --clone-dir emits Markdown by default and the raw fence with --raw" {
+  mkdir -p fake-clone/scripts/release
+  cat > fake-clone/scripts/release/render-partner-download-block.sh <<'EOF2'
+#!/usr/bin/env bash
+printf 'pkg 1 intro\n```\ntitle\n====\n\nRPM\n----\nc (f.rpm):\n  https://dl.cloudsmith.io/FAKETOKEN/f.rpm\n\n```\n'
+EOF2
+  run env ENTITLEMENT_TOKEN=FAKETOKEN bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; cs-links-main sbom.json label --clone-dir fake-clone"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"### RPM"* && "$output" != *'```'* ]]
+  run env ENTITLEMENT_TOKEN=FAKETOKEN bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; cs-links-main sbom.json label --clone-dir fake-clone --raw"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'```'* ]]
+}
+
+@test "render passes but emits no URLs: formatter refuses, main exits non-zero" {
+  mkdir -p fake-clone/scripts/release
+  printf '#!/usr/bin/env bash\necho nothing\n' > fake-clone/scripts/release/render-partner-download-block.sh
+  run env ENTITLEMENT_TOKEN=FAKETOKEN bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; cs-links-main sbom.json label --clone-dir fake-clone"
+  [ "$status" -eq 1 ]
+}

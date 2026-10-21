@@ -113,7 +113,7 @@ cs-links-render-md() {
   raw="$(cs-links-render "$@")" || rc=$?
   local md
   if ! md="$(printf '%s\n' "$raw" | bash "${CS_LINKS_DIR}/format_links.sh" format)"; then
-    return 1
+    return $(( rc != 0 ? rc : 1 ))
   fi
   printf '%s\n' "$md"
   return "$rc"

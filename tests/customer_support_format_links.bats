@@ -62,10 +62,11 @@ EOF2
   printf '%s\n' "$out" | grep -q 'build.7_amd64.deb$'
 }
 
-@test "no trailing punctuation glued to any URL" {
+@test "every URL line is exactly the fixture URL (no glued punctuation)" {
   out=$(cs-fmt-main < render.txt)
-  run bash -c "printf '%s\n' \"\$1\" | grep -E 'https?://' | grep -E '[.,;:)>]\$' | grep -v -E '(rpm|deb|tgz|gz|/1)\$'" _ "$out"
-  [ "$status" -ne 0 ]
+  while IFS= read -r u; do
+    printf '%s\n' "$out" | grep -qE "(: |^- )${u//+/\\+}\$"
+  done < <(cs-fmt-urls < render.txt | grep -v actions/runs)
 }
 
 @test "warning lines kept as bullets without a URL" {
@@ -111,10 +112,10 @@ EOF2
   [ "$status" -eq 1 ]
 }
 
-@test "test output never contains a real token (fake token only)" {
-  out=$(cs-fmt-main < render.txt)
-  [[ "$out" == *FAKETOKEN* ]]
-  [ -z "${ENTITLEMENT_TOKEN:-}" ] || [[ "$out" != *"$ENTITLEMENT_TOKEN"* ]]
+@test "refusal paths keep stdout empty of URLs" {
+  run cs-fmt-assert-urls "$(cs-fmt-urls < render.txt)" ""
+  [ "$status" -eq 1 ]
+  [[ "$output" != *dl.cloudsmith.io* ]]
 }
 
 @test "formatter takes stdin only; a --token flag is rejected" {
