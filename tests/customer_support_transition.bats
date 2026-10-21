@@ -86,7 +86,11 @@ _fx_task_on_main() {
     bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
   [ "$status" -eq 0 ]
   # issue comment 5 --repo acme/synxdb-support --body <one-element> = 7 argv.
-  [ "$(grep -n '^7$' argc.log | wc -l)" -ge 1 ]
+  [ "$(grep -c '^issue comment ' gh-calls.log)" -eq 1 ]
+  # the comment call's argc is the line right after its own gh-calls.log entry's
+  # position: argc.log and gh-calls.log are appended together per call.
+  n=$(grep -n '^issue comment ' gh-calls.log | cut -d: -f1)
+  [ "$(sed -n "${n}p" argc.log)" -eq 7 ]
   url="https://github.com/acme/synxdb-build-pipeline/blob/abc123/dev/TODO/T20261016-412473-x.md"
   run cat body.log
   want="Tracked internally as [synxdb-build-pipeline#T20261016-412473](${url}) — "
@@ -133,8 +137,8 @@ _fx_task_on_main() {
     bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
   [ "$status" -ne 0 ]
   [[ "$output" == *"not found in acme/synxdb-build-pipeline"* ]]
-  ! grep -q -- "issue comment" gh-calls.log
-  ! grep -q -- "--add-label" gh-calls.log
+  if grep -q -- "issue comment" gh-calls.log; then false; fi
+  if grep -q -- "--add-label" gh-calls.log; then false; fi
 }
 
 @test "triage --task: unreadable (private, no access) repo fails before anything is written" {
@@ -143,8 +147,8 @@ _fx_task_on_main() {
     bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
   [ "$status" -ne 0 ]
   [[ "$output" == *"cannot read acme/synxdb-build-pipeline"* ]]
-  ! grep -q -- "issue comment" gh-calls.log
-  ! grep -q -- "--add-label" gh-calls.log
+  if grep -q -- "issue comment" gh-calls.log; then false; fi
+  if grep -q -- "--add-label" gh-calls.log; then false; fi
 }
 
 @test "triage --task: a malformed ref is rejected (no comment, no label)" {
@@ -152,8 +156,8 @@ _fx_task_on_main() {
   run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
     bash "$SCRIPT" triage acme/synxdb-support 5 --task 'synxdb-build-pipeline#T1 2 3 && echo pwned; `id`'
   [ "$status" -ne 0 ]
-  ! grep -q -- "issue comment" gh-calls.log
-  ! grep -q -- "--add-label" gh-calls.log
+  if grep -q -- "issue comment" gh-calls.log; then false; fi
+  if grep -q -- "--add-label" gh-calls.log; then false; fi
 }
 
 @test "deliver --urls: a verified URL moves the label" {

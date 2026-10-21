@@ -114,7 +114,7 @@ status: Open
   _fx "repos/acme/proj/contents/dev/TODO?ref=abc123" "[{\"name\":\"${ID}-p.md\",\"path\":\"dev/TODO/${ID}-p.md\"}]"
   run bash "$SCRIPT" "proj#${ID}" acme
   [ "$status" -eq 0 ]
-  ! grep -qi 'token\|authorization' calls.log
+  if grep -qi 'token\|authorization' calls.log; then false; fi
 }
 
 @test "malformed ref is rejected before any API call" {

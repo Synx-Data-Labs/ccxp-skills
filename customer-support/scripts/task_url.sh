@@ -25,7 +25,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/labels.sh"
 cs-task-url-raw-title() {
   local repo="$1" path="$2" sha="$3" id="$4" raw
   raw=$(cs-gh api -H "Accept: application/vnd.github.raw" "repos/${repo}/contents/${path}?ref=${sha}" 2>/dev/null) || return 0
-  printf '%s\n' "$raw" | sed -n "s/^# ${id}: *//p" | head -1
+  printf '%s\n' "$raw" | sed -n "s/^# ${id}: *//p" | head -1 | tr -d '\r'
 }
 
 # cs-task-url-find <owner/repo> <sha> <dir> <jq-name-regex> — prints path or nothing.
