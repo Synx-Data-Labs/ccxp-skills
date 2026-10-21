@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: this conversation, 2026-10-21
 related: T20261012-373882, T20261012-333879, T20261020-131330
-claimed_by: cc1-50ac6891:e278b453598eab13
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-19
 ---
 
@@ -50,20 +50,35 @@ scheduled: 2026-10-19
 
 ## Test plan
 
-- [ ] `tests/customer_support_format_links.bats` with FAKE tokens/URLs: fence removed, headings, URLs identical incl. `+`, no trailing punctuation, empty/partial input, warning lines, token not in test output, mismatch refusal.
-- [ ] `tests/customer_support_links.bats`: links.sh main emits Markdown by default, `--raw` unchanged, render failure rc propagated.
+- [x] `tests/customer_support_format_links.bats` with FAKE tokens/URLs: fence removed, headings, URLs identical incl. `+`, no trailing punctuation, empty/partial input, warning lines, token not in test output, mismatch refusal.
+- [x] `tests/customer_support_links.bats`: links.sh main emits Markdown by default, `--raw` unchanged, render failure rc propagated.
 
 ## Done criteria
 
-- [ ] Fence and rule lines removed: `tests/customer_support_format_links.bats` "fence removed".
-- [ ] Headings + one bullet per package: same file "headings and bullets".
-- [ ] URLs byte-identical, incl. `+`: same file "URL multiset identical".
-- [ ] Refuse to post on mismatch/empty: same file "refuses ...".
-- [ ] No fence in posted body: `cs-fmt-assert-no-fence` in `customer-support/scripts/format_links.sh`, tested in same file.
-- [ ] Token never in args/stdout/logs: formatter takes stdin only; same file "no token in output".
-- [ ] SKILL.md describes the comment format: `customer-support/SKILL.md` section 4.
-- [ ] Build-pipeline render script untouched (no PR to that repo).
+- [x] Fence and rule lines removed: `tests/customer_support_format_links.bats` "fence removed".
+- [x] Headings + one bullet per package: same file "headings and bullets".
+- [x] URLs byte-identical, incl. `+`: same file "URL multiset identical".
+- [x] Refuse to post on mismatch/empty: same file "refuses ...".
+- [x] No fence in posted body: `cs-fmt-assert-no-fence` in `customer-support/scripts/format_links.sh`, tested in same file.
+- [x] Token never in args/stdout/logs: formatter takes stdin only; same file "no token in output".
+- [x] SKILL.md describes the comment format: `customer-support/SKILL.md` section 4.
+- [x] Build-pipeline render script untouched (no PR to that repo).
 
 ## Root cause
 
 - `links.sh` passes `render-partner-download-block.sh` stdout through unchanged (`customer-support/scripts/links.sh`, `cs-links-render`), and that script wraps the list in a fence (introduced by its author for log readability; deliberate for logs, oversight for GitHub comments).
+
+## Closed (2026-10-21)
+
+- Shipped in the T20261021-332125 implementation PR (design PR #392, claim PR #391); the PR number is on the merge commit.
+- Met: all Done criteria above via `tests/customer_support_format_links.bats` (13 tests) and `tests/customer_support_links.bats`; SKILL.md section 4 documents the format.
+- External, unverified: a real `deliver --release` run against a live release (no real token or issue touched here); the build-pipeline render script is unchanged.
+- Quality probe: shellcheck clean; max_fn_lines +20 (`cs-fmt-markdown`), design score 75, warned only.
+- Follow-ups filed: none.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes in practice - tests written first, then the formatter; skill not formally loaded
+- Verification (`superpowers:verification-before-completion`): partial - bats runs and pre-merge-check.sh per PR; skill not formally loaded
+- Systematic debugging (`superpowers:systematic-debugging`): no - did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): see PR comments
