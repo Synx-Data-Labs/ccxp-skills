@@ -437,6 +437,12 @@ once approved — but nothing in it should be done until that decision lands.
 - Projects-board retirement: **blocked on the pending leadership decision**
   (Q3) — do not action until Shine confirms the outcome of tonight's meeting.
 
+## Amendment (2026-10-21, T20261021-266225)
+
+- Labels renamed in `synxdb-support`: `triage` -> `new`, `accepted` -> `triaged` (old names kept as read-side aliases). The taxonomy and transition tables above use the original names; read `triage`/`accepted` as `new`/`triaged`.
+- New rule: an open issue in `delivered` for 14 days with no reject/reply is closed (`completed`) by `sweep.sh` / `transition.sh autoclose` with a marked "not an acceptance" comment (`<!-- cs-autoclose -->`); reopen routes through `start`. See `customer-support/SKILL.md` § 7.
+- All label names are centralised in `customer-support/scripts/label_names.sh`.
+
 ## Closed (2026-10-12)
 
 Shipped across four PRs, three repos:

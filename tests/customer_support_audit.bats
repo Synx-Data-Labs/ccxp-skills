@@ -10,7 +10,7 @@ setup() {
 }
 
 @test "clean: every issue has exactly one primary label" {
-  json='[{"number":1,"labels":[{"name":"triage"}]},{"number":2,"labels":[{"name":"accepted"},{"name":"sev2"}]}]'
+  json='[{"number":1,"labels":[{"name":"new"}]},{"number":2,"labels":[{"name":"triaged"},{"name":"sev2"}]}]'
   run cs-audit-check "$json"
   [ "$status" -eq 0 ]
 }
@@ -24,14 +24,14 @@ setup() {
 }
 
 @test "flags an issue with more than one primary label" {
-  json='[{"number":5,"labels":[{"name":"triage"},{"name":"accepted"}]}]'
+  json='[{"number":5,"labels":[{"name":"new"},{"name":"triaged"}]}]'
   run cs-audit-check "$json"
   [ "$status" -eq 1 ]
   [[ "$output" == *"#5: multiple primary-state labels"* ]]
 }
 
 @test "ignores non-primary labels entirely" {
-  json='[{"number":27,"labels":[{"name":"family:synxdb"},{"name":"triage"}]}]'
+  json='[{"number":27,"labels":[{"name":"family:synxdb"},{"name":"new"}]}]'
   run cs-audit-check "$json"
   [ "$status" -eq 0 ]
 }
@@ -53,7 +53,18 @@ STUB
 }
 
 @test "CLI entrypoint works directly" {
-  _stub_gh_issue_list '[{"number":1,"labels":[{"name":"triage"}]}]'
+  _stub_gh_issue_list '[{"number":1,"labels":[{"name":"new"}]}]'
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" bash "$REPO_ROOT/customer-support/scripts/audit.sh" acme/synxdb-support
   [ "$status" -eq 0 ]
+}
+
+@test "audit treats retired names (triage/accepted) as valid primaries (T20261021-266225)" {
+  run bash -c "source '$REPO_ROOT/customer-support/scripts/audit.sh'; cs-audit-check '[{\"number\":1,\"labels\":[{\"name\":\"triage\"}]},{\"number\":2,\"labels\":[{\"name\":\"accepted\"}]}]'"
+  [ "$status" -eq 0 ]
+}
+
+@test "audit flags an old+new duplicate (triage + new)" {
+  run bash -c "source '$REPO_ROOT/customer-support/scripts/audit.sh'; cs-audit-check '[{\"number\":3,\"labels\":[{\"name\":\"triage\"},{\"name\":\"new\"}]}]'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"multiple primary-state labels"* ]]
 }
