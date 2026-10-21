@@ -383,3 +383,12 @@ STUB
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" bash "$SCRIPT" start acme/synxdb-support 20
   [ "$status" -eq 1 ]
 }
+
+@test "request-confirm is a true no-op on labels (no remove/re-add that would restart the sweep clock)" {
+  _stub_gh '{"labels":[{"name":"status:delivered"}]}'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" bash "$SCRIPT" request-confirm acme/synxdb-support 5
+  [ "$status" -eq 0 ]
+  run cat gh-calls.log
+  [[ "$output" != *"--remove-label"* ]]
+  [[ "$output" != *"--add-label"* ]]
+}
