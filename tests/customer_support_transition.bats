@@ -42,47 +42,118 @@ STUB
   [[ "$output" == *"--add-label triaged"* ]]
 }
 
-@test "triage --task: a ref with embedded spaces/shell metacharacters is passed as a single argv element (T20261019-181127, no injection)" {
-  # Independent review of /address-pr #369 flagged that the injection-safety
-  # property (verified by code reading: cs-gh exec's "$@" with no eval/shell
-  # re-parsing) wasn't actually test-covered. This proves it: if `${ref}`
-  # were ever word-split or shell-re-interpreted, the comment call would
-  # receive more than 7 argv elements, or `cmd.log`'s recorded body would be
-  # truncated at the first unescaped metacharacter.
-  cat > gh-argv-stub.sh <<'STUB'
+# Task-aware gh fake for `triage --task` (T20261021-289402): serves the issue's
+# labels, a fixture-backed `gh api` for task_url.sh, and records every call.
+_stub_gh_task() {
+  mkdir -p fx
+  cat > gh-task-stub.sh <<'STUB'
 #!/usr/bin/env bash
+echo "$#" >> argc.log
+echo "$*" >> gh-calls.log
 if [[ "$1" == "issue" && "$2" == "view" ]]; then
   echo '{"labels":[{"name":"new"}]}'
   exit 0
 fi
-echo "$#" >> argc.log
 if [[ "$1" == "issue" && "$2" == "comment" ]]; then
-  printf '%s\n' "${@: -1}" >> body.log
+  printf '%s\n----\n' "${@: -1}" >> body.log
+  exit 0
+fi
+if [[ "$1" == "api" ]]; then
+  shift
+  while [[ "${1:-}" == "-H" ]]; do shift 2; done
+  f="fx/$(printf '%s' "$1" | sed 's#[/?&=]#_#g')"
+  if [[ -f "$f" ]]; then cat "$f"; else exit 1; fi
 fi
 STUB
-  chmod +x gh-argv-stub.sh
-  ref='synxdb-build-pipeline#T1 2 3 && echo pwned; `id`'
-  run env CS_GH="$BATS_TEST_TMPDIR/gh-argv-stub.sh" \
-    bash "$SCRIPT" triage acme/synxdb-support 5 --task "$ref"
-  [ "$status" -eq 0 ]
-  # issue comment 5 --repo acme/synxdb-support --body <one-element> = 7 argv.
-  comment_argc=$(head -1 argc.log)
-  [ "$comment_argc" -eq 7 ]
-  run cat body.log
-  [ "$output" = "Tracked internally as ${ref}" ]
+  chmod +x gh-task-stub.sh
 }
 
-@test "triage --task: posts a tracking-link comment before the label moves (T20261019-181127)" {
-  _stub_gh '{"labels":[{"name":"new"}]}'
-  run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" \
+_fx() { printf '%s' "$2" > "fx/$(printf '%s' "$1" | sed 's#[/?&=]#_#g')"; }
+
+_fx_task_on_main() {
+  # $1 = title (may contain shell metacharacters)
+  _fx "repos/acme/synxdb-build-pipeline" '{"default_branch":"main"}'
+  _fx "repos/acme/synxdb-build-pipeline/commits/main" '{"sha":"abc123"}'
+  _fx "repos/acme/synxdb-build-pipeline/contents/dev/TODO?ref=abc123" '[{"name":"T20261016-412473-x.md","path":"dev/TODO/T20261016-412473-x.md"}]'
+  _fx "repos/acme/synxdb-build-pipeline/contents/dev/TODO/T20261016-412473-x.md?ref=abc123" "# T20261016-412473: $1
+"
+}
+
+@test "triage --task: comment is one argv element and carries the readable text, a markdown link and the bare URL (T20261021-289402)" {
+  _stub_gh_task
+  _fx_task_on_main 'Fix `id` && echo pwned; $(x) thing'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
     bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
   [ "$status" -eq 0 ]
-  run cat gh-calls.log
-  [[ "$output" == *"comment 5 --repo acme/synxdb-support --body Tracked internally as synxdb-build-pipeline#T20261016-412473"* ]]
-  [[ "$output" == *"--add-label triaged"* ]]
-  comment_line=$(grep -n -- "comment 5" gh-calls.log | head -1 | cut -d: -f1)
+  # issue comment 5 --repo acme/synxdb-support --body <one-element> = 7 argv.
+  [ "$(grep -n '^7$' argc.log | wc -l)" -ge 1 ]
+  url="https://github.com/acme/synxdb-build-pipeline/blob/abc123/dev/TODO/T20261016-412473-x.md"
+  run cat body.log
+  want="Tracked internally as [synxdb-build-pipeline#T20261016-412473](${url}) — "
+  want+='Fix `id` && echo pwned; $(x) thing'
+  [[ "$output" == "$want"* ]]
+  [[ "$output" == *$'\n\n'"${url}"$'\n'* ]]
+}
+
+@test "triage --task: posts the URL comment before the label moves" {
+  _stub_gh_task
+  _fx_task_on_main 'Some task'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
+  [ "$status" -eq 0 ]
+  grep -q -- "--add-label triaged" gh-calls.log
+  comment_line=$(grep -n -- "issue comment 5" gh-calls.log | head -1 | cut -d: -f1)
   label_line=$(grep -n -- "--add-label triaged" gh-calls.log | head -1 | cut -d: -f1)
   [ "$comment_line" -lt "$label_line" ]
+}
+
+@test "triage --task: task only on an open PR says so and links the PR" {
+  _stub_gh_task
+  _fx "repos/acme/synxdb-build-pipeline" '{"default_branch":"main"}'
+  _fx "repos/acme/synxdb-build-pipeline/commits/main" '{"sha":"abc123"}'
+  _fx "repos/acme/synxdb-build-pipeline/contents/dev/TODO?ref=abc123" '[]'
+  _fx "repos/acme/synxdb-build-pipeline/pulls?state=open&per_page=100" '[{"number":9,"title":"stage T20261016-412473","body":"","head":{"ref":"b","sha":"feed99","repo":{"full_name":"acme/synxdb-build-pipeline"}},"html_url":"https://github.com/acme/synxdb-build-pipeline/pull/9"}]'
+  _fx "repos/acme/synxdb-build-pipeline/pulls/9/files?per_page=100" '[{"filename":"dev/TODO/T20261016-412473-x.md"}]'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
+  [ "$status" -eq 0 ]
+  run cat body.log
+  [[ "$output" == *"blob/feed99/dev/TODO/T20261016-412473-x.md"* ]]
+  [[ "$output" == *"not on the default branch yet; its filing PR is still open: https://github.com/acme/synxdb-build-pipeline/pull/9"* ]]
+}
+
+@test "triage --task: unresolvable task fails loudly, posts NO comment and moves NO label" {
+  _stub_gh_task
+  _fx "repos/acme/synxdb-build-pipeline" '{"default_branch":"main"}'
+  _fx "repos/acme/synxdb-build-pipeline/commits/main" '{"sha":"abc123"}'
+  _fx "repos/acme/synxdb-build-pipeline/contents/dev/TODO?ref=abc123" '[]'
+  _fx "repos/acme/synxdb-build-pipeline/contents/dev/JOURNAL?ref=abc123" '[]'
+  _fx "repos/acme/synxdb-build-pipeline/pulls?state=open&per_page=100" '[]'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"not found in acme/synxdb-build-pipeline"* ]]
+  ! grep -q -- "issue comment" gh-calls.log
+  ! grep -q -- "--add-label" gh-calls.log
+}
+
+@test "triage --task: unreadable (private, no access) repo fails before anything is written" {
+  _stub_gh_task
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"cannot read acme/synxdb-build-pipeline"* ]]
+  ! grep -q -- "issue comment" gh-calls.log
+  ! grep -q -- "--add-label" gh-calls.log
+}
+
+@test "triage --task: a malformed ref is rejected (no comment, no label)" {
+  _stub_gh_task
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-task-stub.sh" \
+    bash "$SCRIPT" triage acme/synxdb-support 5 --task 'synxdb-build-pipeline#T1 2 3 && echo pwned; `id`'
+  [ "$status" -ne 0 ]
+  ! grep -q -- "issue comment" gh-calls.log
+  ! grep -q -- "--add-label" gh-calls.log
 }
 
 @test "deliver --urls: a verified URL moves the label" {
