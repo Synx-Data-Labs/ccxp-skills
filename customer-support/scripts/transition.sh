@@ -201,6 +201,9 @@ ${CS_AUTOCLOSE_MARKER}"
       if [[ -n "$from" && "$(cs-label-canon "$current")" == "$from" ]]; then
         prev=$(cs-transition-previous-status "$repo" "$issue" "$from")
       fi
+      if [[ -n "$from" && -z "$prev" ]]; then
+        echo "warning: no previous status found on the timeline; restoring ${CS_L_TRIAGED}" >&2
+      fi
       next=$(cs-sm-next "$current" "$sm" "$prev")
       cs-labels-apply "$repo" "$issue" "$current" "$next"
       ;;

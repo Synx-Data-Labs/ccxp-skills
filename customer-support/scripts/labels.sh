@@ -53,6 +53,10 @@ cs-labels-apply() {
   local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
   local old="${3:?old state required}" new="${4:?new state required}"
 
+  # Same-state no-op (request-confirm): never remove+re-add, which would
+  # restart the sweep clock and briefly leave the issue with no status.
+  [[ "$old" == "$new" ]] && return 0
+
   # accept/timeout closes keep the delivered status label (it is the one
   # status an accepted/timed-out issue carries); every other transition
   # removes the old status first.
