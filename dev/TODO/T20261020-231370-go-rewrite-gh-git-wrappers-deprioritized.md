@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: Follow-up from T20261020-242723 investigation, 2026-10-20
 related: T20261020-242723
+claimed_by: cc1-50ac6891:2405baa3ca5b7100
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261020-231370: Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
