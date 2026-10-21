@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: this conversation, 2026-10-21
 related: T20261012-373882, T20261012-333879, T20261020-131330
+claimed_by: cc1-50ac6891:e278b453598eab13
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261021-332125: customer-support deliver: post clickable download links, not a fenced code block
