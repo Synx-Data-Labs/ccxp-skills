@@ -20,11 +20,11 @@ scheduled: 2026-10-19
 ## Problem
 
 - Original motivation (kernel leak from nested shebangs) does not hold: T20261020-242723 showed every caller already uses `bash <path>`.
-- Remaining motivation is real and *verified*: `_gh_list_accounts` (`_gh/gh.sh:59-86`) parses human-readable `gh auth status` text; the file's own comment records the two bugs this caused:
-  - mis-linked gawk silently never matching a regex (already worked around by pure-bash `case` matching, `_gh/gh.sh:78-86`);
+- Remaining motivation is real and *verified*: `_gh_list_accounts` (`_gh/gh.sh:61-87`) parses human-readable `gh auth status` text; the file's own comment records the two bugs this caused:
+  - mis-linked gawk silently never matching a regex (already worked around by pure-bash `case` matching, `_gh/gh.sh:80-85`);
   - an `LC_ALL=C` locale bug in the same text path.
 - Structured output exists and is verified on this machine (gh 2.101.0): `gh auth status --json hosts --jq '.hosts["github.com"]|map({login,active,state})'` returns `[{"active":true,"login":"..."},{"active":false,"login":"..."}]`.
-- Stays low-urgency: no active incident, so the rollout must be zero-risk to the ~250 existing call sites (`grep -rhoE '_gh/(gh|git)\.sh'` finds 191 + 79 hits).
+- Stays low-urgency: no active incident, so the rollout must be zero-risk to the existing call sites (`grep -rhoE '_gh/(gh|git)\.sh'` finds ~375 references repo-wide incl. docs/tests).
 
 ## Context
 
@@ -45,15 +45,27 @@ scheduled: 2026-10-19
   - `*_test.go` - table tests with a fake `gh` on `PATH` (same pattern as `tests/fixtures/gh/fake-gh.sh`).
 - **Cache file format unchanged**, so bash and Go pickers interoperate and can be flipped back and forth.
 - **Token/child handling**: `gh auth token --user <u>` and `gh api` stay shelled out to the real `gh` (no new auth code, no go-gh dependency); child env gets `GH_TOKEN`; `git` mode uses `syscall.Exec` (token never in argv).
-- **Opt-in switch (stage 1, additive)**: the existing wrappers stay the default. At the top of `main()` in `_gh/gh.sh` and `main_git()` in `_gh/git.sh`: if `CCXP_GH_GO=1` **and** an executable exists at `${CCXP_GH_BIN:-<_gh>/bin/ccxp-gh}`, `exec` it with mode + args; otherwise fall through to the bash path unchanged (one-line stderr note only when the switch is on but the binary is missing).
-  - No call site changes: all ~250 `bash .../_gh/gh.sh` callers keep working; skills opt in per process via env, so rollout is a single env var, reversible instantly.
-  - Build is manual in stage 1: `cd _gh/go && go build -o ../bin/ccxp-gh .`; `_gh/bin/` is gitignored.
+- **Opt-in switch (stage 1, additive)**: the existing wrappers stay the default. At the top of `main()` in `_gh/gh.sh` and `main_git()` in `_gh/git.sh`: if `CCXP_GH_GO=1` **and** an executable exists at `${CCXP_GH_BIN:-<_gh>/bin/ccxp-gh}`, `exec` it with mode + args; otherwise fall through to the bash path unchanged (a stderr note is printed at most once per process, and only when `CCXP_GH_DEBUG=1`, because callers may merge stderr into parsed output).
+  - No call site changes: all existing `bash .../_gh/gh.sh` callers keep working; skills opt in per process via env, so rollout is a single env var, reversible instantly.
+  - Build is manual in stage 1: `cd _gh/go && go build -o ../bin/ccxp-gh .`; `_gh/bin/` is added to `.gitignore` in the impl PR (no entry today).
 - **Distribution options (decision needed, not chosen here)**:
   - A. Committed prebuilt binaries per platform (`darwin-arm64`, `darwin-amd64`, `linux-amd64`, `linux-arm64`): zero toolchain need, but binary blobs in git and in the plugin cache; supply-chain/review burden.
-  - B. Build on first use (`go build` into a cache dir): no blobs, but requires a Go toolchain on every machine and CI; first call slow; failure mode must fall back to bash.
+  - B. Build on first use (`go build` into a user cache dir, never the possibly read-only/version-pinned plugin dir): no blobs, but requires a Go toolchain on every machine and CI; first call slow; failure mode must fall back to bash.
   - C. GitHub release artifacts fetched on demand: clean repo, needs a release workflow, checksum pinning and network at first use.
   - D. Keep opt-in only (devs who want it build it): zero distribution work, no fleet benefit.
   - Recommendation: B with mandatory bash fallback, then C if Go is not universally present. Choosing needs the maintainer (it decides what the plugin ships).
+- **Known scope limits (stage 1)**:
+  - Callers that `source` the wrappers and use internals (`_session/_lib.sh` uses `_gh_pick_account` / `_gh_token_for`; `git.sh` sources `gh.sh`) never hit `main()`, so they keep the bash text parser. The awk/locale bug class stays reachable there until those callers migrate; "no text parsing" holds for the Go path only.
+  - `gh auth status --json` needs a recent gh: the Go binary detects an unsupported flag and exits with a clear "upgrade gh or unset CCXP_GH_GO" error; only gh 2.101.0 is verified so far.
+- **`--json hosts` parsing rules** (pinned here, tested in impl):
+  - parse stdout regardless of exit code (`gh auth status` exits 1 when any account's token is invalid);
+  - keep accounts with `state == "success"` only; host scope stays `github.com` (parity with today);
+  - order as returned.
+- **Parity details the port must copy**:
+  - child inherits stdin; `GH_TOKEN` replaces (not duplicates) any existing entry in the child env;
+  - exit code: 128+N when the child dies on signal N (bash behavior), not Go's -1;
+  - stderr buffered and relayed after the command, as today (`_gh/gh.sh` `main()`), a deliberate parity choice;
+  - cache path built from `$TMPDIR`/`$USER` env, not `os/user`; appends are not atomic across bash and Go, harmless since the cache is best-effort.
 - **Alternatives considered and rejected**:
   - Replace the wrappers in one step - rejected: every skill calls them; hard limit is additive + staged.
   - Keep bash and just use `--json` + `jq` - rejected as the sole fix for this task (adds a `jq` dependency, same class of tool-drift risk), though it remains a cheap intermediate hardening.
@@ -62,7 +74,7 @@ scheduled: 2026-10-19
 ## Test plan
 
 - [ ] `go test ./...` in `_gh/go/`: slug parsing (SSH alias, https, no `.git`), `--json hosts` parsing (active/inactive, missing host), picker (write beats earlier read-only, read fallback, none -> error text), cache read/write/invalidate, permission-error regexp.
-- [ ] `tests/gh-go.bats`: black-box run of the built binary against `tests/fixtures/gh/fake-gh.sh` (account order, token in env not argv, self-heal retry, error messages); skipped when `go` is absent.
+- [ ] `tests/gh-go.bats`: black-box run of the built binary against `tests/fixtures/gh/fake-gh.sh` (extended in the impl PR to serve `auth status --json hosts`; today it only emulates the text form and exits 99 on unknown shapes) (account order, token in env not argv, self-heal retry, error messages); skipped when `go` is absent - note CI's `bats` job has no `setup-go` today, so it would never run there unless the impl PR adds that step.
 - [ ] Shim tests: switch off -> bash path untouched; switch on + binary present -> exec'd; switch on + binary missing -> bash fallback.
 - [ ] Existing `bats tests/*.bats` stays green (the bash path is unchanged by default).
 - [ ] Post-merge (external): real-machine smoke with two accounts, `CCXP_GH_GO=1 bash _gh/gh.sh api user --jq .login`.
@@ -85,8 +97,8 @@ scheduled: 2026-10-19
 
 | File | Lines | Purpose |
 |---|---|---|
-| `_gh/gh.sh` | 59-86 | text-parsing `_gh_list_accounts` (the fragile part) |
-| `_gh/gh.sh` | 158-195 | `main()` - where the opt-in switch goes |
+| `_gh/gh.sh` | 61-87 | text-parsing `_gh_list_accounts` (the fragile part) |
+| `_gh/gh.sh` | 158-197 | `main()` - where the opt-in switch goes |
 | `_gh/git.sh` | 67-77 | `main_git()` - same switch; credential wiring to port |
 | `tests/gh.bats`, `tests/git.bats` | - | behavior to mirror in Go tests |
 | `tests/gh-wrapper-shebang-invocation.bats` | - | guardrail; shim must keep explicit `bash` callers valid |
