@@ -36,11 +36,14 @@ cs-sweep-gh() {
 # therefore inside autoclose: a fresh delivery can never be closed).
 cs-sweep-days-check() {
   local d="${1:-}"
-  if ! [[ "$d" =~ ^[0-9]+$ ]] || [[ "$d" -lt 1 ]]; then
+  if ! [[ "$d" =~ ^[0-9]+$ ]] || [[ "$((10#$d))" -lt 1 ]]; then
     echo "error: --days must be an integer >= 1 (got '${d}')" >&2
     return 2
   fi
 }
+
+# cs-sweep-days-norm <days> — strip leading zeros (08 is not octal here).
+cs-sweep-days-norm() { echo "$((10#${1}))"; }
 
 # cs-sweep-timeline <repo> <issue> — flat JSON array of timeline events.
 cs-sweep-timeline() {
@@ -78,10 +81,13 @@ cs-sweep-eval() {
       end' <<<"$timeline"
 }
 
-# cs-sweep-has-marker <timeline-json> — exit 0 if our autoclose comment exists.
+# cs-sweep-has-marker <timeline-json> — exit 0 if our autoclose comment exists
+# for the CURRENT delivery cycle (after the last `delivered` label event), so
+# a second timeout after reopen -> start -> deliver still gets its comment.
 cs-sweep-has-marker() {
-  jq -e --arg m "$CS_AUTOCLOSE_MARKER" \
-    '[.[] | select(.event=="commented" and ((.body // "") | contains($m)))] | length > 0' \
+  jq -e --arg m "$CS_AUTOCLOSE_MARKER" --arg d "$CS_L_DELIVERED" \
+    '([.[] | select(.event=="labeled" and .label.name==$d)] | last | .created_at // "") as $t
+     | [.[] | select(.event=="commented" and .created_at > $t and ((.body // "") | contains($m)))] | length > 0' \
     <<<"${1:?timeline json}" >/dev/null
 }
 
@@ -94,6 +100,7 @@ cs-sweep-now() { echo "${CS_NOW:-$(date -u +%s)}"; }
 cs-autoclose-gate() {
   local repo="$1" issue="$2" days="$3" labels timeline verdict
   cs-sweep-days-check "$days" || return 2
+  days=$(cs-sweep-days-norm "$days")
   labels=$(cs-sweep-gh issue view "$issue" --repo "$repo" --json labels | jq -r '.labels[].name')
   timeline=$(cs-sweep-timeline "$repo" "$issue")
   verdict=$(cs-sweep-eval "$timeline" "$labels" "$(cs-sweep-now)" "$days")
@@ -113,6 +120,7 @@ cs-sweep-main() {
   done
   [[ -n "$repo" ]] || { echo "usage: sweep.sh <owner/repo> [--days N] [--apply]" >&2; return 2; }
   cs-sweep-days-check "$days" || return 2
+  days=$(cs-sweep-days-norm "$days")
 
   local list n labels timeline verdict closes=0 flags=0 now
   now=$(cs-sweep-now)
