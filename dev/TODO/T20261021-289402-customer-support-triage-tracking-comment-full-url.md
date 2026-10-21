@@ -32,10 +32,12 @@ scheduled: 2026-10-19
 
 - New `customer-support/scripts/task_url.sh` (sourceable, `cs-task-url <ref>`), all I/O through `cs-gh api` so auth, private repos and test fakes share one path:
   - Parse `<repo>#T<id>` or `<owner>/<repo>#T<id>` (owner defaults to the support repo owner); anything else is rejected with a clear message.
-  - Default branch via `repos/O/R`; `GET contents/dev/TODO?ref=<branch>` for `<id>-*.md`, else `contents/dev/JOURNAL` for `*-<id>-*.md`; else open PRs found by `search/issues` (`<id> is:pr is:open repo:O/R`) whose files include `dev/TODO/<id>-*.md`.
+  - Probe `repos/O/R` first: any failure there (404/403, which is also what a private repo without access returns) is reported as "repo not readable (not found or no access; check gh auth)", never as "task missing". Then resolve the default-branch HEAD commit SHA once and **pin every later lookup to that SHA** so the listing and the permalink agree.
+  - `GET contents/dev/TODO?ref=<sha>` for `<id>-*.md`, else `contents/dev/JOURNAL?ref=<sha>` for `*-<id>-*.md` (contents listings cap at 1000 entries; not found in a full listing fails loudly and says so).
+  - Else open PRs: walk `pulls?state=open&per_page=100` (search/issues is rejected: it matches title/body text, not paths, lags the index and has a tight rate limit), keep PRs whose title, body or head ref mentions `<id>`, and take the one whose `pulls/<n>/files` contains `dev/TODO/<id>-*.md`.
   - Print `<kind>\t<url>\t<title>`; kind is `main`, `journal` or `pr`. Title is the task file's `# T<id>: ...` H1 read through the raw contents API.
 - **Link-rot decision**: the URL is a **permalink pinned to the default-branch commit SHA** at triage time (`blob/<sha>/<path>`). A pinned blob keeps resolving after the task moves TODO -> JOURNAL, unlike `blob/main/...`. Rejected: live `blob/main` link (404 after close), posting both (the live half rots and misleads), code-search redirect (needs auth, unstable).
-- PR-only task: link the file at the PR head SHA in the head repo and state that the filing PR `<url>` is still open; JOURNAL task: pinned permalink to the journal file.
+- PR-only task: link the file at the PR head SHA in the head repo and state that the filing PR `<url>` is still open; the PR URL is always included because a fork or head branch can be deleted after merge, and the PR page survives; JOURNAL task: pinned permalink to the journal file.
 - Comment body (human text kept): `Tracked internally as [<ref>](<url>) — <title>` then a blank line and the bare `<url>`; the PR case adds a line naming the open PR.
 - Missing task, unreadable repo (404/403, including a private repo without access): `transition.sh` returns non-zero with a message naming the cause and `gh auth`, **before** the comment and before the label moves. No token is ever echoed.
 - `--task` argument form unchanged (`<repo>#T<id>`; `<owner>/<repo>#T<id>` newly accepted); plain `triage` unchanged.
