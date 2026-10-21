@@ -1,7 +1,7 @@
 ---
-status: Blocked by T20261012-278418
+status: Done
 estimation: 1
-scheduled: 2026-10-12
+scheduled: 2026-10-19
 source: this conversation, 2026-10-12 (user: "an epic task to keep track of all 4 subtasks ... we drive the epic, which drives the subtasks by priority")
 related: [T20261012-109735, T20261012-949870, T20261012-383399, T20261012-278418]
 description: Epic tracking the four-phase customer-support skill (intake, dry-run reporter, live reporting, CI enforcement)
@@ -40,3 +40,7 @@ description: Epic tracking the four-phase customer-support skill (intake, dry-ru
 - Gap, not fixed here: the recursion chain is epic -> P4 -> P3 -> P2 -> P1 (depth 4), and `/drive` Phase 6 escalates at depth >= 3 ("task-graph rot") instead of recursing.
   - Workaround: drive the children directly in order (`/drive T20261012-109735`, then the next), using this epic as the tracking checklist.
   - A drive enhancement (epic-aware: walk a children checklist, exempt epics from the depth smell) needs its own task.
+
+## Closed
+
+Superseded by E1 (`dev/EPICS/E1-customer-support-skill.md`, maintainer decision 2026-10-21). Membership and open questions Q1-Q11 moved to the epic file; the `Blocked by` chain through P4 is dropped with this task, and P1-P4 keep their own `blocked-by` links.
