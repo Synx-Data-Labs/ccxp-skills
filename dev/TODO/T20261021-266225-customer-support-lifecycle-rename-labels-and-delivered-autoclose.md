@@ -28,3 +28,54 @@ scheduled: 2026-10-19
   - Design PR decides whether a cron workflow calls it; otherwise file a follow-up task.
   - Update `SKILL.md`, lifecycle docs, and design reference T20261012-373882.
 - Constraints: dry-run only against real issues (expect roughly #30, #32, #33 to be reported); no real issue is closed or relabelled; no Slack steps (escalations recorded in this file).
+
+## TLDR
+
+- **Type**: feature (two linked changes to `customer-support`: label rename + delivered timeout).
+- Rename primary labels in code/docs/tests: `triage` -> `new`, `accepted` -> `triaged`; old names stay as read-side aliases (`cs-sm-canon`) so stale issues pass `audit` and the state machine. The `triage` subcommand keeps its name.
+- New `transition.sh autoclose` + read-only-by-default `sweep.sh` (`--days 14`, `--apply`): closes `delivered` issues idle for 14 days as `completed`, with a marked "NOT an acceptance" comment.
+- Timeout close is distinct from `accept`: `accept` stays identity-gated; `autoclose` is gated by its own re-verified eligibility check and keeps the `delivered` label as the signature, so a reopen routes through `start` (`delivered -> in-progress`).
+- No cron in this PR (design decision below); follow-up task filed instead.
+
+## Context
+
+- Verified 2026-10-21 (`gh label list`): live labels are `new`, `triaged`, `in-progress`, `delivered`, `blocked`, `needs-upstream`; `triage`/`accepted` are gone (verified).
+- Code sites using old names (verified by `git grep`): `customer-support/scripts/state_machine.sh:8,20,31-60`, `labels.sh:11`, `audit.sh:16`, `transition.sh` comment on `triage`, `SKILL.md:12-13,31-32`, `tests/customer_support_{audit,labels,transition}.bats`.
+- No `to-task` / `close-support-issue` reference to the old label names exists in this repo (verified; `close-support-issue` lives in synxdb-build-pipeline, whose repo has no label-name references either — verified read-only, only `/customer-support` mentions in task files).
+- Design reference: `dev/JOURNAL/2026-10-12-T20261012-373882-support-status-label-lifecycle-design.md` (taxonomy §1, transitions §2); this task amends both.
+
+## Solution
+
+- **A. Rename.** `CS_PRIMARY_LABELS="new triaged in-progress delivered"` in `labels.sh`/`audit.sh`; `CS_LABEL_ALIASES="triage=new accepted=triaged"`.
+  - `cs-sm-canon <label>` (state_machine.sh) maps an old name to the new one; `cs-sm-next` canonicalises `current` first, so `triage` on an issue still labelled `triage` works.
+  - Readers (`cs-labels-primary`, `cs-audit-check`) recognise old names as primaries; `cs-labels-primary` prints the label actually present (so `--remove-label` hits the real label) and the state machine canonicalises it. Writers only ever add new names.
+  - Alternative rejected: one-shot relabel script (would touch real issues; aliases are enough for stale ones).
+- **B. Timeout rule.** Eligible iff all hold, evaluated by the pure `cs-sweep-eval` (jq over the timeline JSON, no I/O):
+  - issue open with `delivered`; none of `blocked` / `needs-upstream`;
+  - clock = `created_at` of the LAST `labeled delivered` timeline event (events API, not issue `updated_at`); age >= `--days` (default 14);
+  - no `reopened` event after that label event; no comment after it from anyone other than the label's actor (our delivering account) -> `FLAG needs human`, never closed.
+  - Output lines: `#N: WOULD CLOSE (delivered Xd ago)`, `#N: SKIP <reason>`, `#N: FLAG <reason>`. Default dry-run; `--apply` calls `transition.sh autoclose` per eligible issue.
+- **Single entrypoint.** `transition.sh autoclose <repo> <issue> [--days N]` re-fetches timeline + labels and re-runs `cs-sweep-eval` itself (so a direct call cannot bypass the rules), posts the comment, then closes. `state_machine.sh` gets `autoclose`: `delivered` -> `CLOSED:timeout` (distinct from `accept`'s `CLOSED:completed`). `cs-labels-apply` closes `CLOSED:timeout` with reason `completed` and does NOT remove `delivered`.
+- **Distinguishable from acceptance.** Comment starts `**Auto-closed (not accepted):**` plus hidden marker `<!-- cs-autoclose -->`, says: closed after N days with no reject or reply, this is NOT a support-team acceptance, support team or customer can reopen it, then `start` moves `delivered -> in-progress`. Closed + `delivered` label still present = timeout-closed; a real accept clears the label.
+- **Scheduling decision: no cron here.** The sweep needs a token with write access to synxdb-support (cross-repo secret) and the support team should first see a real dry-run list; filed as a follow-up task (workflow in synxdb-support calling `sweep.sh --apply`). Alternative rejected: ccxp-skills cron (wrong repo for a customer-data token).
+- Docs: `customer-support/SKILL.md` (table, workflow, notes), `lifecycle.md`/`glossary.md` if they mention the states (verified none do), and a dated amendment note on the T20261012-373882 journal doc.
+
+## Test plan
+
+- BATS (fakes via `CS_GH` + `CS_NOW`, no real issue touched): `tests/customer_support_sweep.bats` (eligible, too young, blocked, needs-upstream, foreign comment -> FLAG, own comment ok, reopened, relabelled-delivered clock reset, dry-run makes no write call, `--apply` comments then closes, idempotent on closed list, `--days` override).
+- Updated: `customer_support_{audit,labels,transition}.bats` for new names plus alias cases (`triage`/`accepted` labelled issues pass audit; `triage` subcommand on an old-labelled issue works).
+- Real-world check: dry-run only against `Synx-Data-Labs/synxdb-support`; list reported in Closed.
+
+## Done criteria
+
+- [ ] Primary labels renamed with aliases — `tests/customer_support_audit.bats`, `tests/customer_support_labels.bats`, `customer-support/scripts/state_machine.sh`.
+- [ ] `triage` moves `new` -> `triaged` via the single entrypoint — `tests/customer_support_transition.bats`.
+- [ ] Sweep eligibility rules and dry-run default — `tests/customer_support_sweep.bats`.
+- [ ] `autoclose` goes through `transition.sh`, comment marked, `delivered` kept — `tests/customer_support_sweep.bats`.
+- [ ] `accept` still identity-gated, unchanged — existing `tests/customer_support_transition.bats`.
+- [ ] `SKILL.md` and T20261012-373882 doc updated — `customer-support/SKILL.md`, reviewed by `doc-impact.sh`.
+- [ ] Dry-run list recorded; follow-up cron task filed — `## Closed`.
+
+## Escalations
+
+- None (no Slack steps in this job; nothing needed a decision from the maintainer).
