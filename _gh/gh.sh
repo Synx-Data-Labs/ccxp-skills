@@ -155,7 +155,25 @@ _gh_invalidate_cache() {
     && mv "$tmp" "$_gh_cache_file"
 }
 
+# Opt-in Go path (T20261020-231370): with CCXP_GH_GO=1 and a built binary
+# (CCXP_GH_BIN, default <this dir>/bin/ccxp-gh — see _gh/go/build.sh), exec it
+# instead of running the bash logic below. Anything else (switch off, binary
+# missing) returns and the bash path runs unchanged. $1 = mode (gh|git).
+_gh_go_shim() {
+  [[ "${CCXP_GH_GO:-0}" == "1" ]] || return 0
+  local mode="$1" bin
+  shift
+  bin="${CCXP_GH_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bin/ccxp-gh}"
+  if [[ -x "$bin" ]]; then
+    exec "$bin" "$mode" "$@"
+  fi
+  # Silent by default: callers may merge stderr into parsed output.
+  [[ "${CCXP_GH_DEBUG:-0}" == "1" ]] && printf '%s: CCXP_GH_GO=1 but no binary at %s — using bash path\n' "${0##*/}" "$bin" >&2
+  return 0
+}
+
 main() {
+  _gh_go_shim gh "$@"
   local slug user tok status errfile
   slug="$(_gh_repo_slug)" || _gh_die "no github 'origin' remote in $PWD"
   [[ -n "$slug" && "$slug" == */* ]] || _gh_die "could not parse owner/repo from origin URL"

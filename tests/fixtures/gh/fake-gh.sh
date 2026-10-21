@@ -13,6 +13,14 @@
 #                       expects). `gh auth token --user <name>`
 #                       deterministically returns "<name>-token".
 #
+#   FAKE_GH_INVALID    space-separated account names reported with state
+#                       "error" by `gh auth status --json hosts` (a stored
+#                       token gone bad); the command then exits 1 like real gh.
+#
+#   FAKE_GH_NO_JSON=1  `gh auth status --json ...` fails as an old gh would
+#                       ("unknown flag: --json") — for the Go binary's
+#                       unsupported-gh error path (T20261020-231370).
+#
 #   FAKE_GH_PERM        space-separated "<token>:<true|false>" pairs.
 #                       `gh api repos/<slug> --jq .permissions.push` prints
 #                       the paired value and exits 0 when $GH_TOKEN has an
@@ -45,6 +53,21 @@ case "${1:-}" in
   auth)
     case "${2:-}" in
       status)
+        if [ "${3:-}" = "--json" ]; then
+          if [ "${FAKE_GH_NO_JSON:-0}" = "1" ]; then
+            echo "unknown flag: --json" >&2; exit 1
+          fi
+          sep=""; rc=0
+          printf '{"hosts":{"github.com":['
+          for acct in ${FAKE_GH_ACCOUNTS:-}; do
+            st=success
+            for bad in ${FAKE_GH_INVALID:-}; do [ "$bad" = "$acct" ] && { st=error; rc=1; }; done
+            printf '%s{"state":"%s","active":false,"host":"github.com","login":"%s"}' "$sep" "$st" "$acct"
+            sep=","
+          done
+          printf ']}}\n'
+          exit "$rc"
+        fi
         for acct in ${FAKE_GH_ACCOUNTS:-}; do
           printf 'Logged in to github.com account %s (keyring)\n' "$acct"
         done

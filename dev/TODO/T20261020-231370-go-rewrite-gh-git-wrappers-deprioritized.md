@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 3
 source: Follow-up from T20261020-242723 investigation, 2026-10-20; maintainer raised priority 2026-10-20 (filename suffix `deprioritized` is historical)
 related: T20261020-242723, T20261012-280694
@@ -75,21 +75,21 @@ scheduled: 2026-10-19
 
 ## Test plan
 
-- [ ] `go test ./...` in `_gh/go/`: slug parsing (SSH alias, https, no `.git`), `--json hosts` parsing (active/inactive, missing host), picker (write beats earlier read-only, read fallback, none -> error text), cache read/write/invalidate, permission-error regexp.
-- [ ] `tests/gh-go.bats`: black-box run of the built binary against `tests/fixtures/gh/fake-gh.sh` (extended in the impl PR to serve `auth status --json hosts`; today it only emulates the text form and exits 99 on unknown shapes) (account order, token in env not argv, self-heal retry, error messages); skipped when `go` is absent - note CI's `bats` job has no `setup-go` today, so it would never run there unless the impl PR adds that step.
-- [ ] `_session_gh` (`_session/_lib.sh`) works end-to-end under `CCXP_GH_GO=1` with the fake binary.
-- [ ] Shim tests: switch off -> bash path untouched; switch on + binary present -> exec'd; switch on + binary missing -> bash fallback.
-- [ ] Existing `bats tests/*.bats` stays green (the bash path is unchanged by default).
+- [x] `go test ./...` in `_gh/go/`: slug parsing (SSH alias, https, no `.git`), `--json hosts` parsing (active/inactive, missing host), picker (write beats earlier read-only, read fallback, none -> error text), cache read/write/invalidate, permission-error regexp.
+- [x] `tests/gh-go.bats`: black-box run of the built binary against `tests/fixtures/gh/fake-gh.sh` (extended in the impl PR to serve `auth status --json hosts`; today it only emulates the text form and exits 99 on unknown shapes) (account order, token in env not argv, self-heal retry, error messages); skipped when `go` is absent - note CI's `bats` job has no `setup-go` today, so it would never run there unless the impl PR adds that step.
+- [x] `_session_gh` (`_session/_lib.sh`) works end-to-end under `CCXP_GH_GO=1` with the fake binary.
+- [x] Shim tests: switch off -> bash path untouched; switch on + binary present -> exec'd; switch on + binary missing -> bash fallback.
+- [x] Existing `bats tests/*.bats` stays green (the bash path is unchanged by default).
 - [ ] Post-merge (external): real-machine smoke with two accounts, `CCXP_GH_GO=1 bash _gh/gh.sh api user --jq .login`.
 
 ## Done criteria
 
-- [ ] Go binary implements gh + git modes with parity on picker/cache/self-heal/messages - `_gh/go/*_test.go` (stage 1, impl PR).
-- [ ] Account detection uses `gh auth status --json hosts`, no text parsing - `_gh/go/accounts.go` + its test.
-- [ ] Wrappers unchanged by default, opt-in switch works - `tests/gh-go.bats` shim tests.
-- [ ] Build step documented - `_gh/README` section or `_gh/go/README` header comment (impl PR).
+- [x] Go binary implements gh + git modes with parity on picker/cache/self-heal/messages - `_gh/go/gh_test.go`, `tests/gh-go.bats` (stage 1, impl PR).
+- [x] Account detection uses `gh auth status --json hosts`, no text parsing - `_gh/go/accounts.go:36-52` + `TestParseAccounts` in `_gh/go/gh_test.go`.
+- [x] Wrappers unchanged by default, opt-in switch works - `tests/gh-go.bats` shim tests (tests 1-5).
+- [x] Build step documented - `_gh/go/build.sh` header, `_gh/go/main.go:1-12`.
 - [ ] Distribution mechanism chosen and implemented; call sites migrated to the binary - **external, unchecked**: blocked on the maintainer's choice among options A-D above.
-- [ ] fake-broken-awk / locale regression tests noted as moot for the Go path - `tests/gh-go.bats` header comment.
+- [x] fake-broken-awk / locale regression tests noted as moot for the Go path `tests/gh-go.bats` header comment + test 12.
 
 ## Root cause
 
@@ -105,6 +105,11 @@ scheduled: 2026-10-19
 | `_gh/git.sh` | 67-77 | `main_git()` - same switch; credential wiring to port |
 | `tests/gh.bats`, `tests/git.bats` | - | behavior to mirror in Go tests |
 | `tests/gh-wrapper-shebang-invocation.bats` | - | guardrail; shim must keep explicit `bash` callers valid |
+
+## Stage 1 status
+
+- Shipped (impl PR): Go binary + opt-in shim + tests + CI `setup-go` step; bash wrappers remain the default.
+- Remaining: distribution decision (A-D above), then migrating callers/default. Task stays open until the maintainer chooses.
 
 ## Closed
 
