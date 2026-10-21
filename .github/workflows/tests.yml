@@ -105,6 +105,12 @@ jobs:
       - name: Install bats
         run: sudo apt-get update && sudo apt-get install -y bats
         shell: bash
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.22'
+      - name: Go tests (opt-in gh/git wrapper binary, T20261020-231370)
+        run: cd _gh/go && go vet ./... && go test ./...
+        shell: bash
       - name: Run bats suite
         run: bats tests/*.bats _docs/*.bats _slack/*.bats
         shell: bash

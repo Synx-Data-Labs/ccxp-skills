@@ -65,6 +65,7 @@ _git_wire_credentials() {
 }
 
 main_git() {
+  _gh_go_shim git "$@"
   local slug user tok
   slug="$(_gh_repo_slug)" || _gh_die "no github 'origin' remote in $PWD"
   [[ -n "$slug" && "$slug" == */* ]] || _gh_die "could not parse owner/repo from origin URL"
