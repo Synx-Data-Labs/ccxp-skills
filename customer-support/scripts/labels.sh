@@ -8,8 +8,8 @@
 # _gh/ci-triage.sh's CI_TRIAGE_GH / _taskid/url.sh's TASKID_GH convention.
 set -euo pipefail
 
-CS_PRIMARY_LABELS="triage accepted in-progress delivered"
-CS_REJECT_LABELS="wontfix invalid duplicate"
+# shellcheck source=./label_names.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/label_names.sh"
 
 CS_GH="${CS_GH:-}"
 cs-gh() {
@@ -28,9 +28,12 @@ cs-gh() {
 cs-labels-primary() {
   local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
   local json names found="" n
+  # Current names plus retired aliases (a stale `triage`/`accepted` issue is
+  # still a valid primary; the label actually present is printed so a later
+  # --remove-label hits the real one).
   json=$(cs-gh issue view "$issue" --repo "$repo" --json labels)
   names=$(echo "$json" | jq -r '.labels[].name')
-  for n in $CS_PRIMARY_LABELS; do
+  for n in $(cs-label-primary-names); do
     if grep -qxF "$n" <<<"$names"; then
       if [[ -n "$found" ]]; then
         echo "error: issue ${repo}#${issue} carries more than one primary label (${found}, ${n}) — invariant violated, run 'audit'" >&2
@@ -49,12 +52,18 @@ cs-labels-apply() {
   local repo="${1:?owner/repo required}" issue="${2:?issue number required}"
   local old="${3:?old state required}" new="${4:?new state required}"
 
-  if [[ -n "$old" && "$old" != "none" ]]; then
+  if [[ -n "$old" && "$old" != "none" && "$new" != "CLOSED:timeout" ]]; then
     cs-gh issue edit "$issue" --repo "$repo" --remove-label "$old"
   fi
 
   case "$new" in
     CLOSED:completed)
+      cs-gh issue close "$issue" --repo "$repo" --reason completed
+      ;;
+    CLOSED:timeout)
+      # Delivered-timeout close (T20261021-266225): NOT an acceptance. The
+      # delivered label is kept (the caller's marker comment is the signature)
+      # so a reopen routes through `start` (delivered -> in-progress).
       cs-gh issue close "$issue" --repo "$repo" --reason completed
       ;;
     CLOSED:rejected)

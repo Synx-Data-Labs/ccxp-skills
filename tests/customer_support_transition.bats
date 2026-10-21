@@ -33,13 +33,13 @@ STUB
   chmod +x curl-stub.sh
 }
 
-@test "triage: accepted label applied via the single entrypoint" {
-  _stub_gh '{"labels":[{"name":"triage"}]}'
+@test "triage: triaged label applied via the single entrypoint" {
+  _stub_gh '{"labels":[{"name":"new"}]}'
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" bash "$SCRIPT" triage acme/synxdb-support 5
   [ "$status" -eq 0 ]
   run cat gh-calls.log
-  [[ "$output" == *"--remove-label triage"* ]]
-  [[ "$output" == *"--add-label accepted"* ]]
+  [[ "$output" == *"--remove-label new"* ]]
+  [[ "$output" == *"--add-label triaged"* ]]
 }
 
 @test "triage --task: a ref with embedded spaces/shell metacharacters is passed as a single argv element (T20261019-181127, no injection)" {
@@ -52,7 +52,7 @@ STUB
   cat > gh-argv-stub.sh <<'STUB'
 #!/usr/bin/env bash
 if [[ "$1" == "issue" && "$2" == "view" ]]; then
-  echo '{"labels":[{"name":"triage"}]}'
+  echo '{"labels":[{"name":"new"}]}'
   exit 0
 fi
 echo "$#" >> argc.log
@@ -73,15 +73,15 @@ STUB
 }
 
 @test "triage --task: posts a tracking-link comment before the label moves (T20261019-181127)" {
-  _stub_gh '{"labels":[{"name":"triage"}]}'
+  _stub_gh '{"labels":[{"name":"new"}]}'
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" \
     bash "$SCRIPT" triage acme/synxdb-support 5 --task "synxdb-build-pipeline#T20261016-412473"
   [ "$status" -eq 0 ]
   run cat gh-calls.log
   [[ "$output" == *"comment 5 --repo acme/synxdb-support --body Tracked internally as synxdb-build-pipeline#T20261016-412473"* ]]
-  [[ "$output" == *"--add-label accepted"* ]]
+  [[ "$output" == *"--add-label triaged"* ]]
   comment_line=$(grep -n -- "comment 5" gh-calls.log | head -1 | cut -d: -f1)
-  label_line=$(grep -n -- "--add-label accepted" gh-calls.log | head -1 | cut -d: -f1)
+  label_line=$(grep -n -- "--add-label triaged" gh-calls.log | head -1 | cut -d: -f1)
   [ "$comment_line" -lt "$label_line" ]
 }
 
@@ -129,7 +129,7 @@ STUB
 }
 
 @test "reject: applies the specific reason label BEFORE closing (the gap found in review)" {
-  _stub_gh '{"labels":[{"name":"triage"}]}'
+  _stub_gh '{"labels":[{"name":"new"}]}'
   run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" \
     bash "$SCRIPT" reject acme/synxdb-support 5 --reason duplicate
   [ "$status" -eq 0 ]
@@ -170,4 +170,13 @@ STUB
 @test "unknown subcommand exits 2" {
   run bash "$SCRIPT" frobnicate acme/synxdb-support 5
   [ "$status" -eq 2 ]
+}
+
+@test "triage on a stale issue still labelled 'triage' works and removes that real label (T20261021-266225)" {
+  _stub_gh '{"labels":[{"name":"triage"}]}'
+  run env CS_GH="$BATS_TEST_TMPDIR/gh-stub.sh" bash "$SCRIPT" triage acme/synxdb-support 5
+  [ "$status" -eq 0 ]
+  run cat gh-calls.log
+  [[ "$output" == *"--remove-label triage"* ]]
+  [[ "$output" == *"--add-label triaged"* ]]
 }

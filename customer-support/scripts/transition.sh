@@ -17,6 +17,7 @@
 #   transition.sh request-confirm  <owner/repo> <issue>
 #   transition.sh accept           <owner/repo> <issue> --actor <login> --allowed <comma-list>
 #   transition.sh reject           <owner/repo> <issue> --reason <wontfix|invalid|duplicate>
+#   transition.sh autoclose        <owner/repo> <issue> [--days N]   (delivered-timeout close, NOT an acceptance)
 #   transition.sh block            <owner/repo> <issue>
 #   transition.sh unblock          <owner/repo> <issue>
 #   transition.sh needs-upstream   <owner/repo> <issue> <on|off>
@@ -37,14 +38,16 @@ source "${CS_SCRIPTS_DIR}/labels.sh"
 source "${CS_SCRIPTS_DIR}/deliver_gate.sh"
 # shellcheck source=./accept_gate.sh
 source "${CS_SCRIPTS_DIR}/accept_gate.sh"
+# shellcheck source=./sweep.sh
+source "${CS_SCRIPTS_DIR}/sweep.sh"
 
 # cs-transition-clear-modifiers <repo> <issue> — best-effort; a modifier not
 # present is a harmless no-op failure from gh's own `--remove-label`, so
 # errors here are swallowed (never block a close over a missing modifier).
 cs-transition-clear-modifiers() {
   local repo="$1" issue="$2"
-  cs-labels-toggle "$repo" "$issue" blocked off 2>/dev/null || true
-  cs-labels-toggle "$repo" "$issue" needs-upstream off 2>/dev/null || true
+  cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" off 2>/dev/null || true
+  cs-labels-toggle "$repo" "$issue" "$CS_L_NEEDS_UPSTREAM" off 2>/dev/null || true
 }
 
 cs-transition() {
@@ -58,7 +61,7 @@ cs-transition() {
       next=$(cs-sm-next "$current" "$subcommand")
       # `triage`'s optional --task <ref> (T20261019-181127): posts a
       # standardized tracking-link comment BEFORE the label moves, so the
-      # comment and the `accepted` label land together instead of relying
+      # comment and the `triaged` label land together instead of relying
       # purely on the caller's memory (mirrors the documented — but not
       # code-gated — convention `block`/`needs-upstream` already use).
       # Backward-compatible: plain `triage <repo> <issue>` with no --task is
@@ -138,15 +141,42 @@ cs-transition() {
       cs-transition-clear-modifiers "$repo" "$issue"
       ;;
 
+    autoclose)
+      # Delivered-timeout close (T20261021-266225). Not an accept: no
+      # identity gate, but the gate below re-verifies age/modifiers/foreign
+      # comments itself, so neither sweep.sh nor a direct call can bypass it.
+      local days="$CS_SWEEP_DEFAULT_DAYS"
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --days) days="${2:?--days needs a value}"; shift 2 ;;
+          *) echo "usage: transition.sh autoclose <owner/repo> <issue> [--days N]" >&2; return 2 ;;
+        esac
+      done
+      local current next verdict timeline
+      current=$(cs-labels-primary "$repo" "$issue")
+      next=$(cs-sm-next "$current" autoclose)
+      verdict=$(cs-autoclose-gate "$repo" "$issue" "$days") || {
+        echo "autoclose refused for ${repo}#${issue}: ${verdict:-not eligible}" >&2
+        return 1
+      }
+      timeline=$(cs-sweep-timeline "$repo" "$issue")
+      # Retry-safe: skip the comment if an earlier run already posted it.
+      if ! cs-sweep-has-marker "$timeline"; then
+        cs-gh issue comment "$issue" --repo "$repo" --body "**Auto-closed (not accepted):** this issue was marked \`${CS_L_DELIVERED}\` and has had no reject or reply for ${days} days, so it is being closed automatically. This is NOT an acceptance by the support team. The support team or the customer can reopen it at any time; the \`start\` step then moves it back from \`${CS_L_DELIVERED}\` to \`${CS_L_IN_PROGRESS}\`.
+${CS_AUTOCLOSE_MARKER}"
+      fi
+      cs-labels-apply "$repo" "$issue" "$current" "$next"
+      ;;
+
     block)
-      cs-labels-toggle "$repo" "$issue" blocked on
+      cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" on
       ;;
     unblock)
-      cs-labels-toggle "$repo" "$issue" blocked off
+      cs-labels-toggle "$repo" "$issue" "$CS_L_BLOCKED" off
       ;;
     needs-upstream)
       local mode="${1:?on|off required}"
-      cs-labels-toggle "$repo" "$issue" needs-upstream "$mode"
+      cs-labels-toggle "$repo" "$issue" "$CS_L_NEEDS_UPSTREAM" "$mode"
       ;;
 
     *)

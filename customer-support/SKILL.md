@@ -1,17 +1,19 @@
 ---
 name: customer-support
-description: Use when the user explicitly asks to move a synxdb-support GitHub issue through its lifecycle — triage, start work, mark delivered with evidence, request confirmation, accept/reject/close, block/unblock, flag needs-upstream, or audit the label invariant across open issues
+description: Use when the user explicitly asks to move a synxdb-support GitHub issue through its lifecycle — triage, start work, mark delivered with evidence, request confirmation, accept/reject/close, auto-close timed-out deliveries (sweep), block/unblock, flag needs-upstream, or audit the label invariant across open issues
 disable-model-invocation: false
-argument-hint: "<triage|start|deliver|request-confirm|accept|reject|block|unblock|needs-upstream|audit|links> <issue-ref>"
+argument-hint: "<triage|start|deliver|request-confirm|accept|reject|block|unblock|needs-upstream|audit|links|sweep|autoclose> <issue-ref>"
 ---
 
 > `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Drive a `Synx-Data-Labs/synxdb-support` issue through its label-driven
-lifecycle: `triage -> accepted -> in-progress -> delivered -> (closed)`, plus
-the `blocked`/`needs-upstream` stackable modifiers. Reuses the existing
-label set (`triage`, `accepted`, `in-progress`, `blocked`, `needs-upstream`)
-plus exactly one new label, `delivered`. Sibling skill to `/to-task` (which
+lifecycle: `new -> triaged -> in-progress -> delivered -> (closed)`, plus
+the `blocked`/`needs-upstream` stackable modifiers. Labels were renamed
+2026-10-21 (`triage` -> `new`, `accepted` -> `triaged`); the old names remain
+read-side aliases so stale issues pass `audit`. **All label names live in
+`customer-support/scripts/label_names.sh`** — never write a label literal
+elsewhere; a future rename edits that one file. Sibling skill to `/to-task` (which
 stays intake-only); design: `T20261012-373882`.
 
 **Never self-reported.** `deliver` is evidence-gated (a real reachability
@@ -27,12 +29,13 @@ support team — the delivering engineer can never close their own delivery.
 
 | Subcommand | Transition | Notes |
 |---|---|---|
-| `triage` | `triage` -> `accepted` | Confirmed real, queued. To reject at triage time, use `reject` instead. If tracked, post `Tracked internally as <repo>#T<id>` (`--task`). |
-| `start` | `accepted` -> `in-progress`, or `delivered` -> `in-progress` | The second form is the revert path (customer reports the delivery didn't work); `deliver --revert` is an alias for this. |
+| `triage` | `new` -> `triaged` | The verb keeps its name. Confirmed real, queued. To reject at triage time, use `reject` instead. If tracked, post `Tracked internally as <repo>#T<id>` (`--task`). |
+| `start` | `triaged` -> `in-progress`, or `delivered` -> `in-progress` | The second form is the revert path (customer reports the delivery didn't work); `deliver --revert` is an alias for this. |
 | `deliver` | `in-progress` -> `delivered` | **Evidence-gated** — see below. |
 | `links` | (no transition) | Standalone cross-repo worker: resolves + HTTP-verifies every partner download link for a released SBOM. Callable any time to refresh links, not just from `deliver`. |
 | `request-confirm` | `delivered` -> `delivered` | Nudge comment only, no label change. Re-invokes `links` first for a release-type issue if the customer reports a dead link. |
 | `accept` | `delivered` -> closed (`completed`) | **Support-team-only** (identity-gated — see below). |
+| `sweep` / `autoclose` | `delivered` -> closed (`completed`, timeout) | **Not an acceptance.** `sweep <repo> [--days 14] [--apply]` is dry-run by default; see § 7. `autoclose` is the per-issue `transition.sh` step it calls. |
 | `reject` | any pre-close state -> closed (`wontfix`/`invalid`/`duplicate`) | Picks the label that matches why. |
 | `block` / `unblock` | toggle `blocked` | `block` requires an explanatory comment (what it's blocked on). |
 | `needs-upstream` | toggle `needs-upstream` | Requires a GitLab tracking-link comment when turning it on. |
@@ -63,6 +66,7 @@ bash <skills-root>/customer-support/scripts/transition.sh deliver <owner>/<repo>
 bash <skills-root>/customer-support/scripts/transition.sh request-confirm <owner>/<repo> <number>
 bash <skills-root>/customer-support/scripts/transition.sh accept <owner>/<repo> <number> --actor "$(gh api user --jq .login)" --allowed "$SUPPORT_TEAM_LOGINS"
 bash <skills-root>/customer-support/scripts/transition.sh reject <owner>/<repo> <number> --reason <wontfix|invalid|duplicate>
+bash <skills-root>/customer-support/scripts/transition.sh autoclose <owner>/<repo> <number> [--days N]   # normally via sweep.sh --apply; re-verifies eligibility itself
 bash <skills-root>/customer-support/scripts/transition.sh block <owner>/<repo> <number>      # post the explanatory comment yourself, via gh issue comment — never skip it
 bash <skills-root>/customer-support/scripts/transition.sh unblock <owner>/<repo> <number>
 bash <skills-root>/customer-support/scripts/transition.sh needs-upstream <owner>/<repo> <number> <on|off>
@@ -118,15 +122,28 @@ Prints one line per invariant violation (missing or duplicate primary
 label) across open issues; exit 0 if clean. Read-only — never call
 `labels.sh apply`/`toggle` from here.
 
+### 7. `sweep` — delivered timeout (auto-close after 14 days)
+
+```bash
+bash <skills-root>/customer-support/scripts/sweep.sh <owner>/<repo>                 # dry-run: lists WOULD CLOSE / SKIP / FLAG
+bash <skills-root>/customer-support/scripts/sweep.sh <owner>/<repo> --days 14 --apply
+```
+
+- Clock: when the **last** `delivered` label was applied (issue timeline API), not `updated_at`. `--days` default 14, minimum 1.
+- Eligible: open, `delivered`, no `blocked`/`needs-upstream`, no reopen since, no comment after delivery from anyone but the account that applied the label. Anyone else commenting -> `FLAG needs human` (never closed); modifiers or too young -> `SKIP`.
+- `--apply` closes through `transition.sh autoclose`, which re-runs the gate (so a direct call cannot bypass it), posts a comment starting `**Auto-closed (not accepted):**` with the hidden marker `<!-- cs-autoclose -->`, then closes as `completed`. The `delivered` label is kept.
+- **Not an `accept`**: no support-team identity, and the marker comment is what distinguishes it. Reopen (support or customer) then `start` moves `delivered -> in-progress`; a reopened issue is flagged, never re-closed, until `start`.
+- Not scheduled by this skill; a cron calling `sweep.sh --apply` is a separate follow-up (needs a write token for synxdb-support).
+
 ## Important Notes
 
-- **Reuse-first labels.** Only `delivered` is new; everything else
-  (`triage`/`accepted`/`in-progress`/`blocked`/`needs-upstream`) already
-  exists in `Synx-Data-Labs/synxdb-support` and keeps its exact current
-  meaning — see `T20261012-373882`'s label taxonomy table.
+- **Reuse-first labels.** Only `delivered` was new; everything else
+  (`new`/`triaged`/`in-progress`/`blocked`/`needs-upstream`) exists in
+  `Synx-Data-Labs/synxdb-support` and keeps its meaning — see `T20261012-373882`'s label taxonomy table.
 - **Terminal confirmation needs no label.** "Closed, and not one of
-  `wontfix`/`invalid`/`duplicate`" already means accepted-and-resolved; a
-  second `accepted`-shaped label would recreate the exact ambiguity this
+  `wontfix`/`invalid`/`duplicate`" already means accepted-and-resolved (except
+  a timeout close, recognisable by its `cs-autoclose` marker comment); a
+  second acceptance-shaped label would recreate the exact ambiguity this
   design exists to remove.
 - **Regression found after accept**: support files a brand-new issue — no
   same-issue reopen, no time-window rule (case-by-case, maintainer call).

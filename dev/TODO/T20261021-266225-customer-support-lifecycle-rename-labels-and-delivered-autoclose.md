@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 1
 source: this conversation, 2026-10-21 (user request)
 related: T20261012-373882

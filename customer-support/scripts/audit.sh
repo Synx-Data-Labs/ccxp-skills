@@ -13,7 +13,8 @@
 # gh wrapper — DI seam via CS_GH, same convention as labels.sh.
 set -euo pipefail
 
-CS_PRIMARY_LABELS="triage accepted in-progress delivered"
+# shellcheck source=./label_names.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/label_names.sh"
 
 CS_GH="${CS_GH:-}"
 cs-audit-gh() {
@@ -37,7 +38,7 @@ cs-audit-check() {
     names=$(echo "$json" | jq -r --argjson n "$n" '.[] | select(.number==$n) | .labels[].name')
     count=0
     local matched=""
-    for label in $CS_PRIMARY_LABELS; do
+    for label in $(cs-label-primary-names); do
       if grep -qxF "$label" <<<"$names"; then
         count=$((count + 1))
         matched="${matched:+$matched,}${label}"

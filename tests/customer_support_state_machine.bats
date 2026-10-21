@@ -7,20 +7,20 @@ setup() {
   source "$REPO_ROOT/customer-support/scripts/state_machine.sh"
 }
 
-@test "triage -> accepted" {
-  run cs-sm-next triage triage
+@test "new -> triaged via triage" {
+  run cs-sm-next "$CS_L_NEW" triage
   [ "$status" -eq 0 ]
-  [ "$output" = "accepted" ]
+  [ "$output" = "$CS_L_TRIAGED" ]
 }
 
 @test "triage subcommand rejects a non-triage current state" {
-  run cs-sm-next accepted triage
+  run cs-sm-next "$CS_L_TRIAGED" triage
   [ "$status" -eq 1 ]
   [[ "$output" == *"invalid"* ]]
 }
 
 @test "accepted -> in-progress via start" {
-  run cs-sm-next accepted start
+  run cs-sm-next "$CS_L_TRIAGED" start
   [ "$status" -eq 0 ]
   [ "$output" = "in-progress" ]
 }
@@ -32,7 +32,7 @@ setup() {
 }
 
 @test "start rejects triage or in-progress as current state" {
-  run cs-sm-next triage start
+  run cs-sm-next "$CS_L_NEW" start
   [ "$status" -eq 1 ]
   run cs-sm-next in-progress start
   [ "$status" -eq 1 ]
@@ -45,7 +45,7 @@ setup() {
 }
 
 @test "deliver rejects any state other than in-progress" {
-  run cs-sm-next accepted deliver
+  run cs-sm-next "$CS_L_TRIAGED" deliver
   [ "$status" -eq 1 ]
 }
 
@@ -69,14 +69,14 @@ setup() {
 @test "accept rejects any state other than delivered (never self-close mid-flight)" {
   run cs-sm-next in-progress accept
   [ "$status" -eq 1 ]
-  run cs-sm-next accepted accept
+  run cs-sm-next "$CS_L_TRIAGED" accept
   [ "$status" -eq 1 ]
-  run cs-sm-next triage accept
+  run cs-sm-next "$CS_L_NEW" accept
   [ "$status" -eq 1 ]
 }
 
 @test "reject allowed from every pre-close state" {
-  for s in triage accepted in-progress delivered; do
+  for s in $CS_PRIMARY_LABELS; do
     run cs-sm-next "$s" reject
     [ "$status" -eq 0 ]
     [ "$output" = "CLOSED:rejected" ]
@@ -84,7 +84,7 @@ setup() {
 }
 
 @test "unknown subcommand exits 2" {
-  run cs-sm-next triage frobnicate
+  run cs-sm-next "$CS_L_NEW" frobnicate
   [ "$status" -eq 2 ]
 }
 
@@ -96,7 +96,7 @@ setup() {
 }
 
 @test "cs-sm-is-preclose accepts the four primary states, rejects others" {
-  run cs-sm-is-preclose triage
+  run cs-sm-is-preclose "$CS_L_NEW"
   [ "$status" -eq 0 ]
   run cs-sm-is-preclose delivered
   [ "$status" -eq 0 ]
@@ -107,7 +107,39 @@ setup() {
 }
 
 @test "CLI entrypoint works directly" {
-  run bash "$REPO_ROOT/customer-support/scripts/state_machine.sh" triage triage
+  run bash "$REPO_ROOT/customer-support/scripts/state_machine.sh" new triage
   [ "$status" -eq 0 ]
-  [ "$output" = "accepted" ]
+  [ "$output" = "$CS_L_TRIAGED" ]
+}
+
+@test "retired names are aliases: triage -> new, accepted -> triaged (T20261021-266225)" {
+  run cs-sm-next triage triage
+  [ "$status" -eq 0 ]
+  [ "$output" = "$CS_L_TRIAGED" ]
+  run cs-sm-next accepted start
+  [ "$status" -eq 0 ]
+  [ "$output" = "$CS_L_IN_PROGRESS" ]
+  run cs-sm-is-preclose accepted
+  [ "$status" -eq 0 ]
+  run cs-sm-next accepted reject
+  [ "$output" = "CLOSED:rejected" ]
+}
+
+@test "autoclose: only from delivered, yields CLOSED:timeout (distinct from accept)" {
+  run cs-sm-next "$CS_L_DELIVERED" autoclose
+  [ "$status" -eq 0 ]
+  [ "$output" = "CLOSED:timeout" ]
+  run cs-sm-next "$CS_L_IN_PROGRESS" autoclose
+  [ "$status" -eq 1 ]
+  run cs-sm-next "$CS_L_NEW" autoclose
+  [ "$status" -eq 1 ]
+}
+
+@test "label_names: canon maps retired names and leaves current ones alone" {
+  run cs-label-canon triage
+  [ "$output" = "new" ]
+  run cs-label-canon accepted
+  [ "$output" = "triaged" ]
+  run cs-label-canon in-progress
+  [ "$output" = "in-progress" ]
 }
