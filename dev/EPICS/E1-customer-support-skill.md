@@ -15,4 +15,4 @@ Migrated from the task-form epic T20261012-333879 (maintainer decision 2026-10-2
 - [T20261021-266225](../JOURNAL/2026-10-21-T20261021-266225-customer-support-lifecycle-rename-labels-and-delivered-autoclose.md) — label rename and 14-day delivered auto-close
 - [T20261021-332125](../JOURNAL/2026-10-21-T20261021-332125-customer-support-deliver-clickable-links.md) — clickable download links
 - [T20261021-291375](../TODO/T20261021-291375-schedule-delivered-autoclose-sweep-synxdb-support.md) — schedule the delivered auto-close sweep
-- [T20261021-289402](../TODO/T20261021-289402-customer-support-triage-tracking-comment-full-url.md) — triage tracking comment carries a full clickable URL (in flight, PR #403 claim)
+- [T20261021-289402](../JOURNAL/2026-10-21-T20261021-289402-customer-support-triage-tracking-comment-full-url.md) — triage tracking comment carries a full clickable URL (in flight, PR #403 claim)

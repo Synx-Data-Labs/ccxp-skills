@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: user request in this conversation, 2026-10-21
 related: T20261019-181127
-claimed_by: cc1-50ac6891:2c66f4d3357f511f
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-19
 ---
 
@@ -45,17 +45,17 @@ scheduled: 2026-10-19
 
 ## Test plan
 
-- [ ] BATS (fake `CS_GH`) in `tests/customer_support_task_url.bats`: task on main, task only on an open PR, task in JOURNAL, missing task, repo not readable (private, no auth), bad ref.
-- [ ] Update `tests/customer_support_transition.bats`: comment body now carries the URL; missing task posts nothing and moves no label; body stays one argv element even with metacharacters in the title.
-- [ ] CI: bats, Markdown Lint, lint-tasks, skill-quality green.
-- [ ] Post-merge read-only: list existing synxdb-support tracking comments lacking `https://` (follow-up list for the user; nothing edited).
+- [x] BATS (fake `CS_GH`) in `tests/customer_support_task_url.bats`: task on main, task only on an open PR, task in JOURNAL, missing task, repo not readable (private, no auth), bad ref.
+- [x] Update `tests/customer_support_transition.bats`: comment body now carries the URL; missing task posts nothing and moves no label; body stays one argv element even with metacharacters in the title.
+- [x] CI: bats, Markdown Lint, lint-tasks, skill-quality green.
+- [ ] Post-merge read-only (done in the final report, not part of this PR): list existing synxdb-support tracking comments lacking `https://` (follow-up list for the user; nothing edited).
 
 ## Done criteria
 
-- [ ] Comment carries a full https URL and keeps the readable text (`tests/customer_support_transition.bats`, triage --task test).
-- [ ] Main, PR-only, JOURNAL, missing, private-repo cases (`tests/customer_support_task_url.bats`).
-- [ ] Failure posts nothing and moves no label (`tests/customer_support_transition.bats`).
-- [ ] SKILL.md documents the form (`customer-support/SKILL.md` triage row).
+- [x] Comment carries a full https URL and keeps the readable text (`tests/customer_support_transition.bats`, triage --task test).
+- [x] Main, PR-only, JOURNAL, missing, private-repo cases (`tests/customer_support_task_url.bats`).
+- [x] Failure posts nothing and moves no label (`tests/customer_support_transition.bats`).
+- [x] SKILL.md documents the form (`customer-support/SKILL.md` triage row).
 
 ## Root cause
 
@@ -70,6 +70,21 @@ scheduled: 2026-10-19
 | `customer-support/SKILL.md` | `31` | document form |
 | `tests/customer_support_transition.bats` | `60-90` | update expectations |
 | `tests/customer_support_task_url.bats` | new | resolver cases |
+
+## Closed (2026-10-21)
+
+- Shipped in ccxp-skills PR #406 (design in #405, claim #403, stage #402); CI green.
+- Met: URL in the comment, readable text kept, main/PR/JOURNAL/missing/private cases (`tests/customer_support_task_url.bats`, `tests/customer_support_transition.bats`), failure writes nothing, SKILL.md updated.
+- Quality probe: shellcheck clean (info only); `max_fn_lines` regressed by 7 (`cs-transition` grew), recorded, not blocking.
+- External: existing synxdb-support tracking comments lacking a URL are listed in the final report for the user to approve; none edited.
+- No follow-up tasks filed; no idempotency marker existed, none added.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes in spirit, code-class (tests written with the code; one red-then-fix on the jq precedence)
+- Verification (`superpowers:verification-before-completion`): yes, Phase 3.6 + /address-pr gates
+- Systematic debugging (`superpowers:systematic-debugging`): no, bugs found were one-step (jq precedence, bash backtick in test)
+- Receiving code review (`superpowers:receiving-code-review`): yes, /address-pr §2.d, pushbacks on #403, fixes on #405
 
 ## Escalations
 
