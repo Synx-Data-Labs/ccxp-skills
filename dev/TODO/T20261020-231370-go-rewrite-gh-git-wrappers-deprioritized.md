@@ -66,7 +66,7 @@ scheduled: 2026-10-19
   - child inherits stdin; `GH_TOKEN` replaces (not duplicates) any existing entry in the child env;
   - exit code: 128+N when the child dies on signal N (bash behavior), not Go's -1;
   - stderr buffered and relayed after the command, as today (`_gh/gh.sh` `main()`), a deliberate parity choice;
-  - `git` mode keeps today's order and tolerance: credential wiring runs only after a successful pick and before the token read, errors swallowed, always succeeds (`_gh/git.sh:36-65`); `git` is resolved from `PATH` as bash does;
+  - `git` mode keeps today's order and tolerance: credential wiring runs only after a successful pick and before the token read, errors swallowed, always succeeds (`_gh/git.sh:31-65`); `git` is resolved from `PATH` as bash does;
   - cache path built from `$TMPDIR`/`$USER` env, not `os/user`; appends are not atomic across bash and Go, harmless since the cache is best-effort.
 - **Alternatives considered and rejected**:
   - Replace the wrappers in one step - rejected: every skill calls them; hard limit is additive + staged.
