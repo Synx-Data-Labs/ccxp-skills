@@ -87,35 +87,19 @@ understand the mechanics, but drive the skill through `transition.sh`.
 
 ### 4. `links` — cross-repo worker (token bridging)
 
-`links.sh` clones `synxdb-build-pipeline` (ephemeral, same pattern as
-`/drive` Phase 1.5 — never reuses an existing local clone) and calls its
-`scripts/release/render-partner-download-block.sh <sbom> <entitlement-label>`.
-It bridges the token itself: `synxdb-build-pipeline`'s `.env` key is
-`ENTITLEMENT_TOKEN`, but the script it wraps reads `SYNX_PARTNER_TOKEN` —
-**never** pass the token as a CLI argument (both the wrapped scripts and
-this one reject any `--token*` flag). Entitlement identity for SynxDB/
-SynxDB4 releases: Cloudsmith repo `synx/synxdb`, entitlement id
-`3PNyRETaE96a`, display label `"Hashdata.ai"` (the label is a free-text
-argument, not the id).
+`links.sh` clones `synxdb-build-pipeline` (ephemeral, as in `/drive` Phase 1.5; never reuses a local clone) and calls its `scripts/release/render-partner-download-block.sh <sbom> <entitlement-label>`.
 
-**Token source, exactly**: `synxdb-build-pipeline`'s `.env` is gitignored,
-so the *default* ephemeral clone never has one populated. Without
-`--clone-dir`, **the caller must already have `ENTITLEMENT_TOKEN`
-exported** before calling `links.sh` (the normal case for a session already
-working in this suite) — `links.sh` fails fast, before cloning, if it
-isn't. The `.env`-file fallback only applies when `--clone-dir` points at
-an existing, already-populated checkout.
+- The wrapped script reads `SYNX_PARTNER_TOKEN`, while the `.env` key is `ENTITLEMENT_TOKEN`; `links.sh` bridges them.
+- **Never** pass the token as a CLI argument (any `--token*` flag is rejected).
+- SynxDB/SynxDB4 entitlement: Cloudsmith repo `synx/synxdb`, id `3PNyRETaE96a`, free-text display label `"Hashdata.ai"`.
 
-**Comment format (clickable links).** `links.sh` prints Markdown, not the
-render script's fenced block — GitHub does not linkify URLs inside a code
-fence. `scripts/format_links.sh` (stdin to stdout) drops the fence and the
-`====`/`----` rules and emits `### RPM` / `### DEB` / `### RAW` headings with
-one bullet per package, `- **name** (`file`): <bare URL>`. Post that output
-as the delivery comment body. It refuses (non-zero, empty stdout) when the
-URL multiset differs from the render output, when no URL is present, or when
-a fence survives; pass `--raw` to `links.sh` for the unmodified render output
-(logs only — never post it). `format_links.sh check` is the standalone
-guard: it exits 1 if a body contains a fence.
+**Token source**: an ephemeral clone has no `.env` (gitignored), so without `--clone-dir` export `ENTITLEMENT_TOKEN` first (`links.sh` fails fast otherwise); the `.env` fallback applies only to a populated `--clone-dir`.
+
+**Comment format**: `links.sh` prints Markdown (GitHub does not linkify URLs in a fence).
+
+- `format_links.sh` (stdin to stdout) emits `### RPM`/`DEB`/`RAW` headings and `- **name** (`file`): <bare URL>` bullets.
+- It refuses unless the URLs are unchanged, present, and fence-free.
+- `--raw` gives the unmodified render output (logs only); `format_links.sh check` fails on a fenced body.
 
 ### 5. `accept` — support-team-only (identity gate)
 
