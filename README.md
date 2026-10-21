@@ -296,6 +296,10 @@ stay invisible as skills). Current set:
   cached pick still fails a write op with a permission-shaped error (e.g.
   "must be a collaborator"), it drops the cache entry and retries once
   with a different account (T20260911-140914).
+  - **Opt-in Go build (T20261020-231370, experimental):** `bash _gh/go/build.sh`
+    builds `_gh/bin/ccxp-gh`; with `CCXP_GH_GO=1` both wrappers exec it
+    (account list from `gh auth status --json hosts`, no text parsing).
+    Off by default; if the binary is missing the bash path runs.
 - `_gh/git.sh` — same account-picking logic as `gh.sh`, for `git` commands
   that need GitHub auth over HTTPS (`push`, mainly). **Use this instead of
   a bare `git push`** on a multi-account machine — same rationale as
