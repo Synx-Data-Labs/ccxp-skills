@@ -169,3 +169,18 @@ _comment() { echo "{\"event\":\"commented\",\"actor\":{\"login\":\"$1\"},\"creat
   [ "$status" -eq 0 ]
   [[ "$output" == *"0 would close"* ]]
 }
+
+@test "marker from an EARLIER delivery cycle does not suppress the comment on a second timeout" {
+  _issue 14 "delivered" "[$(_labeled 2026-08-01T00:00:00Z),$(_comment bot 2026-08-20T00:00:00Z '<!-- cs-autoclose -->'),$(_labeled 2026-10-01T00:00:00Z)]"
+  run bash "$TRANS" autoclose acme/synxdb-support 14
+  [ "$status" -eq 0 ]
+  run cat gh-calls.log
+  [[ "$output" == *"issue comment 14"* ]]
+}
+
+@test "--days with a leading zero is normalised, not an octal error" {
+  _issue 15 "delivered" "[$(_labeled 2026-10-01T00:00:00Z)]"
+  run bash "$SWEEP" acme/synxdb-support --days 08
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#15: WOULD CLOSE"* ]]
+}
