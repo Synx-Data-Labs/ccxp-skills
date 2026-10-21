@@ -1,7 +1,7 @@
 ---
 status: Design
 estimation: 3
-source: Follow-up from T20261020-242723 investigation, 2026-10-20; priority raised by maintainer 2026-10-20
+source: Follow-up from T20261020-242723 investigation, 2026-10-20; maintainer raised priority 2026-10-20 (filename suffix `deprioritized` is historical)
 related: T20261020-242723, T20261012-280694
 claimed_by: cc1-50ac6891:2405baa3ca5b7100
 claimed_role: interactive
@@ -55,7 +55,8 @@ scheduled: 2026-10-19
   - D. Keep opt-in only (devs who want it build it): zero distribution work, no fleet benefit.
   - Recommendation: B with mandatory bash fallback, then C if Go is not universally present. Choosing needs the maintainer (it decides what the plugin ships).
 - **Known scope limits (stage 1)**:
-  - Callers that `source` the wrappers and use internals (`_session/_lib.sh` uses `_gh_pick_account` / `_gh_token_for`; `git.sh` sources `gh.sh`) never hit `main()`, so they keep the bash text parser. The awk/locale bug class stays reachable there until those callers migrate; "no text parsing" holds for the Go path only.
+  - Real callers are `bash`-invoked (`_session/_lib.sh:89-91` runs `bash "$wrapper" "$@"`), so they reach `main()` and take the Go path when the switch is on; their stdout/stderr must stay parity-safe.
+  - Only `source`-ers keep the bash internals: `git.sh` sources `gh.sh`, and `tests/gh.bats:22`, `tests/git.bats:114`/`:140`. The bash path also keeps `awk` for cache lookup/invalidate (`_gh/gh.sh:112`, `:154`) - same tool-drift class as the gawk bug - so "no external-tool parsing" holds for the Go path only.
   - `gh auth status --json` needs a recent gh: the Go binary detects an unsupported flag and exits with a clear "upgrade gh or unset CCXP_GH_GO" error; only gh 2.101.0 is verified so far.
 - **`--json hosts` parsing rules** (pinned here, tested in impl):
   - parse stdout regardless of exit code (`gh auth status` exits 1 when any account's token is invalid);
@@ -65,6 +66,7 @@ scheduled: 2026-10-19
   - child inherits stdin; `GH_TOKEN` replaces (not duplicates) any existing entry in the child env;
   - exit code: 128+N when the child dies on signal N (bash behavior), not Go's -1;
   - stderr buffered and relayed after the command, as today (`_gh/gh.sh` `main()`), a deliberate parity choice;
+  - `git` mode keeps today's order and tolerance: credential wiring runs only after a successful pick and before the token read, errors swallowed, always succeeds (`_gh/git.sh:36-65`); `git` is resolved from `PATH` as bash does;
   - cache path built from `$TMPDIR`/`$USER` env, not `os/user`; appends are not atomic across bash and Go, harmless since the cache is best-effort.
 - **Alternatives considered and rejected**:
   - Replace the wrappers in one step - rejected: every skill calls them; hard limit is additive + staged.
@@ -75,6 +77,7 @@ scheduled: 2026-10-19
 
 - [ ] `go test ./...` in `_gh/go/`: slug parsing (SSH alias, https, no `.git`), `--json hosts` parsing (active/inactive, missing host), picker (write beats earlier read-only, read fallback, none -> error text), cache read/write/invalidate, permission-error regexp.
 - [ ] `tests/gh-go.bats`: black-box run of the built binary against `tests/fixtures/gh/fake-gh.sh` (extended in the impl PR to serve `auth status --json hosts`; today it only emulates the text form and exits 99 on unknown shapes) (account order, token in env not argv, self-heal retry, error messages); skipped when `go` is absent - note CI's `bats` job has no `setup-go` today, so it would never run there unless the impl PR adds that step.
+- [ ] `_session_gh` (`_session/_lib.sh`) works end-to-end under `CCXP_GH_GO=1` with the fake binary.
 - [ ] Shim tests: switch off -> bash path untouched; switch on + binary present -> exec'd; switch on + binary missing -> bash fallback.
 - [ ] Existing `bats tests/*.bats` stays green (the bash path is unchanged by default).
 - [ ] Post-merge (external): real-machine smoke with two accounts, `CCXP_GH_GO=1 bash _gh/gh.sh api user --jq .login`.
