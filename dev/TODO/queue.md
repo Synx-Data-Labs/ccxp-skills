@@ -43,3 +43,4 @@ reprioritize.
 - [T20261020-242723](T20261020-242723-harden-gh-wrapper-against-nested-shebang.md): Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
 - [T20261020-131330](T20261020-131330-customer-support-skill-automate-full-support-issue-lifecycle.md): customer-support skill: automate the full lifecycle of a support issue (triage -> deliver)
 - [T20261021-337802](T20261021-337802-agent-memory-management.md): Agent memory management: durable dispatcher ledger/job registry, lesson capture, shared standing rules, and memory hygiene automation
+- [T20261021-289402](T20261021-289402-customer-support-triage-tracking-comment-full-url.md): customer-support triage: the tracking comment must carry a full clickable URL to the task file
