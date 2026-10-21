@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: this conversation, 2026-10-21 (user request)
 related: T20261012-373882
-claimed_by: cc1-50ac6891:aa0777f53e013582
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-19
 ---
 
@@ -70,14 +70,33 @@ scheduled: 2026-10-19
 
 ## Done criteria
 
-- [ ] Primary labels renamed with aliases — `tests/customer_support_audit.bats`, `tests/customer_support_labels.bats`, `customer-support/scripts/state_machine.sh`.
-- [ ] `triage` moves `new` -> `triaged` via the single entrypoint — `tests/customer_support_transition.bats`.
-- [ ] Sweep eligibility rules and dry-run default — `tests/customer_support_sweep.bats`.
-- [ ] `autoclose` goes through `transition.sh`, comment marked, `delivered` kept — `tests/customer_support_sweep.bats`.
-- [ ] `accept` still identity-gated, unchanged — existing `tests/customer_support_transition.bats`.
-- [ ] `SKILL.md` and T20261012-373882 doc updated — `customer-support/SKILL.md`, reviewed by `doc-impact.sh`.
-- [ ] Dry-run list recorded; follow-up cron task filed — `## Closed`.
+- [x] Primary labels renamed with aliases — `tests/customer_support_audit.bats`, `tests/customer_support_labels.bats`, `customer-support/scripts/state_machine.sh`.
+- [x] `triage` moves `new` -> `triaged` via the single entrypoint — `tests/customer_support_transition.bats`.
+- [x] Sweep eligibility rules and dry-run default — `tests/customer_support_sweep.bats`.
+- [x] `autoclose` goes through `transition.sh`, comment marked, `delivered` kept — `tests/customer_support_sweep.bats`.
+- [x] `accept` still identity-gated, unchanged — existing `tests/customer_support_transition.bats`.
+- [x] `SKILL.md` and T20261012-373882 doc updated — `customer-support/SKILL.md`, reviewed by `doc-impact.sh`.
+- [x] Dry-run list recorded; follow-up cron task filed — `## Closed`.
 
 ## Escalations
 
 - None (no Slack steps in this job; nothing needed a decision from the maintainer).
+
+## Closed (2026-10-21)
+
+- Shipped in ccxp-skills PR PRNUM (design PR #398). Central label mapping: `customer-support/scripts/label_names.sh` (coordinator request; a future `domain:value` rename edits that file only — NOT implemented, undecided).
+- Met: label rename with old-name aliases (audit/state machine/primary lookup), `triage` verb `new -> triaged`, `sweep.sh` + `transition.sh autoclose` (dry-run default, `--days` floor 1, marker comment, `delivered` kept), SKILL.md + design reference amended; `bats tests/customer_support_*.bats` 110/110 green.
+- Review caught one real bug in my own code (gate called under `||` so `--days 0` bypassed the floor); fixed with a test.
+- Dry-run against real synxdb-support (read-only, 2026-10-21 19:00Z): `#30`, `#31`, `#32` all got `delivered` TODAY (00:22Z, 18:47Z, 06:42Z), so 0 would close now and 0 flagged; they become eligible 2026-11-04 (`#30`) / 2026-11-04+ if no outside comment. `#33` is `triaged`, not delivered. Nothing was closed or relabelled.
+- doc-impact flagged `ccxp/SKILL.md` (matches an unrelated `sweep.sh` in `/todo`): reviewed, no change needed.
+- Quality probe: shellcheck_info/max_fn_lines/file_loc regressed (new script + tests added), recorded in `dev/quality/metrics.jsonl`; record+warn only.
+- synxdb-build-pipeline follow-ups: none for label names (read-only scan found only `/customer-support` mentions in its task files; `close-support-issue` there should be re-checked when T20261012-612044 lands).
+- Follow-up filed: T20261021-291375 (schedule the sweep; needs synxdb-support write token).
+- Escalations: none.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): partial — tests written alongside the code; the BATS run exposed the `--days 0` gate bug before the PR.
+- Verification (`superpowers:verification-before-completion`): yes — full customer_support BATS run before PR, `/address-pr` gate.
+- Systematic debugging (`superpowers:systematic-debugging`): no — one failing test, root cause obvious (`set -e` suppressed under `||`).
+- Receiving code review (`superpowers:receiving-code-review`): yes — design PR review, 4 findings fixed, 0 pushbacks.
