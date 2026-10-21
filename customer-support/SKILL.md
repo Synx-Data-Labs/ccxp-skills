@@ -28,7 +28,7 @@ support team — the delivering engineer can never close their own delivery.
 
 | Subcommand | Transition | Notes |
 |---|---|---|
-| `triage` | `new` -> `triaged` | The verb keeps its name. Confirmed real, queued. To reject at triage time, use `reject` instead. If tracked, post `Tracked internally as <repo>#T<id>` (`--task`). |
+| `triage` | `new` -> `triaged` | The verb keeps its name. Confirmed real, queued. To reject at triage time, use `reject` instead. If tracked, `--task <repo>#T<id>` (or `<owner>/<repo>#T<id>`) posts `Tracked internally as [<ref>](<url>) — <title>` plus the bare URL; see Tracking comment below. |
 | `start` | `triaged` -> `in-progress`, or `delivered` -> `in-progress` | The second form is the revert path (customer reports the delivery didn't work); `deliver --revert` is an alias for this. |
 | `deliver` | `in-progress` -> `delivered` | **Evidence-gated** — see below. |
 | `links` | (no transition) | Standalone cross-repo worker: resolves + HTTP-verifies every partner download link for a released SBOM. Callable any time to refresh links, not just from `deliver`. |
@@ -39,6 +39,14 @@ support team — the delivering engineer can never close their own delivery.
 | `block` / `unblock` | toggle `blocked` | `block` requires an explanatory comment (what it's blocked on). |
 | `needs-upstream` | toggle `needs-upstream` | Requires a GitLab tracking-link comment when turning it on. |
 | `audit` | read-only | Checks "exactly one primary label, consistent with open/closed state" across open issues. Never writes. Project-board drift reporting is not implemented (board retirement is deferred). |
+
+### Tracking comment (`triage --task`)
+
+- `<repo>#T<id>` is not a GitHub autolink, so `scripts/task_url.sh` resolves the task file through the GitHub API at triage time and the comment carries a full https URL.
+- The URL is a permalink pinned to a commit SHA (default-branch HEAD, or the PR head for a task only on an open PR), so it still resolves after the task moves `dev/TODO/` -> `dev/JOURNAL/`.
+- Task on an open filing PR: the comment links the file at the PR head and the PR itself, and says the task is not on the default branch yet.
+- Task missing, malformed ref, or repo unreadable (private without access): triage fails loudly and posts nothing and moves no label; fix the ref or `gh auth` and re-run.
+- Plain `triage <issue>` (no `--task`) is unchanged.
 
 ## Workflow
 

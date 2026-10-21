@@ -40,6 +40,8 @@ source "${CS_SCRIPTS_DIR}/deliver_gate.sh"
 source "${CS_SCRIPTS_DIR}/accept_gate.sh"
 # shellcheck source=./sweep.sh
 source "${CS_SCRIPTS_DIR}/sweep.sh"
+# shellcheck source=./task_url.sh
+source "${CS_SCRIPTS_DIR}/task_url.sh"
 
 # cs-transition-clear-modifiers <repo> <issue> — best-effort; a modifier not
 # present is a harmless no-op failure from gh's own `--remove-label`, so
@@ -59,16 +61,23 @@ cs-transition() {
       local current next
       current=$(cs-labels-primary "$repo" "$issue")
       next=$(cs-sm-next "$current" "$subcommand")
-      # `triage`'s optional --task <ref> (T20261019-181127): posts a
-      # standardized tracking-link comment BEFORE the label moves, so the
-      # comment and the `triaged` label land together instead of relying
-      # purely on the caller's memory (mirrors the documented — but not
-      # code-gated — convention `block`/`needs-upstream` already use).
-      # Backward-compatible: plain `triage <repo> <issue>` with no --task is
-      # byte-for-byte unchanged.
+      # `triage`'s optional --task <ref> (T20261019-181127, URL T20261021-289402):
+      # posts a tracking comment with a FULL clickable URL to the task file
+      # BEFORE the label moves, so the comment and the `triaged` label land
+      # together. The URL is resolved first (task_url.sh): when the task cannot
+      # be resolved nothing is posted and the label does not move. Plain
+      # `triage <repo> <issue>` with no --task is unchanged.
       if [[ "$subcommand" == "triage" && "${1:-}" == "--task" ]]; then
-        local ref="${2:?task ref required}"
-        cs-gh issue comment "$issue" --repo "$repo" --body "Tracked internally as ${ref}"
+        local ref="${2:?task ref required}" resolved kind url title prurl body
+        resolved=$(cs-task-url "$ref" "${repo%%/*}") || return 1
+        IFS=$'\037' read -r kind url title prurl <<<"$resolved"
+        body="Tracked internally as [${ref}](${url})"
+        [[ -n "$title" ]] && body+=" — ${title}"
+        body+=$'\n\n'"${url}"
+        if [[ "$kind" == "pr" ]]; then
+          body+=$'\n\n'"The task file is not on the default branch yet; its filing PR is still open: ${prurl}"
+        fi
+        cs-gh issue comment "$issue" --repo "$repo" --body "$body"
       fi
       cs-labels-apply "$repo" "$issue" "$current" "$next"
       ;;
