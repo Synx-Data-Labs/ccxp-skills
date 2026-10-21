@@ -126,3 +126,17 @@ EOF
   [ "$status" -ne 0 ]
   [[ "$output" != *"ENTITLEMENT_TOKEN is not set"* ]]
 }
+
+@test "cs-links-render-md emits Markdown (no fence) and keeps the render exit code" {
+  mkdir -p fake-clone/scripts/release
+  cat > fake-clone/scripts/release/render-partner-download-block.sh <<'EOF2'
+#!/usr/bin/env bash
+printf 'pkg 1 intro\n```\ntitle\n====\n\nRPM\n----\nc (f.rpm):\n  https://dl.cloudsmith.io/FAKETOKEN/f+1.rpm\n\n```\n'
+exit 1
+EOF2
+  run env ENTITLEMENT_TOKEN=FAKETOKEN bash -c "source '$REPO_ROOT/customer-support/scripts/links.sh'; cs-links-render-md fake-clone sbom.json label"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"### RPM"* ]]
+  [[ "$output" == *'- **c** (`f.rpm`): https://dl.cloudsmith.io/FAKETOKEN/f+1.rpm'* ]]
+  [[ "$output" != *'```'* ]]
+}

@@ -15,7 +15,13 @@
 # scripts it wraps; enforced below too).
 #
 # Usage:
-#   links.sh <released-sbom-path> <entitlement-label> [--clone-dir <path>]
+#   links.sh <released-sbom-path> <entitlement-label> [--clone-dir <path>] [--raw]
+#
+# Output: by default the render output is reformatted into Markdown (headings
+# + one bullet per package, bare URLs) via format_links.sh so the posted
+# comment's URLs linkify — a fenced block is NOT linkified by GitHub
+# (T20261021-332125). `--raw` keeps the render script's output byte-for-byte
+# (for logs). The render exit code (the verification gate) is preserved.
 #
 # Cloning: by default, clones synxdb-build-pipeline fresh into an ephemeral
 # path (same ephemeral-clone pattern as /drive Phase 1.5 — never reuse an
@@ -47,6 +53,7 @@
 set -euo pipefail
 
 CS_LINKS_REPO="${SYNXDB_BUILD_PIPELINE_REPO:-git@github.com:Synx-Data-Labs/synxdb-build-pipeline.git}"
+CS_LINKS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # cs-links-reject-token-arg <args...> — refuse any --token* flag, mirroring
 # render-partner-download-block.sh / partner-download-url.sh's own guard.
@@ -97,10 +104,25 @@ cs-links-render() {
   SYNX_PARTNER_TOKEN="$token" bash "$render_script" "$sbom" "$label"
 }
 
+# cs-links-render-md <clone-dir> <sbom> <label> — cs-links-render, then the
+# Markdown formatter. Returns the render's exit code; if the render passed
+# but formatting was refused (URL mismatch / no URLs / fence), returns 1 with
+# nothing on stdout. Output is buffered in a variable, never a temp file.
+cs-links-render-md() {
+  local raw rc=0
+  raw="$(cs-links-render "$@")" || rc=$?
+  local md
+  if ! md="$(printf '%s\n' "$raw" | bash "${CS_LINKS_DIR}/format_links.sh" format)"; then
+    return 1
+  fi
+  printf '%s\n' "$md"
+  return "$rc"
+}
+
 cs-links-main() {
   cs-links-reject-token-arg "$@"
 
-  local clone_dir="" sbom="" label="" args=() a
+  local clone_dir="" sbom="" label="" args=() a raw_out=0
   args=("$@")
   local i=0 n="${#args[@]}"
   local positional=()
@@ -109,6 +131,8 @@ cs-links-main() {
     if [[ "$a" == "--clone-dir" ]]; then
       i=$((i + 1))
       clone_dir="${args[$i]:-}"
+    elif [[ "$a" == "--raw" ]]; then
+      raw_out=1
     else
       positional+=("$a")
     fi
@@ -116,7 +140,7 @@ cs-links-main() {
   done
 
   if [[ "${#positional[@]}" -ne 2 ]]; then
-    echo "usage: links.sh <released-sbom-path> <entitlement-label> [--clone-dir <path>]" >&2
+    echo "usage: links.sh <released-sbom-path> <entitlement-label> [--clone-dir <path>] [--raw]" >&2
     return 2
   fi
   sbom="${positional[0]}"
@@ -139,7 +163,11 @@ cs-links-main() {
   fi
 
   local rc=0
-  cs-links-render "$clone_dir" "$sbom" "$label" || rc=$?
+  if [[ "$raw_out" -eq 1 ]]; then
+    cs-links-render "$clone_dir" "$sbom" "$label" || rc=$?
+  else
+    cs-links-render-md "$clone_dir" "$sbom" "$label" || rc=$?
+  fi
 
   if [[ "$created" -eq 1 ]]; then
     rm -rf "$cleanup_dir"
