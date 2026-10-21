@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -64,9 +65,14 @@ func cacheInvalidate(slug, user string) {
 			b.WriteString(r[0] + "\t" + r[1] + "\n")
 		}
 	}
-	tmp := cacheFile() + ".tmp"
-	if os.WriteFile(tmp, []byte(b.String()), 0o644) == nil {
-		os.Rename(tmp, cacheFile())
+	f, err := os.CreateTemp(filepath.Dir(cacheFile()), ".gh-account-cache-tmp-*")
+	if err != nil {
+		return
+	}
+	_, werr := f.WriteString(b.String())
+	f.Close()
+	if werr != nil || os.Rename(f.Name(), cacheFile()) != nil {
+		os.Remove(f.Name())
 	}
 }
 

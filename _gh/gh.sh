@@ -164,7 +164,7 @@ _gh_go_shim() {
   local mode="$1" bin
   shift
   bin="${CCXP_GH_BIN:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bin/ccxp-gh}"
-  if [[ -x "$bin" ]]; then
+  if [[ -f "$bin" && -x "$bin" ]]; then
     exec "$bin" "$mode" "$@"
   fi
   # Silent by default: callers may merge stderr into parsed output.
