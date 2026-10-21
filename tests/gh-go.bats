@@ -7,8 +7,8 @@
 # the Go path: it reads `gh auth status --json hosts`, so no awk and no locale
 # dependence exist to regress. Logic-level coverage lives in _gh/go/*_test.go.
 #
-# Binary tests are skipped when `go` is absent (CI's bats job has no setup-go
-# today, so they run locally and wherever Go is installed).
+# Binary tests are skipped when `go` is absent (CI's bats job installs Go via
+# setup-go, so they run there and wherever Go is installed).
 
 load test_helper
 
