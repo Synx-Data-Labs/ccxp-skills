@@ -88,7 +88,8 @@ scheduled: 2026-10-19
 - [x] Account detection uses `gh auth status --json hosts`, no text parsing - `_gh/go/accounts.go:36-52` + `TestParseAccounts` in `_gh/go/gh_test.go`.
 - [x] Wrappers unchanged by default, opt-in switch works - `tests/gh-go.bats` shim tests (tests 1-5).
 - [x] Build step documented - `_gh/go/build.sh` header, `_gh/go/main.go:1-12`.
-- [ ] Distribution mechanism chosen and implemented; call sites migrated to the binary - **external, unchecked**: blocked on the maintainer's choice among options A-D above.
+- [ ] Stage 2: install.sh + argv[0] mode + forwarders + shim removal - `_gh/go/install.sh`, `tests/gh-go.bats` (stage 2 impl PR).
+- [ ] Call sites migrated to bare `gh`/`git`, forwarders deleted - follow-up task (filed at stage 2 close).
 - [x] fake-broken-awk / locale regression tests noted as moot for the Go path `tests/gh-go.bats` header comment + test 12.
 
 ## Root cause
@@ -109,7 +110,22 @@ scheduled: 2026-10-19
 ## Stage 1 status
 
 - Shipped (impl PR): Go binary + opt-in shim + tests + CI `setup-go` step; bash wrappers remain the default.
-- Remaining: distribution decision (A-D above), then migrating callers/default. Task stays open until the maintainer chooses.
+- Distribution decided by the maintainer 2026-10-20: see Stage 2 below (supersedes options A-D and the opt-in switch).
+
+## Stage 2 design (maintainer decision 2026-10-20)
+
+- **Decision (B')**: build locally, install under `~/.local/bin`; nothing committed as a binary, no release artifacts, **no bash in the gh/git path**. Fallback when the binary is missing or fails to start is the real `gh`/`git` (no account switching) - the maintainer accepts losing per-repo account selection in that case.
+- **Install**: `_gh/go/install.sh` (hand-run, not in any call path): `go build -ldflags '-s -w'` to a temp file, self-test (`ccxp-gh version`, usage exit code), atomic `mv` to `~/.local/bin/ccxp-gh`; optional `--link-dir DIR` creates `gh`/`git` symlinks to it.
+- **Resolution without a bash hop**: one binary, mode by `argv[0]` basename (`gh`, `git`, or `ccxp-gh <gh|git> ...`).
+  - PATH order verified on this Mac (`echo $PATH`): `~/workspace/.bin` precedes `/opt/homebrew/bin`; `~/.local/bin` is appended **last** (`~/.zprofile:3`), so a `gh` placed there would NOT shadow the real one.
+  - Least invasive choice: put the `gh`/`git` symlinks in `~/workspace/.bin` (the dir that already holds the bash shims, already ahead of homebrew), replacing the shim files. No shell-profile change.
+- **Implicit routing (argv[0]=gh|git) reproduces the retired shims exactly** (`~/workspace/.bin/{gh,git}`): act only under `~/workspace`; gh skips `auth|config|extension|alias|completion|version|help|` and non-github/non-repo cwd; git acts only for `push|pull|fetch|ls-remote` with a github.com origin; everything else execs the real binary. Any picker failure in implicit mode also execs the real binary (no new failure modes for plain `gh`/`git`).
+- **Real-binary lookup**: scan `PATH` skipping any entry whose `EvalSymlinks` equals our own executable (recursion guard replaces the shims' PATH stripping), then `/opt/homebrew/bin`, `/usr/local/bin`, `/usr/bin`; `CCXP_REAL_GH` / `CCXP_REAL_GIT` override (tests).
+- **Explicit mode (`ccxp-gh gh ...`)** keeps stage 1 semantics: always pick, same error messages.
+- **Wrappers**: `_gh/gh.sh` / `_gh/git.sh` become minimal forwarders (`exec ccxp-gh gh "$@"`, fallback `exec gh "$@"` via PATH) - the **only remaining bash**; chosen over migrating ~375 call references (SKILL.md prose, tests, lint scripts) because it keeps every skill working today at near-zero risk; a follow-up task migrates call sites to bare `gh`/`git`, after which the forwarders are deleted. All bash picker logic and the `CCXP_GH_GO` switch are removed.
+- **Tests**: `tests/gh.bats`/`git.bats` internals tests (sourcing removed bash functions) are replaced by forwarder tests; `tests/gh-go.bats` and `tests/git.bats` set their own `PATH=/opt/homebrew/bin:/usr/bin:...` so no user shim can hang them (the hang was a shim recursing into the fake git); Go tests cover routing, argv[0] mode, real-binary lookup.
+- **Machine change (maintainer-authorized, not in the PRs)**: after the install is verified, trash the two bash shims in `~/workspace/.bin` (copies kept for restore) and link `gh`/`git` there to `ccxp-gh`.
+- **Alternatives rejected**: `~/.local/bin` links only (does not shadow real gh/git - appended last); editing PATH in `~/.zprofile` (outside authorization, affects every shell); keeping bash as fallback (maintainer: no bash in between).
 
 ## Closed
 
