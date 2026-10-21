@@ -84,7 +84,7 @@ scheduled: 2026-10-19
 
 ## Closed (2026-10-21)
 
-- Shipped in ccxp-skills PR PRNUM (design PR #398). Central label mapping: `customer-support/scripts/label_names.sh` (coordinator request; a future `domain:value` rename edits that file only — NOT implemented, undecided).
+- Shipped in ccxp-skills PR #400 (design PR #398). Central label mapping: `customer-support/scripts/label_names.sh` (coordinator request; a future `domain:value` rename edits that file only — NOT implemented, undecided).
 - Met: label rename with old-name aliases (audit/state machine/primary lookup), `triage` verb `new -> triaged`, `sweep.sh` + `transition.sh autoclose` (dry-run default, `--days` floor 1, marker comment, `delivered` kept), SKILL.md + design reference amended; `bats tests/customer_support_*.bats` 110/110 green.
 - Review caught one real bug in my own code (gate called under `||` so `--days 0` bypassed the floor); fixed with a test.
 - Dry-run against real synxdb-support (read-only, 2026-10-21 19:00Z): `#30`, `#31`, `#32` all got `delivered` TODAY (00:22Z, 18:47Z, 06:42Z), so 0 would close now and 0 flagged; they become eligible 2026-11-04 (`#30`) / 2026-11-04+ if no outside comment. `#33` is `triaged`, not delivered. Nothing was closed or relabelled.
