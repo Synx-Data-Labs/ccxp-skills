@@ -11,6 +11,14 @@ scheduled: 2026-10-19
 
 # T20261022-345549: ccxp-hud mod: make user messages stand out and render a richer status line (no tweakcc)
 
+## TLDR
+
+- Ship `ccxp-hud` as a mod **inside** `ccxp-skills` (`hooks/hooks.json` gains `"modules"`), loaded and **on by default**, with its own opt-out (`~/.claude/ccxp-hud.json`, `/hud off`).
+- It styles the user's own prompt rows (colored left bar) and draws a status band (autopilot, context, branch, task, jobs) fed by a new `hud-data.sh --json` bash helper that keeps the claimant secret out of the mod.
+- Phase 0 verified live: `hooks` and `modules` coexist in one `hooks.json`, `$.fs.write` can toggle the config, and the opt-out and global kill switches work.
+- Every hook falls back to Claude Code's own drawing; the classic `statusLine.command` stays and shrinks to `ctx | branch` while the band is live.
+- Unit and BATS tests cover the data layer, render functions and every no-op path; live-UI checks (selection, copy, ctrl+o, band look) remain a manual test-plan item.
+
 ## Problem
 
 - **Type**: feature
@@ -98,7 +106,7 @@ scheduled: 2026-10-19
 - **Band (`AbovePrompt`)**: right for an always-visible HUD, with buttons such as `[ autopilot status ]` that run `$.prompt.fill` or `$.command.run`.
 - **Pane**: right for a detail view (`/hud` opens it), for example the full autopilot state, the job list and the last stuck reason.
 
-## Design
+## Solution
 
 ### Package layout and install
 
@@ -237,24 +245,24 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 - `last_input` is already sanitised and truncated by `last-input-hook.sh`. Keep it behind a `fields` opt-in, since a prompt can contain a pasted secret.
 - `$.process.run` takes only a fixed argv (bash plus the helper path inside `$.plugin.root`). No values typed by the user go into argv.
 
-### Test plan
+## Test plan
 
-- **BATS** (`tests/statusline_setup.bats` plus a new `tests/hud_data.bats`):
+- [x] **BATS** (`tests/statusline_setup.bats` plus a new `tests/hud_data.bats`):
   - `--json` output for fixture repos covering autopilot running, backoff, stopped, paused, missing and malformed
   - claimed and unclaimed tasks, a detached HEAD, a worktree, and null `context_window`
   - the heartbeat-driven minimal mode
-- **Mod unit tests** (`claude plugin test .`):
+- [x] **Mod unit tests** (`claude plugin test .`, `hud/pure.test.ts`, `hud/hooks.test.tsx`):
   - pure `model.ts`/`render.tsx` with fixture snapshots
   - `UserMessage` render on `['terminal','desktop']`: a composer row is wrapped and a task-notification row is passed through
   - the band, at 140 and 80 `bodyColumns`, and empty when there is no data
   - `session.measure` updates the context atom, and a mocked `process.run` failure produces the stale tag
-- **No-op tests (required, from decision 1)**:
+- [x] **No-op tests (required, from decision 1)**:
   - With `enabled: false`, every hook returns `next(e)`, no band or status text is drawn, and no heartbeat is written.
   - With each feature toggled off singly (`userMessage`, `band`), only that feature is inert.
   - With a missing, empty or malformed config file, the module uses the defaults (on) and does not throw.
   - When the helper fails or times out, the render falls back to the stale tag or to `next(e)`, and never throws.
-- **CI**: add the mod tests to `tests.yml` if the `claude` CLI can be installed there. Otherwise run them locally under `/statusline-setup test` and say so in the PR.
-- **Manual smoke** (a human, live UI; this cannot run in CI):
+- [x] **CI**: the `claude` CLI is not installed in GitHub Actions, so the mod tests run locally (`claude plugin test .`, `claude plugin validate .`); the BATS suite runs in CI as before (decision 4).
+- [ ] **Manual smoke** (a human, live UI; this cannot run in CI; NOT ticked by the implementer):
   - Run `claude --plugin-dir .`.
   - Check the user row style, selection and copy, ctrl+o, the band under `/autopilot`, and the narrow terminal.
 
@@ -284,9 +292,48 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 - The band competes with other mods' bands. Return `next(e)` inside your `Box` to keep theirs (docs: band section).
 - Default-on changes the look of every user's terminal. Mitigation: a conservative default style, documented opt-out in the README and in the plugin's release notes (MINOR bump per `dev/guidelines.md`).
 
+## Phase 0 results (2026-10-22, Claude Code 2.1.307, run from a fresh clone)
+
+- **Coexistence: VERIFIED.** One `hooks/hooks.json` with the existing `"hooks"` (PreToolUse skill-ask) and `"modules": ["../hud/register.tsx"]`:
+  - `claude plugin validate .` passes and lists the module's hooks.
+  - `claude -p --plugin-dir .` logs `hooks module ccxp-skills@inline loaded (worker ...)`; the module ran `session.start` and `$.plugin.root` was the repo root, so the helper path resolves with no vendoring.
+  - The module path is relative to `hooks/hooks.json`, so the file lives at `hud/` and is named `../hud/register.tsx`. No fallback is needed; the packaging decision stands.
+- **Disable path: VERIFIED.** `--settings '{"disableAllHooks":true}'` and `--safe-mode` both stop the module (its probe file was never written). The per-feature `enabled: false` path is covered by `hud/hooks.test.tsx`.
+- **Reload: live, by design.** `$.fs.write` is permitted to an absolute path (`plugin.register ... admitted`), so `/hud on|off` writes the user file. The module re-reads the config on every tick (5 s, gated by `pollSeconds`) and after `/hud`, so no reload is needed. A live-UI confirmation stays in the manual smoke item.
+- **Not verifiable here**: how the wrapped `UserMessage` behaves in a real terminal (selection, copy, hover, ctrl+o) and the band's placement relative to the settings status line.
+
+## Done criteria
+
+- [x] The module is declared in `hooks/hooks.json` beside the existing hook, and validates: `claude plugin validate .` (no errors), `hooks/hooks.json:12`.
+- [x] Data helper `hud-data.sh --json` emits task, branch, worktree and autopilot fields from the shared `sl-*` functions, never the `claimed_by` value: `tests/hud_data.bats` ("claimed task id and title, never the claimed_by value").
+- [x] Prompt rows from the composer are wrapped, notifications and peers pass through: `hud/hooks.test.tsx` (default (no config file) test).
+- [x] The band renders the fields at 140 and 80 columns and is empty with no data: `hud/pure.test.ts` (band tests).
+- [x] `enabled: false` makes every hook a no-op with no helper run and no heartbeat: `hud/hooks.test.tsx` (enabled:false test).
+- [x] Each feature switch is independent, a bad config means defaults, and helper failure never throws: `hud/hooks.test.tsx` (userMessage:false, band:false, config file, helper failure tests).
+- [x] The existing statusline works unchanged without the mod and shrinks to `ctx | branch` only on a fresh `on` heartbeat: `tests/hud_data.bats` (heartbeat tests) and `tests/statusline_setup.bats`.
+- [x] No network, model or MCP calls: `claude plugin validate .` call list and `tests/hud_data.bats` ("no network call").
+- [ ] Live-UI check by the user (row style, selection, copy, ctrl+o, band under `/autopilot`, narrow terminal): manual smoke item, see Test plan.
+
+## Root cause
+
+- **Why there is a gap**: the only HUD surface was a single plain `statusLine.command` line (`statusline-setup/scripts/statusline-command.sh`, added in `8a1dacc`, 2026-10-20 as a deliberate, simple first version), and nothing styles the user's prompt row. A settings status line is not a render site, so it cannot be restyled; only a mod can.
+- **Why a mod and not tweakcc**: it patches the minified CLI per version (see Research findings), where a mod uses the supported plugin API.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `hooks/hooks.json` | 1-20 | gains `"modules": ["../hud/register.tsx"]` |
+| `hud/register.tsx` | all | wiring: config, events, state, render hooks, `/hud` |
+| `hud/config.ts`, `hud/model.ts`, `hud/render.tsx` | all | pure config, snapshot/band layout, trees |
+| `types/index.d.ts` | all | shared types and the `$.state` contract; named in `plugin.json` |
+| `statusline-setup/scripts/hud-data.sh` | all | new `--json` data helper |
+| `statusline-setup/scripts/statusline-command.sh` | `sl-autopilot-fields`, `sl-hud-active` | shared autopilot parser; heartbeat-driven minimal line |
+| `tests/hud_data.bats`, `hud/*.test.ts(x)` | all | helper and mod tests |
+
 ## Open decisions (for the user)
 
 1. **Packaging**: **DECIDED (2026-10-22, by the user)**: ship inside the `ccxp-skills` plugin as a module, loaded and enabled by default, with an optional off switch of its own (see Design, Config). The separate-plugin option is kept under "Alternatives considered".
-2. **Band and statusline**: shrink the settings statusline while the band is active (recommended), or show both in full.
-3. **Defaults**: the default user-row style (`quote` bar plus a `YOU` label, a round box, or a colour only), and whether `last_input` shows in the band.
-4. **CI**: install the `claude` CLI in GitHub Actions to run `claude plugin validate`/`test` (the `calls` check applies to the whole plugin), or keep the mod tests local-only.
+2. **Band and statusline**: **DECIDED by the implementer (recommended option)**: the settings statusline shrinks to `ctx | branch` while the band's heartbeat is fresh; revisit after the live check.
+3. **Defaults**: **DECIDED by the implementer**: `quote` bar in `suggestion` colour with no `YOU` label (the label would need a rewrite of `text`, which the live check should confirm first); `last_input` stays opt-in via `fields`.
+4. **CI**: **DECIDED by the implementer**: mod tests stay local-only for now; the `claude` CLI install in Actions is a follow-up if the live check goes well.

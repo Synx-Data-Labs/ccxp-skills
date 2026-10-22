@@ -20,6 +20,13 @@
 # override convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
 LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
 
+# ccxp-hud heartbeat dir (T20261022-345549): the hud mod writes "on" to
+# <dir>/<session_id> every poll while it draws the band for that session, so
+# this line can shrink to ctx | branch instead of showing everything twice.
+# Honours CLAUDE_CONFIG_DIR like the other state roots; BATS overrides it.
+HUD_ACTIVE_DIR="${HUD_ACTIVE_DIR:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/state/hud-active}"
+HUD_ACTIVE_MAX_AGE="${HUD_ACTIVE_MAX_AGE:-120}"
+
 _SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh" \
                 "$HOME/.claude/skills/_session/claimant-id.sh"; do
@@ -93,27 +100,32 @@ sl-iso-to-epoch() {
   printf ''
 }
 
-# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>"
-# when /autopilot's dev/.autopilot-state.json exists and status is "running"
-# or "stopped", else nothing. [r] running normally, [b] running but backing
-# off (last_outcome == "stuck"), [s] stopped — [s] lingers with no
+# $1 repo_root -> one record (fields joined by the ASCII unit separator, 0x1f,
+# so an empty field survives `read`):
+#   <status> <prefix> <elapsed_hr> <requested_hr> <stuck> <cycle> <last_outcome>
+#   <last_task_id> <stuck_reason> <stop_reason>
+# when /autopilot's dev/.autopilot-state.json exists and status is "running",
+# "paused" or "stopped", else nothing. prefix: [r] running normally, [p] paused
+# (clock frozen at paused_at), [b] running but
+# backing off (last_outcome == "stuck"), [s] stopped — [s] lingers with no
 # dismiss/expiry, same as the state file itself (autopilot/SKILL.md Phase 5
 # never deletes it). Never fails the prompt: any missing/malformed field
 # just degrades to printing nothing (same convention as every other sl-
-# helper).
-sl-autopilot-part() {
+# helper). The ONE place the state file is parsed: sl-autopilot-part (text
+# line) and hud-data.sh (--json) both render from this record.
+sl-autopilot-fields() {
   local repo_root="$1" state_file line
   state_file="$repo_root/dev/.autopilot-state.json"
   [ -f "$state_file" ] || return 0
 
   # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
-  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at] | map(. // "") | @tsv' \
+  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .stop_reason] | map(. // "" | tostring) | join("\u001f")' \
     "$state_file" 2>/dev/null) || return 0
 
-  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at
-  IFS=$'\t' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at <<<"$line"
-  [ "$ap_status" = "running" ] || [ "$ap_status" = "stopped" ] || return 0
+  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason
+  IFS=$'\x1f' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason <<<"$line"
+  case "$ap_status" in running|paused|stopped) ;; *) return 0 ;; esac
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
   # negative, or non-numeric value degrades to nothing rather than a
@@ -130,7 +142,15 @@ sl-autopilot-part() {
   [ "$started_epoch" -le "$now_epoch" ] || return 0
 
   local prefix elapsed_secs
-  if [ "$ap_status" = "stopped" ]; then
+  if [ "$ap_status" = "paused" ]; then
+    # Pausing stops the clock: elapsed is frozen at paused_at (autopilot/SKILL.md
+    # Phase 0), not live. A missing/unparseable paused_at degrades to nothing.
+    local paused_epoch
+    paused_epoch=$(sl-iso-to-epoch "$paused_at")
+    [ -n "$paused_epoch" ] && [ "$paused_epoch" -ge "$started_epoch" ] || return 0
+    prefix='[p]'
+    elapsed_secs=$(( paused_epoch - started_epoch ))
+  elif [ "$ap_status" = "stopped" ]; then
     prefix='[s]'
     # Elapsed for a stopped run is last_cycle_at - started_at (or 0 if no
     # cycle ever ran), not now - started_at — the run is long over, so
@@ -152,12 +172,24 @@ sl-autopilot-part() {
     elapsed_secs=$(( now_epoch - started_epoch ))
   fi
 
-  local requested_secs elapsed_hr requested_hr
+  local requested_secs elapsed_hr requested_hr sep=$'\x1f'
   requested_secs=$(( end_epoch - started_epoch ))
   elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
   requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
 
-  printf 'ap:%s %s/%shr %s/%s' "$prefix" "$elapsed_hr" "$requested_hr" "$stuck_count" "$cycle_count"
+  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}${requested_hr}${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${stop_reason}"
+}
+
+# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>"
+# (the text statusline segment), or nothing; rendered from sl-autopilot-fields.
+sl-autopilot-part() {
+  local rec ap_status prefix elapsed_hr requested_hr stuck cycle _rest
+  rec=$(sl-autopilot-fields "$1")
+  [ -n "$rec" ] || return 0
+  IFS=$'\x1f' read -r ap_status prefix elapsed_hr requested_hr stuck cycle _rest <<<"$rec"
+  # The text statusline has never shown a paused run; keep it that way.
+  [ "$ap_status" = "paused" ] && return 0
+  printf 'ap:%s %s/%shr %s/%s' "$prefix" "$elapsed_hr" "$requested_hr" "$stuck" "$cycle"
 }
 
 # $1 last-input state dir, $2 session_id -> "last: <cached text>", or
@@ -177,6 +209,25 @@ sl-last-input-part() {
   text="$(cat "$file" 2>/dev/null)"
   [ -n "$text" ] || return 0
   printf 'last: %s' "$text"
+}
+
+# $1 heartbeat dir, $2 session_id -> exit 0 when the hud mod is actively drawing
+# its band for this session: the file holds "on" and was touched within
+# HUD_ACTIVE_MAX_AGE seconds. Anything else (no file, "off", stale, unsafe id)
+# is "not active", so the classic full line prints.
+sl-hud-active() {
+  local dir="$1" session_id="$2" file mtime now
+  [ -n "$session_id" ] || return 1
+  case "$session_id" in
+    */*|.|..) return 1 ;;
+  esac
+  file="$dir/$session_id"
+  [ -r "$file" ] || return 1
+  [ "$(head -n1 "$file" 2>/dev/null)" = "on" ] || return 1
+  mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null) || return 1
+  [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
+  now=$(date +%s)
+  [ $(( now - mtime )) -le "$HUD_ACTIVE_MAX_AGE" ]
 }
 
 # Join non-empty parts with " | " (array-expansion IFS only uses its first
@@ -219,6 +270,13 @@ statusline-command() {
     task_part="no claimed task"
   fi
   last_input_part=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
+
+  # The hud band already shows autopilot, task and last input: keep only the
+  # always-useful ctx | branch while it is live.
+  if sl-hud-active "$HUD_ACTIVE_DIR" "$session_id"; then
+    sl-join "$ctx_part" "$branch_part"
+    return 0
+  fi
 
   sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$last_input_part"
 }

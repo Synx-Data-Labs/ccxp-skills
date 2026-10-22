@@ -19,5 +19,6 @@
     "rca",
     "cloudflare"
   ],
-  "skills": "."
+  "skills": ".",
+  "types": "./types/index.d.ts"
 }

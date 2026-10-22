@@ -111,6 +111,20 @@ change," not editing.)
    Same marketplace-vs-directory-source path convention as step 3 above —
    use the matching form for this config dir's install.
 
+### ccxp-hud mod companion
+
+The `ccxp-hud` mod (`hud/`, see `hud/README.md`) ships in this plugin, on by
+default, and reuses this script's data layer:
+
+- `scripts/hud-data.sh --json` prints one JSON object (task id/title, branch,
+  worktree, autopilot fields) from the same `sl-*` functions, so there is one
+  source of truth and the claimant secret never leaves bash.
+- While the mod draws its band it writes `on` to
+  `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-active/<session_id>` every poll.
+  A fresh (under 2 minutes) `on` heartbeat shrinks this statusline to
+  `ctx | branch`; no heartbeat, `off`, or a stale one prints the full line, so
+  the mod being off (or absent) changes nothing here.
+
 ### Edit
 
 1. Edit `scripts/statusline-command.sh` and/or `scripts/last-input-hook.sh`
@@ -124,7 +138,8 @@ change," not editing.)
 ### Test
 
 ```bash
-bats tests/statusline_setup.bats tests/last_input_hook.bats
+bats tests/statusline_setup.bats tests/last_input_hook.bats tests/hud_data.bats
+claude plugin test .   # the hud mod's unit tests (needs the claude CLI)
 ```
 
 Helper functions (`sl-repo-root`, `sl-clone-id`, `sl-claimed-task-label`,
