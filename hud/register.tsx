@@ -29,7 +29,7 @@ const mem = {
   surface: null as string | null,
   bandSurface: null as string | null,
   lastHelperAt: 0,
-  heartbeatIsOn: false,
+  heartbeatIsOn: null as boolean | null,
   started: false,
 }
 
@@ -85,14 +85,15 @@ async function writeHeartbeat($: any, value: 'on' | 'off') {
 }
 
 async function syncHeartbeat($: any, cfg: HudConfig) {
+  // "on" only while a band is actually drawn (bandSurface is cleared when the
+  // band hook had nothing to show), so the statusline never shrinks for nothing.
   const wantOn = cfg.enabled && cfg.band && mem.bandSurface !== null
-  if (wantOn) {
-    await writeHeartbeat($, 'on')
-    mem.heartbeatIsOn = true
-  } else if (mem.heartbeatIsOn) {
-    await writeHeartbeat($, 'off')
-    mem.heartbeatIsOn = false
-  }
+  // First call after a (re)load always writes, so a heartbeat left "on" by a
+  // previous module instance cannot outlive the mod being switched off.
+  // "on" is rewritten every call: the statusline treats an old file as off.
+  if (!wantOn && mem.heartbeatIsOn === false) return
+  await writeHeartbeat($, wantOn ? 'on' : 'off')
+  mem.heartbeatIsOn = wantOn
 }
 
 async function refresh($: any, cfg: HudConfig) {
@@ -108,7 +109,7 @@ async function refresh($: any, cfg: HudConfig) {
     const res = await $.process.run(argv, {
       cwd,
       stdin: JSON.stringify({ cwd, session_id: sessionId }),
-      timeoutMs: 2000,
+      timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null
     isOk = helper !== null
@@ -141,13 +142,19 @@ async function readUsage($: any): Promise<Partial<Snapshot>> {
 }
 
 function usagePart(u: any): Partial<Snapshot> {
-  const percent = u?.context?.percent
-  const five = (u?.rateLimits ?? []).find((r: any) => r?.kind === 'five_hour')
-  return {
-    ctxLeft: typeof percent === 'number' ? Math.max(0, 100 - percent) : null,
-    rateUsed: typeof five?.percentUsed === 'number' ? five.percentUsed : null,
-    costUsd: typeof u?.cost?.usd === 'number' ? u.cost.usd : null,
+  // Only the units present in `u` are returned, so a partial measurement
+  // (say context alone) never wipes the others.
+  const out: Partial<Snapshot> = {}
+  if (u?.context) {
+    const percent = u.context.percent
+    out.ctxLeft = typeof percent === 'number' ? Math.max(0, 100 - percent) : null
   }
+  if (Array.isArray(u?.rateLimits)) {
+    const five = u.rateLimits.find((r: any) => r?.kind === 'five_hour')
+    out.rateUsed = typeof five?.percentUsed === 'number' ? five.percentUsed : null
+  }
+  if (u?.cost) out.costUsd = typeof u.cost.usd === 'number' ? u.cost.usd : null
+  return out
 }
 
 async function mirrorStatus($: any, cfg: HudConfig) {
@@ -271,8 +278,8 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const cfg = await read($, configAtom)
     if (!cfg.enabled || !cfg.band || e.props.hasSurvey) return next(e)
-    mem.bandSurface = e.surface
     const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns)
+    mem.bandSurface = tree ? e.surface : null
     return tree ?? next(e)
   }).catch(($, e, next) => next(e))
 
