@@ -59,5 +59,27 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
     s="${s%%#*}"; s="${s//[[:space:]]/}"
     [ -n "$s" ] || continue
     [ -f "$REPO_ROOT/$s/SKILL.md" ] || { echo "missing skill: $s"; return 1; }
-  done <"$REPO_ROOT/hooks/ask-skills.txt"
+
+
+}
+@test "hooks.json: every command quotes \${CLAUDE_PLUGIN_ROOT} (survives a space in the path)" {
+  # Unquoted placeholder word-splits on a space in the install path.
+  run jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$REPO_ROOT/hooks/hooks.json"
+  [ "$status" -eq 0 ]
+  [ -n "$output" ]
+  while IFS= read -r cmd; do
+    # Every occurrence must sit inside double quotes: strip quoted spans, none may remain.
+    stripped="$(sed -E 's/"[^"]*"//g' <<<"$cmd")"
+    [[ "$stripped" != *'${CLAUDE_PLUGIN_ROOT}'* ]] || { echo "unquoted: $cmd"; false; }
+    [[ "$cmd" == *'${CLAUDE_PLUGIN_ROOT}'* ]]
+  done <<<"$output"
+}
+
+@test "hooks.json: the quoted command runs the hook from a root with a space" {
+  d="$BATS_TEST_TMPDIR/plug in"; mkdir -p "$d/hooks"
+  cp "$HOOK" "$REPO_ROOT/hooks/ask-skills.txt" "$d/hooks/"
+  cmd="$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$REPO_ROOT/hooks/hooks.json")"
+  run env CLAUDE_PLUGIN_ROOT="$d" sh -c "printf '%s' '{\"tool_name\":\"Skill\",\"tool_input\":{\"skill\":\"autopilot\"}}' | $cmd"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = ask ]
 }

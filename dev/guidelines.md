@@ -88,8 +88,9 @@ Workflow:
 
 1. **Review** what's merged into `main` since the last tag (`git log <last-tag>..main`)
 2. **Classify** each change per the rubric above; take the most-severe level across the whole batch
-3. **Bump** `plugin.json`'s `version` field accordingly, in its own small PR (through the normal Branch and Merge Policy above)
-4. **Tag**: run `claude plugin tag [--push]` from the repo root to cut (and push) the `ccxp-skills--v{version}` tag once the bump PR is merged
+3. **Gate**: `claude plugin validate .` must report ZERO warnings before the bump PR and again before tagging — "passed with warnings" is not a pass. CI has no `claude` CLI, so nothing else enforces this; run it locally and fix every warning (the repo's own `CLAUDE.md` lives at `.claude/CLAUDE.md` because a plugin-root `CLAUDE.md` is flagged)
+4. **Bump** `plugin.json`'s `version` field accordingly, in its own small PR (through the normal Branch and Merge Policy above)
+5. **Tag**: run `claude plugin tag [--push]` from the repo root to cut (and push) the `ccxp-skills--v{version}` tag once the bump PR is merged
 
 ## Documentation
 

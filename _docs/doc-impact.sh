@@ -42,13 +42,14 @@ doc_impact() {
 
   # ------------------------------------------------------------------
   # 3. Build tracked doc set via git ls-files.
-  #    Patterns: README*, CLAUDE.md, dev/guidelines.md,
+  #    Patterns: README*, CLAUDE.md, .claude/CLAUDE.md, dev/guidelines.md,
   #    dev/guidelines/*.md, */SKILL.md, SKILL.md, docs/**/*.md
   # ------------------------------------------------------------------
   local docs
   docs="$(git ls-files \
     'README*' \
     'CLAUDE.md' \
+    '.claude/CLAUDE.md' \
     'dev/guidelines.md' \
     'dev/guidelines/*.md' \
     '*/SKILL.md' \
