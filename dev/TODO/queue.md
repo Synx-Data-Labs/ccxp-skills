@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
 - [T20261021-291375](T20261021-291375-schedule-delivered-autoclose-sweep-synxdb-support.md): Schedule the customer-support delivered-autoclose sweep (cron) for synxdb-support
 - [T20261020-231370](T20261020-231370-go-rewrite-gh-git-wrappers-deprioritized.md): Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
 - [T20261016-278922](T20261016-278922-lint-forbid-bare-gh-git-remaining-wrapper-hardening.md): lint forbid bare network gh/git in skills + remaining `_gh` wrapper hardening
@@ -43,4 +44,3 @@ reprioritize.
 - [T20261020-131330](T20261020-131330-customer-support-skill-automate-full-support-issue-lifecycle.md): customer-support skill: automate the full lifecycle of a support issue (triage -> deliver)
 - [T20261021-337802](T20261021-337802-agent-memory-management.md): Agent memory management: durable dispatcher ledger/job registry, lesson capture, shared standing rules, and memory hygiene automation
 - [T20261021-164802](T20261021-164802-review-and-redesign-gh-git-wrappers.md): Review and redesign the gh/git wrappers (bash review + separate-repo Go redesign for per-repo account switching)
-- [T20261022-345549](T20261022-345549-ccxp-hud-mod-user-message-statusline.md): ccxp-hud mod: make user messages stand out and render a richer status line (no tweakcc)
