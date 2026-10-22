@@ -118,7 +118,7 @@ mods/ccxp-hud/
   - It emits `{task_id, task_title, branch, autopilot:{status,prefix,elapsed_hr,requested_hr,stuck,cycle,last_outcome,last_task}, last_input}` from the same `sl-*` functions. That keeps one source of truth, and the claimant secret stays in bash.
   - The mod calls `$.process.run(["bash", <helper>, "--json"], {stdin: <synthetic statusLine JSON>, timeoutMs: 2000})`.
   - **Path problem** (UNVERIFIED): does a marketplace cache of `./mods/ccxp-hud` include sibling repo directories?
-    - If not, either vendor the helper into the mod with a BATS drift test that diffs it against the source (as `skill-conventions` does for script drift), or
+    - If not, either vendor the helper into the mod with a BATS drift test that diffs it against the source (same `cmp -s` copy-vs-source pattern as `tests/agent_pairing.bats`), or
     - take open decision 1's alternative: put the module in the root plugin's `hooks/hooks.json` (`"modules"` beside the existing `"hooks"`), so `$.plugin.root` is the repo root.
 - **Coexistence with statusline-setup**: keep `statusLine.command` as the fallback that always works.
   - When the mod is active it writes a heartbeat at `~/.claude/state/hud-active/<session_id>` (the same state root as `last-input`; honour `CLAUDE_CONFIG_DIR` per T20261002-303999).
