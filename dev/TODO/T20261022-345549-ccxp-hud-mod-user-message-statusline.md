@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Conversation 2026-10-22 (user ask: a supported mod instead of tweakcc to make the user message stand out and render a richer autopilot/context/branch/task status line)
 related: T20261002-303999
 description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tweakcc patch) shipped inside the ccxp-skills plugin, on by default with its own opt-out, that highlights the user's prompt rows and draws a richer status band, reusing statusline-setup's data helpers
+claimed_by: cc1-50ac6891:55d302b969ae2080
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261022-345549: ccxp-hud mod: make user messages stand out and render a richer status line (no tweakcc)
