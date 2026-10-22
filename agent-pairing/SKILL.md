@@ -98,5 +98,6 @@ drivers doing right now."
 ## Cross-references
 
 - `assets/ccxp-agent.md` — the bundled agent definition this installs
+- `bg-jobs.md` — runbook for detached `claude --bg` jobs (`scripts/job-launch.sh`, `job-status.sh`, `job-resume.sh`); an existing installed `ccxp-agent.md` is never overwritten, so copy the **Detached jobs** section from the asset into it by hand to pick this up
 - `superpowers:dispatching-parallel-agents` — the general pattern this
   profile-level toggle is built on

@@ -21,6 +21,7 @@ on:
       - '**/SKILL.md'
       - 'skill-conventions/**'
       - 'dev/quality/skill-scores.json'
+      - 'agent-pairing/**'
       - 'tests/**'
       - '.github/workflows/tests.yml'
   pull_request:
@@ -41,6 +42,7 @@ on:
       - '**/SKILL.md'
       - 'skill-conventions/**'
       - 'dev/quality/skill-scores.json'
+      - 'agent-pairing/**'
       - 'tests/**'
       - '.github/workflows/tests.yml'
   workflow_dispatch:
