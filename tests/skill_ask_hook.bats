@@ -38,3 +38,26 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
   [ "$output" = Skill ]
   grep -q 'hooks/skill-ask.sh' "$REPO_ROOT/hooks/hooks.json"
 }
+
+@test "every skill listed in ask-skills.txt gets an ask (bare and qualified)" {
+  local n=0 s
+  while IFS= read -r s; do
+    s="${s%%#*}"; s="${s//[[:space:]]/}"
+    [ -n "$s" ] || continue
+    n=$((n+1))
+    run run_hook "$s"
+    [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = ask ]
+    run run_hook "ccxp-skills:$s"
+    [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = ask ]
+  done <"$REPO_ROOT/hooks/ask-skills.txt"
+  [ "$n" -ge 7 ]
+}
+
+@test "every skill listed in ask-skills.txt exists as a skill directory" {
+  local s
+  while IFS= read -r s; do
+    s="${s%%#*}"; s="${s//[[:space:]]/}"
+    [ -n "$s" ] || continue
+    [ -f "$REPO_ROOT/$s/SKILL.md" ] || { echo "missing skill: $s"; return 1; }
+  done <"$REPO_ROOT/hooks/ask-skills.txt"
+}
