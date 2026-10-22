@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: this conversation, 2026-10-22 (user asked to verify `claude --bg` and teach ccxp-agent to dispatch detached jobs)
 description: ccxp-agent dispatches long or risky jobs as detached `claude --bg` sessions through a launcher script
+claimed_by: cc1-50ac6891:9be2f5145d25b4ed
+claimed_role: interactive
+scheduled: 2026-10-19
 ---
 
 # T20261022-349299: ccxp-agent dispatches detached `claude --bg` jobs
