@@ -35,9 +35,7 @@ reprioritize.
 - [T20260829-362863](T20260829-362863-solo-to-team-mode-conversion-checklist.md): Write the solo-mode → team-mode conversion checklist for any ccxp repo
 - [T20261014-144630](T20261014-144630-epic-skill-status-refresh-drive.md): /epic skill (status | refresh | drive)
 - [T20261016-393753](T20261016-393753-parallelize-bats-test-suite-with-jobs.md): parallelize bats test suite with --jobs to cut CI wall-clock
-- [T20261016-316464](T20261016-316464-extract-shared-bats-test-helper.md): Extract a shared tests/test_helper.bash for the BATS suite
 - [T20261016-360850](T20261016-360850-fix-chore-review-list-due-test-failure.md): Fix pre-existing failure in chore_review.bats "list-due" test
-- [T20261019-181127](T20261019-181127-triage-accept-no-tracking-link-comment.md): `triage` has no tracking-link comment requirement, unlike `block`/`needs-upstream`
 - [T20261019-174788](T20261019-174788-multi-repo-worktree-dispatcher.md): Make the ccxp skillset multi-repo aware: a dispatcher/agent that works each task/PR in its own git worktree while all repos stay on main
 - [T20261020-260751](T20261020-260751-self-isolate-drive-address-pr-autopilot.md): Self-isolate ccxp-skills write-operations (worktree) inside /drive, /address-pr, /autopilot — not just at dispatcher level
 - [T20261020-242723](T20261020-242723-harden-gh-wrapper-against-nested-shebang.md): Harden `_gh/gh.sh` and `_gh/git.sh` against nested-shebang invocation (investigation-scoped, not a Go rewrite)
