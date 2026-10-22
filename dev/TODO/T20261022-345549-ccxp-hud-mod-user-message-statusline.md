@@ -189,6 +189,7 @@ Before (default)                         After (ccxp-hud, border "quote", color 
   - Con: the marketplace cache may not include sibling repo directories, so the helper would need vendoring plus a drift test (the `cmp -s` pattern from `tests/agent_pairing.bats`).
   - Rejected by the user (decision 1). It remains the fallback only if `hooks` and `modules` cannot coexist (phase 0).
 - **A custom `statusLine.command` only**: cannot restyle the prompt row and is not a render site; rejected in the research findings.
+
 ### Config
 
 The module is **loaded and enabled by default**. It has its own opt-out, separate from installing or disabling the whole `ccxp-skills` plugin.
@@ -210,6 +211,7 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 | `fields` | `ap,ctx,branch,task,jobs` | comma list, in order |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | thresholds for the context colour |
+
 ### Degradation
 
 - **Opt-out and kill switches** (the module is on by default, so these must always work):
@@ -222,6 +224,7 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
   - A throw while loading the config or registering hooks leaves the module inert, never the session broken.
 - **Helper failure or timeout**: show the last good snapshot, dimmed with a `stale` tag; never block a turn. The helper must still never exit non-zero.
 - **VS Code**: there is no band, so mirror a compact line through `$.ui.status`.
+
 ### Security
 
 - No `$.http`, no `$.model` and no `$.mcp` calls.
@@ -277,6 +280,7 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 - A double frame or colour clash with the theme's `userMessageBackground`. Mitigation: per-feature switches, and default to the `quote` border only.
 - The band competes with other mods' bands. Return `next(e)` inside your `Box` to keep theirs (docs: band section).
 - Default-on changes the look of every user's terminal. Mitigation: a conservative default style, documented opt-out in the README and in the plugin's release notes (MINOR bump per `dev/guidelines.md`).
+
 ## Open decisions (for the user)
 
 1. **Packaging**: **DECIDED (2026-10-22, by the user)**: ship inside the `ccxp-skills` plugin as a module, loaded and enabled by default, with an optional off switch of its own (see Design, Config). The separate-plugin option is kept under "Alternatives considered".
