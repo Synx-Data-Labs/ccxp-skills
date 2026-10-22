@@ -16,7 +16,7 @@ setup() {
 { echo "PWD=$PWD"; for a in "$@"; do echo "ARG=$a"; done; echo "--"; } >> "$FAKE_LOG"
 case "$1" in
   agents) cat "$FAKE_AGENTS_JSON" ;;
-  stop) echo "stopped $2" ;;
+  stop) jq --arg id "$2" 'map(if .id==$id then .status=null else . end)' "$FAKE_AGENTS_JSON" > "$FAKE_AGENTS_JSON.n" && mv "$FAKE_AGENTS_JSON.n" "$FAKE_AGENTS_JSON"; echo "stopped $2" ;;
   --bg) if [ -n "${FAKE_UNTRUSTED:-}" ]; then echo "Workspace not trusted. Run claude once"; else echo "backgrounded · ab12cd34 · x"; fi ;;
   --resume) echo "backgrounded · ab12cd34" ;;
 esac
@@ -84,7 +84,8 @@ EOF
   run bash "$D/job-launch.sh" 3 "env" "$PROMPT" --cwd "$BATS_TEST_TMPDIR/work" --env PROBE_NONSECRET
   [ "$status" -eq 0 ]
   [[ "$output" != *sentinel-value-123* ]]
-  ! grep -q sentinel-value-123 "$FAKE_LOG"
+  run grep -q sentinel-value-123 "$FAKE_LOG"
+  [ "$status" -ne 0 ]
   [ "$(settings j3-env | jq -r .env.PROBE_NONSECRET)" = sentinel-value-123 ]
 }
 
@@ -150,7 +151,8 @@ EOF
   grep -q '^ARG=bb000002-1111$' "$FAKE_LOG"
   grep -q '^ARG=use repo foo$' "$FAKE_LOG"
   # resume call carries no flag besides --resume/--bg
-  ! tail -7 "$FAKE_LOG" | grep -E '^ARG=--(name|settings|agent|model|permission-mode)'
+  run bash -c "tail -7 '$FAKE_LOG' | grep -E '^ARG=--(name|settings|agent|model|permission-mode)'"
+  [ "$status" -ne 0 ]
   grep -q "^PWD=.*work$" "$FAKE_LOG"
 }
 
@@ -159,11 +161,42 @@ EOF
   run bash "$D/job-resume.sh" 52 "yes"
   [ "$status" -eq 4 ]
   [[ "$output" == *"claude attach aa000001"* ]]
-  ! grep -q '^ARG=--resume$' "$FAKE_LOG"
+  run grep -q '^ARG=--resume$' "$FAKE_LOG"
+  [ "$status" -ne 0 ]
 }
 
 @test "resume: unknown job fails" {
   mk_agents
   run bash "$D/job-resume.sh" 99 "x"
   [ "$status" -ne 0 ]
+}
+
+@test "launch: --allow of a default-denied rule is refused (only Authorization lifts a deny)" {
+  run bash "$D/job-launch.sh" 5 "x" "$PROMPT" --cwd "$BATS_TEST_TMPDIR/work" --allow 'Bash(git push *)'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"lifts a default deny"* ]]
+  [ ! -e "$FAKE_LOG" ]
+}
+
+@test "launch: bad --env name is a clean error" {
+  run bash "$D/job-launch.sh" 5 "x" "$PROMPT" --cwd "$BATS_TEST_TMPDIR/work" --env 'a b'
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"bad --env name"* ]]
+}
+
+@test "resume: aborts when the process is still live after stop" {
+  mk_agents
+  # shim whose stop does not clear the status
+  sed -i.bak 's/^  stop).*/  stop) echo "stopped $2" ;;/' "$BATS_TEST_TMPDIR/bin/claude"
+  run bash "$D/job-resume.sh" 53 "x"
+  [ "$status" -eq 5 ]
+  run grep -q '^ARG=--resume$' "$FAKE_LOG"
+  [ "$status" -ne 0 ]
+}
+
+@test "resume: a dash-leading answer is not parsed as a flag" {
+  mk_agents
+  run bash "$D/job-resume.sh" 53 "--name evil"
+  [ "$status" -eq 0 ]
+  grep -q '^ARG= --name evil$' "$FAKE_LOG"
 }

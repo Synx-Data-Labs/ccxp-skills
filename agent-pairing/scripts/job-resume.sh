@@ -11,7 +11,7 @@ function resume() {
   (( $# == 2 )) || { echo "usage: job-resume.sh <job-number>|<name> \"<answer>\"" >&2; return 2; }
   local sel="$1" answer="$2" row id sid cwd waiting
   row="$(claude agents --json --all | jq -c --arg sel "$sel" '
-    [.[] | select(.name == $sel or ((.name // "") | startswith("j" + $sel + "-")))][0] // empty')"
+    [.[] | select(.name == $sel or ((.name // "") | startswith("j" + $sel + "-")))] | sort_by(.startedAt // 0) | last // empty')"
   [[ -n "$row" ]] || { echo "no such job: $sel" >&2; return 1; }
   id="$(jq -r .id <<< "$row")"
   sid="$(jq -r .sessionId <<< "$row")"
@@ -24,11 +24,14 @@ function resume() {
   claude stop "$id" >/dev/null 2>&1 || true
   # resuming while the process is still alive starts an unsandboxed copy:
   # wait (bounded) until the session shows no live status
-  local i
+  local i live=1
   for ((i = 0; i < ${CCXP_JOB_STOP_WAIT:-10}; i++)); do
-    [[ -z "$(claude agents --json --all | jq -r --arg id "$id" '.[] | select(.id == $id) | .status // empty')" ]] && break
+    if [[ -z "$(claude agents --json --all | jq -r --arg id "$id" '.[] | select(.id == $id) | .status // empty')" ]]; then live=0; break; fi
     sleep 1
   done
+  (( live == 0 )) || { echo "job $sel is still live after stop; not resuming (would start an unsandboxed copy)" >&2; return 5; }
+  # an answer starting with '-' would parse as a flag (and start a copy)
+  [[ "$answer" == -* ]] && answer=" $answer"
   (cd "$cwd" && claude --resume "$sid" --bg "$answer")
 }
 
