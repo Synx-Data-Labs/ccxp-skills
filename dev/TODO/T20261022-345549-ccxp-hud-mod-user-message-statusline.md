@@ -3,7 +3,7 @@ status: Open
 estimation: 1
 source: Conversation 2026-10-22 (user ask: a supported mod instead of tweakcc to make the user message stand out and render a richer autopilot/context/branch/task status line)
 related: T20261002-303999
-description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tweakcc patch) that highlights the user's prompt rows and draws a richer status band, reusing statusline-setup's data helpers
+description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tweakcc patch) shipped inside the ccxp-skills plugin, on by default with its own opt-out, that highlights the user's prompt rows and draws a richer status band, reusing statusline-setup's data helpers
 ---
 
 # T20261022-345549: ccxp-hud mod: make user messages stand out and render a richer status line (no tweakcc)
@@ -17,9 +17,10 @@ description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tw
   - Data comes from: stdin JSON (`cwd`, `session_id`, `context_window.remaining_percentage`), `dev/.autopilot-state.json`, the `claimed_by:` frontmatter matched against `_session/claimant-id.sh`, `git symbolic-ref`, and `last-input-hook.sh`'s cache.
   - Nothing styles the user's prompt row. The default is a plain gray block.
 - **Done looks like**:
-  - Installing or enabling the mod makes the user's prompts visibly distinct in the terminal.
+  - After updating `ccxp-skills`, the mod is on by default and the user's prompts are visibly distinct in the terminal.
+  - It can be switched off through its own config file (and `/hud off` if the API allows) without uninstalling `ccxp-skills`.
   - A status band shows the fields below, color-coded, with no new data source that leaks secrets or uses the network.
-  - With mods off, the existing statusline still works.
+  - With the mod off (its own switch, or mods disabled globally), the existing statusline and Claude Code's own rendering work unchanged.
   - BATS and unit tests cover the data layer and the render functions with fixtures.
 - **Do not**: patch the CLI bundle, depend on tweakcc, or remove the existing `statusLine.command` path.
 
@@ -34,7 +35,7 @@ description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tw
   - Its "keep patched binary" option stops Claude Code from repairing its own binary.
 - **Mods are the supported route**: a plugin whose `hooks/hooks.json` lists a JS/TS module under `"modules"`.
   - Mods are on by default from v2.1.287 in the terminal and v2.1.286 in Desktop.
-  - They install like any plugin, from a marketplace.
+  - They install like any plugin; here the module ships inside `ccxp-skills` itself (decision 1).
   - Docs: `code.claude.com/docs/en/plugins/mods/{overview,interface,reference}`.
 - **Caveat**: the types header says "EARLY ACCESS: this surface may change between releases without notice". Pin the behaviour in tests, and fall back gracefully (see Degradation).
 
@@ -98,28 +99,29 @@ description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tw
 
 ### Package layout and install
 
-Recommended (open decision 1): a **separate plugin in the same marketplace**, so installing `ccxp-skills` does not force a mod on every user.
+**Decided (decision 1)**: the module lives **inside the root `ccxp-skills` plugin**. There is no second plugin and no second install. Users who already have `ccxp-skills` get it on update, enabled by default.
 
 ```text
-mods/ccxp-hud/
-├── .claude-plugin/plugin.json   # name ccxp-hud, version, "types": "./types/index.d.ts", userConfig
-├── hooks/hooks.json             # { "modules": ["./register.tsx"] }
-├── hooks/register.tsx           # wiring only: events → state → render
-├── hooks/model.ts               # pure: HudSnapshot from inputs (no $)
-├── hooks/render.tsx             # pure-ish: tree from snapshot + config + surface
-├── themes/ccxp-contrast.json    # optional zero-code layer: userMessageBackground, briefLabelYou
-├── types/index.d.ts             # PluginState contract for $.state values
-├── hooks/*.test.ts(x)           # `claude plugin test` suites
-└── README.md                    # install line
+hooks/hooks.json              # existing "hooks" + new "modules": ["./hud/register.tsx"]   (coexistence UNVERIFIED)
+hud/
+├── register.tsx              # wiring only: config → events → state → render
+├── config.ts                 # pure: defaults, merge, enabled gate
+├── model.ts                  # pure: HudSnapshot from inputs (no $)
+├── render.tsx                # pure-ish: tree from snapshot + config + surface
+├── *.test.ts(x)              # `claude plugin test` suites
+└── README.md                 # what it does, how to turn it off
+themes/ccxp-contrast.json     # optional zero-code layer: userMessageBackground, briefLabelYou
+types/index.d.ts              # PluginState contract; plugin.json gains "types"
 ```
 
-- **Marketplace**: add `{ "name": "ccxp-hud", "source": "./mods/ccxp-hud" }` to `.claude-plugin/marketplace.json`. Install with `/plugin install ccxp-hud@ccxp-skills`.
+- **Manifest**: `.claude-plugin/plugin.json` gains `"types": "./types/index.d.ts"` and, if the themes ship, `experimental.themes`. This is a MINOR bump (a new backward-compatible capability), per `dev/guidelines.md`.
+- **Coexistence of `hooks` and `modules`** is UNVERIFIED (phase 0).
+  - Fallback 1: a second hooks file for the module, if the manifest accepts a list.
+  - Fallback 2: the separate plugin under "Alternatives considered".
 - **Data helper**: add a `--json` mode to `statusline-setup/scripts/statusline-command.sh`, or a sibling `hud-data.sh`.
   - It emits `{task_id, task_title, branch, autopilot:{status,prefix,elapsed_hr,requested_hr,stuck,cycle,last_outcome,last_task}, last_input}` from the same `sl-*` functions. That keeps one source of truth, and the claimant secret stays in bash.
-  - The mod calls `$.process.run(["bash", <helper>, "--json"], {stdin: <synthetic statusLine JSON>, timeoutMs: 2000})`.
-  - **Path problem** (UNVERIFIED): does a marketplace cache of `./mods/ccxp-hud` include sibling repo directories?
-    - If not, either vendor the helper into the mod with a BATS drift test that diffs it against the source (same `cmp -s` copy-vs-source pattern as `tests/agent_pairing.bats`), or
-    - take open decision 1's alternative: put the module in the root plugin's `hooks/hooks.json` (`"modules"` beside the existing `"hooks"`), so `$.plugin.root` is the repo root.
+  - **Helper path**: with the module in the root plugin, `$.plugin.root` is the repo root, so the module reaches `statusline-setup/scripts/` directly. No vendoring and no drift test are needed.
+  - The mod calls `$.process.run(["bash", <$.plugin.root>/statusline-setup/scripts/<helper>, "--json"], {stdin: <synthetic statusLine JSON>, timeoutMs: 2000})`. Check in phase 0 that the cached plugin copy contains that directory (it should, as the whole repo is the plugin).
 - **Coexistence with statusline-setup**: keep `statusLine.command` as the fallback that always works.
   - When the mod is active it writes a heartbeat at `~/.claude/state/hud-active/<session_id>` (the same state root as `last-input`; honour `CLAUDE_CONFIG_DIR` per T20261002-303999).
   - `statusline-command.sh` can then shrink to a minimal `ctx | branch` line while the heartbeat is fresh (under 2 minutes old), so the info is not shown twice. This is Phase 3.
@@ -180,34 +182,50 @@ Before (default)                         After (ccxp-hud, border "quote", color 
   - the context breakdown (`$.session.usage({ breakdown: 'summary' })`)
 - Opened by the user only; it never opens itself.
 
+### Alternatives considered
+
+- **Separate `ccxp-hud` plugin in the same marketplace** (`mods/ccxp-hud`, `{ "name": "ccxp-hud", "source": "./mods/ccxp-hud" }`, install with `/plugin install ccxp-hud@ccxp-skills`).
+  - Pro: opt-in by installing, and the mod API risk stays away from other users.
+  - Con: the marketplace cache may not include sibling repo directories, so the helper would need vendoring plus a drift test (the `cmp -s` pattern from `tests/agent_pairing.bats`).
+  - Rejected by the user (decision 1). It remains the fallback only if `hooks` and `modules` cannot coexist (phase 0).
+- **A custom `statusLine.command` only**: cannot restyle the prompt row and is not a render site; rejected in the research findings.
 ### Config
 
-`userConfig` in `plugin.json` gives rows in `/config` and `pluginConfigs` in settings. The defaults:
+The module is **loaded and enabled by default**. It has its own opt-out, separate from installing or disabling the whole `ccxp-skills` plugin.
+
+- **Location**: a small JSON file at `~/.claude/ccxp-hud.json` (honour `CLAUDE_CONFIG_DIR`, per T20261002-303999), with an optional per-project override at `<project>/.claude/ccxp-hud.json`. The module reads them with `$.fs.read`.
+- **Precedence**: project file, then user file, then the built-in defaults. A missing or malformed file means the defaults, so on.
+- **Default**: `enabled: true`, with every feature on.
+- **When off** (`enabled: false`): draws nothing, writes no heartbeat, and leaves Claude Code's own rendering and the existing `statusLine.command` alone.
+- **Slash command**: `/hud on|off|status`, registered with `$.command.register`, if the mod API allows it. It writes `enabled` into the user file. UNVERIFIED: whether a plugin may write that file from the module (`$.fs` may be read-only), and whether toggling is live or needs a reload. If not writable, `/hud` only prints the file path and the line to edit.
+- **Why a file, not `userConfig`**: the module must be switchable without a plugin reinstall, and the file is readable by the BATS and unit tests. `userConfig` in `plugin.json` (rows in `/config`) can mirror it later if it proves worthwhile.
 
 | Key | Default | Notes |
 |---|---|---|
-| `userMessage` | `on` | `on` / `off` |
+| `enabled` | `true` | master switch; `false` makes the whole module a no-op |
+| `userMessage` | `true` | prompt-row styling on/off |
+| `band` | `true` | status band on/off |
 | `userBorder` | `quote` | one of the terminal's border styles; anything else draws no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `band` | `on` | `on` / `off` |
 | `fields` | `ap,ctx,branch,task,jobs` | comma list, in order |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | thresholds for the context colour |
-
 ### Degradation
 
-- **Mods off** (`disableAllHooks`, `--safe-mode`, an org's `allowManagedModsOnly`, a CLI older than 2.1.287): nothing in the mod runs. The settings `statusLine.command` still prints the classic line, because without a fresh heartbeat the script prints the full line.
+- **Opt-out and kill switches** (the module is on by default, so these must always work):
+  - `enabled: false` in the config file: every hook returns `next(e)` and the heartbeat is not written, so the classic statusline prints in full.
+  - Global: `disableAllHooks`, `--safe-mode`, an org's `allowManagedModsOnly`, or a CLI older than 2.1.287 stop the module entirely.
 - **API drift**:
   - Every `ui.render` hook gets `.catch(($, e, next) => next(e))`, so a throw draws the engine's own row.
   - A tree that does not validate is drawn by the engine anyway, with a debug-log line.
   - Wrap field reads (`e.props.origin?.kind`) defensively.
+  - A throw while loading the config or registering hooks leaves the module inert, never the session broken.
 - **Helper failure or timeout**: show the last good snapshot, dimmed with a `stale` tag; never block a turn. The helper must still never exit non-zero.
 - **VS Code**: there is no band, so mirror a compact line through `$.ui.status`.
-
 ### Security
 
 - No `$.http`, no `$.model` and no `$.mcp` calls.
-  - CI asserts this with `claude plugin validate --json mods/ccxp-hud`: the `calls` list must contain no `http.fetch`, `model.*` or `mcp.*`.
+  - CI asserts this with `claude plugin validate --json .`: the `calls` list must contain no `http.fetch`, `model.*` or `mcp.*`.
   - Gate this on the CLI being installable in CI (open decision 4).
 - The mod never reads `~/.claude/state/<claimant secret>` or `.env`. The claimant id comes only from the bash helper's output, and only the task id and title are shown, never the `claimed_by` value.
 - `last_input` is already sanitised and truncated by `last-input-hook.sh`. Keep it behind a `fields` opt-in, since a prompt can contain a pasted secret.
@@ -219,21 +237,31 @@ Before (default)                         After (ccxp-hud, border "quote", color 
   - `--json` output for fixture repos covering autopilot running, backoff, stopped, paused, missing and malformed
   - claimed and unclaimed tasks, a detached HEAD, a worktree, and null `context_window`
   - the heartbeat-driven minimal mode
-- **Mod unit tests** (`claude plugin test mods/ccxp-hud`):
+- **Mod unit tests** (`claude plugin test .`):
   - pure `model.ts`/`render.tsx` with fixture snapshots
   - `UserMessage` render on `['terminal','desktop']`: a composer row is wrapped and a task-notification row is passed through
   - the band, at 140 and 80 `bodyColumns`, and empty when there is no data
   - `session.measure` updates the context atom, and a mocked `process.run` failure produces the stale tag
+- **No-op tests (required, from decision 1)**:
+  - With `enabled: false`, every hook returns `next(e)`, no band or status text is drawn, and no heartbeat is written.
+  - With each feature toggled off singly (`userMessage`, `band`), only that feature is inert.
+  - With a missing, empty or malformed config file, the module uses the defaults (on) and does not throw.
+  - When the helper fails or times out, the render falls back to the stale tag or to `next(e)`, and never throws.
 - **CI**: add the mod tests to `tests.yml` if the `claude` CLI can be installed there. Otherwise run them locally under `/statusline-setup test` and say so in the PR.
 - **Manual smoke** (a human, live UI; this cannot run in CI):
-  - Run `claude --plugin-dir mods/ccxp-hud`.
+  - Run `claude --plugin-dir .`.
   - Check the user row style, selection and copy, ctrl+o, the band under `/autopilot`, and the narrow terminal.
 
 ### Phased plan
 
+0. **Verify first (estimate 1; before any feature code)**:
+   - **Coexistence**: a single `hooks/hooks.json` holding both `"hooks"` (the existing `PreToolUse` skill-ask entry) and `"modules"` loads both. UNVERIFIED. Check with `claude --plugin-dir .` and `claude plugin validate`.
+   - **Disable path**: with `enabled: false` in the config file, the module draws nothing, registers no heartbeat and leaves `statusLine.command` alone. Also check the global safe mode and `disableAllHooks`.
+   - **Reload**: whether editing the config file or `/hud on|off` takes effect live or needs a reload. UNVERIFIED.
+   - **Fallback if coexistence fails**: a second hooks file for the module (if the manifest allows a list), else the separate-plugin option under "Alternatives considered". Record the outcome in the task before continuing.
 1. **MVP (estimate 2)**:
-   - `mods/ccxp-hud` with Feature 1 only, plus `themes/ccxp-contrast.json`, the marketplace entry and tests.
-   - It proves the install path and the UNVERIFIED wrap behaviour.
+   - Module skeleton, config loader, kill switch and Feature 1 only, plus `themes/ccxp-contrast.json` and tests (including the disabled and helper-failure no-op tests).
+   - It proves the wrap behaviour (UNVERIFIED) and the default-on path.
 2. **Statusline v2 (estimate 3)**:
    - The helper `--json`, the band, `$.state` atoms, `session.measure` and the poll.
    - The VS Code `$.ui.status` mirror, and the fixture tests.
@@ -242,14 +270,16 @@ Before (default)                         After (ccxp-hud, border "quote", color 
 
 ### Risks
 
-- The early-access mod API changes between releases. Mitigations: `.catch` fallbacks, `claude plugin validate` in CI, and pinning a minimum CLI version in the README.
-- The marketplace cache may not include sibling directories (helper path). Mitigation: decision 1, vendoring with a drift test.
-- A double frame or colour clash with the theme's `userMessageBackground`. Mitigation: config switches, and default to the `quote` border only.
+- **Blast radius (raised by decision 1)**: the module is on for every `ccxp-skills` user, so an early-access mod API break reaches all of them, not only opt-in users.
+  - Mitigations: `.catch` fallbacks to native drawing, a config-file kill switch, the global safe mode, `claude plugin validate` in CI, and a minimum CLI version in the README.
+  - A bad release can be neutralised by users with `enabled: false`, and by us with a patch release that defaults it off.
+- `hooks` and `modules` may not coexist in one `hooks.json`. Mitigation: phase 0 check and its fallback.
+- A double frame or colour clash with the theme's `userMessageBackground`. Mitigation: per-feature switches, and default to the `quote` border only.
 - The band competes with other mods' bands. Return `next(e)` inside your `Box` to keep theirs (docs: band section).
-
+- Default-on changes the look of every user's terminal. Mitigation: a conservative default style, documented opt-out in the README and in the plugin's release notes (MINOR bump per `dev/guidelines.md`).
 ## Open decisions (for the user)
 
-1. **Packaging**: a separate `ccxp-hud` plugin in the marketplace (recommended, opt-in), or a module in the root `ccxp-skills` plugin (simplest helper path, but on for every ccxp-skills user).
+1. **Packaging**: **DECIDED (2026-10-22, by the user)**: ship inside the `ccxp-skills` plugin as a module, loaded and enabled by default, with an optional off switch of its own (see Design, Config). The separate-plugin option is kept under "Alternatives considered".
 2. **Band and statusline**: shrink the settings statusline while the band is active (recommended), or show both in full.
 3. **Defaults**: the default user-row style (`quote` bar plus a `YOU` label, a round box, or a colour only), and whether `last_input` shows in the band.
-4. **CI**: install the `claude` CLI in GitHub Actions to run `claude plugin validate`/`test`, or keep the mod tests local-only.
+4. **CI**: install the `claude` CLI in GitHub Actions to run `claude plugin validate`/`test` (the `calls` check applies to the whole plugin), or keep the mod tests local-only.
