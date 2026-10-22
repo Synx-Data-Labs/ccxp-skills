@@ -139,7 +139,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 |-------|---------|
 | `verify-site` | Local preview + automated test-plan checks for a site PR |
 | `help-net` | Triage traveler network issues on macOS (GFW, throttle, MTU, DNS, VPN) |
-| `statusline-setup` | Deploy/edit/test the Claude Code statusline script |
+| `statusline-setup` | Deploy/edit/test the Claude Code statusline script (also feeds the `ccxp-hud` mod, `hud/README.md`) |
 | `md-to-pdf` | Convert markdown to PDF with scaled images, CJK support |
 | `proof-read` | Sentence-level consistency check for markdown (term drift, undefined jargon, CN↔EN) |
 | `translate-patent` | Translate a patent DOCX from Chinese to English |
