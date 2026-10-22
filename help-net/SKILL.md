@@ -1,7 +1,6 @@
 ---
 name: help-net
 description: Use when on macOS and network is degraded in a travel or cross-border context (GFW, carrier throttle, MTU black hole, DNS poisoning, VPN) — also pre/post-trip checklists; not for routine home/office Wi-Fi
-disable-model-invocation: false
 argument-hint: "[pre-trip | post-trip]  (no args = live diagnostic)"
 ---
 

@@ -1,7 +1,6 @@
 ---
 name: ccxp
 description: Use when the user explicitly asks to run the full XP engineering loop / day-or-week orchestrator (daily standup, focused work, Friday retro — the Monday IPM is a separate opt-in skill, see /ipm)
-disable-model-invocation: false
 argument-hint: "[task-id]"
 ---
 

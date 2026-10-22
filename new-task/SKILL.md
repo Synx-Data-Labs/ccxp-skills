@@ -1,7 +1,6 @@
 ---
 name: new-task
 description: Use when the user explicitly asks to file, create, or add a new task to the dev/TODO backlog
-disable-model-invocation: false
 argument-hint: "[one-line description]"
 ---
 

@@ -15,7 +15,3 @@ load test_helper
     "$REPO_ROOT/to-task" "$REPO_ROOT/_support" --include='*.sh' --include='SKILL.md'
   [ "$status" -eq 1 ]
 }
-
-@test "to-task skill is explicit-ask only" {
-  grep -q '^disable-model-invocation: true' "$REPO_ROOT/to-task/SKILL.md"
-}

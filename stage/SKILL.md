@@ -1,7 +1,6 @@
 ---
 name: stage
 description: Ensure a task is present in dev/TODO/queue.md — appended at the end, or inserted immediately before a task it blocks
-disable-model-invocation: false
 argument-hint: "T<id> [T<id> ...]"
 ---
 

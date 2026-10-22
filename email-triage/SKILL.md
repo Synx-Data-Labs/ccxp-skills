@@ -1,7 +1,6 @@
 ---
 name: email-triage
 description: Use when the user explicitly asks to triage the Gmail inbox — summarize, surface the top action item, Slack the result
-disable-model-invocation: false
 argument-hint: "[--window 7d] [--no-slack]"
 ---
 

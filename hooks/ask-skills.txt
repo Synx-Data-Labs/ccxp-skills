@@ -1,7 +1,6 @@
 # Skills the model may invoke only after the user approves a permission prompt.
 # One bare skill name per line (no plugin prefix); blank lines and # comments ignored.
-# Each listed skill must ALSO carry `disable-model-invocation: false` in its SKILL.md,
-# otherwise it is invisible to the model and this hook never sees a call.
+# All skills are model-invocable, so a skill listed here is always visible to the model.
 autopilot
 bottom
 memory-to-skill

@@ -1,7 +1,6 @@
 ---
 name: slack
 description: Use when the user explicitly asks to send a Slack notification to the configured channel
-disable-model-invocation: false
 argument-hint: "--channel <name> <message>"
 ---
 

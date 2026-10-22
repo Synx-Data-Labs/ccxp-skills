@@ -1,7 +1,6 @@
 ---
 name: verify-site
 description: Use when the user explicitly asks to verify a site PR — local preview, run the test plan's automated checks, tick boxes
-disable-model-invocation: false
 argument-hint: "[PR number]"
 ---
 

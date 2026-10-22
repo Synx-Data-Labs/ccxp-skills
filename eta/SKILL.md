@@ -1,7 +1,6 @@
 ---
 name: eta
 description: Use when the user explicitly asks for an ETA / projected finish time on the current task (or an explicit T<id>) — elapsed vs. remaining estimation, in the local timezone or an override
-disable-model-invocation: false
 argument-hint: "[T<id>] [--tz <IANA-zone>]"
 ---
 

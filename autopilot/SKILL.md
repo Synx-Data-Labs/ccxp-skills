@@ -1,7 +1,6 @@
 ---
 name: autopilot
 description: Use when the user explicitly asks to keep working tasks unattended for a set duration — e.g. "/autopilot for the next 6 hours" or "/autopilot 6h"
-disable-model-invocation: false
 argument-hint: "<duration> | status | pause [--now] | resume | stop [--now]"
 ---
 

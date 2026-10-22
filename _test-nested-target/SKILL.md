@@ -1,7 +1,6 @@
 ---
 name: _test-nested-target
 description: Throwaway regression harness for T20260922-409644 — never invoke directly; exists only so _test-nested-invoker's nested-call test has a disable-model-invocation:true target to probe
-disable-model-invocation: true
 argument-hint: (none)
 ---
 

@@ -1,7 +1,6 @@
 ---
 name: _test-nested-invoker
 description: Throwaway regression harness for T20260922-409644 — never invoke directly; invoke only when a dispatched test agent is explicitly told to run this skill to probe nested-invocation of a disable-model-invocation:true target
-disable-model-invocation: false
 argument-hint: (none)
 ---
 

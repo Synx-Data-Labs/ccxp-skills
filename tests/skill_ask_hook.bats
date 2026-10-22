@@ -38,11 +38,3 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
   [ "$output" = Skill ]
   grep -q 'hooks/skill-ask.sh' "$REPO_ROOT/hooks/hooks.json"
 }
-
-@test "every ask-listed skill is model-visible (disable-model-invocation: false)" {
-  while IFS= read -r line; do
-    line="${line%%#*}"; line="${line//[[:space:]]/}"
-    [ -n "$line" ] || continue
-    grep -q '^disable-model-invocation: false$' "$REPO_ROOT/$line/SKILL.md"
-  done < "$REPO_ROOT/hooks/ask-skills.txt"
-}

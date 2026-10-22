@@ -1,7 +1,6 @@
 ---
 name: ipm
 description: Use when the user explicitly asks to run or re-run the Iteration Planning Meeting — carry over in-flight work, commit queue-ordered picks into ipm-weekly.md, drain the previous iteration, update the ROADMAP
-disable-model-invocation: false
 ---
 
 # IPM

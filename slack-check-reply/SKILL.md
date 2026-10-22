@@ -1,7 +1,6 @@
 ---
 name: slack-check-reply
 description: Use when the user explicitly asks to check for replies on the Slack escalation threads /drive opened, or on the daily standup thread
-disable-model-invocation: false
 argument-hint: "<task-id> | all | standup"
 ---
 

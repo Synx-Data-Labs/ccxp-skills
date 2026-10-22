@@ -1,7 +1,6 @@
 ---
 name: repo-conventions
 description: Use when setting up or checking a repo against these conventions — CLAUDE.md/guidelines.md structure, dev/ TODO lifecycle, or the conventions lint
-disable-model-invocation: false
 argument-hint: "[check|sync|show|setup {team|solo}]"
 ---
 

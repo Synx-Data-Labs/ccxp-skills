@@ -1,7 +1,6 @@
 ---
 name: to-task
 description: Use when the user explicitly asks to track a URL (a GitHub issue, or any other reference) as a task — fetch it, file and stage a task; posts nothing
-disable-model-invocation: true
 argument-hint: "<url | owner/repo#N>"
 ---
 

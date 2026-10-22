@@ -20,7 +20,7 @@ source: this conversation, 2026-10-12 (customer-support skill plan, phase 3 of 4
   (`T20261012-373882`), not on `/to-task` — updated throughout this section
   accordingly; nothing else about this phase's scope or sizing changes.
 - Scope, manual path:
-  - `/customer-support report` skill surface (thin, `disable-model-invocation: true`): the reporter tick for every open support task, also runnable by hand.
+  - `/customer-support report` skill surface (thin): the reporter tick for every open support task, also runnable by hand.
   - `/customer-support report T<id>` one-shot post, `/customer-support status [T<id>]`, `/customer-support stop T<id>`.
   - First comment for a task is human-reviewed: show the rendered draft, user approves (y/edit/n) before the first post and before enabling automatic ticks; later ticks are templated-only.
   - Consent at intake: prints "Report cadence will post to <url> as <account>. Enable? (y/N)" and records `support-report: on` only on yes.

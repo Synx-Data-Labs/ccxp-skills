@@ -1,7 +1,6 @@
 ---
 name: land
 description: Use when the user explicitly asks to land, commit and push, or open a PR for the current uncommitted changes — alias for /gcpr
-disable-model-invocation: false
 argument-hint: [commit-message-or-description]
 ---
 

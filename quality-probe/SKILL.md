@@ -1,7 +1,6 @@
 ---
 name: quality-probe
 description: Use after implementing a task (pre-PR) to measure code quality on the task's TOUCHED files and append one record per task to dev/quality/metrics.jsonl in the target repo — record+warn, never block
-disable-model-invocation: false
 argument-hint: "--task <T-id> (--range <git-range> | --files <csv>) [--repo-root <path>] [--date YYYY-MM-DD] [--design-score N] [--json]"
 ---
 

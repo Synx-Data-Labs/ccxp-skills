@@ -1,7 +1,6 @@
 ---
 name: design-score
 description: Use when checking whether a /drive design doc clears the quality bar before implementation — a deterministic 0–100 structural score that gates Phase 2 → Phase 3
-disable-model-invocation: false
 argument-hint: "<task-file> [--kind code|docs] [--threshold N] [--json]"
 ---
 

@@ -15,7 +15,6 @@ import skill_score
 GOOD = """---
 name: demo
 description: Use when the user explicitly asks to demo the scorer on a fixture
-disable-model-invocation: false
 argument-hint: "[x]"
 ---
 
