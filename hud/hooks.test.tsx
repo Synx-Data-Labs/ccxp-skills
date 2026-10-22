@@ -103,7 +103,7 @@ test('desktop rows keep the engine drawing (its own frame)', async ($: any, on: 
   await ui.unmount()
 })
 
-test('enabled:false: every hook is a pass-through, no band, no process run, no heartbeat', async ($: any, on: any) => {
+test('enabled:false: every hook is a pass-through, no band, no process run, no "on" heartbeat', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"enabled": false}'
   world($, on, w)
@@ -115,7 +115,10 @@ test('enabled:false: every hook is a pass-through, no band, no process run, no h
   expect(await drawsEngine(band)).toBe(true)
   await band.unmount()
   expect(w.runs).toEqual([])
-  expect(w.writes.filter(x => x.path.includes('hud-active'))).toEqual([])
+  const beats = w.writes.filter(x => x.path.includes('hud-active'))
+  expect(beats.some(x => x.text === 'on\n')).toBe(false)
+  // A heartbeat left "on" by an earlier instance is overwritten with "off".
+  expect(beats.every(x => x.text === 'off\n')).toBe(true)
 })
 
 test('userMessage:false switches only the prompt styling off; the band still draws', async ($: any, on: any) => {
@@ -226,4 +229,30 @@ test('/hud status reports on or off and the file path', async ($: any, on: any) 
   const out = await $.command.run({ command: 'hud', args: 'status' })
   expect(out.text).toMatch(/on/)
   expect(out.text).toMatch(/ccxp-hud\.json/)
+})
+
+test('an empty band (fields: []) never writes an "on" heartbeat', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"fields": []}'
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(140))
+  expect(await drawsEngine(band)).toBe(true)
+  await band.unmount()
+  await $.session.start(START)
+  expect(w.writes.some(x => x.path.includes('hud-active') && x.text === 'on\n')).toBe(false)
+})
+
+test('a partial session.measure updates context and keeps the other units', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"fields": ["ctx", "rate"]}'
+  world($, on, w)
+  on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
+  await $.session.start(START)
+  await $.session.measure({ context: { window: 200000, percent: 90 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], changed: ['context', 'rateLimits'] })
+  await $.session.measure({ context: { window: 200000, percent: 50 }, changed: ['context'] })
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /5h 42%/ })).toBeDefined()
+  await band.unmount()
 })

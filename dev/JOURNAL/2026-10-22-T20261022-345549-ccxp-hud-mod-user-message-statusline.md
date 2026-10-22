@@ -341,7 +341,7 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 ## Closed (2026-10-22)
 
 - **Shipped in** the ccxp-skills implementation PR for this task (see the PR linked from the task's merge commit); the claim was PR #414.
-- **Met**: every Done-criteria box above except the live-UI check. `claude plugin validate .` passes, `claude plugin test .` runs 33 tests, and `bats tests/hud_data.bats tests/statusline_setup.bats` is green (64 tests).
+- **Met**: every Done-criteria box above except the live-UI check. `claude plugin validate .` passes, `claude plugin test .` runs 35 tests, and `bats tests/hud_data.bats tests/statusline_setup.bats` is green (64 tests).
 - **Unverified (external)**: how the wrapped prompt row behaves in a real terminal, and the band's placement. A person must tick these; they are filed as follow-up **T20261022-287778** (next iteration, front of the queue). The Test plan's manual smoke box is left unticked on purpose.
 - **Not done here, on purpose**:
   - the optional `themes/ccxp-contrast.json` (its manifest schema is unverified)
