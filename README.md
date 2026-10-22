@@ -162,7 +162,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 
 ### Ask-first skills (model-invoked, user-approved)
 
-`autopilot`, `bottom` and `memory-to-skill` are model-visible, but the plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) makes Claude Code prompt you before the model may run them. Typed `/skill` is unaffected. Edit `hooks/ask-skills.txt` to change the list. Headless `-p`, `dontAsk` and dispatched sub-agents cannot answer the prompt, so the call is denied there. `agent-pairing` and `cleanup-branch` stay fully blocked (`disable-model-invocation: true`).
+`autopilot`, `bottom` and `memory-to-skill` are model-visible, but the plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) makes Claude Code prompt you before the model may run them. Typed `/skill` is unaffected. Edit `hooks/ask-skills.txt` to change the list. Headless `-p`, `dontAsk` and dispatched sub-agents cannot answer the prompt, so the call is denied there. Every other skill is model-invocable with no prompt.
 
 ## Reference docs
 

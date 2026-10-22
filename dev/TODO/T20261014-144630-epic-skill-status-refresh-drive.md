@@ -24,7 +24,7 @@ scheduled: 2026-10-12
 - `refresh`: `epic-links.sh sync` + `lint`, report moved/plain members, propose (never auto-add) related `dev/TODO` candidates.
 - `status`: read-only member table plus `epic-status.sh render`.
 - Deterministic parts in `epic/scripts/epic.sh` (`tests/epic.bats`); loop and judgment stay in `epic/SKILL.md`.
-- `disable-model-invocation: true` because `drive` merges PRs.
+- Model-invocable like every skill; the description wording ("explicitly asks") restricts it.
 
 ## Done criteria
 

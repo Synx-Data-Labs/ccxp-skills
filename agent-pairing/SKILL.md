@@ -1,7 +1,6 @@
 ---
 name: agent-pairing
 description: Use when the user explicitly asks to toggle the ccxp-agent main-session agent on/off for this Claude Code profile, or check its status
-disable-model-invocation: true
 argument-hint: on | off | status
 ---
 
@@ -85,7 +84,7 @@ drivers doing right now."
   normal case.
 - `jq` is required; the script hard-fails with a clear message if it's
   missing rather than falling back to a fragile text edit.
-- Never invoked autonomously (`disable-model-invocation: true`) — this
+- Only run when the user explicitly asks — this
   changes a profile's default behavior for every future session, which
   is squarely the user's call to make explicitly, never a model
   judgment call mid-task.

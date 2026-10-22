@@ -1,7 +1,6 @@
 ---
 name: customer-support
 description: Use when the user explicitly asks to move a synxdb-support GitHub issue through its lifecycle — triage, start work, mark delivered with evidence, request confirmation, accept/reject/close, auto-close timed-out deliveries (sweep), block/unblock, flag needs-upstream, or audit the label invariant across open issues
-disable-model-invocation: false
 argument-hint: "<triage|start|deliver|request-confirm|accept|reject|block|unblock|needs-upstream|audit|links|sweep|autoclose> <issue-ref>"
 ---
 

@@ -1,13 +1,6 @@
 ---
 name: drive
 description: Use when the user explicitly asks to work a single task end-to-end — implement, PR, merge, recursing into blockers; never switch laterally to unrelated work
-disable-model-invocation: false
-# Never flip this to `true` — per
-# https://code.claude.com/docs/en/skills, disable-model-invocation:true
-# "prevents the skill from being preloaded into subagents", and /autopilot
-# Phase 3 dispatches a fresh subagent specifically instructed to run /drive.
-# Flipping this would silently break that dispatch regardless of the
-# Bucket B nested-invocation question this task also answers.
 argument-hint: "[task-id]"
 ---
 

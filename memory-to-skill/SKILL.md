@@ -1,7 +1,6 @@
 ---
 name: memory-to-skill
 description: Use when the user explicitly asks to review the current clone's auto-memory, prune stale entries, or turn recurring memories into a durable skill/doc/hook change
-disable-model-invocation: false
 argument-hint: "[dry-run]"
 ---
 

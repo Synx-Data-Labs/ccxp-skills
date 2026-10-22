@@ -1,7 +1,6 @@
 ---
 name: address-pr
 description: Use when the user explicitly asks to address, verify, or merge a specific open PR (CI, Claude Code review, test plan, tiered merge)
-disable-model-invocation: false
 argument-hint: "[PR number or URL]"
 ---
 

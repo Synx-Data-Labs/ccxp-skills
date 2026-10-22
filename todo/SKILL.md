@@ -1,7 +1,6 @@
 ---
 name: todo
 description: Use when the user explicitly asks to list open tasks, pick the next task, or reorder/clean up the backlog
-disable-model-invocation: false
 argument-hint: list | next | sweep
 ---
 

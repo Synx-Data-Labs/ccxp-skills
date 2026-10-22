@@ -1,7 +1,6 @@
 ---
 name: translate-patent
 description: Use when the user explicitly asks to translate a patent DOCX from Chinese to English (extract, translate, ASCII-diagram the images)
-disable-model-invocation: false
 argument-hint: <path-to-docx> [--target-lang en] [--cn-only|--en-only] [--no-proofread] [--no-pdf]
 ---
 

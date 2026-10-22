@@ -1,7 +1,6 @@
 ---
 name: proof-read
 description: Use when a markdown doc needs a sentence-level consistency check (flags, does not fix) — term drift, undefined jargon vs glossary, word↔ASCII-figure mismatches, broken refs, CN↔EN
-disable-model-invocation: false
 argument-hint: <md-file> [<parallel-md-file>] [--glossary <tsv>] [--glossary-md <glossary.md>] [--report <path>]
 ---
 

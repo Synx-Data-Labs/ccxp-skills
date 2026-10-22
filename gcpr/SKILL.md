@@ -1,7 +1,6 @@
 ---
 name: gcpr
 description: Use when the user explicitly asks to commit & push uncommitted changes and open a PR (then hands off to /address-pr)
-disable-model-invocation: false
 argument-hint: [commit-message-or-description]
 ---
 

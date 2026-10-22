@@ -1,7 +1,6 @@
 ---
 name: skill-conventions
 description: Use when authoring or editing a SKILL.md in ccxp-skills, or deciding a skill's name, structure, arguments, frontmatter, or whether to extract a shared lib
-disable-model-invocation: false
 argument-hint: show
 ---
 
@@ -25,15 +24,13 @@ These skills are model-invocable (see §2), so the `description` is the text the
 
 Example — `/drive`: not `"Pick ONE task, drive it to done"` (what) but `"Use when the user explicitly asks to start focused work on a single task and drive it to a merged PR"` (tightly-scoped when).
 
-**A second, harder mechanism exists.** The prose above is a request the model can ignore. `disable-model-invocation: true` is enforced by the harness — it blocks autonomous discovery outright. Test: **"could the model usefully reach for this autonomously?"** No (hard to reverse, high-blast-radius) → flip it, but verify first if another skill's prose nested-invokes it.
-
-Counter-example — never flip `/drive`: the flag also blocks preloading into subagents, and `/autopilot` dispatches a subagent to run `/drive`; flipping it breaks that. Said inline in `/drive`'s own frontmatter.
+**No `disable-model-invocation` flag.** Every skill is model-invocable (the flag's default is false), so never add the line. The way to restrict a skill is the description wording above. The flag also blocks preloading into subagents, and `/autopilot` dispatches a subagent to run `/drive`, so `true` would break that dispatch.
 
 ### 2. Dual invocation
 
 These skills are BOTH:
 
-- **Model-invocable** — `disable-model-invocation: false` plus a good `Use when…` description (§1).
+- **Model-invocable** — by default (no `disable-model-invocation` line) plus a good `Use when…` description (§1).
 - **User-invocable** — an `argument-hint` so `/name <arg>` works from the slash menu.
 
 Naming: kebab-case, a single clear verb where possible, no abbreviations or invented terms (`/drive`, `/retro`, `/sweep`). Reference skills may be noun-ish (`/repo-conventions`, `/skill-conventions`).

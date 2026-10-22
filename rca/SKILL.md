@@ -1,7 +1,6 @@
 ---
 name: rca
 description: Use when you have a failed GitHub Actions run URL or run ID to diagnose, classify, and track root cause directly (not from a Slack notification — that's /labrun-rca)
-disable-model-invocation: false
 argument-hint: "<run-url or run-id> [workflow-name] [--no-post]"
 ---
 

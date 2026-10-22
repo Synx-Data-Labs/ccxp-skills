@@ -1,7 +1,6 @@
 ---
 name: labrun-rca
 description: Use when the input is a Slack permalink to a failure notification — RCA the announced GitHub Actions run and reply in the thread
-disable-model-invocation: false
 argument-hint: "<slack-message-url>"
 ---
 

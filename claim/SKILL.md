@@ -1,7 +1,6 @@
 ---
 name: claim
 description: Use when the user explicitly asks to claim a task, check what this clone currently holds, or release a claim — for interactive work outside the full /drive loop
-disable-model-invocation: false
 argument-hint: "T<id> | release T<id> | status"
 ---
 

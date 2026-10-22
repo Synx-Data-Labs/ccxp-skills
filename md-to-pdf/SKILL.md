@@ -1,7 +1,6 @@
 ---
 name: md-to-pdf
 description: Convert markdown to PDF with scaled images, preserved line breaks, and CJK/special character support
-disable-model-invocation: false
 argument-hint: <path-to-md> [--img-width 60] [--output path.pdf] [--extra-css path]
 ---
 

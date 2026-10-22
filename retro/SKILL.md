@@ -1,7 +1,6 @@
 ---
 name: retro
 description: Use when the user explicitly asks to run the weekly retrospective — review the last 7 days, grade the IPM, file action items
-disable-model-invocation: false
 argument-hint: "[weeks-back]"
 ---
 

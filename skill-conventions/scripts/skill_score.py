@@ -152,8 +152,8 @@ def score_skill(skill_dir, repo):
         f"{len(desc)} chars; starts 'Use when': "
         f"{desc.lower().startswith('use when')}")
     add("invocation", (3 if has_hint else 0)
-        + (2 if "disable-model-invocation" in fm else 0), 5,
-        "argument-hint + explicit disable-model-invocation")
+        + (2 if "disable-model-invocation" not in fm else 0), 5,
+        "argument-hint; no disable-model-invocation flag")
     frac = (SIZE_ZERO_BYTES - size) / (SIZE_ZERO_BYTES - SIZE_FULL_BYTES)
     add("size", 25 * min(1, max(0, frac)), 25,
         f"{size} bytes (~{size // 4} tokens), {len(body.splitlines())} lines")

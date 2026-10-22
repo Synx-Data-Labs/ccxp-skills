@@ -1,7 +1,6 @@
 ---
 name: journal-compact
 description: Use when the user explicitly asks to compact a month of dev/JOURNAL/ into a digest
-disable-model-invocation: false
 argument-hint: "<month>"
 ---
 

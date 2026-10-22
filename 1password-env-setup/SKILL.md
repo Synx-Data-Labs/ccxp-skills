@@ -1,7 +1,6 @@
 ---
 name: 1password-env-setup
 description: Use when the user explicitly asks to bootstrap or refresh a repo's 1Password-backed .env — generates the skip-if-populated .envrc and materializes .env from .env.tpl via op inject
-disable-model-invocation: false
 argument-hint: "[path]"
 ---
 

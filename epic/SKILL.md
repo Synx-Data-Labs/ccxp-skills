@@ -1,9 +1,6 @@
 ---
 name: epic
 description: Use when the user explicitly asks to check, refresh, or drive a standing epic (dev/EPICS/E<n>) — per-epic progress, member-link upkeep, or working its member tasks one at a time via /drive
-disable-model-invocation: true
-# true on purpose: `drive` merges PRs across many tasks, so only the user may start it.
-# Nothing nest-invokes /epic (it dispatches /drive, which stays model-invocable).
 argument-hint: "status [E<n>] | refresh [E<n>] | drive <E<n>>"
 ---
 

@@ -1,7 +1,6 @@
 ---
 name: bottom
 description: Use when the user explicitly asks to move a task (or several) to the back of the dev/TODO priority queue
-disable-model-invocation: false
 argument-hint: "T<id> [T<id> ...]"
 ---
 
