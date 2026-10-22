@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261022-349299](T20261022-349299-dispatcher-detached-bg-jobs.md): ccxp-agent dispatches detached `claude --bg` jobs
 - [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
 - [T20261021-291375](T20261021-291375-schedule-delivered-autoclose-sweep-synxdb-support.md): Schedule the customer-support delivered-autoclose sweep (cron) for synxdb-support
 - [T20261020-231370](T20261020-231370-go-rewrite-gh-git-wrappers-deprioritized.md): Rewrite `_gh/gh.sh` / `_gh/git.sh` as a compiled Go binary (deprioritized)
