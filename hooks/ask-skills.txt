@@ -1,6 +1,13 @@
 # Skills the model may invoke only after the user approves a permission prompt.
 # One bare skill name per line (no plugin prefix); blank lines and # comments ignored.
 # All skills are model-invocable, so a skill listed here is always visible to the model.
+# Why listed: autopilot/bottom/memory-to-skill run unattended or reshape state;
+# agent-pairing rewrites profile config, cleanup-branch deletes branches,
+# epic drives many tasks, to-task files and stages tasks. Typed /skill is unaffected.
 autopilot
 bottom
 memory-to-skill
+agent-pairing
+cleanup-branch
+epic
+to-task
