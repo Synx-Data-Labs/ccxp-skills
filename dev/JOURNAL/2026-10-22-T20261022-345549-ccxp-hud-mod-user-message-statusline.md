@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: Conversation 2026-10-22 (user ask: a supported mod instead of tweakcc to make the user message stand out and render a richer autopilot/context/branch/task status line)
 related: T20261002-303999
 description: Build `ccxp-hud`, a Claude Code mod (supported plugin API, not a tweakcc patch) shipped inside the ccxp-skills plugin, on by default with its own opt-out, that highlights the user's prompt rows and draws a richer status band, reusing statusline-setup's data helpers
-claimed_by: cc1-50ac6891:55d302b969ae2080
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-19
 ---
 
@@ -337,3 +337,21 @@ The module is **loaded and enabled by default**. It has its own opt-out, separat
 2. **Band and statusline**: **DECIDED by the implementer (recommended option)**: the settings statusline shrinks to `ctx | branch` while the band's heartbeat is fresh; revisit after the live check.
 3. **Defaults**: **DECIDED by the implementer**: `quote` bar in `suggestion` colour with no `YOU` label (the label would need a rewrite of `text`, which the live check should confirm first); `last_input` stays opt-in via `fields`.
 4. **CI**: **DECIDED by the implementer**: mod tests stay local-only for now; the `claude` CLI install in Actions is a follow-up if the live check goes well.
+
+## Closed (2026-10-22)
+
+- **Shipped in** the ccxp-skills implementation PR for this task (see the PR linked from the task's merge commit); the claim was PR #414.
+- **Met**: every Done-criteria box above except the live-UI check. `claude plugin validate .` passes, `claude plugin test .` runs 33 tests, and `bats tests/hud_data.bats tests/statusline_setup.bats` is green (64 tests).
+- **Unverified (external)**: how the wrapped prompt row behaves in a real terminal, and the band's placement. A person must tick these; they are filed as follow-up **T20261022-287778** (next iteration, front of the queue). The Test plan's manual smoke box is left unticked on purpose.
+- **Not done here, on purpose**:
+  - the optional `themes/ccxp-contrast.json` (its manifest schema is unverified)
+  - the plugin version bump (a maintainer-triggered MINOR bump PR per `dev/guidelines.md`)
+  - the `YOU` label on prompt rows (it needs a `text` rewrite, to be decided after the live check)
+- **Quality probe**: `file_loc regressed (delta 70)`, expected for a new module; shellcheck clean apart from one info note.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — tests were written alongside the code in the same pass, not red-first
+- Verification (`superpowers:verification-before-completion`): yes — run commands before claiming (validate, plugin test, bats, design-score, skill score)
+- Systematic debugging (`superpowers:systematic-debugging`): no — the few failures (BSD vs GNU `stat`, symlinked tmp paths) were diagnosed directly
+- Receiving code review (`superpowers:receiving-code-review`): see the PR for the independent review result
