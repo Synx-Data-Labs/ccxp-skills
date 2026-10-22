@@ -11,9 +11,9 @@ skill-authoring cleanup.
 
 ## Guidelines
 
-**You MUST read and follow [dev/guidelines.md](dev/guidelines.md) before making any changes.**
+**You MUST read and follow [dev/guidelines.md](../dev/guidelines.md) before making any changes.**
 
-**Conventions**: see `/repo-conventions` skill — it defines CLAUDE.md/guidelines.md structure and the dev/ TODO lifecycle. Task/design conventions specifically live in [lifecycle.md](lifecycle.md) (this repo IS the canonical source every consumer repo points back to).
+**Conventions**: see `/repo-conventions` skill — it defines CLAUDE.md/guidelines.md structure and the dev/ TODO lifecycle. Task/design conventions specifically live in [lifecycle.md](../lifecycle.md) (this repo IS the canonical source every consumer repo points back to).
 
 ---
 
@@ -22,7 +22,7 @@ skill-authoring cleanup.
 - **Open tasks**: `dev/TODO/*.md` — one file per task
 - **Parked tasks**: `dev/PARKING/*.md` — valid but not actionable now
 - **Completed tasks / journal**: `dev/JOURNAL/*.md` — permanent record (the folder IS the index; do NOT mirror it here)
-- See [lifecycle.md](lifecycle.md) for task ID format, status flow, and procedures
+- See [lifecycle.md](../lifecycle.md) for task ID format, status flow, and procedures
 - **Work about this repo itself** (a bug in `_gh/`, `_session/`, `_taskid/`, `_ipm/`; a new skill; skill-authoring cleanup) belongs here — file directly in `dev/TODO/`
 - **Do NOT update CLAUDE.md when journaling** — only when the project's overall structure changes
 

@@ -59,9 +59,9 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
     s="${s%%#*}"; s="${s//[[:space:]]/}"
     [ -n "$s" ] || continue
     [ -f "$REPO_ROOT/$s/SKILL.md" ] || { echo "missing skill: $s"; return 1; }
-
-
+  done <"$REPO_ROOT/hooks/ask-skills.txt"
 }
+
 @test "hooks.json: every command quotes \${CLAUDE_PLUGIN_ROOT} (survives a space in the path)" {
   # Unquoted placeholder word-splits on a space in the install path.
   run jq -r '[.. | objects | select(has("command")) | .command] | .[]' "$REPO_ROOT/hooks/hooks.json"
