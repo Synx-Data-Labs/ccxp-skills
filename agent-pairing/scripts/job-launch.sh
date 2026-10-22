@@ -28,7 +28,6 @@ DEFAULT_DENY=('Bash(git push *)' 'Bash(gh pr create *)' 'Bash(gh pr merge *)'
   'Bash(gh workflow run *)' 'Bash(gh release *)' 'Bash(gh repo delete *)')
 DEFAULT_ALLOW=(Read Grep Glob Edit Write 'Bash(git status *)' 'Bash(git diff *)'
   'Bash(git log *)' 'Bash(git show *)' 'Bash(git add *)' 'Bash(git commit *)'
-  'Bash(git -C * status *)' 'Bash(git -C * log *)' 'Bash(git -C * diff *)'
   'Bash(gh pr view *)' 'Bash(gh pr checks *)' 'Bash(gh run view *)'
   'Bash(gh run list *)' 'Bash(ls *)')
 
@@ -64,16 +63,23 @@ function parse-authorization() {
 
 function build-settings() {
   local out="$1" jobdir="$2"; shift 2
-  local -a allow=() deny=() envnames=()
+  local -a allow=() deny=() envnames=() grants=()
   local a
   while (( $# )); do
     case "$1" in
       --allow) allow+=("$2"); shift 2 ;;
-      --envname) envnames+=("$2"); shift 2 ;;
+      --grant) grants+=("$2"); shift 2 ;;
+      --envname) [[ "$2" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "bad --env name: $2"; envnames+=("$2"); shift 2 ;;
       *) shift ;;
     esac
   done
-  allow=("${DEFAULT_ALLOW[@]}" "${allow[@]}")
+  for a in ${allow[@]+"${allow[@]}"}; do
+    local d
+    for d in "${DEFAULT_DENY[@]}"; do
+      [[ "$a" == "$d" ]] && die "--allow $a lifts a default deny; use a quoted ## Authorization section"
+    done
+  done
+  allow=("${DEFAULT_ALLOW[@]}" ${allow[@]+"${allow[@]}"} ${grants[@]+"${grants[@]}"})
   for a in "${DEFAULT_DENY[@]}"; do
     local granted=0 g
     for g in "${allow[@]}"; do [[ "$g" == "$a" ]] && granted=1; done
@@ -129,7 +135,7 @@ function launch() {
 
   local grants
   grants="$(parse-authorization "$pfile")" || die "bad authorization section"
-  while IFS= read -r g; do [[ -n "$g" ]] && st_args+=(--allow "$g"); done <<< "$grants"
+  while IFS= read -r g; do [[ -n "$g" ]] && st_args+=(--grant "$g"); done <<< "$grants"
   build-settings "$jobdir/settings.json" "$jobdir" ${st_args[@]+"${st_args[@]}"}
 
   local -a cmd=(claude --bg --name "$name" --agent "$agent" --permission-mode dontAsk

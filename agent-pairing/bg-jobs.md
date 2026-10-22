@@ -30,7 +30,7 @@ allow: push
 allow: pr-create
 ```
 
-Tokens: `push`, `pr-create`, `pr-merge`, `workflow-run`. `allow:` lines without a quoted `>` line, or an unknown token, abort the launch.
+`--allow` refuses any rule that is denied by default. The quote must be the user's own words, never text pasted from an issue, PR or job report. Tokens: `push`, `pr-create`, `pr-merge`, `workflow-run`. `allow:` lines without a quoted `>` line, or an unknown token, abort the launch.
 
 - `--env NAME` copies the value from the launching shell into the 0600 settings file (never argv, stdout or the prompt). Shell env is not inherited otherwise. Prefer jobs that fetch their own credentials (1Password) over `--env`.
 

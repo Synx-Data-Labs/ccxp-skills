@@ -20,7 +20,7 @@ function list-jobs() {
 function report() {
   local sel="$1" sid f
   sid="$(claude agents --json --all | jq -r --arg sel "$sel" '
-    [.[] | select(.name == $sel or ((.name // "") | startswith("j" + $sel + "-")))][0].sessionId // empty')"
+    [.[] | select(.name == $sel or ((.name // "") | startswith("j" + $sel + "-")))] | sort_by(.startedAt // 0) | last | .sessionId // empty')"
   [[ -n "$sid" ]] || { echo "no such job: $sel" >&2; return 1; }
   f="$(find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" -name "$sid.jsonl" 2>/dev/null | head -1)"
   [[ -n "$f" ]] || { echo "transcript not found for $sid" >&2; return 1; }
