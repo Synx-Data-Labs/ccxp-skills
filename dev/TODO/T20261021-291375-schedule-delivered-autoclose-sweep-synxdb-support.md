@@ -1,9 +1,11 @@
 ---
-status: Open
-scheduled: 2026-11-02
+status: In Progress
+scheduled: 2026-10-19
 estimation: 2
 source: follow-up of T20261021-266225 (design decision: no cron in the skill PR)
 related: T20261021-266225
+claimed_by: cc1-50ac6891:70c2e1ebb65a8b18
+claimed_role: interactive
 ---
 
 # T20261021-291375: Schedule the customer-support delivered-autoclose sweep (cron) for synxdb-support
