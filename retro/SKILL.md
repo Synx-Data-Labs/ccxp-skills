@@ -581,7 +581,7 @@ Creation safety-net — process-looking docs with no matching `dev/chore.md` row
 (status of action items from previous retro — completed, in progress, or dropped)
 
 ## Housekeeping
-- Slack summary: Posted via MCP / Posted via webhook fallback — MCP send failed / Both MCP and webhook fallback failed (see Phase 6)
+- Slack summary: Posted via MCP / Posted via webhook fallback — MCP unavailable / Slack post FAILED: <reason> (see Phase 6)
 ```
 
 ### Phase 6: Notify
@@ -591,20 +591,20 @@ Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP 
 - **Webhook fallback on MCP send failure (same pattern as `ccxp/SKILL.md` Phase 1.4 / `ipm/SKILL.md` step 6).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result.
 - Don't let a failed send silently drop the week's retro from Slack:
 
-1. Attempt `slack_send_message` once, then one retry on error — 2 attempts total, no further looping (same policy as Phase 1.4).
-2. If both attempts error, capture the retro summary text into a variable and fall back to the same underlying script the `/slack` skill's `dev` channel uses:
+1. If `slack_send_message` is **not available** (absent or unauthenticated — the headless cron case), go straight to step 2. Otherwise attempt it once, then one retry on error — 2 attempts total, no further looping (same policy as Phase 1.4).
+2. If the tool is unavailable or both attempts error, fall back via the wrapper (same as `ccxp/SKILL.md` Phase 1.4; always the `dev` channel webhook, whatever `RETRO_SLACK_CHANNEL` is). It prints a status line, appends it to the report file, and exits 1 on failure:
 
    ```bash
    RETRO_MESSAGE="$(cat <<'EOF'
    <the *Weekly Retro* (YYYY-MM-DD) mrkdwn block composed below>
    EOF
    )"
-   bash <skills-root>/slack/scripts/slack-send.sh --channel dev "$RETRO_MESSAGE"
+   bash <skills-root>/slack/scripts/slack-fallback.sh --journal <the retro report file written in Phase 5> "$RETRO_MESSAGE"
    ```
 
    Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s Prerequisites documents (already-exported env var → `~/.claude/.env` → repo `.env`).
-3. Record which path succeeded in the retro report's own `## Housekeeping` section (see Phase 5 template) — `Posted via MCP` vs. `Posted via webhook fallback — MCP send failed` — mirroring Phase 1.4's convention, so the record stays visible even on a week Slack itself shows no gap.
-4. If **both** the MCP send and the webhook fallback fail, that's the hard-stop worth flagging loudly — note it in the report's Housekeeping section rather than silently giving up.
+3. Record which path succeeded in the report's `## Housekeeping` section (see Phase 5 template) — the wrapper already appended the webhook line; add `Posted via MCP` yourself when MCP worked.
+4. If the webhook fallback fails too, never stay silent: the wrapper wrote `- Slack post FAILED: <reason>` into the report; also state it in the session output.
 
 ```
 *Weekly Retro* (YYYY-MM-DD)

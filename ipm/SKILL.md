@@ -313,9 +313,10 @@ If anything about the edit is unclear (e.g. a near-term entry with no obvious ta
 
 ### 6 Slack the focus
 
-Send to `#acme-dev-notifications` via MCP `slack_send_message`. On send failure, apply the same
-webhook fallback as `/ccxp` Phase 1.4 — this is a weekly, guaranteed-to-fire send in
-the same failure-prone path:
+Send to `#acme-dev-notifications` via MCP `slack_send_message`. If the MCP tool is unavailable
+or the send fails, apply the same webhook fallback as `/ccxp` Phase 1.4, passing
+`--journal` the `dev/JOURNAL/*-ipm-weekly.md` file written in step 5 (a failure is recorded there as
+`- Slack post FAILED: <reason>` and in the session output — never silent):
 
 ```
 *Weekly Focus* (YYYY-MM-DD)
