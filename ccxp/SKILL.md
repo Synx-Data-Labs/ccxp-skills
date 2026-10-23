@@ -461,19 +461,21 @@ Send daily summary to `#acme-dev-notifications` via MCP `slack_send_message`.
 chronic intermittent `MCP error -32603: Internal Server Error` failures — a 7-consecutive-day
 miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a failed send silently drop the day's standup from Slack:
 
-1. Attempt `slack_send_message` once, then one retry on error — per the design decision
-   ("don't loop retries in a single session — 2 attempts is enough evidence per occurrence"), not
-   a policy documented elsewhere in this file. Looping past that second attempt is not warranted.
-2. If both attempts error, capture the standup message text into a variable and fall back
-   immediately to the same underlying script the `/slack` skill's `dev` channel uses (routes to
-   the same `#acme-dev-notifications`):
+1. If `slack_send_message` is **not available** (tool absent from the toolset or unauthenticated — the
+   headless cron case), skip straight to step 2 — no attempt, no retry. Otherwise attempt it once, then
+   one retry on error — per the design decision ("don't loop retries in a single session — 2 attempts
+   is enough evidence per occurrence"). Looping past that second attempt is not warranted.
+2. If the tool is unavailable or both attempts error, fall back immediately to the wrapper around the
+   script the `/slack` skill's `dev` channel uses (routes to the same `#acme-dev-notifications`).
+   It prints a one-line status, appends it to the journal file, and exits 1 on failure (it can't
+   rely on `slack-send.sh`'s exit code — that exits 0 on a webhook 404):
 
    ```bash
    STANDUP_MESSAGE="$(cat <<'EOF'
    <the *Daily Standup* (YYYY-MM-DD) mrkdwn block composed above>
    EOF
    )"
-   bash <skills-root>/slack/scripts/slack-send.sh --channel dev "$STANDUP_MESSAGE"
+   bash <skills-root>/slack/scripts/slack-fallback.sh --journal dev/JOURNAL/YYYY-MM-DD-daily-summary.md "$STANDUP_MESSAGE"
    ```
 
    Requires `SLACK_WEBHOOK_URL_DEV` resolvable via the same three-tier lookup `slack/SKILL.md`'s
@@ -481,8 +483,8 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
    `~/.claude/.env` (machine-global, recommended), then the working repo's own `.env`
    (see your own repo's secrets-rotation docs for how that's provisioned, e.g. 1Password-routed).
 3. Record which path succeeded in that day's `dev/JOURNAL/YYYY-MM-DD-daily-summary.md`
-   Housekeeping section (`Posted via MCP` vs. `Posted via webhook fallback — MCP send failed`), so
-   the streak stays visible in the durable record even on a day Slack itself shows no gap.
+   Housekeeping section (`Posted via MCP` vs. `Posted via webhook fallback — MCP unavailable`); the
+   wrapper already appended the webhook line, so only add the MCP line yourself.
 4. **Known limitations of the webhook path** — accept, don't block on:
    - Posts under the generic webhook-configured identity, not a distinct bot name (the same
      identity gap `SLACK_WEBHOOK_URL_DEV`'s other consumers already have).
@@ -491,8 +493,9 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
      `slack_search_public_and_private` discovery is unaffected — a webhook-posted message is
      searchable and repliable-to like any other once found — so next-tick reply-checking still
      works; only *this* tick's immediate self-threading is unavailable.
-5. If **both** the MCP send and the webhook fallback fail, that's the actual hard-stop worth
-   escalating loudly (something's wrong beyond the known MCP flakiness) — note it in Housekeeping.
+5. If **both** the MCP send and the webhook fallback fail, never stay silent: the wrapper has already
+   written `- Slack post FAILED: <reason>` to the journal; also state it in the session output
+   (final report) so it's visible in the cron log. Something's wrong beyond the known MCP flakiness.
 
 - **Scope note.** This fallback is wired only into this phase and `/ipm` step 6 (Weekly Focus) — the two sends across this file and `/ipm` that fire unconditionally on their cadence (daily / weekly).
 - The other `slack_send_message` call sites (Phase 0.5's reclaim-sweep and claim-gap summaries in this file, the IPM bump-2x note, `/ipm` step 5b's ROADMAP-failure escalation) are conditional — they post only when something's already been found — so an occasional miss there is lower-stakes than losing a guaranteed daily/weekly notification.

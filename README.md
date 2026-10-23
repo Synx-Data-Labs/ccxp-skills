@@ -48,7 +48,9 @@ shares:
   graceful-degrade — nothing here is required just to use the suite:
   - `SLACK_WEBHOOK_URL` / `SLACK_WEBHOOK_URL_<NAME>` — incoming webhooks for
     the `slack` skill's channels; `<NAME>` maps to `--channel <name>`
-    (uppercased). See `slack/SKILL.md`.
+    (uppercased). See `slack/SKILL.md`. `SLACK_WEBHOOK_URL_DEV` is also what
+    `/ccxp`, `/retro` and `/ipm` post through when the Slack MCP tool is
+    unavailable (headless cron); a failed post is logged, never silent.
   - `SLACK_STANDUP_CHANNEL` — channel `slack-check-reply` polls for standup
     replies. Unset degrades to a one-line skip note.
   - `SLACK_BOT_TOKEN` / `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` — bot-token
