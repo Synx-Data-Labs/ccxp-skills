@@ -21,7 +21,11 @@ set -euo pipefail
 function slack-fallback() {
   local journal="" message
   if [[ "${1:-}" == "--journal" ]]; then
-    journal="${2:-}"; shift 2 || true
+    if [[ $# -lt 2 || -z "$2" ]]; then
+      echo "Error: --journal needs a file path." >&2
+      return 2
+    fi
+    journal="$2"; shift 2
   fi
   message="$*"
   local script_dir send out rc=0 line
@@ -45,7 +49,10 @@ function slack-fallback() {
 
   echo "$line"
   if [[ -n "$journal" ]]; then
-    printf -- '- %s\n' "$line" >> "$journal"
+    # Best-effort: a journal write failure must not turn a sent post into a failure.
+    { [[ ! -s "$journal" || -z "$(tail -c1 "$journal")" ]] || echo >> "$journal"
+      printf -- '- %s\n' "$line" >> "$journal"; } 2>/dev/null \
+      || echo "Warning: could not append to $journal" >&2
   fi
   [[ "$line" == "Slack post: "* ]]
 }

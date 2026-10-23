@@ -484,7 +484,8 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
    (see your own repo's secrets-rotation docs for how that's provisioned, e.g. 1Password-routed).
 3. Record which path succeeded in that day's `dev/JOURNAL/YYYY-MM-DD-daily-summary.md`
    Housekeeping section (`Posted via MCP` vs. `Posted via webhook fallback — MCP unavailable`); the
-   wrapper already appended the webhook line, so only add the MCP line yourself.
+   wrapper already appended the webhook line, so only add the MCP line yourself. If the summary was
+   already committed, include that line in a follow-up doc commit rather than leaving it uncommitted.
 4. **Known limitations of the webhook path** — accept, don't block on:
    - Posts under the generic webhook-configured identity, not a distinct bot name (the same
      identity gap `SLACK_WEBHOOK_URL_DEV`'s other consumers already have).
