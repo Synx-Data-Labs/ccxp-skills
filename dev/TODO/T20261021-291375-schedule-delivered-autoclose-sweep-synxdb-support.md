@@ -42,6 +42,6 @@ claimed_role: interactive
 ## Acceptance
 
 - [ ] `delivered-autoclose.yml` merged in `synxdb-support`: daily cron, mints the App token as above, runs `sweep.sh Synx-Data-Labs/synxdb-support` in dry-run mode.
-- [ ] The only credential is the App (ID variable + private key secret); the old `SUPPORT_SWEEP_TOKEN` name is gone from workflow, docs, and this task.
+- [ ] The only credential is the App (ID variable + private key secret).
 - [ ] One observed scheduled dry-run; its candidate list reviewed with the support team.
 - [ ] After the support team's go-ahead, the maintainer enables `--apply`.
