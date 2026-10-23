@@ -62,3 +62,25 @@ stub() { # stub <stdout> <stderr> <exit>
   [ "$status" -eq 1 ]
   [ ! -e "$BATS_TEST_TMPDIR/args" ]
 }
+
+@test "unwritable journal does not change the post's exit status" {
+  stub "Slack notification sent successfully" "" 0
+  run bash "$FALLBACK" --journal "$BATS_TEST_TMPDIR/nodir/j.md" "hello"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Posted via webhook fallback"* ]]
+}
+
+@test "journal without trailing newline keeps the bullet on its own line" {
+  J="$BATS_TEST_TMPDIR/j.md"; printf 'last line' > "$J"
+  stub "Slack notification sent successfully" "" 0
+  run bash "$FALLBACK" --journal "$J" "hello"
+  [ "$(sed -n 1p "$J")" = "last line" ]
+  [[ "$(sed -n 2p "$J")" == "- Slack post: "* ]]
+}
+
+@test "--journal without a value is an error, nothing sent" {
+  stub "Slack notification sent successfully" "" 0
+  run bash "$FALLBACK" --journal
+  [ "$status" -ne 0 ]
+  [ ! -e "$BATS_TEST_TMPDIR/args" ]
+}

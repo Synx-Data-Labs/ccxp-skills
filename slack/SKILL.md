@@ -22,7 +22,7 @@ Example usage (illustrative, not the only options):
 |------|---------|---------|---------|
 | *(none — default)* | `#acme-automation-alerts` | `SLACK_WEBHOOK_URL` | Automation alerts, build notifications, testing |
 | `cloud` | `#acme-cloud` | `SLACK_WEBHOOK_URL_CLOUD` | Release announcements only — use sparingly |
-| `dev` | `#acme-dev-notifications` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` is unavailable or fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* the stop-summary this channel intentionally routes (see `autopilot/SKILL.md` Phase 5) — MCP is still the default path for every other use of this channel |
+| `dev` | `#acme-dev-notifications` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` is unavailable or fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* the autopilot stop-summary (`autopilot/SKILL.md` Phase 5) |
 
 ## Argument
 
@@ -66,11 +66,9 @@ bash <skills-root>/slack/scripts/slack-send.sh [--channel <name>] <remaining arg
 
 ## Fallback wrapper for rituals
 
-`/ccxp` standup, `/retro` and `/ipm` post via `scripts/slack-fallback.sh [--journal FILE] <message>`
-when the MCP tool is unavailable (headless cron) or errors. It sends via `--channel dev`, then prints
-and appends (to FILE) `Slack post: Posted via webhook fallback — MCP unavailable` or
-`Slack post FAILED: <reason>` (exit 1; reason is URL-scrubbed). It judges success by
-`slack-send.sh`'s "sent successfully" line because that script exits 0 on a webhook 404.
+- `/ccxp` standup, `/retro` and `/ipm` post via `scripts/slack-fallback.sh [--journal FILE] <message>` when the MCP tool is unavailable (headless cron) or errors.
+- It sends via `--channel dev`, then prints and appends (to FILE) one line: `Slack post: Posted via webhook fallback — MCP unavailable` or `Slack post FAILED: <reason>` (exit 1, reason URL-scrubbed).
+- Success is judged by `slack-send.sh`'s "sent successfully" line, since that script exits 0 on a webhook 404.
 
 ## When to notify proactively
 
