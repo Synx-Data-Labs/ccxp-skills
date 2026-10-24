@@ -50,7 +50,7 @@ set -uo pipefail
 
 # Load ATTRIBUTION_CCXP_PATHS from ~/.claude/.env (machine-global) when not
 # already exported — same resolution order and ENV_FILE test seam as
-# slack/scripts/slack-send.sh, vpn/scripts/vpn.sh, and _session/_lib.sh.
+# slack/scripts/slack-send.sh, the synx-skills:vpn skill, and _session/_lib.sh.
 # Skipped in BATS (unless ENV_FILE points at a fixture) to keep tests hermetic.
 _attribution_load_env() {
   [ -n "$ATTRIBUTION_CCXP_PATHS" ] && return 0
