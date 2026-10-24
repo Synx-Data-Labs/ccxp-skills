@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
-import { EMPTY, bandRows, compactLine, countJobs, ctxTone, meter, parseHelper } from './model'
+import { EMPTY, bandRows, compactLine, countJobs, ctxTone, formatStamp, meter, parseHelper } from './model'
 
 const HELPER = JSON.stringify({
   task_id: 'T20261021-354035',
@@ -138,6 +138,16 @@ test('band: jobs without a ledger is a dim dash; AP colours and stuck marker', a
   expect(ap({ prefix: '[s]', status: 'stopped', stop_reason: 'elapsed' }).find(s => s.text.includes('stopped'))?.color).toBe('inactive')
   expect(ap({ prefix: '[s]', status: 'stopped', stop_reason: 'dispatch failed' }).find(s => s.text.includes('stopped'))?.color).toBe('error')
   expect(parseHelper('{"branch":"m","autopilot":{"status":"running"}}')?.autopilot?.merged).toBe(0)
+})
+
+test('formatStamp: HH:MM today, with the date otherwise; lastat field hidden when unknown', async () => {
+  const at = new Date(2026, 9, 24, 9, 5).getTime() / 1000
+  expect(formatStamp(at, new Date(2026, 9, 24, 23, 0).getTime())).toBe('09:05')
+  expect(formatStamp(at, new Date(2026, 9, 25, 8, 0).getTime())).toBe('Oct 24 09:05')
+  const h = parseHelper(HELPER)!
+  const fields = { ...DEFAULTS, fields: ['lastat' as const] }
+  expect(bandRows(snap({ helper: { ...h, last_input_at: Date.now() / 1000 } }), fields, 140)[0][0].text).toMatch(/^you \d\d:\d\d$/)
+  expect(bandRows(snap({ helper: { ...h, last_input_at: 0 } }), fields, 140)).toEqual([])
 })
 
 test('compactLine is one plain line within the 2,000 character limit', async () => {
