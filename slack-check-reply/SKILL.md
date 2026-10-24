@@ -49,7 +49,9 @@ Create the directory and file if they don't exist (`mkdir -p .claude/state`).
 
 `CCXP_SLACK_CHANNEL` — the one channel every daily-ccxp Slack use targets
 (standup summary and escalation threads), e.g. `claude-notification` (no
-leading `#`; the queries below add it). `SLACK_STANDUP_CHANNEL` is an
+leading `#`; the queries below add it).
+
+`SLACK_STANDUP_CHANNEL` is an
 optional legacy override: when set it wins, otherwise `CCXP_SLACK_CHANNEL`
 is used. Below, `$SLACK_STANDUP_CHANNEL` means that resolved value. Required for the standup-thread check
 (step 1a) and its search fallback (step 4); there is **no baked-in
