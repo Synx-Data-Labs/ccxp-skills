@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Autopilot, Field, HelperData, HudConfig, Jobs, Snapshot } from '../types'
+import type { Autopilot, Field, HelperData, HudConfig, Jobs, Ledger, Snapshot } from '../types'
 
 export type { Autopilot, HelperData, Jobs, Snapshot }
 
@@ -48,6 +48,22 @@ export function parseHelper(stdout: string): HelperData | null {
       last_task: str(a.last_task),
       stuck_reason: str(a.stuck_reason),
       stop_reason: str(a.stop_reason),
+      merged: num(a.merged),
+    }
+  }
+  const led = r.ledger
+  let ledger: Ledger | null = null
+  if (typeof led === 'object' && led !== null && !Array.isArray(led)) {
+    const l = led as Record<string, unknown>
+    ledger = {
+      running: (Array.isArray(l.running) ? l.running : [])
+        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
+        .map(x => ({ job: num(x.job), title: str(x.title) })),
+      lifetime_jobs: num(l.lifetime_jobs),
+      parked: num(l.parked),
+      parked_ids: (Array.isArray(l.parked_ids) ? l.parked_ids : []).filter((x): x is string => typeof x === 'string'),
+      next_job: num(l.next_job),
+      updated_at: str(l.updated_at),
     }
   }
   return {
@@ -56,6 +72,7 @@ export function parseHelper(stdout: string): HelperData | null {
     branch: str(r.branch),
     worktree: str(r.worktree),
     autopilot,
+    ledger,
     last_input: str(r.last_input),
   }
 }
@@ -89,9 +106,14 @@ export type Seg = { text: string; color?: string; dim?: boolean; bold?: boolean 
 
 const AP_LOOK: Record<string, { glyph: string; word: string; color: string }> = {
   '[r]': { glyph: '●', word: 'run', color: 'success' },
-  '[b]': { glyph: '◐', word: 'backoff', color: 'warning' },
+  '[b]': { glyph: '●', word: 'run', color: 'success' }, // backing off is still running; ⚠ carries the stuck count
   '[s]': { glyph: '○', word: 'stopped', color: 'inactive' },
   '[p]': { glyph: '⏸', word: 'paused', color: 'warning' },
+}
+
+/** A stop reason that means something went wrong (not elapsed / queue-empty / user-requested). */
+export function isFailureStop(reason: string): boolean {
+  return /fail|error|crash|abort/i.test(reason)
 }
 
 export function truncate(text: string, max: number): string {
@@ -105,12 +127,16 @@ function segFor(field: Field, snap: Snapshot, cfg: HudConfig, room: number): Seg
     case 'ap': {
       const ap = h?.autopilot
       if (!ap) return null
-      const look = AP_LOOK[ap.prefix] ?? { glyph: '·', word: ap.status, color: 'inactive' }
-      return [
+      const look = { ...(AP_LOOK[ap.prefix] ?? { glyph: '·', word: ap.status, color: 'inactive' }) }
+      if (ap.prefix === '[s]' && isFailureStop(ap.stop_reason)) look.color = 'error'
+      const segs: Seg[] = [
         { text: 'AP ', bold: true },
         { text: `${look.glyph} ${look.word} `, color: look.color },
-        { text: `${ap.elapsed_hr}/${ap.requested_hr}h  stuck ${ap.stuck}/${ap.cycle}` },
+        { text: `${ap.elapsed_hr}/${ap.requested_hr}h ` },
       ]
+      if (ap.stuck > 0) segs.push({ text: `⚠${ap.stuck} `, color: 'error' })
+      segs.push({ text: `loops ${ap.cycle} ` }, { text: `✓${ap.merged}`, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
+      return segs
     }
     case 'ctx': {
       if (snap.ctxLeft === null) return null
@@ -127,14 +153,23 @@ function segFor(field: Field, snap: Snapshot, cfg: HudConfig, room: number): Seg
       if (!h.task_id) return [{ text: 'no claimed task', dim: true }]
       return [{ text: truncate(`${h.task_id} ${h.task_title}`.trim(), room) }]
     }
-    case 'jobs':
-      return [
-        {
-          text: `jobs ${snap.jobs.running}▶ ${snap.jobs.waiting}⏸ ${snap.jobs.failed}✗`,
-          color: snap.jobs.failed > 0 ? 'error' : undefined,
-          dim: snap.jobs.running + snap.jobs.waiting + snap.jobs.failed === 0,
-        },
+    case 'jobs': {
+      const l = h?.ledger
+      if (!l) return [{ text: 'jobs —', dim: true }]
+      const run = l.running.length
+      const segs: Seg[] = [
+        { text: 'jobs run ' },
+        { text: `${run}`, color: run > 0 ? 'success' : undefined },
+        { text: ` · total ${l.lifetime_jobs} · parked ` },
+        { text: `${l.parked}`, color: l.parked > 0 ? 'warning' : undefined },
       ]
+      // Wide layout only (room is columns - 60): show what is running.
+      if (run > 0 && room >= 40) {
+        const names = l.running.map(j => `r${j.job}${j.title ? ' ' + j.title : ''}`).join(', ')
+        segs.push({ text: ` (${truncate(names, room - 10)})`, dim: true })
+      }
+      return segs
+    }
     case 'rate':
       return snap.rateUsed === null ? null : [{ text: `5h ${Math.round(snap.rateUsed)}%` }]
     case 'cost':

@@ -103,7 +103,7 @@ sl-iso-to-epoch() {
 # $1 repo_root -> one record (fields joined by the ASCII unit separator, 0x1f,
 # so an empty field survives `read`):
 #   <status> <prefix> <elapsed_hr> <requested_hr> <stuck> <cycle> <last_outcome>
-#   <last_task_id> <stuck_reason> <stop_reason>
+#   <last_task_id> <stuck_reason> <stop_reason> <merged_count>
 # when /autopilot's dev/.autopilot-state.json exists and status is "running",
 # "paused" or "stopped", else nothing. prefix: [r] running normally, [p] paused
 # (clock frozen at paused_at), [b] running but
@@ -120,11 +120,11 @@ sl-autopilot-fields() {
 
   # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
-  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .stop_reason] | map(. // "" | tostring) | join("\u001f")' \
+  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .stop_reason, .merged_count] | map(. // "" | tostring) | join("\u001f")' \
     "$state_file" 2>/dev/null) || return 0
 
-  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason
-  IFS=$'\x1f' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason <<<"$line"
+  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason merged_count
+  IFS=$'\x1f' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason merged_count <<<"$line"
   case "$ap_status" in running|paused|stopped) ;; *) return 0 ;; esac
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
@@ -132,6 +132,8 @@ sl-autopilot-fields() {
   # garbled segment (e.g. "ap:[r] 2/5hr /" or "ap:[r] 2/5hr abc/3").
   [[ "$stuck_count" =~ ^[0-9]+$ ]] || return 0
   [[ "$cycle_count" =~ ^[0-9]+$ ]] || return 0
+  # merged_count is newer than the state file format: missing/invalid means 0.
+  [[ "$merged_count" =~ ^[0-9]+$ ]] || merged_count=0
 
   local started_epoch end_epoch now_epoch
   started_epoch=$(sl-iso-to-epoch "$started_at")
@@ -177,19 +179,50 @@ sl-autopilot-fields() {
   elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
   requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
 
-  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}${requested_hr}${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${stop_reason}"
+  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}${requested_hr}${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${stop_reason}${sep}${merged_count}"
 }
 
-# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr <stuck>/<cycle>"
-# (the text statusline segment), or nothing; rendered from sl-autopilot-fields.
+# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr [⚠<stuck>] loops <cycle> ✓<merged>"
+# (the text statusline segment; ⚠ only when stuck > 0), or nothing; rendered
+# from sl-autopilot-fields.
 sl-autopilot-part() {
-  local rec ap_status prefix elapsed_hr requested_hr stuck cycle _rest
+  local rec ap_status prefix elapsed_hr requested_hr stuck cycle last_outcome last_task stuck_reason stop_reason merged
   rec=$(sl-autopilot-fields "$1")
   [ -n "$rec" ] || return 0
-  IFS=$'\x1f' read -r ap_status prefix elapsed_hr requested_hr stuck cycle _rest <<<"$rec"
+  IFS=$'\x1f' read -r ap_status prefix elapsed_hr requested_hr stuck cycle last_outcome last_task stuck_reason stop_reason merged <<<"$rec"
   # The text statusline has never shown a paused run; keep it that way.
   [ "$ap_status" = "paused" ] && return 0
-  printf 'ap:%s %s/%shr %s/%s' "$prefix" "$elapsed_hr" "$requested_hr" "$stuck" "$cycle"
+  local warn=""
+  [ "$stuck" -gt 0 ] && warn=" ⚠${stuck}"
+  printf 'ap:%s %s/%shr%s loops %s ✓%s' "$prefix" "$elapsed_hr" "$requested_hr" "$warn" "$cycle" "${merged:-0}"
+}
+
+# Job ledger (written by ledger.sh). Same default path convention as the other
+# state files: CLAUDE_CONFIG_DIR, else ~/.claude. CCXP_LEDGER_FILE overrides.
+sl-ledger-file() {
+  printf '%s' "${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/ccxp-ledger.json}"
+}
+
+# -> one normalized compact JSON object, or nothing when the ledger is
+# missing/unreadable/not an object (callers hide the section or show a dash).
+sl-ledger-json() {
+  local f; f=$(sl-ledger-file)
+  [ -f "$f" ] || return 0
+  jq -c 'select(type == "object") | {
+      updated_at: (.updated_at | strings // ""),
+      next_job: (.next_job | numbers // 0),
+      lifetime_jobs: (.lifetime_jobs | numbers // 0),
+      parked: (.parked | numbers // 0),
+      parked_ids: [(.parked_ids // [])[] | strings],
+      running: [(.running // [])[] | select(type == "object")
+                | {job: (.job | numbers // 0), title: (.title | strings // "")}]}' "$f" 2>/dev/null || true
+}
+
+# -> "jobs run <R> · total <L> · parked <P>", or nothing without a ledger.
+sl-ledger-part() {
+  local j; j=$(sl-ledger-json)
+  [ -n "$j" ] || return 0
+  jq -r '"jobs run \(.running | length) · total \(.lifetime_jobs) · parked \(.parked)"' <<<"$j" 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> "last: <cached text>", or
@@ -270,6 +303,7 @@ statusline-command() {
     task_part="no claimed task"
   fi
   last_input_part=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
+  local jobs_part; jobs_part=$(sl-ledger-part)
 
   # The hud band already shows autopilot, task and last input: keep only the
   # always-useful ctx | branch while it is live.
@@ -278,7 +312,7 @@ statusline-command() {
     return 0
   fi
 
-  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$last_input_part"
+  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$jobs_part" "$last_input_part"
 }
 
 # Run only when executed directly (not when sourced), matching the

@@ -15,6 +15,7 @@ setup() {
   # The machine-id/secret cache lives under ~/.claude/state by default; tests
   # must neither read the developer's real identity nor write to their home.
   isolate_claimant_state
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   # Same isolation for the last-user-input cache (T20260924-366770).
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
 }
@@ -365,7 +366,7 @@ EOF
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap:[s] 2/5hr 1/3" ]
+  [ "$output" = "ap:[s] 2/5hr ⚠1 loops 3 ✓0" ]
 }
 
 @test "sl-autopilot-part prints ap:[s] with elapsed 0 when stopped and last_cycle_at is null" {
@@ -377,10 +378,10 @@ EOF
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap:[s] 0/5hr 0/0" ]
+  [ "$output" = "ap:[s] 0/5hr loops 0 ✓0" ]
 }
 
-@test "sl-autopilot-part prints ap:[r] <elapsed>/<requested>hr <stuck>/<cycle> when running normally" {
+@test "sl-autopilot-part prints ap:[r] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged> when running normally" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-running)
   mkdir -p "$repo/dev"
@@ -394,7 +395,7 @@ EOF
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap:[r] 2/5hr 3/10" ]
+  [ "$output" = "ap:[r] 2/5hr ⚠3 loops 10 ✓0" ]
 }
 
 @test "sl-autopilot-part prints ap:[b] when running and last_outcome is stuck" {
@@ -408,7 +409,7 @@ EOF
 EOF
   run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap:[b] 2/5hr 2/4" ]
+  [ "$output" = "ap:[b] 2/5hr ⚠2 loops 4 ✓0" ]
 }
 
 @test "sl-autopilot-part prints nothing when the JSON is malformed" {
@@ -449,7 +450,7 @@ EOF
   branch=$(git -C "$repo" symbolic-ref --short HEAD)
   run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
   [ "$status" -eq 0 ]
-  [ "$output" = "ap:[r] 2/5hr 3/10 | ctx: 42% left | branch: $branch | no claimed task" ]
+  [ "$output" = "ap:[r] 2/5hr ⚠3 loops 10 ✓0 | ctx: 42% left | branch: $branch | no claimed task" ]
 }
 
 @test "statusline-command output is unchanged when autopilot state file is absent" {

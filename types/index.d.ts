@@ -27,6 +27,17 @@ export type Autopilot = {
   last_task: string
   stuck_reason: string
   stop_reason: string
+  /** Tasks merged this run; 0 for state files written before the field existed. */
+  merged: number
+}
+
+export type Ledger = {
+  running: { job: number; title: string }[]
+  lifetime_jobs: number
+  parked: number
+  parked_ids: string[]
+  next_job: number
+  updated_at: string
 }
 
 export type HelperData = {
@@ -35,6 +46,8 @@ export type HelperData = {
   branch: string
   worktree: string
   autopilot: Autopilot | null
+  /** Job ledger (statusline-setup/scripts/ledger.sh), null when there is none. */
+  ledger: Ledger | null
   last_input: string
 }
 

@@ -9,7 +9,9 @@
 #   {"task_id","task_title","branch","worktree",
 #    "autopilot": null | {"status","prefix","elapsed_hr","requested_hr",
 #                         "stuck","cycle","last_outcome","last_task",
-#                         "stuck_reason","stop_reason"},
+#                         "stuck_reason","stop_reason","merged"},
+#    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked",
+#                      "parked_ids","next_job","updated_at"},   # ledger.sh file
 #    "last_input": ""}          # only filled with --with-last-input (opt-in)
 #
 # Never exits non-zero: any failure prints "{}" so the mod keeps its last good
@@ -50,6 +52,9 @@ hud-data() {
   if [ -n "$gd" ] && [ -n "$cd_" ] && [ "$gd" != "$cd_" ]; then worktree=$(basename "$repo_root"); fi
   rec=$(sl-autopilot-fields "$repo_root")
 
+  local ledger; ledger=$(sl-ledger-json)
+  [ -n "$ledger" ] || ledger="null"
+
   local last_input=""
   if [ "$with_last_input" = 1 ]; then
     last_input=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
@@ -58,7 +63,7 @@ hud-data() {
 
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
-    --arg branch "$branch" --arg worktree "$worktree" --arg rec "$rec" --arg last_input "$last_input" '
+    --arg branch "$branch" --arg worktree "$worktree" --arg rec "$rec" --arg last_input "$last_input" --argjson ledger "$ledger" '
     ($rec | split("\u001f")) as $f
     | {task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        autopilot: (if $rec == "" then null else {
@@ -66,7 +71,8 @@ hud-data() {
          elapsed_hr: ($f[2] | tonumber), requested_hr: ($f[3] | tonumber),
          stuck: ($f[4] | tonumber), cycle: ($f[5] | tonumber),
          last_outcome: $f[6], last_task: $f[7],
-         stuck_reason: $f[8], stop_reason: $f[9]} end),
+         stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0)} end),
+       ledger: $ledger,
        last_input: $last_input}'
 }
 

@@ -2,8 +2,8 @@
 
 A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by default**.
 
-- **Prompt rows**: your own prompts get a colored left bar (`quote` border); the agent's replies, task notifications and peer messages are left alone.
-- **Status band** above the prompt: autopilot state, context left, branch, claimed task, running jobs. The existing `statusLine.command` keeps working and shrinks to `ctx | branch` while the band is live.
+- **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
+- **Status band** above the prompt: autopilot state, context left, branch, claimed task, job ledger. The existing `statusLine.command` keeps working and shrinks to `ctx | branch` while the band is live.
 - **`/hud`**: `on`, `off`, `status`, `pane`.
 
 ## Turn it off (without uninstalling ccxp-skills)
@@ -26,6 +26,11 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `fields` | `ap,ctx,branch,task,jobs` | also `rate`, `cost`, `last` (the last prompt; opt-in) |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
+
+## Jobs and autopilot segments
+
+- `jobs run <R> · total <L> · parked <P>` from the job ledger (`statusline-setup/scripts/ledger.sh`, default `~/.claude/ccxp-ledger.json`, override `CCXP_LEDGER_FILE`). Run is green when above 0, parked yellow when above 0; running titles show on wide layouts; no ledger shows a dim `jobs —`.
+- `AP <status> <elapsed>/<requested>h [⚠stuck] loops <cycles> ✓<merged>` from `dev/.autopilot-state.json`: running green, paused yellow, stopped grey (red for a failure-type stop reason), `⚠` red only when stuck, `✓` green. A missing `merged_count` counts as 0.
 
 ## Notes
 

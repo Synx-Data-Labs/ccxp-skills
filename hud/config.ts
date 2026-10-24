@@ -6,6 +6,8 @@ import type { Field, HudConfig } from '../types'
 export type { Field, HudConfig }
 
 export const ALL_FIELDS: readonly Field[] = ['ap', 'ctx', 'branch', 'task', 'jobs', 'rate', 'cost', 'last']
+/** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
+export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']
 
 export const DEFAULTS: HudConfig = {
