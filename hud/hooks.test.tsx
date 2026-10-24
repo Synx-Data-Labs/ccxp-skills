@@ -1,11 +1,14 @@
 import { expect, test } from 'claude-code/testing'
 
+import { USER_TEXT_COLOR } from './config'
+
 const HELPER = JSON.stringify({
   task_id: 'T20261021-354035',
   task_title: 'Decouple',
   branch: 'main',
   worktree: '',
   autopilot: null,
+  ledger: { running: [{ job: 230, title: 'x' }], lifetime_jobs: 230, parked: 2, parked_ids: ['k1', 'k2'], next_job: 231, updated_at: '' },
   last_input: '',
 })
 
@@ -88,6 +91,7 @@ test('default (no config file): a composer row is wrapped, a task-notification r
   const mine = await $.ui.mount(USER('composer'))
   expect(await drawsEngine(mine)).toBe(false)
   expect(await mine.find({ type: 'Text', text: /engine/ })).toBeDefined()
+  expect(await mine.find({ type: 'Text', color: USER_TEXT_COLOR })).toBeDefined()
   await mine.unmount()
   const note = await $.ui.mount(USER('task-notification'))
   expect(await drawsEngine(note)).toBe(true)
@@ -176,7 +180,7 @@ test('the band shows helper data once the session started, and the helper gets a
   await $.session.start(START)
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /T20261021-354035 Decouple/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /jobs 1▶ 0⏸ 1✗/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /total 230 · parked / })).toBeDefined()
   await band.unmount()
   expect(w.runs.length).toBeGreaterThan(0)
   for (const argv of w.runs) {

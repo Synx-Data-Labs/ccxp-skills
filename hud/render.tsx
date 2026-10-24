@@ -2,20 +2,20 @@
 // passed in, so these stay free of `$` and the tests can drive them.
 
 import type { HudConfig, Snapshot } from '../types'
-import { borderOf } from './config'
+import { USER_TEXT_COLOR, borderOf } from './config'
 import { bandRows } from './model'
 
 /** The prompt row wrapped in the configured frame; `inner` is the engine's own drawing. */
 export function userMessageTree(
-  ui: { Box: any },
+  ui: { Box: any; Text: any },
   cfg: HudConfig,
   inner: unknown,
 ) {
-  const { Box } = ui
+  const { Box, Text } = ui
   const border = borderOf(cfg)
   return (
     <Box borderStyle={border} borderColor={cfg.userColor} paddingX={border ? 1 : 0}>
-      {inner}
+      <Text color={USER_TEXT_COLOR}>{inner}</Text>
     </Box>
   )
 }
@@ -52,13 +52,15 @@ export function paneTree(ui: { Box: any; Text: any }, snap: Snapshot, cfg: HudCo
   const lines: string[] = [
     `enabled: ${cfg.enabled}   band: ${cfg.band}   userMessage: ${cfg.userMessage}`,
     ap
-      ? `autopilot ${ap.status} ${ap.prefix}  ${ap.elapsed_hr}/${ap.requested_hr}h  stuck ${ap.stuck}/${ap.cycle}`
+      ? `autopilot ${ap.status} ${ap.prefix}  ${ap.elapsed_hr}/${ap.requested_hr}h  ${ap.stuck > 0 ? `⚠${ap.stuck} ` : ''}loops ${ap.cycle} ✓${ap.merged}`
       : 'autopilot: not running',
   ]
   if (ap?.last_task) lines.push(`last task: ${ap.last_task}`)
   if (ap?.stuck_reason) lines.push(`last stuck reason: ${ap.stuck_reason}`)
   if (ap?.stop_reason) lines.push(`stop reason: ${ap.stop_reason}`)
-  lines.push(`jobs: ${snap.jobs.running} running, ${snap.jobs.waiting} waiting, ${snap.jobs.failed} failed`)
+  const led = snap.helper?.ledger
+  lines.push(led ? `jobs: run ${led.running.length} · total ${led.lifetime_jobs} · parked ${led.parked}${led.parked_ids.length ? ` (${led.parked_ids.join(' ')})` : ''}` : 'jobs: no ledger')
+  lines.push(`agents: ${snap.jobs.running} running, ${snap.jobs.waiting} waiting, ${snap.jobs.failed} failed`)
   if (snap.ctxLeft !== null) lines.push(`context left: ${Math.round(snap.ctxLeft)}%`)
   if (snap.stale) lines.push('data is stale (the helper failed or timed out)')
   return (

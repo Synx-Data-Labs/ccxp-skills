@@ -9,6 +9,7 @@ SCRIPT="$REPO_ROOT/statusline-setup/scripts/statusline-command.sh"
 
 setup() {
   isolate_claimant_state
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
   export HUD_ACTIVE_DIR="$BATS_TEST_TMPDIR/hud-active"
 }
@@ -222,4 +223,29 @@ _line() { # $1 repo
 @test "a path-like session id never reads outside the heartbeat dir" {
   run bash -c "source '$SCRIPT'; sl-hud-active '$HUD_ACTIVE_DIR' '../x'"
   [ "$status" -ne 0 ]
+}
+
+@test "--json: merged_count is surfaced, a missing one is 0, ledger is null without a file" {
+  local repo; repo=$(_make_repo r-merged)
+  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4,\"merged_count\":3}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.merged <<<"$output")" = "3" ]
+  [ "$(jq -r .ledger <<<"$output")" = "null" ]
+  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.merged <<<"$output")" = "0" ]
+}
+
+@test "--json: ledger written by ledger.sh is passed through; corrupt ledger is null" {
+  local repo; repo=$(_make_repo r-ledger)
+  bash "$REPO_ROOT/statusline-setup/scripts/ledger.sh" start 230 "do it"
+  bash "$REPO_ROOT/statusline-setup/scripts/ledger.sh" park k5
+  run _hud "$repo" --json
+  [ "$(jq -r .ledger.lifetime_jobs <<<"$output")" = "230" ]
+  [ "$(jq -r '.ledger.running[0].title' <<<"$output")" = "do it" ]
+  [ "$(jq -r .ledger.parked <<<"$output")" = "1" ]
+  echo 'garbage' > "$CCXP_LEDGER_FILE"
+  run _hud "$repo" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .ledger <<<"$output")" = "null" ]
 }

@@ -8,7 +8,8 @@ const HELPER = JSON.stringify({
   task_title: 'Decouple the nightly orchestrator',
   branch: 't20261021-354035-decouple',
   worktree: '',
-  autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '' },
+  autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2 },
+  ledger: { running: [{ job: 230, title: 'fix hud' }], lifetime_jobs: 230, parked: 3, parked_ids: ['k1', 'k2', 'k3'], next_job: 231, updated_at: '' },
   last_input: '',
 })
 
@@ -96,7 +97,9 @@ test('band: one row at 140 columns, two at 80, with every default field', async 
     expect(t).toContain('ctx 64%')
     expect(t).toContain('t20261021-354035-decouple')
     expect(t).toContain('T20261021-354035')
-    expect(t).toContain('jobs 0▶')
+    expect(t).toContain('jobs run 1 · total 230 · parked 3')
+    expect(t).toContain('loops 3 ✓2')
+    expect(t).not.toContain('stuck')
   }
 })
 
@@ -113,10 +116,28 @@ test('band: a stale snapshot carries the stale tag; the task title is truncated 
 
 test('band: autopilot looks per state; unclaimed shows "no claimed task"', async () => {
   const mk = (prefix: string, status: string) => snap({ helper: { ...parseHelper(HELPER)!, task_id: '', autopilot: { ...parseHelper(HELPER)!.autopilot!, prefix, status } } })
-  expect(text(bandRows(mk('[b]', 'running'), DEFAULTS, 140))).toContain('backoff')
+  expect(text(bandRows(mk('[b]', 'running'), DEFAULTS, 140))).toContain('run')
   expect(text(bandRows(mk('[s]', 'stopped'), DEFAULTS, 140))).toContain('stopped')
   expect(text(bandRows(mk('[p]', 'paused'), DEFAULTS, 140))).toContain('paused')
   expect(text(bandRows(mk('[r]', 'running'), DEFAULTS, 140))).toContain('no claimed task')
+})
+
+test('band: jobs without a ledger is a dim dash; AP colours and stuck marker', async () => {
+  const h = parseHelper(HELPER)!
+  const noLedger = bandRows(snap({ helper: { ...h, ledger: null } }), { ...DEFAULTS, fields: ['jobs'] }, 140)
+  expect(text(noLedger)).toBe('jobs —')
+  expect(noLedger[0][0].dim).toBe(true)
+  const wide = bandRows(snap(), { ...DEFAULTS, fields: ['jobs'] }, 140)
+  expect(text(wide)).toContain('r230 fix hud')
+  expect(wide[0].find(s => s.text === '3')?.color).toBe('warning')
+  expect(wide[0].find(s => s.text === '1')?.color).toBe('success')
+  const ap = (over: object) => bandRows(snap({ helper: { ...h, autopilot: { ...h.autopilot!, ...over } } }), { ...DEFAULTS, fields: ['ap'] }, 140)[0]
+  expect(ap({ stuck: 2 }).find(s => s.text === '⚠2 ')?.color).toBe('error')
+  expect(ap({}).some(s => s.text.startsWith('⚠'))).toBe(false)
+  expect(ap({ prefix: '[p]', status: 'paused' }).find(s => s.text.includes('paused'))?.color).toBe('warning')
+  expect(ap({ prefix: '[s]', status: 'stopped', stop_reason: 'elapsed' }).find(s => s.text.includes('stopped'))?.color).toBe('inactive')
+  expect(ap({ prefix: '[s]', status: 'stopped', stop_reason: 'dispatch failed' }).find(s => s.text.includes('stopped'))?.color).toBe('error')
+  expect(parseHelper('{"branch":"m","autopilot":{"status":"running"}}')?.autopilot?.merged).toBe(0)
 })
 
 test('compactLine is one plain line within the 2,000 character limit', async () => {
