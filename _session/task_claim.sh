@@ -519,7 +519,7 @@ _tc_is_legacy_self_claim() {
 
 # "ccxp" | "interactive" for THIS clone. Written alongside claimed_by because
 # the claimant id's path half is now a hash: attribution used to recover the
-# clone path from claimed_by and test it against ATTRIBUTION_CCXP_PATHS, which a
+# clone path from claimed_by and test it against ATTRIBUTION_CRONTAB_CCXP_PATHS, which a
 # hash makes impossible (T20260911-698434). A coarse role token is all
 # attribution ever consumed, carries no PII, and — unlike a path hash — stays
 # comparable from another machine at standup time.
@@ -530,7 +530,7 @@ _tc_is_legacy_self_claim() {
 _tc_claimed_role() {
   local path="${1:-}" list p
   [ -n "$path" ] || path="$(claimant_clone_path)"
-  list="${ATTRIBUTION_CCXP_PATHS:-}"
+  list="${ATTRIBUTION_CRONTAB_CCXP_PATHS:-${ATTRIBUTION_CCXP_PATHS:-}}"
   if [ -z "$list" ]; then
     if [ -n "${ENV_FILE:-}" ]; then
       # shellcheck disable=SC1090
@@ -539,7 +539,7 @@ _tc_claimed_role() {
       # shellcheck disable=SC1090
       source "$HOME/.claude/.env"
     fi
-    list="${ATTRIBUTION_CCXP_PATHS:-}"
+    list="${ATTRIBUTION_CRONTAB_CCXP_PATHS:-${ATTRIBUTION_CCXP_PATHS:-}}"
   fi
   local IFS=':'
   for p in $list; do

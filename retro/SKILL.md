@@ -21,7 +21,7 @@ Improve the engineering process and product quality over time through structured
 
 Optional env vars (no adopting-team default baked in — read `~/.claude/.env` before running this skill; see README Prerequisites). Every one degrades gracefully when unset, including in an unattended cron run — never block the retro:
 
-- `RETRO_SLACK_CHANNEL` — the channel Phase 6's summary posts to. If unset: in an interactive session, ask the user which channel to use; in an unattended run, skip Phase 6 and report "no RETRO_SLACK_CHANNEL configured" instead of the summary.
+- `CCXP_SLACK_CHANNEL` — the shared daily-ccxp Slack channel (e.g. `#claude-notification`); Phase 6's summary posts here. `RETRO_SLACK_CHANNEL`, if set, is an optional override that wins. If neither is set: in an interactive session, ask the user which channel to use; in an unattended run, skip Phase 6 and report "no CCXP_SLACK_CHANNEL configured" instead of the summary.
 - `METRICS_OWNER` — the org/owner whose repos' `dev/quality/metrics.jsonl` Phase 4d reads. If unset, skip Phase 4d Step 1 entirely and report "no scoreboard reachable" the same way an unreachable individual repo already does.
 - `METRICS_REPOS` — space-separated `<repo>` list (under `METRICS_OWNER`) running the quality probe. If unset or empty, same graceful skip as above. Extend as more repos adopt the probe.
 
@@ -586,7 +586,7 @@ Creation safety-net — process-looking docs with no matching `dev/chore.md` row
 
 ### Phase 6: Notify
 
-Send a Slack summary to `RETRO_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`.
+Send a Slack summary to `RETRO_SLACK_CHANNEL` if set, else `CCXP_SLACK_CHANNEL` (see Configuration above) via MCP `slack_send_message`.
 
 - **Webhook fallback on MCP send failure (same pattern as `ccxp/SKILL.md` Phase 1.4 / `ipm/SKILL.md` step 6).** This is a weekly, unconditional send — same shape as the daily standup and Monday IPM sends, which already carry this fallback; Phase 6 previously didn't, and a 2026-09-11 retro's summary silently never posted as a result.
 - Don't let a failed send silently drop the week's retro from Slack:
