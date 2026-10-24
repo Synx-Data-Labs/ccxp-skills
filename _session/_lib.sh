@@ -40,7 +40,7 @@ PROJECT_NUMBER="${PROJECT_NUMBER:-}"
 
 # Load PROJECT_OWNER/PROJECT_NUMBER from ~/.claude/.env (machine-global) when
 # not already exported — same resolution order and ENV_FILE test seam as
-# slack/scripts/slack-send.sh and vpn/scripts/vpn.sh's load_vpn_env. Skipped
+# slack/scripts/slack-send.sh and the synx-skills:vpn skill's load_vpn_env. Skipped
 # in BATS (unless ENV_FILE points at a fixture) to keep tests hermetic.
 _session_load_env() {
   [ -n "$PROJECT_OWNER" ] && return 0

@@ -55,7 +55,7 @@ default**. The search follows this order, first hit wins:
 
 1. Already-exported env var
 2. `~/.claude/.env` (machine-global, same convention as `SLACK_WEBHOOK_URL`
-   — see `slack/SKILL.md`'s Prerequisites, `vpn/scripts/vpn.sh`'s
+   — see `slack/SKILL.md`'s Prerequisites, the `synx-skills:vpn` skill's
    `load_vpn_env`, `_session/_lib.sh`'s `_session_load_env`)
 
 ```
