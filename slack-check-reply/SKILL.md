@@ -47,9 +47,11 @@ Create the directory and file if they don't exist (`mkdir -p .claude/state`).
 
 ## Prerequisites
 
-`SLACK_STANDUP_CHANNEL` — the channel the daily standup summary (and
-escalation threads) are posted to, e.g. `acme-dev-notifications` (no leading
-`#`; the queries below add it). Required for the standup-thread check
+`CCXP_SLACK_CHANNEL` — the one channel every daily-ccxp Slack use targets
+(standup summary and escalation threads), e.g. `claude-notification` (no
+leading `#`; the queries below add it). `SLACK_STANDUP_CHANNEL` is an
+optional legacy override: when set it wins, otherwise `CCXP_SLACK_CHANNEL`
+is used. Below, `$SLACK_STANDUP_CHANNEL` means that resolved value. Required for the standup-thread check
 (step 1a) and its search fallback (step 4); there is **no baked-in
 default**. The search follows this order, first hit wins:
 
@@ -59,7 +61,7 @@ default**. The search follows this order, first hit wins:
    `load_vpn_env`, `_session/_lib.sh`'s `_session_load_env`)
 
 ```
-SLACK_STANDUP_CHANNEL=acme-dev-notifications
+CCXP_SLACK_CHANNEL=claude-notification
 ```
 
 If unset, the standup-thread search (step 1a) is skipped with a one-line
@@ -76,7 +78,7 @@ stale channel_id either — normal escalation-thread reads (using the
 
 1a. **Resolve the latest daily standup thread** (run for `all`, empty, and `standup`):
 
-- If `SLACK_STANDUP_CHANNEL` is not configured (see Prerequisites), skip this
+- If neither `SLACK_STANDUP_CHANNEL` nor `CCXP_SLACK_CHANNEL` is configured (see Prerequisites), skip this
   step entirely and report: "no standup channel configured — skipping
   standup-thread check, escalation threads only." Continue with the
   escalation threads (for `standup`, there is then nothing to check).

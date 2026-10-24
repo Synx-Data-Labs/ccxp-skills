@@ -51,8 +51,14 @@ shares:
     (uppercased). See `slack/SKILL.md`. `SLACK_WEBHOOK_URL_DEV` is also what
     `/ccxp`, `/retro` and `/ipm` post through when the Slack MCP tool is
     unavailable (headless cron); a failed post is logged, never silent.
-  - `SLACK_STANDUP_CHANNEL` — channel `slack-check-reply` polls for standup
-    replies. Unset degrades to a one-line skip note.
+  - `CCXP_SLACK_CHANNEL` — the one channel every daily-ccxp Slack use
+    targets (e.g. `#claude-notification`): `slack-check-reply` standup
+    polling, the `ccxp` standup, and `retro` Phase 6. Unset degrades to a
+    one-line skip note (or an interactive prompt for `retro`). Optional
+    per-use overrides, which win when set: `SLACK_STANDUP_CHANNEL`
+    (standup / `slack-check-reply`) and `RETRO_SLACK_CHANNEL` (`retro`).
+    The webhook fallback (`slack-fallback.sh`) still routes through
+    `SLACK_WEBHOOK_URL_DEV`, which is bound to its own channel.
   - `SLACK_BOT_TOKEN` / `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` — bot-token
     Slack Web API access (`_slack/webapi.sh`, no MCP), currently used by
     `ccxp`'s 1.2.2a RCA-in-thread reply (`labrun-rca`/`slack-check-reply`
@@ -69,13 +75,12 @@ shares:
   - `SESSION_TOKEN` / `PROJECT_PAT` / `GH_TOKEN` — one of these must carry a
     token with org-level `Projects: Read and write` for the Project-board
     mirror above to work.
-  - `ATTRIBUTION_CCXP_PATHS` — colon-separated clone path(s) treated as
-    autonomous/ccxp (vs. interactive) for the daily standup's attribution
-    table. Unset means every location classifies as interactive — cosmetic
-    only, never a functional failure.
-  - `RETRO_SLACK_CHANNEL` — channel `retro` Phase 6 posts its weekly summary
-    to. Unset means the skill asks which channel to use interactively, or
-    skips Phase 6 in an unattended run.
+  - `ATTRIBUTION_CRONTAB_CCXP_PATHS` — colon-separated clone path(s) treated as
+    the automation/cron (ccxp) clones (vs. interactive) for the daily
+    standup's attribution table. Unset means every location classifies as
+    interactive — cosmetic only, never a functional failure. Deprecated:
+    the old name `ATTRIBUTION_CCXP_PATHS` is still read as a fallback (the
+    new name wins).
   - `METRICS_OWNER` / `METRICS_REPOS` — the org + space-separated repo list
     `retro` Phase 4d reads `dev/quality/metrics.jsonl` scoreboards from.
     Unset/empty means Phase 4d reports "no scoreboard reachable" and skips.

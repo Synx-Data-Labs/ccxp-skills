@@ -414,7 +414,7 @@ bash <skills-root>/_session/attribution.sh table "$(pwd)/dev"
 - **Completed-task attribution** recovers the last non-empty `claimed_by` from git
   history, because `task_claim.sh` clears it at close (so a JOURNAL stub's live
   frontmatter is empty). In-flight (`dev/TODO`) tasks use the current claim.
-- **Classification** keys on `ATTRIBUTION_CCXP_PATHS` (colon-separated clone
+- **Classification** keys on `ATTRIBUTION_CRONTAB_CCXP_PATHS` (colon-separated clone
   paths) — required config, no baked-in default; set it in
   `~/.claude/.env` to the cron clone the `dev/daily-ccxp.sh` working tree runs
   from (see README Prerequisites). Add another autonomous box's clone path to

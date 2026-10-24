@@ -12,7 +12,7 @@ setup() {
   # Sourcing is side-effect-free (CLI is under the direct-exec guard).
   source "$REPO_ROOT/_session/attribution.sh"
   # Deterministic classification default for the unit tests.
-  export ATTRIBUTION_CCXP_PATHS="/home/ci/focus/some-repo"
+  export ATTRIBUTION_CRONTAB_CCXP_PATHS="/home/ci/focus/some-repo"
 }
 
 # Write a task file with the given frontmatter status + claimed_by, plus decoy
@@ -54,7 +54,7 @@ _mk_git_dev() {
 
 # --- classify (pure, no I/O) ------------------------------------------------
 
-@test "classify: a path in ATTRIBUTION_CCXP_PATHS is ccxp" {
+@test "classify: a path in ATTRIBUTION_CRONTAB_CCXP_PATHS is ccxp" {
   [ "$(attribution_classify 'cdw:/home/ci/focus/some-repo')" = "ccxp" ]
 }
 
@@ -77,7 +77,7 @@ _mk_git_dev() {
   # Completed-task attribution recovers claimed_by from git history, which
   # keeps the old <host>:<path> form forever. Every historical retro must keep
   # attributing correctly without a claimed_role field existing back then.
-  ATTRIBUTION_CCXP_PATHS='/home/ci/focus/some-repo'
+  ATTRIBUTION_CRONTAB_CCXP_PATHS='/home/ci/focus/some-repo'
   [ "$(attribution_classify 'cdw:/home/ci/focus/some-repo')" = "ccxp" ]
   [ "$(attribution_classify 'cdw:/home/someone/interactive-clone')" = "interactive" ]
 }
@@ -88,7 +88,7 @@ _mk_git_dev() {
 }
 
 @test "classify: honours a multi-path colon list and matches the path after the first colon" {
-  export ATTRIBUTION_CCXP_PATHS="/a/box:/home/ci/focus/some-repo:/c/box"
+  export ATTRIBUTION_CRONTAB_CCXP_PATHS="/a/box:/home/ci/focus/some-repo:/c/box"
   [ "$(attribution_classify 'otherhost:/c/box')" = "ccxp" ]
   [ "$(attribution_classify 'otherhost:/not/listed')" = "interactive" ]
 }
@@ -229,31 +229,52 @@ _mk_git_dev() {
 }
 
 # ============================================================================
-# ATTRIBUTION_CCXP_PATHS — no baked-in default; ~/.claude/.env resolution
+# ATTRIBUTION_CRONTAB_CCXP_PATHS — no baked-in default; ~/.claude/.env resolution
 # (T20260827-280088: removed the hardcoded /home/ci/... default so the
 # public ccxp-skills copy of this file ships with no path baked in)
 # ============================================================================
 
-@test "_attribution_load_env: no default — ATTRIBUTION_CCXP_PATHS is empty with nothing configured" {
-  # setup() exports ATTRIBUTION_CCXP_PATHS for the other tests' determinism —
+@test "_attribution_load_env: no default — ATTRIBUTION_CRONTAB_CCXP_PATHS is empty with nothing configured" {
+  # setup() exports ATTRIBUTION_CRONTAB_CCXP_PATHS for the other tests' determinism —
   # unset it for this subshell so we observe the script's own true default.
-  result=$(env -u ATTRIBUTION_CCXP_PATHS bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"[\$ATTRIBUTION_CCXP_PATHS]\"")
+  result=$(env -u ATTRIBUTION_CRONTAB_CCXP_PATHS bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"[\$ATTRIBUTION_CRONTAB_CCXP_PATHS]\"")
   [ "$result" = "[]" ]
 }
 
 @test "_attribution_load_env: ENV_FILE override wins when set" {
   envfile="$BATS_TEST_TMPDIR/custom.env"
-  echo "ATTRIBUTION_CCXP_PATHS=/custom/cron/path" > "$envfile"
-  result=$(env -u ATTRIBUTION_CCXP_PATHS ENV_FILE="$envfile" bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CCXP_PATHS\"")
+  echo "ATTRIBUTION_CRONTAB_CCXP_PATHS=/custom/cron/path" > "$envfile"
+  result=$(env -u ATTRIBUTION_CRONTAB_CCXP_PATHS ENV_FILE="$envfile" bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CRONTAB_CCXP_PATHS\"")
   [ "$result" = "/custom/cron/path" ]
 }
 
-@test "_attribution_load_env: already-exported ATTRIBUTION_CCXP_PATHS is left alone (no file needed)" {
-  result=$(ATTRIBUTION_CCXP_PATHS=/preset/path bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CCXP_PATHS\"")
+@test "_attribution_load_env: already-exported ATTRIBUTION_CRONTAB_CCXP_PATHS is left alone (no file needed)" {
+  result=$(ATTRIBUTION_CRONTAB_CCXP_PATHS=/preset/path bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CRONTAB_CCXP_PATHS\"")
   [ "$result" = "/preset/path" ]
 }
 
-@test "attribution_classify: empty ATTRIBUTION_CCXP_PATHS classifies every location as interactive" {
-  ATTRIBUTION_CCXP_PATHS=""
+@test "attribution_classify: empty ATTRIBUTION_CRONTAB_CCXP_PATHS classifies every location as interactive" {
+  ATTRIBUTION_CRONTAB_CCXP_PATHS=""
   [ "$(attribution_classify 'someone:/some/path')" = "interactive" ]
+}
+
+# ============================================================================
+# ATTRIBUTION_CRONTAB_CCXP_PATHS rename — legacy ATTRIBUTION_CCXP_PATHS fallback
+# ============================================================================
+
+@test "legacy ATTRIBUTION_CCXP_PATHS is honoured when the new name is unset" {
+  result=$(env -u ATTRIBUTION_CRONTAB_CCXP_PATHS ATTRIBUTION_CCXP_PATHS=/legacy/path bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CRONTAB_CCXP_PATHS\"; attribution_classify 'h:/legacy/path'")
+  [ "$result" = "$(printf '/legacy/path\nccxp')" ]
+}
+
+@test "new ATTRIBUTION_CRONTAB_CCXP_PATHS wins over the legacy name" {
+  result=$(ATTRIBUTION_CRONTAB_CCXP_PATHS=/new/path ATTRIBUTION_CCXP_PATHS=/legacy/path bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CRONTAB_CCXP_PATHS\"")
+  [ "$result" = "/new/path" ]
+}
+
+@test "legacy name read from ENV_FILE is honoured as a fallback" {
+  envfile="$BATS_TEST_TMPDIR/legacy.env"
+  echo "ATTRIBUTION_CCXP_PATHS=/from/file" > "$envfile"
+  result=$(env -u ATTRIBUTION_CRONTAB_CCXP_PATHS -u ATTRIBUTION_CCXP_PATHS ENV_FILE="$envfile" bash -c "source '$REPO_ROOT/_session/attribution.sh'; echo \"\$ATTRIBUTION_CRONTAB_CCXP_PATHS\"")
+  [ "$result" = "/from/file" ]
 }

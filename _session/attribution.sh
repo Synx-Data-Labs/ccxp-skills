@@ -17,9 +17,9 @@
 #
 # CLASSIFICATION — a location is labelled ccxp / interactive / unattributed:
 #   - empty location                                   -> unattributed
-#   - the location's clone-PATH ∈ ATTRIBUTION_CCXP_PATHS-> ccxp
+#   - the location's clone-PATH ∈ ATTRIBUTION_CRONTAB_CCXP_PATHS-> ccxp
 #   - any other non-empty location                     -> interactive
-# ATTRIBUTION_CCXP_PATHS is a COLON-separated list of clone PATHS (clone paths
+# ATTRIBUTION_CRONTAB_CCXP_PATHS is a COLON-separated list of clone PATHS (clone paths
 # have no ':' on Linux, so a colon list is unambiguous even though each
 # `claimed_by` value is itself `<host>:<path>` — we split that on the FIRST ':').
 # It defaults to the well-known cron clone path that `dev/daily-ccxp.sh` runs
@@ -46,25 +46,36 @@ set -uo pipefail
 # README Prerequisites). Colon-list; unset means every location classifies as
 # "interactive" (a cosmetic degrade for the standup attribution table, never
 # a functional failure — see attribution_classify below).
-: "${ATTRIBUTION_CCXP_PATHS:=}"
+: "${ATTRIBUTION_CRONTAB_CCXP_PATHS:=}"
 
-# Load ATTRIBUTION_CCXP_PATHS from ~/.claude/.env (machine-global) when not
+# Deprecated alias ATTRIBUTION_CCXP_PATHS: honoured only when the new name is
+# empty (new name wins). Applied after the env-file load, below.
+_attribution_legacy_fallback() {
+  [ -n "$ATTRIBUTION_CRONTAB_CCXP_PATHS" ] || ATTRIBUTION_CRONTAB_CCXP_PATHS="${ATTRIBUTION_CCXP_PATHS:-}"
+  return 0
+}
+
+# Load ATTRIBUTION_CRONTAB_CCXP_PATHS from ~/.claude/.env (machine-global) when not
 # already exported — same resolution order and ENV_FILE test seam as
 # slack/scripts/slack-send.sh, the synx-skills:vpn skill, and _session/_lib.sh.
 # Skipped in BATS (unless ENV_FILE points at a fixture) to keep tests hermetic.
 _attribution_load_env() {
-  [ -n "$ATTRIBUTION_CCXP_PATHS" ] && return 0
+  _attribution_legacy_fallback
+  [ -n "$ATTRIBUTION_CRONTAB_CCXP_PATHS" ] && return 0
   if [ -n "${ENV_FILE:-}" ]; then
     [ -f "$ENV_FILE" ] && { # shellcheck disable=SC1090
       source "$ENV_FILE"; }
-    return 0
+  elif [ -z "${BATS_TEST_TMPDIR:-}" ] && [ -f "$HOME/.claude/.env" ]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.claude/.env"
   fi
-  [ -n "${BATS_TEST_TMPDIR:-}" ] && return 0
-  [ -f "$HOME/.claude/.env" ] && { # shellcheck disable=SC1090
-    source "$HOME/.claude/.env"; }
+  # the env file may set either name (new wins)
+  ATTRIBUTION_CRONTAB_CCXP_PATHS="${ATTRIBUTION_CRONTAB_CCXP_PATHS:-}"
+  _attribution_legacy_fallback
+  return 0
 }
 _attribution_load_env
-: "${ATTRIBUTION_CCXP_PATHS:=}"
+: "${ATTRIBUTION_CRONTAB_CCXP_PATHS:=}"
 
 # --- frontmatter read (mirrors task_claim.sh:_tc_fm_get; that one is _-private) -
 
@@ -132,7 +143,7 @@ attribution_classify() {
     *)   path="$loc" ;;
   esac
   local IFS=':'
-  for p in $ATTRIBUTION_CCXP_PATHS; do
+  for p in $ATTRIBUTION_CRONTAB_CCXP_PATHS; do
     [ -n "$p" ] || continue
     if [ "$path" = "$p" ]; then printf 'ccxp'; return 0; fi
   done
