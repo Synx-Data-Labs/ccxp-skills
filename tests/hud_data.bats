@@ -249,3 +249,13 @@ _line() { # $1 repo
   [ "$status" -eq 0 ]
   [ "$(jq -r .ledger <<<"$output")" = "null" ]
 }
+
+@test "--json: last_input_at is the cache file mtime, 0 when there is none" {
+  local repo; repo=$(_make_repo r-lastat)
+  run _hud "$repo" --json
+  [ "$(jq -r .last_input_at <<<"$output")" = "0" ]
+  mkdir -p "$LAST_INPUT_STATE_DIR"; printf 'hello' > "$LAST_INPUT_STATE_DIR/sess1"
+  touch -t 202601010000 "$LAST_INPUT_STATE_DIR/sess1"
+  run _hud "$repo" --json
+  [ "$(jq -r '.last_input_at > 1700000000' <<<"$output")" = "true" ]
+}

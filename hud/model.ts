@@ -73,6 +73,7 @@ export function parseHelper(stdout: string): HelperData | null {
     worktree: str(r.worktree),
     autopilot,
     ledger,
+    last_input_at: num(r.last_input_at),
     last_input: str(r.last_input),
   }
 }
@@ -114,6 +115,15 @@ const AP_LOOK: Record<string, { glyph: string; word: string; color: string }> = 
 /** A stop reason that means something went wrong (not elapsed / queue-empty / user-requested). */
 export function isFailureStop(reason: string): boolean {
   return /fail|error|crash|abort/i.test(reason)
+}
+
+/** Timestamp format of the last-input field, in one place: local HH:MM, plus "Mon D" when not today. */
+export function formatStamp(epochSec: number, nowMs: number = Date.now()): string {
+  const d = new Date(epochSec * 1000)
+  const now = new Date(nowMs)
+  const hm = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  if (d.toDateString() === now.toDateString()) return hm
+  return `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()} ${hm}`
 }
 
 export function truncate(text: string, max: number): string {
@@ -174,6 +184,10 @@ function segFor(field: Field, snap: Snapshot, cfg: HudConfig, room: number): Seg
       return snap.rateUsed === null ? null : [{ text: `5h ${Math.round(snap.rateUsed)}%` }]
     case 'cost':
       return snap.costUsd === null ? null : [{ text: `$${snap.costUsd.toFixed(2)}` }]
+    case 'lastat': {
+      const at = h?.last_input_at
+      return at ? [{ text: `you ${formatStamp(at)}`, dim: true }] : null
+    }
     case 'last': {
       const t = h?.last_input
       return t ? [{ text: truncate(`last: ${t}`, room), dim: true }] : null

@@ -23,7 +23,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `band` | `true` | status band |
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `fields` | `ap,ctx,branch,task,jobs` | also `rate`, `cost`, `last` (the last prompt; opt-in) |
+| `fields` | `ap,ctx,branch,task,jobs,lastat` | `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted, via the UserPromptSubmit hook cache; also `rate`, `cost`, `last` (the last prompt text; opt-in) |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
 

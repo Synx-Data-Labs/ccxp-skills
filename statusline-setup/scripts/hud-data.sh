@@ -12,6 +12,7 @@
 #                         "stuck_reason","stop_reason","merged"},
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked",
 #                      "parked_ids","next_job","updated_at"},   # ledger.sh file
+#    "last_input_at": 0,        # epoch secs of this session's last prompt (0 = unknown)
 #    "last_input": ""}          # only filled with --with-last-input (opt-in)
 #
 # Never exits non-zero: any failure prints "{}" so the mod keeps its last good
@@ -55,6 +56,10 @@ hud-data() {
   local ledger; ledger=$(sl-ledger-json)
   [ -n "$ledger" ] || ledger="null"
 
+  local last_input_at
+  last_input_at=$(sl-last-input-epoch "$LAST_INPUT_STATE_DIR" "$session_id")
+  [[ "$last_input_at" =~ ^[0-9]+$ ]] || last_input_at=0
+
   local last_input=""
   if [ "$with_last_input" = 1 ]; then
     last_input=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
@@ -63,7 +68,7 @@ hud-data() {
 
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
-    --arg branch "$branch" --arg worktree "$worktree" --arg rec "$rec" --arg last_input "$last_input" --argjson ledger "$ledger" '
+    --arg branch "$branch" --arg worktree "$worktree" --arg rec "$rec" --arg last_input "$last_input" --argjson ledger "$ledger" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        autopilot: (if $rec == "" then null else {
@@ -73,7 +78,7 @@ hud-data() {
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0)} end),
        ledger: $ledger,
-       last_input: $last_input}'
+       last_input_at: $last_input_at, last_input: $last_input}'
 }
 
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then

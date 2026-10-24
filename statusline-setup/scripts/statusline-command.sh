@@ -244,6 +244,22 @@ sl-last-input-part() {
   printf 'last: %s' "$text"
 }
 
+# $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt
+# this session submitted (the cache file's mtime, written by the
+# UserPromptSubmit hook), or nothing. Same safe-session-id rule as above.
+sl-last-input-epoch() {
+  local dir="$1" session_id="$2" file mtime
+  [ -n "$session_id" ] || return 0
+  case "$session_id" in
+    */*|.|..) return 0 ;;
+  esac
+  file="$dir/$session_id"
+  [ -r "$file" ] || return 0
+  mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null) || return 0
+  [[ "$mtime" =~ ^[0-9]+$ ]] && printf '%s' "$mtime"
+  return 0
+}
+
 # $1 heartbeat dir, $2 session_id -> exit 0 when the hud mod is actively drawing
 # its band for this session: the file holds "on" and was touched within
 # HUD_ACTIVE_MAX_AGE seconds. Anything else (no file, "off", stale, unsafe id)
