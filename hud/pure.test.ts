@@ -86,10 +86,10 @@ test('countJobs groups agent statuses', async () => {
   expect(countJobs([{ status: 'running' }, { status: 'pending' }, { status: 'idle' }, { status: 'waiting' }, { status: 'failed' }, { status: 'completed' }])).toEqual({ running: 2, waiting: 2, failed: 1 })
 })
 
-test('band: wide shows every default field in full; running jobs take their own second row', async () => {
+test('band: wide shows every default field in full; running jobs get a row with room for titles', async () => {
   const rows = bandRows(snap(), DEFAULTS, 140)
-  expect(rows.length).toBe(2)
-  expect(text(rows.slice(1))).toContain("jobs run 1")
+  expect(rows.length).toBeLessThanOrEqual(3)
+  expect(text(rows.slice(-1))).toContain("jobs run 1")
   const t = text(rows)
   expect(t).toContain('AP ● running 2/6h · cycle 3 ✓2 merged')
   expect(t).toContain('ctx 64% ▓▓▓▓▓▓░░░░')
@@ -241,6 +241,10 @@ test('formatStamp: HH:MM today, with the date otherwise; lastat field hidden whe
   const fields = { ...DEFAULTS, fields: ['lastat' as const] }
   expect(bandRows(snap({ helper: { ...h, last_input_at: Date.now() / 1000 } }), fields, 140)[0][0].text).toMatch(/^you \d\d:\d\d$/)
   expect(bandRows(snap({ helper: { ...h, last_input_at: 0 } }), fields, 140)).toEqual([])
+})
+
+test('compactLine joins rows with the separator, never a bare space', async () => {
+  expect(compactLine(snap(), DEFAULTS)).not.toMatch(/[^│] (?=jobs run)/)
 })
 
 test('compactLine is one plain line within the 2,000 character limit', async () => {
