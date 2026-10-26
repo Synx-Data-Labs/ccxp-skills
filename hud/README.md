@@ -27,10 +27,24 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
 
+## Layout by width
+
+The band adapts to the terminal width (`bodyColumns`); sections with nothing to say are dropped, never padded.
+
+| Width | Tier | AP | ctx | Jobs |
+|---|---|---|---|---|
+| < 70 | tiny, one row | `AP ○ 13/24h ✓2` | `ctx 89%` | `run 5 · park 3` |
+| 70-99 | compact, up to two rows | `AP ○ stop 13/24h c6 ✓2` | `ctx 89%` | `run 5 · park 3 · tot 242 (r230 r231 +3)` |
+| >= 100 | wide, up to two rows | `AP ○ stopped 13/24h · cycle 6 ✓2 merged` | `ctx 89% ▓▓▓▓▓▓▓▓▓░` | `jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR, … +1)` |
+
+- Narrow tiers drop the least important fields first (`lastat`, `cost`, `rate`, `branch`, `task`) when a row budget is short; tiny also hides branch, task and `lastat`.
+- Wide puts running jobs with titles on their own row; titles are cut at word boundaries and extra jobs collapse to `+N`.
+- No claimed task, no branch, no ledger: the cell is omitted (no `no claimed task`, no `jobs —`).
+
 ## Jobs and autopilot segments
 
-- `jobs run <R> · total <L> · parked <P>` from the job ledger (`statusline-setup/scripts/ledger.sh`, default `~/.claude/ccxp-ledger.json`, override `CCXP_LEDGER_FILE`). Run is green when above 0, parked yellow when above 0; running titles show on wide layouts; no ledger shows a dim `jobs —`.
-- `AP <status> <elapsed>/<requested>h [⚠stuck] loops <cycles> ✓<merged>` from `dev/.autopilot-state.json`: running green, paused yellow, stopped grey (red for a failure-type stop reason), `⚠` red only when stuck, `✓` green. A missing `merged_count` counts as 0.
+- Jobs, from the job ledger (`statusline-setup/scripts/ledger.sh`, default `~/.claude/ccxp-ledger.json`, override `CCXP_LEDGER_FILE`): `run <R>` (green, shown when above 0), `park <P>` (yellow, shown when above 0), `tot <L>` (lifetime jobs, dim while run or park is shown). Running jobs follow as `r<id>` (titles when wide). No ledger hides the cell.
+- AP, from `dev/.autopilot-state.json`: `AP <glyph> <state> <elapsed>/<requested>h [⚠stuck] [cycle N] ✓<merged>`. The `h` marks `13/24` as hours elapsed over requested, `cycle`/`c` is the loop count, `✓` the merged PR count. Running green, paused yellow, stopped grey (red for a failure-type stop reason), `⚠` red only when stuck, `✓` green. A missing `merged_count` counts as 0.
 
 ## Notes
 

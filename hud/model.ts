@@ -104,11 +104,11 @@ export function meter(left: number, width = 10): string {
 
 export type Seg = { text: string; color?: string; dim?: boolean; bold?: boolean }
 
-const AP_LOOK: Record<string, { glyph: string; word: string; color: string }> = {
-  '[r]': { glyph: '●', word: 'run', color: 'success' },
-  '[b]': { glyph: '●', word: 'run', color: 'success' }, // backing off is still running; ⚠ carries the stuck count
-  '[s]': { glyph: '○', word: 'stopped', color: 'inactive' },
-  '[p]': { glyph: '⏸', word: 'paused', color: 'warning' },
+const AP_LOOK: Record<string, { glyph: string; word: string; short: string; color: string }> = {
+  '[r]': { glyph: '●', word: 'running', short: 'run', color: 'success' },
+  '[b]': { glyph: '●', word: 'running', short: 'run', color: 'success' }, // backing off is still running; ⚠ carries the stuck count
+  '[s]': { glyph: '○', word: 'stopped', short: 'stop', color: 'inactive' },
+  '[p]': { glyph: '⏸', word: 'paused', short: 'pause', color: 'warning' },
 }
 
 /** A stop reason that means something went wrong (not elapsed / queue-empty / user-requested). */
@@ -130,88 +130,195 @@ export function truncate(text: string, max: number): string {
   return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + '…'
 }
 
-function segFor(field: Field, snap: Snapshot, cfg: HudConfig, room: number): Seg[] | null {
+/** Layout tier by terminal width: tiny below 70 columns, compact below 100, wide from 100 up. */
+export type Tier = 'tiny' | 'compact' | 'wide'
+export const TINY_BELOW = 70
+export const COMPACT_BELOW = 100
+
+export function tierOf(columns: number): Tier {
+  return columns < TINY_BELOW ? 'tiny' : columns < COMPACT_BELOW ? 'compact' : 'wide'
+}
+
+/** Cuts at a word boundary (never mid-word unless the first word alone is too long) and adds "…". */
+export function truncateWords(text: string, max: number): string {
+  if (max <= 0) return ''
+  if (text.length <= max) return text
+  const head = text.slice(0, Math.max(1, max - 1))
+  const cut = head.lastIndexOf(' ')
+  const kept = cut >= Math.floor(max / 3) && text[head.length] !== ' ' ? head.slice(0, cut) : head
+  return kept.trimEnd() + '…'
+}
+
+/** A band block: fixed segments plus an optional part that fills whatever room is left on its row. */
+type Block = { segs: Seg[]; grow?: (room: number) => Seg[]; minRoom?: number }
+
+function apBlock(snap: Snapshot, tier: Tier): Block | null {
+  const ap = snap.helper?.autopilot
+  if (!ap) return null
+  const look = { ...(AP_LOOK[ap.prefix] ?? { glyph: '·', word: ap.status, short: ap.status.slice(0, 5), color: 'inactive' }) }
+  if (ap.prefix === '[s]' && isFailureStop(ap.stop_reason)) look.color = 'error'
+  const word = tier === 'wide' ? look.word : tier === 'compact' ? look.short : ''
+  const segs: Seg[] = [
+    { text: 'AP ', bold: true },
+    { text: word ? `${look.glyph} ${word}` : look.glyph, color: look.color },
+    // Elapsed over requested hours: the "h" stays so 13/24 can never read as cycles.
+    { text: ` ${ap.elapsed_hr}/${ap.requested_hr}h` },
+  ]
+  if (ap.stuck > 0) segs.push({ text: ` ⚠${ap.stuck}`, color: 'error' })
+  if (tier === 'wide') segs.push({ text: ` · cycle ${ap.cycle}` })
+  else if (tier === 'compact') segs.push({ text: ` c${ap.cycle}` })
+  const merged = tier === 'wide' ? `✓${ap.merged} merged` : `✓${ap.merged}`
+  segs.push({ text: ' ' }, { text: merged, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
+  return { segs }
+}
+
+function jobsBlock(snap: Snapshot, tier: Tier): Block | null {
+  const l = snap.helper?.ledger
+  if (!l) return null
+  const run = l.running.length
+  const segs: Seg[] = []
+  const head = tier === 'wide' ? 1 : 0 // the "jobs " label is not a counter
+  if (tier === 'wide') segs.push({ text: 'jobs ' })
+  const dot = (): void => {
+    if (segs.length > head) segs.push({ text: ' · ' })
+  }
+  if (run > 0) segs.push({ text: `run ${run}`, color: 'success' })
+  if (l.parked > 0) {
+    dot()
+    segs.push({ text: `park ${l.parked}`, color: 'warning' })
+  }
+  if (tier !== 'tiny') {
+    dot()
+    segs.push({ text: `tot ${l.lifetime_jobs}`, dim: run + l.parked > 0 })
+  } else if (segs.length === head) segs.push({ text: `tot ${l.lifetime_jobs}`, dim: true })
+  if (run === 0 || tier === 'tiny') return { segs }
+  // Short ids when narrow, ids with titles when wide; only whole items, then "+N".
+  const grow = (room: number): Seg[] => {
+    const items = l.running.map(j => {
+      const id = `r${j.job}`
+      return tier === 'wide' && j.title ? `${id} ${truncateWords(j.title, 28)}` : id
+    })
+    const sep = tier === 'wide' ? ', ' : ' '
+    let out = ''
+    let shown = 0
+    for (const item of items) {
+      const next = out ? out + sep + item : item
+      const rest = items.length - shown - 1
+      // Reserve room for the " +N" tail unless this is the last item.
+      if (next.length + (rest > 0 ? ` +${rest}`.length : 0) > room - 4) break
+      out = next
+      shown += 1
+    }
+    if (shown === 0) return []
+    const hidden = items.length - shown
+    return [{ text: ` (${out}${hidden > 0 ? ` +${hidden}` : ''})`, dim: true }]
+  }
+  // Wide: a running list needs real room, so it takes its own row rather than a 7-column scrap.
+  return { segs, grow, minRoom: tier === 'wide' ? 90 : 12 }
+}
+
+function blockFor(field: Field, snap: Snapshot, cfg: HudConfig, tier: Tier): Block | null {
   const h = snap.helper
   switch (field) {
-    case 'ap': {
-      const ap = h?.autopilot
-      if (!ap) return null
-      const look = { ...(AP_LOOK[ap.prefix] ?? { glyph: '·', word: ap.status, color: 'inactive' }) }
-      if (ap.prefix === '[s]' && isFailureStop(ap.stop_reason)) look.color = 'error'
-      const segs: Seg[] = [
-        { text: 'AP ', bold: true },
-        { text: `${look.glyph} ${look.word} `, color: look.color },
-        { text: `${ap.elapsed_hr}/${ap.requested_hr}h ` },
-      ]
-      if (ap.stuck > 0) segs.push({ text: `⚠${ap.stuck} `, color: 'error' })
-      segs.push({ text: `loops ${ap.cycle} ` }, { text: `✓${ap.merged}`, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
-      return segs
-    }
+    case 'ap':
+      return apBlock(snap, tier)
     case 'ctx': {
       if (snap.ctxLeft === null) return null
       const left = Math.round(snap.ctxLeft)
-      return [{ text: `ctx ${left}% ${meter(left)}`, color: ctxTone(left, cfg) }]
+      return { segs: [{ text: tier === 'wide' ? `ctx ${left}% ${meter(left)}` : `ctx ${left}%`, color: ctxTone(left, cfg) }] }
     }
     case 'branch': {
       const b = h?.branch
-      if (!b) return null
-      return [{ text: ` ${b}${h?.worktree ? ` (wt ${h.worktree})` : ''}` }]
+      if (!b || tier === 'tiny') return null
+      const wt = tier === 'wide' && h?.worktree ? ` (wt ${h.worktree})` : ''
+      return { segs: [{ text: ` ${tier === 'wide' ? b : truncate(b, 24)}${wt}` }] }
     }
     case 'task': {
-      if (!h) return null
-      if (!h.task_id) return [{ text: 'no claimed task', dim: true }]
-      return [{ text: truncate(`${h.task_id} ${h.task_title}`.trim(), room) }]
+      // Unclaimed means nothing to show: no placeholder cell.
+      if (!h?.task_id || tier === 'tiny') return null
+      if (tier === 'compact') return { segs: [{ text: h.task_id }], grow: room => (h.task_title && room > 12 ? [{ text: ' ' + truncateWords(h.task_title, Math.min(room - 1, 32)) }] : []) }
+      return { segs: [{ text: truncateWords(`${h.task_id} ${h.task_title}`.trim(), 70) }] }
     }
-    case 'jobs': {
-      const l = h?.ledger
-      if (!l) return [{ text: 'jobs —', dim: true }]
-      const run = l.running.length
-      const segs: Seg[] = [
-        { text: 'jobs run ' },
-        { text: `${run}`, color: run > 0 ? 'success' : undefined },
-        { text: ` · total ${l.lifetime_jobs} · parked ` },
-        { text: `${l.parked}`, color: l.parked > 0 ? 'warning' : undefined },
-      ]
-      // Wide layout only (room is columns - 60): show what is running.
-      if (run > 0 && room >= 40) {
-        const names = l.running.map(j => `r${j.job}${j.title ? ' ' + j.title : ''}`).join(', ')
-        segs.push({ text: ` (${truncate(names, room - 10)})`, dim: true })
-      }
-      return segs
-    }
+    case 'jobs':
+      return jobsBlock(snap, tier)
     case 'rate':
-      return snap.rateUsed === null ? null : [{ text: `5h ${Math.round(snap.rateUsed)}%` }]
+      return snap.rateUsed === null ? null : { segs: [{ text: `5h ${Math.round(snap.rateUsed)}%` }] }
     case 'cost':
-      return snap.costUsd === null ? null : [{ text: `$${snap.costUsd.toFixed(2)}` }]
+      return snap.costUsd === null ? null : { segs: [{ text: `$${snap.costUsd.toFixed(2)}` }] }
     case 'lastat': {
       const at = h?.last_input_at
-      return at ? [{ text: `you ${formatStamp(at)}`, dim: true }] : null
+      return at && tier !== 'tiny' ? { segs: [{ text: `you ${formatStamp(at)}`, dim: true }] } : null
     }
   }
 }
 
+const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
+const SEP = ' │ '
+
+/** Greedy row packing; null when the blocks need more than `maxRows` rows. */
+function pack(blocks: Block[], width: number, maxRows: number): Block[][] | null {
+  const rows: Block[][] = []
+  let used = 0
+  for (const b of blocks) {
+    const w = widthOf(b.segs)
+    const row = rows[rows.length - 1]
+    const fits = row && used + SEP.length + w <= width
+    // A growing block (job ids) wants minRoom spare columns; else it starts a new row when it may.
+    const cramped = b.minRoom !== undefined && fits && width - (used + SEP.length + w) < b.minRoom && rows.length < maxRows
+    if (fits && !cramped) {
+      row.push(b)
+      used += SEP.length + w
+    } else {
+      rows.push([b])
+      used = w
+    }
+    if (rows.length > maxRows) return null
+  }
+  return rows
+}
+
 /**
- * The band as rows of segments. One row from ~100 columns up, two below.
+ * The band as rows of segments, laid out for the terminal width (tiny / compact / wide).
+ * Sections with nothing to say are dropped, not padded. When the blocks do not fit the
+ * rows allowed (one row when tiny, two otherwise) the least important ones are dropped.
  * Empty when there is nothing to show (the caller then yields to the engine).
  */
 export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[][] {
-  const blocks: Seg[][] = []
+  const tier = tierOf(columns)
+  const width = Math.max(20, columns - 2) // the band has one column of padding each side
+  const maxRows = tier === 'tiny' ? 1 : 2
+  const entries: { field: string; block: Block }[] = []
   for (const f of cfg.fields) {
-    const block = segFor(f, snap, cfg, Math.max(12, columns - 60))
-    if (block) blocks.push(block)
+    const block = blockFor(f, snap, cfg, tier)
+    if (block) entries.push({ field: f, block })
   }
-  if (blocks.length === 0) return []
-  if (snap.stale) blocks.push([{ text: 'stale', dim: true }])
+  if (snap.stale) entries.push({ field: 'stale', block: { segs: [{ text: 'stale', dim: true }] } })
+  if (entries.length === 0) return []
 
-  const narrow = columns < 100
-  const rows: Seg[][] = narrow ? [[], []] : [[]]
-  const half = Math.ceil(blocks.length / 2)
-  blocks.forEach((block, i) => {
-    const row = narrow ? rows[i < half ? 0 : 1] : rows[0]
-    if (row.length > 0) row.push({ text: ' │ ', dim: true })
-    row.push(...block)
+  // Keep order as configured, but when space runs out drop in this order: lastat, cost, rate, branch, task.
+  const droppable = ['lastat', 'cost', 'rate', 'branch', 'task', 'jobs']
+  let kept = entries
+  while (kept.length > 1 && pack(kept.map(e => e.block), width, maxRows) === null) {
+    const victim = droppable.map(f => kept.findIndex(e => e.field === f)).find(i => i >= 0)
+    kept = victim === undefined ? kept.slice(0, -1) : kept.filter((_, i) => i !== victim)
+  }
+  const rows = pack(kept.map(e => e.block), width, maxRows) ?? [kept.map(e => e.block).slice(0, 1)]
+
+  return rows.map(row => {
+    const used = widthOf(row.flatMap(b => b.segs)) + SEP.length * (row.length - 1)
+    let room = width - used
+    const out: Seg[] = []
+    row.forEach((b, i) => {
+      if (i > 0) out.push({ text: SEP, dim: true })
+      out.push(...b.segs)
+      if (b.grow && room > 0) {
+        const extra = b.grow(room)
+        out.push(...extra)
+        room -= widthOf(extra)
+      }
+    })
+    return out
   })
-  return rows.filter(r => r.length > 0)
 }
 
 /** One plain line for surfaces with no band (VS Code `$.ui.status`), 2,000 chars at most. */
