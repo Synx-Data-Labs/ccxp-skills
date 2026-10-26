@@ -1,7 +1,7 @@
 ---
 name: agent-pairing
-description: Use when the user explicitly asks to toggle the ccxp-agent main-session agent on/off for this Claude Code profile, check its status, or refresh (update) its installed agent definition
-argument-hint: on | off | status | update
+description: Use when the user explicitly asks to toggle the ccxp-agent main-session agent on/off for this Claude Code profile, check its status, or refresh (update, backup kept) its installed agent definition
+argument-hint: on | off | status | update [--dry-run]
 ---
 
 # Agent Pairing
@@ -24,9 +24,9 @@ Pairing, XP-style, but with subagents as the drivers:
 `on`/`off` toggle whether a Claude Code profile (`~/.claude` by default)
 boots into this mode by default. `status` shows whether it's on right
 now, plus what your own session's driver-agents are currently doing.
-`update` refreshes the installed agent definition (and the settings it
-manages) to the version bundled with this plugin, without touching
-on/off state.
+`update` backs up, then refreshes the installed agent definition (and
+the settings it manages) to the version bundled with this plugin,
+without touching on/off state.
 
 ## Argument
 
@@ -35,9 +35,11 @@ on/off state.
   definition, just stops it being the default.
 - `status` (default) — report on/off, plus the current session's running
   subagents, plus whether the installed agent definition is current.
-- `update [--yes]` — refresh the installed `agents/ccxp-agent.md` from
-  the bundled asset and re-assert the managed settings. Dry run (diff
-  only) unless `--yes` is passed. Never changes on/off state.
+- `update [--dry-run|-n]` — keep a timestamped backup, then refresh the
+  installed `agents/ccxp-agent.md` from the bundled asset and re-assert
+  the managed settings. No confirmation step. `--dry-run` only prints
+  the diff. Never changes on/off state. (`--yes` is accepted and
+  ignored.)
 
 ## Workflow
 
@@ -90,33 +92,23 @@ right now."
 
 ### `update`
 
-Run the dry run first; never start with `--yes`.
+```bash
+bash <skills-root>/agent-pairing/scripts/agent-pairing.sh update
+```
 
-1. Dry run (writes nothing):
-
-   ```bash
-   bash <skills-root>/agent-pairing/scripts/agent-pairing.sh update
-   ```
-
-2. Show the user the diff it printed (`-` lines = what the installed file
-   has now, including any hand edits; `+` lines = what the bundled
-   version adds) and the re-run command. If it says `up to date`, report
-   that and stop.
-3. Only after the user agrees to the replacement, run the command the
-   dry run printed (same script with `--yes`, plus `--claude-dir` when
-   one was used):
-
-   ```bash
-   bash <skills-root>/agent-pairing/scripts/agent-pairing.sh update --yes
-   ```
+Just run it; there is no confirmation step. Relay its summary: what was
+backed up where, the `+N -M lines` diffstat, and that it takes effect at
+the next session start. `up to date` means nothing was written. To
+preview first (or see the diff), add `--dry-run`; it writes nothing.
 
 What `update` manages, and what it leaves alone:
 
 - **`agents/ccxp-agent.md`** — compared with `assets/ccxp-agent.md`.
-  Identical: reported, nothing written. Different: diff printed; with
-  `--yes` the old file is first copied to
-  `ccxp-agent.md.bak-<YYYYMMDD-HHMMSS>` beside it, then replaced
-  atomically. A missing file is not installed (that is `on`).
+  Identical: reported, nothing written. Different (including hand
+  edits): the old file is first copied to
+  `ccxp-agent.md.bak-<YYYYMMDD-HHMMSS>` beside it (numeric suffix on a
+  same-second collision), then replaced atomically. A missing file is
+  not installed (that is `on`).
 - **`settings.json`** — the only agent-pairing-owned key is `"agent"`.
   - Re-asserted as `"ccxp-agent"` (key-level `jq`, backed up to
     `settings.json.bak-<YYYYMMDD-HHMMSS>`, only if it would change)
@@ -150,10 +142,10 @@ running session keeps the definition it booted with.
 - `jq` is required; the script hard-fails with a clear message if it's
   missing rather than falling back to a fragile text edit.
 - Overwrite rules: `on` never overwrites an existing
-  `agents/ccxp-agent.md` (hand edits are safe). Only `update --yes`
-  replaces it, and always after writing a timestamped `.bak-` copy;
-  restore by copying the backup over it. `update` without `--yes`
-  writes nothing. Backups are not pruned automatically.
+  `agents/ccxp-agent.md`. Only `update` replaces it, and always after
+  writing a timestamped `.bak-` copy; restore by copying the backup
+  over it. `update --dry-run` writes nothing. Backups are not pruned
+  automatically.
 - Only run when the user explicitly asks — this
   changes a profile's default behavior for every future session, which
   is squarely the user's call to make explicitly, never a model
@@ -165,7 +157,7 @@ running session keeps the definition it booted with.
   matches the managed name. Remove the stale `dispatcher.md` by hand
   once the new one works.
 - **Picking up a newer bundled definition** (e.g. the Detached jobs
-  section): run `/agent-pairing update` — no hand-copying.
+  section): run `/agent-pairing update` — it backs up first, no hand-copying.
 
 ## Cross-references
 
