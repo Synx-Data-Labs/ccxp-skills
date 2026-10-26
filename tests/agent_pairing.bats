@@ -208,3 +208,200 @@ EOF
   # flips it forward to ccxp-agent rather than treating it as already-on.
   [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "ccxp-agent" ]
 }
+
+# --- update: refresh the agent definition + managed settings ----------------
+
+ASSET_FILE() { echo "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"; }
+
+install_outdated_agent() {
+  # An older definition: the bundled asset minus its "Detached jobs" section,
+  # plus a local edit marker so a diff has both removed and added lines.
+  mkdir -p "$CLAUDE_DIR/agents"
+  grep -v 'Detached jobs' "$(ASSET_FILE)" > "$CLAUDE_DIR/agents/ccxp-agent.md"
+  echo "my local note" >> "$CLAUDE_DIR/agents/ccxp-agent.md"
+}
+
+@test "update: identical agent file is a no-op (reports up to date, no backups)" {
+  mk_settings_with_agent ccxp-agent
+  mkdir -p "$CLAUDE_DIR/agents"
+  cp "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+  before="$(cat "$CLAUDE_DIR/settings.json")"
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "up to date"
+  [ "$(cat "$CLAUDE_DIR/settings.json")" = "$before" ]
+  cmp -s "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+  [ -z "$(ls "$CLAUDE_DIR/agents" | grep '\.bak-' || true)" ]
+  [ -z "$(ls "$CLAUDE_DIR" | grep '\.bak-' || true)" ]
+}
+
+@test "update: outdated file without --yes is a dry run (diff + re-run command, nothing written)" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  before="$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")"
+  run bash "$SCRIPT" update --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "OUTDATED"
+  echo "$output" | grep -q "^+## Detached jobs"
+  echo "$output" | grep -q "^-my local note"
+  echo "$output" | grep -q "update --yes --claude-dir $CLAUDE_DIR"
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "$before" ]
+  [ -z "$(ls "$CLAUDE_DIR/agents" | grep '\.bak-' || true)" ]
+}
+
+@test "update --yes: backs up the old file, replaces it with the bundled asset" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  old="$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")"
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  cmp -s "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+  set -- "$CLAUDE_DIR"/agents/ccxp-agent.md.bak-*
+  [ "$#" -eq 1 ]
+  [[ "$1" =~ ccxp-agent\.md\.bak-[0-9]{8}-[0-9]{6}$ ]]
+  [ "$(cat "$1")" = "$old" ]
+  echo "$output" | grep -q "UPDATED"
+  echo "$output" | grep -qi "next session"
+}
+
+@test "update --yes: two updates in the same second never clobber an earlier backup" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  echo "second edit" >> "$CLAUDE_DIR/agents/ccxp-agent.md"
+  bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  set -- "$CLAUDE_DIR"/agents/ccxp-agent.md.bak-*
+  [ "$#" -eq 2 ]
+  cmp -s "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+}
+
+@test "update --yes: no settings backup when settings.json needs no change" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  before="$(cat "$CLAUDE_DIR/settings.json")"
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_DIR/settings.json")" = "$before" ]
+  [ -z "$(ls "$CLAUDE_DIR" | grep 'settings\.json\.bak-' || true)" ]
+}
+
+@test "update: a hand-edited file is protected without --yes (and 'on' still never overwrites it)" {
+  mk_settings
+  mkdir -p "$CLAUDE_DIR/agents"
+  echo "custom hand-edited content" > "$CLAUDE_DIR/agents/ccxp-agent.md"
+  run bash "$SCRIPT" update --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "custom hand-edited content" ]
+  run bash "$SCRIPT" on --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "custom hand-edited content" ]
+}
+
+@test "update: a profile that is OFF stays OFF (settings byte-identical, def refreshed under --yes)" {
+  mk_settings
+  install_outdated_agent
+  before="$(cat "$CLAUDE_DIR/settings.json")"
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$CLAUDE_DIR/settings.json")" = "$before" ]
+  [ "$(jq -r 'has("agent")' "$CLAUDE_DIR/settings.json")" = "false" ]
+  cmp -s "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+}
+
+@test "update: a different custom agent default is left alone" {
+  mk_settings_with_agent "some-other-agent"
+  install_outdated_agent
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "some-other-agent" ]
+}
+
+@test "update: a stale agent=dispatcher is reported, not migrated (update never changes on/off)" {
+  mk_settings_with_agent dispatcher
+  install_outdated_agent
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "dispatcher" ]
+  echo "$output" | grep -q "stale agent"
+}
+
+@test "update: a profile that is ON stays ON" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.agent' "$CLAUDE_DIR/settings.json")" = "ccxp-agent" ]
+}
+
+@test "update --yes: unrelated settings keys are preserved exactly (jq -S comparison)" {
+  mk_settings
+  jq '. + {agent: "ccxp-agent"}' "$CLAUDE_DIR/settings.json" > "$BATS_TEST_TMPDIR/s.json"
+  mv "$BATS_TEST_TMPDIR/s.json" "$CLAUDE_DIR/settings.json"
+  jq -S . "$CLAUDE_DIR/settings.json" > "$BATS_TEST_TMPDIR/before.json"
+  install_outdated_agent
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  jq -S . "$CLAUDE_DIR/settings.json" > "$BATS_TEST_TMPDIR/after.json"
+  cmp -s "$BATS_TEST_TMPDIR/before.json" "$BATS_TEST_TMPDIR/after.json"
+}
+
+@test "update: missing agent definition is reported and not installed (that is 'on')" {
+  mk_settings_with_agent ccxp-agent
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "not installed"
+  [ ! -e "$CLAUDE_DIR/agents/ccxp-agent.md" ]
+}
+
+@test "update: reports unmanaged dependencies instead of editing them" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  echo "old dispatcher" > "$CLAUDE_DIR/agents/dispatcher.md"
+  run bash "$SCRIPT" update --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "no ccxp-skills plugin install"
+  echo "$output" | grep -q "dispatcher.md"
+  [ "$(cat "$CLAUDE_DIR/agents/dispatcher.md")" = "old dispatcher" ]
+}
+
+@test "update: --yes is rejected for the other actions" {
+  mk_settings
+  run bash "$SCRIPT" on --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 64 ]
+  [ ! -e "$CLAUDE_DIR/agents/ccxp-agent.md" ]
+}
+
+@test "update: invalid settings.json is a hard error, nothing touched" {
+  echo "not valid json" > "$CLAUDE_DIR/settings.json"
+  install_outdated_agent
+  before="$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")"
+  run bash "$SCRIPT" update --yes --claude-dir "$CLAUDE_DIR"
+  [ "$status" -ne 0 ]
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "$before" ]
+}
+
+@test "status: reports the agent definition as up to date when identical to the bundled one" {
+  mk_settings_with_agent ccxp-agent
+  mkdir -p "$CLAUDE_DIR/agents"
+  cp "$(ASSET_FILE)" "$CLAUDE_DIR/agents/ccxp-agent.md"
+  run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "agent definition: up to date"
+}
+
+@test "status: reports OUTDATED when the installed definition differs, and changes nothing" {
+  mk_settings_with_agent ccxp-agent
+  install_outdated_agent
+  before="$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")"
+  run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "OUTDATED -- run update"
+  [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "$before" ]
+}
+
+@test "status: reports the definition as not installed when absent" {
+  mk_settings
+  run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
+  [ "$status" -eq 0 ]
+  echo "$output" | grep -q "agent definition: not installed"
+}
