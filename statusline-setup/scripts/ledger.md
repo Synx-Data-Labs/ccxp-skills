@@ -1,9 +1,10 @@
 # Job ledger (`ledger.sh`)
 
 The HUD `jobs` section reads `${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-ledger.json}`
-and shows `jobs run <R> · total <L> · parked <P>` (running titles on wide
-layouts; `jobs —` dim when there is no ledger; the text line prints the same
-section only when the ledger exists). `total` = highest job number ever
+and shows `jobs run <R> · park <P> · tot <L>` in the band (zero counts are
+hidden; running ids `r<id>` when narrow, with titles when wide; no ledger hides
+the cell; the text line prints its own section only when the ledger exists).
+`tot` = highest job number ever
 started. Only the dispatcher knows job numbers, so it must make these calls
 (the plugin ships no hook for them; settings are never touched):
 

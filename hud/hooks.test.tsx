@@ -179,7 +179,7 @@ test('the band shows helper data once the session started, and the helper gets a
   await $.session.start(START)
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /T20261021-354035 Decouple/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /total 230 · parked / })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /tot 230/ })).toBeDefined()
   await band.unmount()
   expect(w.runs.length).toBeGreaterThan(0)
   for (const argv of w.runs) {
