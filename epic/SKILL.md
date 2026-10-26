@@ -20,12 +20,13 @@ All deterministic parts live in `<skills-root>/epic/scripts/epic.sh` (sourceable
 ## Workflow: `status`
 
 - Run `bash <skills-root>/epic/scripts/epic.sh status [E<n>]`; print verbatim.
+- Members whose task lives in another repo (plain IDs or GitHub blob-URL links) are resolved through `gh` against the owning repo (JOURNAL = Done, else its frontmatter status). Candidate repos: `TASKID_REMOTE_REPOS` (space-separated `owner/repo`), repos named by URL members in `dev/EPICS`, then this clone's origin. A gh failure shows the member as unresolved.
 - It prints a per-member table (status, `claimed_by`, deadline, drive verdict), then `epic-status.sh render` counts.
 - Never edits anything.
 
 ## Workflow: `refresh`
 
-1. Run `bash <skills-root>/epic/scripts/epic.sh refresh [E<n>]`. It runs `_taskid/epic-links.sh sync` + `lint`, then reports per epic:
+1. Run `bash <skills-root>/epic/scripts/epic.sh refresh [E<n>]`. GitHub-URL members are never rewritten (already correct; cross-repo). It runs `_taskid/epic-links.sh sync` + `lint`, then reports per epic:
    - moved/closed members (old and new link);
    - plain lines with no task file here (other repo: kept plain, not driveable from here);
    - **candidates**: open `dev/TODO` tasks that are not members but are linked by `related:`/`blocks:`/`blocked-by:` or share a title keyword.

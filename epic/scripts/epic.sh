@@ -23,6 +23,8 @@ source "$_EPIC_ROOT/todo/scripts/_lib.sh"   # todo-fm-get, todo-claim-state (set
 source "$_EPIC_ROOT/_taskid/url.sh"         # taskid-path
 # shellcheck disable=SC1091
 source "$_EPIC_ROOT/_taskid/epic-links.sh"  # epic_links_sync / epic_links_lint
+# shellcheck disable=SC1091
+source "$_EPIC_ROOT/_taskid/remote.sh"      # taskid-remote-find / -status (members in other repos)
 
 _EPIC_ID='T[0-9]{8}-[0-9]{6}'
 _EPIC_MEMBER="^-[[:space:]]+\\[?(${_EPIC_ID})\\]?(\\([^)]*\\))?[[:space:]]*(— (.*))?\$"
@@ -66,11 +68,40 @@ function epic-members() {
   return 0
 }
 
-# epic-verdict <id> -> verdict<TAB>detail<TAB>status<TAB>claimed_by<TAB>deadline (empty fields -> "-")
+# epic-member-url <E1|path> <id> -> the member's GitHub blob URL, if its link is one; 1 otherwise
+function epic-member-url() {
+  local f line re
+  f="$(epic-file "${1:-}")" || return 1
+  re="^-[[:space:]]+\\[?${2:-}\\]?\\((https://github\\.com/[^)]*)\\)"
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ $re ]]; then printf '%s\n' "${BASH_REMATCH[1]}"; return 0; fi
+  done < "$f"
+  return 1
+}
+
+# epic-remote-verdict <id> [url] -> verdict line for a member with no local file; 1 if not found remotely.
+# Source of truth is the owning repo: JOURNAL = done, PARKING = parked, TODO = its frontmatter status.
+function epic-remote-verdict() {
+  local id="$1" url="${2:-}" hint="" hit slug path st v="external" d
+  if [ -n "$url" ]; then hint="$(taskid-remote-url-parse "$url" | cut -f1)" || hint=""; fi
+  hit="$(taskid-remote-find "$id" "$hint")" || return 1
+  slug="${hit%%$'\t'*}"; path="${hit#*$'\t'}"
+  d="other-repo:$slug"
+  case "$path" in
+    dev/JOURNAL/*) st="Done"; v="skip"; d="done" ;;
+    dev/PARKING/*) st="Parked"; v="skip"; d="parked" ;;
+    *) st="$(taskid-remote-status "$slug" "$path")" || st=""
+       if [[ "$st" == Done* ]]; then v="skip"; d="done"; fi ;;
+  esac
+  printf '%s\t%s\t%s\t-\t-\n' "$v" "$d" "${st:--}"
+}
+
+# epic-verdict <id> [url] -> verdict<TAB>detail<TAB>status<TAB>claimed_by<TAB>deadline (empty fields -> "-")
 function epic-verdict() {
-  local id="$1" file status claim deadline cb v="drive" d="-" blocker
+  local id="$1" url="${2:-}" file status claim deadline cb v="drive" d="-" blocker
   if ! file="$(taskid-path "$id")"; then
-    printf 'external\tno-file\t-\t-\t-\n'; return 0
+    epic-remote-verdict "$id" "$url" || printf 'external\tno-file\t-\t-\t-\n'
+    return 0
   fi
   status="$(todo-fm-get "$file" status)"
   deadline="$(todo-fm-get "$file" deadline)"
@@ -100,7 +131,7 @@ function epic-plan() {
   epic-file "${1:-}" >/dev/null || { echo "epic: no epic file for '${1:-}'" >&2; return 1; }
   while IFS=$'\t' read -r id title; do
     if [ -z "$id" ]; then continue; fi
-    printf '%s\t%s\t%s\n' "$id" "$(epic-verdict "$id")" "$title"
+    printf '%s\t%s\t%s\n' "$id" "$(epic-verdict "$id" "$(epic-member-url "$1" "$id" || true)")" "$title"
   done < <(epic-members "$1")
   return 0
 }
@@ -284,5 +315,6 @@ function epic-main() {
 }
 
 if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  trap taskid-remote-cache-clear EXIT
   epic-main "$@"
 fi

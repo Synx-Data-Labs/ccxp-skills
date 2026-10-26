@@ -39,6 +39,8 @@ SKILLS_ROOT="${SKILLS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 # (same file _session/task-state.sh sources directly).
 # shellcheck disable=SC1091
 source "$SKILLS_ROOT/_taskid/url.sh"
+# shellcheck disable=SC1091
+source "$SKILLS_ROOT/_taskid/remote.sh"
 
 # --- frontmatter read (pure; own copy, first fence only, per the
 # ts_fm_get/_tc_fm_get convention — each sourceable script that needs this
@@ -168,6 +170,16 @@ epic_resolve() {
     epoch="$(git log -1 --format=%ct -- "$file" 2>/dev/null)" || epoch=""
     printf '%s\t%s\t%s\t%s\t%s\n' "$status" "$claimed" "$repo" "$file" "$epoch"
     return 0
+  fi
+
+  # Not in this clone: the member lives in another repo — ask its source of truth.
+  local hit slug rpath rstatus
+  if hit="$(taskid-remote-find "$id" 2>/dev/null)"; then
+    slug="${hit%%$'\t'*}"; rpath="${hit#*$'\t'}"
+    if rstatus="$(taskid-remote-status "$slug" "$rpath" 2>/dev/null)" && [ -n "$rstatus" ]; then
+      printf '%s\t\t%s\t%s\t\n' "$rstatus" "$slug" "$rpath"
+      return 0
+    fi
   fi
 
   printf 'unknown\t\t\t\t\n'
@@ -388,5 +400,6 @@ main() {
 # Run only if executed directly (not sourced) — lets tests source this file
 # and call individual functions without invoking main.
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  trap taskid-remote-cache-clear EXIT
   main "$@"
 fi

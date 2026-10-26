@@ -46,6 +46,13 @@ function _epic_links_member() {
   fi
 }
 
+# _epic_links_is_url <member parts> -> 0 when the link path is an absolute http(s) URL
+function _epic_links_is_url() {
+  local rest="${1#*$'\t'}" path
+  path="${rest%%$'\t'*}"
+  [[ "$path" =~ ^https?:// ]]
+}
+
 function epic_links_sync() {
   local f line parts id rest cur tmp target
   while IFS= read -r f; do
@@ -54,7 +61,10 @@ function epic_links_sync() {
     while IFS= read -r line || [ -n "$line" ]; do
       if parts="$(_epic_links_member "$line")"; then
         id="${parts%%$'\t'*}"; rest="${parts#*$'\t'*$'\t'}"
-        if cur="$(taskid-path "$id")"; then
+        if _epic_links_is_url "$parts"; then
+          # Cross-repo member: the link is already correct by construction; never rewrite it.
+          printf '%s\n' "$line" >> "$tmp"
+        elif cur="$(taskid-path "$id")"; then
           target="../${cur#dev/}"
           printf -- '- [%s](%s)%s\n' "$id" "$target" "$rest" >> "$tmp"
         else
@@ -78,7 +88,7 @@ function epic_links_lint() {
     while IFS= read -r line || [ -n "$line" ]; do
       parts="$(_epic_links_member "$line")" || continue
       id="${parts%%$'\t'*}"; rest="${parts#*$'\t'}"; path="${rest%%$'\t'*}"
-      if [ -n "$path" ] && [ ! -e "$(dirname "$f")/$path" ]; then
+      if [ -n "$path" ] && ! [[ "$path" =~ ^https?:// ]] && [ ! -e "$(dirname "$f")/$path" ]; then
         echo "epic-links: $f: $id -> $path does not exist (run: epic-links.sh sync)" >&2
         bad=1
       fi
