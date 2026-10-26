@@ -44,3 +44,4 @@ reprioritize.
 - [T20261021-337802](T20261021-337802-agent-memory-management.md): Agent memory management: durable dispatcher ledger/job registry, lesson capture, shared standing rules, and memory hygiene automation
 - [T20261021-164802](T20261021-164802-review-and-redesign-gh-git-wrappers.md): Review and redesign the gh/git wrappers (bash review + separate-repo Go redesign for per-repo account switching)
 - [T20261026-542905](T20261026-542905-lint-nudge-frontmatter-field-length.md): lint_tasks.py nudge for over-long frontmatter field values
+- [T20260813-406012](T20260813-406012-ccxp-phase0-sync-abandons-unmerged-self-authored-pr.md): `ccxp` Phase 0 sync silently switches away from a self-authored branch with an open, unmerged PR
