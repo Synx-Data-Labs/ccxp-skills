@@ -35,9 +35,9 @@ The band adapts to the terminal width (`bodyColumns`); sections with nothing to 
 |---|---|---|---|---|
 | < 70 | tiny, one row | `AP ○ 13/24h ✓2` | `ctx 89%` | `run 5 · park 3` |
 | 70-99 | compact, up to two rows | `AP ○ stop 13/24h c6 ✓2` | `ctx 89%` | `run 5 · park 3 · tot 242 (r230 r231 +3)` |
-| >= 100 | wide, up to two rows | `AP ○ stopped 13/24h · cycle 6 ✓2 merged` | `ctx 89% ▓▓▓▓▓▓▓▓▓░` | `jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR, … +1)` |
+| >= 100 | wide, up to three rows | `AP ○ stopped 13/24h · cycle 6 ✓2 merged` | `ctx 89% ▓▓▓▓▓▓▓▓▓░` | `jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR, … +1)` |
 
-- Narrow tiers drop the least important fields first (`lastat`, `cost`, `rate`, `branch`, `task`) when a row budget is short; tiny also hides branch, task and `lastat`.
+- Narrow tiers drop the least important fields first (`lastat`, `cost`, `rate`, `branch`, `task`, then `jobs`) when a row budget is short; tiny also hides branch, task and `lastat`.
 - Wide puts running jobs with titles on their own row; titles are cut at word boundaries and extra jobs collapse to `+N`.
 - No claimed task, no branch, no ledger: the cell is omitted (no `no claimed task`, no `jobs —`).
 

@@ -280,13 +280,13 @@ function pack(blocks: Block[], width: number, maxRows: number): Block[][] | null
 /**
  * The band as rows of segments, laid out for the terminal width (tiny / compact / wide).
  * Sections with nothing to say are dropped, not padded. When the blocks do not fit the
- * rows allowed (one row when tiny, two otherwise) the least important ones are dropped.
+ * rows allowed (one row when tiny, two when compact, three when wide) the least important ones are dropped.
  * Empty when there is nothing to show (the caller then yields to the engine).
  */
 export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[][] {
   const tier = tierOf(columns)
   const width = Math.max(20, columns - 2) // the band has one column of padding each side
-  const maxRows = tier === 'tiny' ? 1 : 2
+  const maxRows = tier === 'tiny' ? 1 : tier === 'compact' ? 2 : 3
   const entries: { field: string; block: Block }[] = []
   for (const f of cfg.fields) {
     const block = blockFor(f, snap, cfg, tier)
@@ -324,5 +324,5 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
 /** One plain line for surfaces with no band (VS Code `$.ui.status`), 2,000 chars at most. */
 export function compactLine(snap: Snapshot, cfg: HudConfig): string {
   const rows = bandRows(snap, cfg, 200)
-  return rows.map(r => r.map(s => s.text).join('')).join(' ').slice(0, 2000)
+  return rows.map(r => r.map(s => s.text).join('')).join(SEP).slice(0, 2000)
 }
