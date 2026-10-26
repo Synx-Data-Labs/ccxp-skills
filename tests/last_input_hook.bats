@@ -1,17 +1,17 @@
 #!/usr/bin/env bats
-# Tests for statusline-setup/scripts/last-input-hook.sh — the Claude Code
+# Tests for hud/scripts/last-input-hook.sh — the Claude Code
 # UserPromptSubmit hook that records WHEN a session last got a prompt: an empty
-# per-session_id file whose mtime is the signal, read by statusline-command.sh's
+# per-session_id file whose mtime is the signal, read by hud-lib.sh's
 # sl-last-input-epoch for the hud `lastat` field. It stores no prompt text.
 #
 # Helper functions are sourced and tested directly (function-wrapped, see the
 # BASH_SOURCE guard at the bottom of the script); the stdin entrypoint
 # last-input-hook is tested end-to-end by piping a synthetic UserPromptSubmit
-# payload, same pattern as tests/statusline_setup.bats.
+# payload, same pattern as the other hook tests.
 
 SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SCRIPT="$REPO_ROOT/statusline-setup/scripts/last-input-hook.sh"
+SCRIPT="$REPO_ROOT/hud/scripts/last-input-hook.sh"
 
 setup() {
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
@@ -81,7 +81,7 @@ setup() {
   touch -t 202001010000 "$LAST_INPUT_STATE_DIR/sess-1"
   run bash -c "printf '%s' '{\"session_id\":\"sess-1\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
-  run bash -c "source '$REPO_ROOT/statusline-setup/scripts/statusline-command.sh'; sl-last-input-epoch '$LAST_INPUT_STATE_DIR' sess-1"
+  run bash -c "source '$REPO_ROOT/hud/scripts/hud-lib.sh'; sl-last-input-epoch '$LAST_INPUT_STATE_DIR' sess-1"
   [ "$status" -eq 0 ]
   [ "$output" -gt 1700000000 ]
 }

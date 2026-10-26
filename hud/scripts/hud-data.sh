@@ -2,8 +2,8 @@
 # JSON data helper for the ccxp-hud mod (T20261022-345549).
 #
 # Reads a statusLine-shaped JSON object on stdin ({cwd, session_id, ...}) and
-# prints ONE JSON object built from the SAME sl-* functions the text statusline
-# uses, so there is a single source of truth and the claimant secret never
+# prints ONE JSON object built from the SAME sl-* functions (hud-lib.sh)
+# so there is a single source of truth and the claimant secret never
 # leaves bash (the mod only ever sees task id/title, never the claimed_by value):
 #
 #   {"task_id","task_title","branch","worktree",
@@ -18,8 +18,8 @@
 # snapshot. No network, no writes.
 
 _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=statusline-command.sh
-. "$_HD_DIR/statusline-command.sh"
+# shellcheck source=hud-lib.sh
+. "$_HD_DIR/hud-lib.sh"
 
 hud-data() {
   local input cwd session_id

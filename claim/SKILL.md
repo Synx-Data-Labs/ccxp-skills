@@ -34,8 +34,8 @@ ambiguous, ask).
 There's no CI to gate a PR and no peer session to race against, so §1–§2's
 PR step is pure ceremony there — but the **branch** and the **claim commit
 landing on `main` before other work** both still earn their keep for a
-different reason: the statusline
-(`../statusline-setup/scripts/statusline-command.sh`) reads
+different reason: the ccxp-hud band
+(`../hud/scripts/hud-lib.sh`) reads
 the **live working tree**, not a remote — `branch: <name>` is literally
 `git symbolic-ref --short HEAD` in the repo root, and `TASK: <id>: <title>`
 is whichever `dev/TODO/*.md` has `claimed_by:` matching this clone's
@@ -63,7 +63,7 @@ git commit -m "docs(claim): claim T<id>, release <other-ids-if-any>"
 git checkout main && git merge --ff-only t<id>-<slug> && bash <skills-root>/_gh/git.sh push
 
 # ...then go BACK to the branch and stay there for the actual work, so
-# `branch:` in the statusline reads t<id>-<slug> for the task's duration,
+# the HUD `branch` reads t<id>-<slug> for the task's duration,
 # not main.
 git checkout t<id>-<slug>
 ```
@@ -78,7 +78,7 @@ bash <skills-root>/_session/task_claim.sh release T<id> <final-status>
 git add -A   # + any Closed-section / journal-move edits
 git commit -m "docs(tasks): close T<id>"   # or fold into the last work commit
 git checkout main && git merge --ff-only t<id>-<slug> && bash <skills-root>/_gh/git.sh push
-git branch -d t<id>-<slug>   # clears the statusline's branch signal back to main
+git branch -d t<id>-<slug>   # clears the HUD's branch signal back to main
 ```
 
 Everything else in §1–§3 (the free/claimable checks, `release-others`

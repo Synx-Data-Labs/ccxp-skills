@@ -46,7 +46,7 @@ export type HelperData = {
   branch: string
   worktree: string
   autopilot: Autopilot | null
-  /** Job ledger (statusline-setup/scripts/ledger.sh), null when there is none. */
+  /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
   last_input_at: number

@@ -81,7 +81,7 @@ since.
 - Helper functions (`pes-envrc-content`, `pes-check-env-tpl`,
   `pes-write-envrc`, `pes-materialize-env`, `pes-direnv-allow`) are
   function-wrapped and BASH_SOURCE-guarded (see
-  `statusline-setup/scripts/statusline-command.sh` for the same pattern), so
+  `quality-probe/scripts/probe.sh` for the same pattern), so
   BATS can source the script and unit-test each step without invoking `op`
   or `direnv` for real.
 - Does not install `op` or `direnv` — it detects their absence and prints

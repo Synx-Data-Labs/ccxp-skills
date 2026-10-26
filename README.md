@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 51 skills in one step:
+so `/plugin` can install all 50 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -28,13 +28,10 @@ resolve correctly under a plugin install.
 
 `_gh/git.sh` (see [Shared helpers](#shared-helpers-_name) below) wires its
 own repo-local git credentials on every invocation — nothing to do.
-`statusLine.command` (`statusline-setup/SKILL.md`) is the one exception: Claude Code has no
-per-plugin statusline mechanism, so it still needs a one-time, manual
-`settings.json` entry pointing at wherever `/plugin install` put this
-plugin — and if that install used a marketplace (not the `directory`
-source this repo's own dev checkout uses), the cache path is
-version-pinned (e.g. `.../ccxp-skills/1.0.1/...`) and needs re-pointing
-after `/plugin update` bumps it.
+The `ccxp-hud` mod (`hud/README.md`) replaces the retired `statusline-setup`
+skill, so there is no `statusLine.command` to wire. The one optional manual
+step is registering the timestamp-only `UserPromptSubmit` hook behind the
+HUD's `lastat` field; see "Last-input hook" in `hud/README.md`.
 
 ## Prerequisites
 
@@ -146,7 +143,6 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 |-------|---------|
 | `verify-site` | Local preview + automated test-plan checks for a site PR |
 | `help-net` | Triage traveler network issues on macOS (GFW, throttle, MTU, DNS, VPN) |
-| `statusline-setup` | Deploy/edit/test the Claude Code statusline script (also feeds the `ccxp-hud` mod, `hud/README.md`) |
 | `md-to-pdf` | Convert markdown to PDF with scaled images, CJK support |
 | `proof-read` | Sentence-level consistency check for markdown (term drift, undefined jargon, CN↔EN) |
 | `translate-patent` | Translate a patent DOCX from Chinese to English |

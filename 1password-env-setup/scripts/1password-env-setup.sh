@@ -112,7 +112,7 @@ pes-direnv-allow() {
 }
 
 # Run only when executed directly (not when sourced), matching the
-# statusline-setup/scripts/statusline-command.sh convention so BATS can
+# quality-probe/scripts/probe.sh convention so BATS can
 # source this file and unit-test the helper functions without invoking the
 # real bootstrap.
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then

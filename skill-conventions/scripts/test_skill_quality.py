@@ -133,7 +133,7 @@ class RepoFrontmatterTest(unittest.TestCase):
     trigger may then never load. This walks every real SKILL.md in the repo
     (not a synthetic fixture) so a future skill with the same mistake fails
     here before it ships. Failed on migrate-task/SKILL.md and
-    statusline-setup/SKILL.md prior to T20260928-101526's frontmatter fix.
+    the since-retired statusline-setup/SKILL.md prior to T20260928-101526's frontmatter fix.
     """
 
     def test_every_skill_frontmatter_is_valid_yaml(self):

@@ -95,7 +95,7 @@ source "$_TC_DIR/_lib.sh"   # identity helpers: session_machine, session_clone_p
 # shellcheck source=/dev/null
 source "$_TC_DIR/claimant-id.sh"  # claimant_id + claimant_is_current_shape — the
                                   # ONE definition of the claimant identity,
-                                  # shared with statusline-command.sh
+                                  # shared with hud-lib.sh
 
 # Where task files live, relative to repo root. Resolved at call time
 # (via _tc_task_dir) so tests and other repos can override TASK_CLAIM_DIR.

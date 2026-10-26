@@ -4,8 +4,8 @@
 # skip-if-populated .envrc (direnv), per hub-repo T20260722-399461.
 #
 # Helper functions (pes-*) are sourced and tested directly (function-wrapped,
-# BASH_SOURCE-guarded — same pattern as statusline-setup/scripts/statusline-
-# command.sh). `op`/`direnv` presence is controlled via a PATH-stub dir so
+# BASH_SOURCE-guarded — same pattern as quality-probe/scripts/probe.sh).
+# `op`/`direnv` presence is controlled via a PATH-stub dir so
 # tests never touch a real 1Password session or shell hook.
 
 SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")" && pwd)"
