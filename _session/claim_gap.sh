@@ -46,6 +46,24 @@ _cg_task_id_from_file() {
   basename "$1" .md | grep -oE '^T[0-9]{8}-[0-9]+' | head -1
 }
 
+# True when the status's leading phrase is "In Progress", tolerating a prose
+# suffix (`In Progress — Leg 3 ...`, `In Progress: ...`, `In Progress (x)`) —
+# same tolerance as lint_tasks.py's status_head() (T20260809-398282). A longer
+# word ("In Progressive") is not a match.
+_cg_is_in_progress() {
+  local v rest
+  v="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  case "$v" in
+    "in progress") return 0 ;;
+    "in progress"*) rest="${v#in progress}" ;;
+    *) return 1 ;;
+  esac
+  case "$rest" in
+    [[:space:]]*|:*|"("*|")"*|-*|—*) return 0 ;;
+  esac
+  return 1
+}
+
 claim_gap() {
   local dir f id status claimed_by
   dir="$(_tc_task_dir)"
@@ -53,14 +71,14 @@ claim_gap() {
   for f in "$dir"/*.md; do
     [ -e "$f" ] || continue
     status="$(_tc_fm_get "$f" status)"
-    case "$status" in "In Progress") : ;; *) continue ;; esac
+    _cg_is_in_progress "$status" || continue
     claimed_by="$(_tc_fm_get "$f" claimed_by)"
     { [ -z "$claimed_by" ] || [ "$claimed_by" = "none" ]; } || continue
     id="$(_cg_task_id_from_file "$f")"
     [ -n "$id" ] || continue
 
-    printf 'unclaimed %s — active status %s with no claim\n' "$id" "$status"
-    _session_log "  ⚠ claim_gap: $id is $status with no claimed_by"
+    printf 'unclaimed %s — active status %s with no claim\n' "$id" "In Progress"
+    _session_log "  ⚠ claim_gap: $id is In Progress with no claimed_by"
   done
 
   return 0

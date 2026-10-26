@@ -97,6 +97,28 @@ EOF
   [[ "$output" == *"unclaimed T20260101-999999"* ]]
 }
 
+@test "flags a prose-suffixed In Progress status with no claimed_by (T20260809-398282)" {
+  _mk_task T20260101-121212 "In Progress — Leg 3 (promote-gate wiring); claimed 2026-06-23" ""
+  _mk_task T20260101-131313 "In Progress: second leg" ""
+  _mk_task T20260101-141414 "In Progress (blocked on review)" ""
+  run claim_gap
+  [[ "$output" == *"unclaimed T20260101-121212 — active status In Progress"* ]]
+  [[ "$output" == *"unclaimed T20260101-131313"* ]]
+  [[ "$output" == *"unclaimed T20260101-141414"* ]]
+}
+
+@test "does NOT flag a longer word that merely starts with In Progress" {
+  _mk_task T20260101-151515 "In Progressive" ""
+  run claim_gap
+  [ -z "$output" ]
+}
+
+@test "silent on a prose-suffixed In Progress task that IS claimed" {
+  _mk_task T20260101-161616 "In Progress — Leg 2" cdw:/home/ci/repo
+  run claim_gap
+  [ -z "$output" ]
+}
+
 # --- claim_gap_changed (dedup wrapper, T20260809-310724 root cause C) ------
 
 @test "claim_gap_changed posts on the first call (no prior state)" {
