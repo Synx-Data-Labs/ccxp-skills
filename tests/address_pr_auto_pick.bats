@@ -23,6 +23,8 @@ write_gh_stub() {
   cat > "$fakebin/gh-stub.sh" <<STUB
 #!/usr/bin/env bash
 case "\$*" in
+  "repo view --json nameWithOwner --jq .nameWithOwner")
+    echo "\${STUB_REPO_SLUG:-}" ;;
   "pr list --author @me --state open --json number,title,createdAt --jq sort_by(.createdAt)")
     cat <<'JSON'
 $json
@@ -154,4 +156,38 @@ run_auto_pick_stdout_only() {
   ! grep -q '~/\.claude/skills' "$SCRIPT"
   grep -q '/\.\./\.\./_gh" && pwd)/gh\.sh' "$SCRIPT"
   grep -q '/\.\./\.\./_session" && pwd)/task_claim\.sh' "$SCRIPT"
+}
+
+@test "default do-not-touch list skips parked PR #2590 of synxdb-build-pipeline" {
+  write_gh_stub '[{"number":2590,"title":"migrate high-risk tier","createdAt":"2026-06-30T00:00:00Z"},{"number":2600,"title":"other","createdAt":"2026-07-01T00:00:00Z"}]'
+  write_claim_stub "2590:free 2600:free"
+
+  STUB_REPO_SLUG="Synx-Data-Labs/synxdb-build-pipeline" run_auto_pick_stdout_only
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"number":2600'* ]]
+  [[ "$output" != *'"number":2590'* ]]
+}
+
+@test "do-not-touch entry only matches its own repo" {
+  write_gh_stub '[{"number":2590,"title":"same number, other repo","createdAt":"2026-06-30T00:00:00Z"}]'
+  write_claim_stub "2590:free"
+
+  STUB_REPO_SLUG="Synx-Data-Labs/ccxp-skills" run_auto_pick_stdout_only
+  [[ "$output" == *'"number":2590'* ]]
+}
+
+@test "AUTO_PICK_DO_NOT_TOUCH overrides the default list (comma/space separated)" {
+  write_gh_stub '[{"number":2590,"title":"was parked","createdAt":"2026-06-30T00:00:00Z"},{"number":7,"title":"now parked","createdAt":"2026-07-01T00:00:00Z"},{"number":8,"title":"ok","createdAt":"2026-07-02T00:00:00Z"}]'
+  write_claim_stub "2590:free 7:free 8:free"
+
+  STUB_REPO_SLUG="Synx-Data-Labs/synxdb-build-pipeline" AUTO_PICK_DO_NOT_TOUCH="Synx-Data-Labs/synxdb-build-pipeline#7, other/repo#8" run_auto_pick_stdout_only
+  [[ "$output" == *'"number":2590'* ]]
+}
+
+@test "empty AUTO_PICK_DO_NOT_TOUCH disables the list" {
+  write_gh_stub '[{"number":2590,"title":"parked by default","createdAt":"2026-06-30T00:00:00Z"}]'
+  write_claim_stub "2590:free"
+
+  STUB_REPO_SLUG="Synx-Data-Labs/synxdb-build-pipeline" AUTO_PICK_DO_NOT_TOUCH="" run_auto_pick_stdout_only
+  [[ "$output" == *'"number":2590'* ]]
 }

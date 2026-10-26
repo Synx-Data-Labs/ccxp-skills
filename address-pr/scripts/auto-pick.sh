@@ -16,6 +16,15 @@
 # were skipped and why) goes to stderr so stdout stays machine-parseable
 # (one-line JSON object, or nothing).
 #
+# Do-not-touch list: PRs deliberately parked (never auto-picked, whatever
+# their ownership verdict). Entries are `<owner>/<repo>#<number>`, separated
+# by spaces or commas, matched against the current repo.
+#   AUTO_PICK_DO_NOT_TOUCH  overrides the list (set to "" for none).
+#   default                 Synx-Data-Labs/synxdb-build-pipeline#2590
+#                           ("migrate high-risk tier to
+#                           synx-build-pipeline-bot App token", parked).
+# If the current repo slug cannot be resolved, nothing is skipped (fail-open).
+#
 # Usage:
 #   bash auto-pick.sh
 #
@@ -30,8 +39,21 @@ set -euo pipefail
 GH_SH="${GH_SH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../_gh" && pwd)/gh.sh}"
 TASK_CLAIM_SH="${TASK_CLAIM_SH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../_session" && pwd)/task_claim.sh}"
 
+AUTO_PICK_DEFAULT_DO_NOT_TOUCH="Synx-Data-Labs/synxdb-build-pipeline#2590"
+
+# auto-pick-parked <slug> <number> — exit 0 if <slug>#<number> is on the list.
+function auto-pick-parked() {
+  local slug="$1" number="$2" entry
+  [ -n "$slug" ] || return 1
+  for entry in $(printf '%s' "${AUTO_PICK_DO_NOT_TOUCH-$AUTO_PICK_DEFAULT_DO_NOT_TOUCH}" | tr ',' ' '); do
+    [ "$entry" = "$slug#$number" ] && return 0
+  done
+  return 1
+}
+
 function auto-pick-main() {
-  local prs_json
+  local prs_json slug
+  slug="$(bash "$GH_SH" repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null || true)"
   prs_json="$(bash "$GH_SH" pr list --author @me --state open \
     --json number,title,createdAt --jq 'sort_by(.createdAt)' 2>/dev/null || true)"
 
@@ -43,6 +65,11 @@ function auto-pick-main() {
   while IFS= read -r pr; do
     [ -n "$pr" ] || continue
     number="$(jq -r '.number' <<<"$pr")"
+
+    if auto-pick-parked "$slug" "$number"; then
+      printf 'auto-pick: skipping PR #%s (do-not-touch list)\n' "$number" >&2
+      continue
+    fi
 
     reason="$(bash "$TASK_CLAIM_SH" pr-owner "$number" 2>/dev/null || true)"
 
