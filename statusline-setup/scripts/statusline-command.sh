@@ -15,9 +15,11 @@
 # loads ~/.claude/.env at source time, and this runs on every prompt render.
 # claimant-id.sh is side-effect-free for exactly this caller.
 
-# Last-user-input cache dir, written by last-input-hook.sh's UserPromptSubmit
-# hook (T20260924-366770). Mirrors claimant-id.sh's CLAIMANT_STATE_DIR
-# override convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
+# Last-user-input timestamp dir: last-input-hook.sh's UserPromptSubmit hook
+# touches <dir>/<session_id> on every prompt, and only that file's mtime is
+# read (sl-last-input-epoch, for the hud `lastat` field). The files hold no
+# prompt text. Mirrors claimant-id.sh's CLAIMANT_STATE_DIR override
+# convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
 LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
 
 # ccxp-hud heartbeat dir (T20261022-345549): the hud mod writes "on" to
@@ -225,28 +227,11 @@ sl-ledger-part() {
   jq -r '"jobs run \(.running | length) · total \(.lifetime_jobs) · parked \(.parked)"' <<<"$j" 2>/dev/null || true
 }
 
-# $1 last-input state dir, $2 session_id -> "last: <cached text>", or
-# nothing when no cache file exists yet for this session (degrade-to-empty,
-# same convention as every other sl-* helper here).
-sl-last-input-part() {
-  local dir="$1" session_id="$2" file text
-  [ -n "$session_id" ] || return 0
-  # Reject anything that isn't a safe bare filename (path separator, or
-  # exactly "." / "..") — mirrors last-input-hook.sh's li-safe-session-id so
-  # a crafted session_id can't read an arbitrary file outside $dir.
-  case "$session_id" in
-    */*|.|..) return 0 ;;
-  esac
-  file="$dir/$session_id"
-  [ -r "$file" ] || return 0
-  text="$(cat "$file" 2>/dev/null)"
-  [ -n "$text" ] || return 0
-  printf 'last: %s' "$text"
-}
-
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt
 # this session submitted (the cache file's mtime, written by the
-# UserPromptSubmit hook), or nothing. Same safe-session-id rule as above.
+# UserPromptSubmit hook), or nothing. A session_id with a path separator (or
+# exactly "." / "..") is rejected, mirroring last-input-hook.sh's
+# li-safe-session-id, so a payload can never make this read outside the dir.
 sl-last-input-epoch() {
   local dir="$1" session_id="$2" file mtime
   [ -n "$session_id" ] || return 0
@@ -304,7 +289,7 @@ statusline-command() {
   todo_dir="$repo_root/dev/TODO"
   task_label=$(sl-claimed-task-label "$todo_dir" "$clone_id")
 
-  local ap_part="" ctx_part="" branch_part="" task_part branch_name last_input_part=""
+  local ap_part="" ctx_part="" branch_part="" task_part branch_name
   ap_part=$(sl-autopilot-part "$repo_root")
   if [ -n "$remaining" ]; then
     ctx_part="ctx: $(printf '%.0f' "$remaining")% left"
@@ -318,17 +303,16 @@ statusline-command() {
   else
     task_part="no claimed task"
   fi
-  last_input_part=$(sl-last-input-part "$LAST_INPUT_STATE_DIR" "$session_id")
   local jobs_part; jobs_part=$(sl-ledger-part)
 
-  # The hud band already shows autopilot, task and last input: keep only the
+  # The hud band already shows autopilot, task and last-input time: keep only the
   # always-useful ctx | branch while it is live.
   if sl-hud-active "$HUD_ACTIVE_DIR" "$session_id"; then
     sl-join "$ctx_part" "$branch_part"
     return 0
   fi
 
-  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$jobs_part" "$last_input_part"
+  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$jobs_part"
 }
 
 # Run only when executed directly (not when sourced), matching the

@@ -16,7 +16,7 @@ setup() {
   # must neither read the developer's real identity nor write to their home.
   isolate_claimant_state
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
-  # Same isolation for the last-user-input cache (T20260924-366770).
+  # Same isolation for the last-user-input timestamp dir.
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
 }
 
@@ -224,41 +224,29 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# sl-last-input-part
+# sl-last-input-epoch (timestamp only; the `last: <text>` part is retired)
 # ---------------------------------------------------------------------------
 
-@test "sl-last-input-part prints nothing when session_id is empty" {
-  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' ''"
+@test "sl-last-input-epoch prints nothing for an empty session_id or a missing file" {
+  run bash -c "source '$SCRIPT'; sl-last-input-epoch '$BATS_TEST_TMPDIR/li' ''; sl-last-input-epoch '$BATS_TEST_TMPDIR/li-missing' 'sess-1'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-last-input-part prints nothing when no cache file exists for this session" {
-  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li-missing' 'sess-1'"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test "sl-last-input-part prints 'last: <text>' when a cache file exists" {
-  mkdir -p "$BATS_TEST_TMPDIR/li"
-  printf '%s' 'fix the thing' > "$BATS_TEST_TMPDIR/li/sess-1"
-  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' 'sess-1'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "last: fix the thing" ]
-}
-
-@test "sl-last-input-part prints nothing when the cache file is empty" {
+@test "sl-last-input-epoch prints the file mtime as epoch seconds" {
   mkdir -p "$BATS_TEST_TMPDIR/li"
   : > "$BATS_TEST_TMPDIR/li/sess-1"
-  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' 'sess-1'"
+  touch -t 202601010000 "$BATS_TEST_TMPDIR/li/sess-1"
+  run bash -c "source '$SCRIPT'; sl-last-input-epoch '$BATS_TEST_TMPDIR/li' 'sess-1'"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
+  [[ "$output" =~ ^[0-9]+$ ]]
+  [ "$output" -gt 1700000000 ]
 }
 
-@test "sl-last-input-part rejects a path-traversal session_id instead of reading outside the state dir" {
+@test "sl-last-input-epoch rejects a path-traversal session_id instead of reading outside the state dir" {
   mkdir -p "$BATS_TEST_TMPDIR/li"
-  printf 'secret' > "$BATS_TEST_TMPDIR/outside-marker"
-  run bash -c "source '$SCRIPT'; sl-last-input-part '$BATS_TEST_TMPDIR/li' '../outside-marker'"
+  : > "$BATS_TEST_TMPDIR/outside-marker"
+  run bash -c "source '$SCRIPT'; sl-last-input-epoch '$BATS_TEST_TMPDIR/li' '../outside-marker'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
@@ -313,22 +301,13 @@ EOF
   [ "$output" = "ctx: 100% left | branch: $branch | no claimed task" ]
 }
 
-@test "statusline-command appends the last-input segment when a cache file exists for session_id" {
+@test "statusline-command never prints a last: segment, even when a cached file holds old text" {
   local repo branch
   repo=$(_make_repo repo10)
   branch=$(git -C "$repo" symbolic-ref --short HEAD)
   mkdir -p "$LAST_INPUT_STATE_DIR"
   printf '%s' 'fix the thing' > "$LAST_INPUT_STATE_DIR/sess-xyz"
   run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":55},\"session_id\":\"sess-xyz\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 55% left | branch: $branch | no claimed task | last: fix the thing" ]
-}
-
-@test "statusline-command omits the last-input segment when no cache file exists for session_id" {
-  local repo branch
-  repo=$(_make_repo repo11)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":55},\"session_id\":\"sess-never-wrote\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
   [ "$output" = "ctx: 55% left | branch: $branch | no claimed task" ]
 }

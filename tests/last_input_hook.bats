@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
 # Tests for statusline-setup/scripts/last-input-hook.sh — the Claude Code
-# UserPromptSubmit hook that caches a sanitized, truncated copy of the last
-# submitted prompt per session_id, read by statusline-command.sh's
-# sl-last-input-part (T20260924-366770).
+# UserPromptSubmit hook that records WHEN a session last got a prompt: an empty
+# per-session_id file whose mtime is the signal, read by statusline-command.sh's
+# sl-last-input-epoch for the hud `lastat` field. It stores no prompt text.
 #
 # Helper functions are sourced and tested directly (function-wrapped, see the
 # BASH_SOURCE guard at the bottom of the script); the stdin entrypoint
@@ -29,32 +29,6 @@ setup() {
   run bash -c "source '$SCRIPT'; type last-input-hook >/dev/null 2>&1 && echo OK"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
-}
-
-# ---------------------------------------------------------------------------
-# li-sanitize
-# ---------------------------------------------------------------------------
-
-@test "li-sanitize collapses newlines and tabs to single spaces" {
-  run bash -c "source '$SCRIPT'; li-sanitize \$'hello\nworld\tagain'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "hello world again" ]
-}
-
-@test "li-sanitize squeezes repeated whitespace and trims ends" {
-  run bash -c "source '$SCRIPT'; li-sanitize '  hello    world  '"
-  [ "$status" -eq 0 ]
-  [ "$output" = "hello world" ]
-}
-
-@test "li-sanitize strips the ESC/BEL control bytes that drive terminal escape sequences" {
-  # Strips the raw ESC (\x1b) and BEL (\x07) bytes themselves — defusing the
-  # escape sequence so it can never be replayed into the terminal — without
-  # needing to parse/strip the printable text a real sequence would carry
-  # (e.g. "[31m"), which is inert once its driving control byte is gone.
-  run bash -c "source '$SCRIPT'; li-sanitize \$'hello\x1b[31mworld\x07'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "hello[31mworld" ]
 }
 
 # ---------------------------------------------------------------------------
@@ -89,34 +63,35 @@ setup() {
 }
 
 # ---------------------------------------------------------------------------
-# li-truncate
+# last-input-hook (full stdin -> timestamp-file pipeline)
 # ---------------------------------------------------------------------------
 
-@test "li-truncate leaves a short string untouched" {
-  run bash -c "source '$SCRIPT'; li-truncate 'hello' 40"
-  [ "$status" -eq 0 ]
-  [ "$output" = "hello" ]
-}
-
-@test "li-truncate cuts a long string and appends a single ellipsis" {
-  run bash -c "source '$SCRIPT'; li-truncate '0123456789abcdefghij' 10"
-  [ "$status" -eq 0 ]
-  [ "$output" = "0123456789…" ]
-}
-
-# ---------------------------------------------------------------------------
-# last-input-hook (full stdin -> cache-file pipeline)
-# ---------------------------------------------------------------------------
-
-@test "last-input-hook writes a sanitized, truncated, single-line cache file" {
-  run bash -c "printf '%s' '{\"session_id\":\"sess-1\",\"prompt\":\"hello   world\nwith newline and\ttabs plus a lot more text than forty characters for sure\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
+@test "last-input-hook writes an EMPTY per-session file — no prompt text is stored" {
+  run bash -c "printf '%s' '{\"session_id\":\"sess-1\",\"prompt\":\"super secret prompt text\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
   [ -f "$LAST_INPUT_STATE_DIR/sess-1" ]
-  run cat "$LAST_INPUT_STATE_DIR/sess-1"
+  [ ! -s "$LAST_INPUT_STATE_DIR/sess-1" ]
+  run grep -rl "secret" "$LAST_INPUT_STATE_DIR"
+  [ "$status" -ne 0 ]
+}
+
+@test "last-input-hook bumps the file mtime to now on each prompt" {
+  mkdir -p "$LAST_INPUT_STATE_DIR"
+  : > "$LAST_INPUT_STATE_DIR/sess-1"
+  touch -t 202001010000 "$LAST_INPUT_STATE_DIR/sess-1"
+  run bash -c "printf '%s' '{\"session_id\":\"sess-1\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
-  # single line, no raw newline/tab bytes, capped at 40 chars + ellipsis
-  [ "$(printf '%s' "$output" | wc -l)" -eq 0 ]
-  [ "$output" = "hello world with newline and tabs plus a…" ]
+  run bash -c "source '$REPO_ROOT/statusline-setup/scripts/statusline-command.sh'; sl-last-input-epoch '$LAST_INPUT_STATE_DIR' sess-1"
+  [ "$status" -eq 0 ]
+  [ "$output" -gt 1700000000 ]
+}
+
+@test "last-input-hook wipes prompt text cached there by the retired text feature" {
+  mkdir -p "$LAST_INPUT_STATE_DIR"
+  printf 'old cached prompt' > "$LAST_INPUT_STATE_DIR/sess-1"
+  run bash -c "printf '%s' '{\"session_id\":\"sess-1\",\"prompt\":\"x\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
+  [ "$status" -eq 0 ]
+  [ ! -s "$LAST_INPUT_STATE_DIR/sess-1" ]
 }
 
 @test "last-input-hook exits 0 and writes nothing when session_id is absent" {
@@ -126,18 +101,11 @@ setup() {
 }
 
 @test "last-input-hook refuses a path-traversal session_id and writes nothing outside the state dir" {
-  local outside="$BATS_TEST_TMPDIR/outside-marker"
+  marker="$BATS_TEST_TMPDIR/outside-marker"
   run bash -c "printf '%s' '{\"session_id\":\"../outside-marker\",\"prompt\":\"pwned\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
   [ "$status" -eq 0 ]
-  [ ! -f "$outside" ]
+  [ ! -e "$marker" ]
   [ ! -d "$LAST_INPUT_STATE_DIR" ] || [ -z "$(ls -A "$LAST_INPUT_STATE_DIR" 2>/dev/null)" ]
-}
-
-@test "last-input-hook exits 0 and writes an empty cache file when prompt is absent" {
-  run bash -c "printf '%s' '{\"session_id\":\"sess-2\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ -f "$LAST_INPUT_STATE_DIR/sess-2" ]
-  [ -z "$(cat "$LAST_INPUT_STATE_DIR/sess-2")" ]
 }
 
 @test "last-input-hook exits 0 on malformed JSON (never fails prompt submission)" {

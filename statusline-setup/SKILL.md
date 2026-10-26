@@ -1,6 +1,6 @@
 ---
 name: statusline-setup
-description: 'Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged>" segment leads it while /autopilot is running or after it last stopped; an optional trailing "last=<slug>" segment is fed by a companion UserPromptSubmit hook), driven by settings.json''s statusLine.command'
+description: 'Use when the user explicitly asks to redeploy, edit, or test the Claude Code statusline script — the "ctx: N% left | TASK: ..." line in the terminal status bar (an optional "ap:[r]/[b]/[s] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged>" segment leads it while /autopilot is running or after it last stopped; an optional companion UserPromptSubmit hook records only the time of the last prompt, for the HUD "lastat" field), driven by settings.json''s statusLine.command'
 argument-hint: "[edit|test]"
 ---
 
@@ -18,14 +18,15 @@ the remaining context-window percentage, and an `ap:` segment read from
 - `ap:[b] ...` — running but backing off after a stuck `/drive` cycle
 - `ap:[s] ...` — stopped; lingers until the next `/autopilot` invocation overwrites the file
 
-A trailing `last: <slug>` segment (T20260924-366770):
+The former `last: <text>` segment (T20260924-366770) is **retired**; nothing
+stores prompt text any more. Only a timestamp remains: the optional
+`scripts/last-input-hook.sh` hook (Deploy step 4) feeds the HUD `lastat` field.
 
-- Shows a sanitized, ~40-char truncation of the last prompt *this session*
-  submitted — useful when several clones/sessions run in parallel and the
-  terminal tabs alone don't say which is working on what.
-- Fed by a companion `scripts/last-input-hook.sh` `UserPromptSubmit` hook —
-  mechanical truncation only, no LLM call (see that script's own header).
-- Omitted entirely when no cache file exists yet for the session.
+**Migration** for anyone who registered the hook:
+
+- Keep the `hooks.UserPromptSubmit` entry as-is: same script path, `lastat` keeps working.
+- The HUD `last` field is gone (an old `"last"` in `ccxp-hud.json` is ignored).
+- Cached text under `~/.claude/state/last-input/` is never read; delete it if you like.
 
 The script previously lived loose at `~/.claude/statusline-command.sh`,
 untracked by any repo. It now lives here so changes go through a normal
@@ -94,13 +95,11 @@ change," not editing.)
    `~/.claude/plugins/cache/ccxp-skills/ccxp-skills/` if unsure which
    version is current.
 
-4. For **each** config dir from step 2, confirm its `settings.json`'s
-   `hooks.UserPromptSubmit` array includes an entry pointing at
-   `scripts/last-input-hook.sh` (T20260924-366770 — feeds the `last: ...`
-   statusline segment). This is **additive**, alongside whatever other
-   `UserPromptSubmit` hook may already be configured for an unrelated
-   purpose (e.g. a terminal-integration status hook) — never replace the
-   array, append to it:
+4. Optional, for the HUD `lastat` field (`you HH:MM`, hidden until this is
+   registered): in **each** config dir from step 2, append an entry for
+   `scripts/last-input-hook.sh` to `hooks.UserPromptSubmit`. The hook is
+   timestamp-only (never reads or stores prompt text). Append, never replace
+   the array; other `UserPromptSubmit` hooks stay:
 
    ```json
    "UserPromptSubmit": [
@@ -149,7 +148,7 @@ claude plugin test .   # the hud mod's unit tests (needs the claude CLI)
 ```
 
 Helper functions (`sl-repo-root`, `sl-clone-id`, `sl-claimed-task-label`,
-`sl-join`, `sl-last-input-part`) are sourced and unit-tested directly; the
+`sl-join`, `sl-last-input-epoch`) are sourced and unit-tested directly; the
 stdin entrypoints (`statusline-command`, `last-input-hook`) are each tested
 by piping a synthetic hook-input JSON payload, same pattern as
 `quality-probe/scripts/probe.sh`.

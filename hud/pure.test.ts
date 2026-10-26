@@ -10,7 +10,6 @@ const HELPER = JSON.stringify({
   worktree: '',
   autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2 },
   ledger: { running: [{ job: 230, title: 'fix hud' }], lifetime_jobs: 230, parked: 3, parked_ids: ['k1', 'k2', 'k3'], next_job: 231, updated_at: '' },
-  last_input: '',
 })
 
 const snap = (over = {}) => ({ ...EMPTY, helper: parseHelper(HELPER), ctxLeft: 64, ...over })
@@ -39,7 +38,7 @@ test('config: project overrides user overrides defaults, key by key', async () =
 
 test('config: fields take a list or a comma string, drop unknown names', async () => {
   expect(parseConfigText('{"fields": "ctx, task,bogus,ctx"}').fields).toEqual(['ctx', 'task'])
-  expect(parseConfigText('{"fields": ["ap", 3, "last"]}').fields).toEqual(['ap', 'last'])
+  expect(parseConfigText('{"fields": ["ap", 3, "last"]}').fields).toEqual(['ap'])
 })
 
 test('config: numbers are clamped (poll minimum 5, crit never above warn)', async () => {
