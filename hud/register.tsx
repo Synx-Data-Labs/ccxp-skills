@@ -105,7 +105,6 @@ async function refresh($: any, cfg: HudConfig) {
     const cwd: string = await $.session.cwd()
     const sessionId: string = await $.session.id()
     const argv = ['bash', `${$.plugin.root}/statusline-setup/scripts/hud-data.sh`, '--json']
-    if (cfg.fields.includes('last')) argv.push('--with-last-input')
     const res = await $.process.run(argv, {
       cwd,
       stdin: JSON.stringify({ cwd, session_id: sessionId }),

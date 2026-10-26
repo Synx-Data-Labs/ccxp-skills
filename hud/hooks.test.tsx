@@ -9,7 +9,6 @@ const HELPER = JSON.stringify({
   worktree: '',
   autopilot: null,
   ledger: { running: [{ job: 230, title: 'x' }], lifetime_jobs: 230, parked: 2, parked_ids: ['k1', 'k2'], next_job: 231, updated_at: '' },
-  last_input: '',
 })
 
 type World = {

@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Claude Code UserPromptSubmit hook — caches a sanitized, truncated copy of
-# the just-submitted prompt so statusline-command.sh can show "what did I
-# just ask this session" without re-reading the growing transcript JSONL on
-# every render (T20260924-366770).
+# Claude Code UserPromptSubmit hook — records WHEN this session last received
+# a prompt, so the hud `lastat` field ("you HH:MM") can show it without
+# re-reading the growing transcript JSONL. Timestamp only: it never stores or
+# reads the prompt text. The per-session file is empty; its mtime is the
+# signal (statusline-command.sh: sl-last-input-epoch, read by hud-data.sh).
 #
-# Fires exactly once per genuine human submission (slash commands included,
-# as their literal typed text) — never on a tool-result turn (those also
-# carry role:user in the transcript, but UserPromptSubmit never sees them),
-# so no transcript role filtering is needed here.
+# History: this hook used to cache a truncated copy of the prompt for a
+# `last: <text>` statusline segment (T20260924-366770). That text feature is
+# retired; the script keeps its name and path so existing settings.json
+# entries keep working. Writing (truncating) the per-session file also wipes
+# any prompt text a previous version cached there.
+#
+# Fires exactly once per genuine human submission (slash commands included) —
+# never on a tool-result turn, so no transcript role filtering is needed.
 #
 # Mirrors _session/claimant-id.sh's CLAIMANT_STATE_DIR convention
 # (_session/claimant-id.sh:30) for an override env var, so BATS can isolate
@@ -16,11 +21,10 @@
 # Deliberately NOT `set -euo pipefail`: same rationale as
 # statusline-command.sh and claimant-id.sh — this runs on every prompt
 # submission and must never fail/hang the interactive flow. Every failure
-# path below degrades to "cache not written this time" rather than a
+# path below degrades to "timestamp not updated this time" rather than a
 # non-zero exit.
 
 LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
-LAST_INPUT_MAX_CHARS="${LAST_INPUT_MAX_CHARS:-40}"
 LAST_INPUT_PRUNE_DAYS="${LAST_INPUT_PRUNE_DAYS:-30}"
 
 # True (0) iff $1 is safe to use as a bare filename under LAST_INPUT_STATE_DIR
@@ -38,28 +42,7 @@ li-safe-session-id() {
   return 0
 }
 
-# Collapse newlines/tabs to spaces, strip other C0/DEL control bytes (an
-# escape/control sequence pasted into a prompt must not be replayed into the
-# terminal on every statusline render), squeeze repeated whitespace, trim
-# ends.
-li-sanitize() {
-  local text="$1"
-  text="${text//$'\n'/ }"
-  text="${text//$'\t'/ }"
-  printf '%s' "$text" | tr -d '\000-\010\013-\037\177' | sed -E 's/ +/ /g; s/^ //; s/ $//'
-}
-
-# Truncate to N chars, appending a single "…" when cut.
-li-truncate() {
-  local text="$1" max="$2"
-  if [ "${#text}" -le "$max" ]; then
-    printf '%s' "$text"
-  else
-    printf '%s…' "${text:0:$max}"
-  fi
-}
-
-# Remove cache files older than N days from the state dir. Best-effort —
+# Remove timestamp files older than N days from the state dir. Best-effort —
 # never fails the hook. Runs on every write (not tied to SessionEnd, since
 # /clear or a crashed session can skip that hook).
 li-prune-stale() {
@@ -68,26 +51,21 @@ li-prune-stale() {
   find "$dir" -maxdepth 1 -type f -mtime "+${days}" -delete 2>/dev/null || true
 }
 
-# Reads a UserPromptSubmit stdin payload (prompt/session_id/cwd/...), writes
-# the sanitized+truncated prompt to "$LAST_INPUT_STATE_DIR/<session_id>", and
-# prunes stale sibling files. Always exits 0 — a broken hook must not block
-# prompt submission.
+# Reads a UserPromptSubmit stdin payload, takes only its session_id, and
+# (re)creates an empty "$LAST_INPUT_STATE_DIR/<session_id>" so its mtime is
+# now. Prunes stale sibling files. Always exits 0 — a broken hook must not
+# block prompt submission.
 last-input-hook() {
-  local input session_id prompt sanitized
+  local input session_id
   input=$(cat)
   session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null)
-  prompt=$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null)
 
   # No session id, or one that isn't a safe bare filename — nothing to key
-  # the cache file on.
+  # the file on.
   li-safe-session-id "$session_id" || exit 0
 
   ( umask 077; mkdir -p "$LAST_INPUT_STATE_DIR" ) 2>/dev/null || exit 0
-
-  sanitized=$(li-sanitize "$prompt")
-  sanitized=$(li-truncate "$sanitized" "$LAST_INPUT_MAX_CHARS")
-
-  ( umask 077; printf '%s' "$sanitized" > "$LAST_INPUT_STATE_DIR/$session_id" ) 2>/dev/null || true
+  ( umask 077; : > "$LAST_INPUT_STATE_DIR/$session_id" ) 2>/dev/null || true
 
   li-prune-stale "$LAST_INPUT_STATE_DIR" "$LAST_INPUT_PRUNE_DAYS"
   exit 0

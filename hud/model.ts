@@ -74,7 +74,6 @@ export function parseHelper(stdout: string): HelperData | null {
     autopilot,
     ledger,
     last_input_at: num(r.last_input_at),
-    last_input: str(r.last_input),
   }
 }
 
@@ -187,10 +186,6 @@ function segFor(field: Field, snap: Snapshot, cfg: HudConfig, room: number): Seg
     case 'lastat': {
       const at = h?.last_input_at
       return at ? [{ text: `you ${formatStamp(at)}`, dim: true }] : null
-    }
-    case 'last': {
-      const t = h?.last_input
-      return t ? [{ text: truncate(`last: ${t}`, room), dim: true }] : null
     }
   }
 }

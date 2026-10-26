@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'ap' | 'ctx' | 'branch' | 'task' | 'jobs' | 'rate' | 'cost' | 'last' | 'lastat'
+export type Field = 'ap' | 'ctx' | 'branch' | 'task' | 'jobs' | 'rate' | 'cost' | 'lastat'
 
 export type HudConfig = {
   enabled: boolean
@@ -50,7 +50,6 @@ export type HelperData = {
   ledger: Ledger | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
   last_input_at: number
-  last_input: string
 }
 
 export type Jobs = { running: number; waiting: number; failed: number }

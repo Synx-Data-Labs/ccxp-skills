@@ -156,14 +156,13 @@ EOT
   [ "$(jq -r .worktree <<<"$output")" = "" ]
 }
 
-@test "--json: last_input is empty unless --with-last-input is passed" {
+@test "--json: has no last_input text key, and --with-last-input is ignored" {
   local repo; repo=$(_make_repo r-last)
   mkdir -p "$LAST_INPUT_STATE_DIR"
   printf 'hello there' > "$LAST_INPUT_STATE_DIR/sess1"
-  run _hud "$repo" --json
-  [ "$(jq -r .last_input <<<"$output")" = "" ]
   run _hud "$repo" --json --with-last-input
-  [ "$(jq -r .last_input <<<"$output")" = "hello there" ]
+  [ "$(jq -r 'has("last_input")' <<<"$output")" = "false" ]
+  [[ "$output" != *"hello there"* ]]
 }
 
 @test "unparseable stdin or a non-repo cwd still prints valid JSON and exits 0" {
@@ -254,7 +253,7 @@ _line() { # $1 repo
   local repo; repo=$(_make_repo r-lastat)
   run _hud "$repo" --json
   [ "$(jq -r .last_input_at <<<"$output")" = "0" ]
-  mkdir -p "$LAST_INPUT_STATE_DIR"; printf 'hello' > "$LAST_INPUT_STATE_DIR/sess1"
+  mkdir -p "$LAST_INPUT_STATE_DIR"; : > "$LAST_INPUT_STATE_DIR/sess1"
   touch -t 202601010000 "$LAST_INPUT_STATE_DIR/sess1"
   run _hud "$repo" --json
   [ "$(jq -r '.last_input_at > 1700000000' <<<"$output")" = "true" ]

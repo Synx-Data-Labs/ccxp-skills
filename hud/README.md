@@ -23,7 +23,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `band` | `true` | status band |
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `fields` | `ap,ctx,branch,task,jobs,lastat` | `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted, via the UserPromptSubmit hook cache; also `rate`, `cost`, `last` (the last prompt text; opt-in) |
+| `fields` | `ap,ctx,branch,task,jobs,lastat` | `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted. It needs the timestamp-only UserPromptSubmit hook `statusline-setup/scripts/last-input-hook.sh` registered (see statusline-setup/SKILL.md), otherwise it stays hidden; also `rate`, `cost`. The old `last` (prompt text) field is retired and ignored |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
 
@@ -36,6 +36,6 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 
 - Needs Claude Code 2.1.287 or newer (mods on by default); the mod API is early access and may change.
 - Data comes from `statusline-setup/scripts/hud-data.sh --json` (bash; keeps the claimant secret out of the mod). No network, model or MCP calls.
-- The classic statusline shrinks to `ctx | branch` while the band is live, so keep the default `fields` (or `/hud off`) if you want autopilot, task or last prompt to stay visible there.
+- The classic statusline shrinks to `ctx | branch` while the band is live, so keep the default `fields` (or `/hud off`) if you want autopilot, task or last-input time to stay visible there.
 - Any error inside a hook falls back to Claude Code's own drawing.
 - Tests: `claude plugin test .` (units and hook behaviour) and `bats tests/hud_data.bats` (data helper).
