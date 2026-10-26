@@ -43,3 +43,4 @@ reprioritize.
 - [T20261020-131330](T20261020-131330-customer-support-skill-automate-full-support-issue-lifecycle.md): customer-support skill: automate the full lifecycle of a support issue (triage -> deliver)
 - [T20261021-337802](T20261021-337802-agent-memory-management.md): Agent memory management: durable dispatcher ledger/job registry, lesson capture, shared standing rules, and memory hygiene automation
 - [T20261021-164802](T20261021-164802-review-and-redesign-gh-git-wrappers.md): Review and redesign the gh/git wrappers (bash review + separate-repo Go redesign for per-repo account switching)
+- [T20261026-542905](T20261026-542905-lint-nudge-frontmatter-field-length.md): lint_tasks.py nudge for over-long frontmatter field values
