@@ -22,7 +22,7 @@
 # per machine. See the task's "Format alternatives considered" table.
 #
 # DELIBERATELY SIDE-EFFECT-FREE: no `set`, no env loading, no work at source
-# time. statusline-command.sh runs on every prompt render and must not inherit
+# time. hud-lib.sh runs on every HUD poll and must not inherit
 # shell options or pay for I/O just to know who it is — that constraint is why
 # this is its own file rather than part of _lib.sh, and why the identity is not
 # reimplemented in two places (the bug class this task exists to close).

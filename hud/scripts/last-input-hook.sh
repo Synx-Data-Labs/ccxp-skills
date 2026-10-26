@@ -3,7 +3,7 @@
 # a prompt, so the hud `lastat` field ("you HH:MM") can show it without
 # re-reading the growing transcript JSONL. Timestamp only: it never stores or
 # reads the prompt text. The per-session file is empty; its mtime is the
-# signal (statusline-command.sh: sl-last-input-epoch, read by hud-data.sh).
+# signal (hud-lib.sh: sl-last-input-epoch, read by hud-data.sh).
 #
 # History: this hook used to cache a truncated copy of the prompt for a
 # `last: <text>` statusline segment (T20260924-366770). That text feature is
@@ -19,7 +19,7 @@
 # writes under $BATS_TEST_TMPDIR instead of the real ~/.claude/state.
 #
 # Deliberately NOT `set -euo pipefail`: same rationale as
-# statusline-command.sh and claimant-id.sh — this runs on every prompt
+# hud-lib.sh and claimant-id.sh — this runs on every prompt
 # submission and must never fail/hang the interactive flow. Every failure
 # path below degrades to "timestamp not updated this time" rather than a
 # non-zero exit.
@@ -72,7 +72,7 @@ last-input-hook() {
 }
 
 # Run only when executed directly (not sourced), same BASH_SOURCE guard
-# convention as statusline-command.sh / quality-probe/scripts/probe.sh.
+# convention as hud-lib.sh / quality-probe/scripts/probe.sh.
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
   last-input-hook
 fi

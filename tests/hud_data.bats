@@ -1,17 +1,15 @@
 #!/usr/bin/env bats
-# Tests for statusline-setup/scripts/hud-data.sh (the ccxp-hud mod's JSON data
-# helper, T20261022-345549) and the heartbeat-driven minimal statusline in
-# statusline-command.sh. Fixture repos only; never the developer's real state.
+# Tests for hud/scripts/hud-data.sh (the ccxp-hud mod's JSON data helper,
+# T20261022-345549). Fixture repos only; never the developer's real state.
 
 load test_helper
-HUD="$REPO_ROOT/statusline-setup/scripts/hud-data.sh"
-SCRIPT="$REPO_ROOT/statusline-setup/scripts/statusline-command.sh"
+HUD="$REPO_ROOT/hud/scripts/hud-data.sh"
+SCRIPT="$REPO_ROOT/hud/scripts/hud-lib.sh"
 
 setup() {
   isolate_claimant_state
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
-  export HUD_ACTIVE_DIR="$BATS_TEST_TMPDIR/hud-active"
 }
 
 # Resolve symlinks (macOS /var -> /private/var) the way the helper does, via
@@ -113,13 +111,6 @@ EOT
   [ "$(jq -r .autopilot.elapsed_hr <<<"$output")" = "1" ]
 }
 
-@test "the text statusline still hides a paused autopilot (behaviour unchanged)" {
-  local repo; repo=$(_make_repo r-pause-text)
-  _state "$repo" '{"status":"paused","started_at":"2026-01-01T00:00:00Z","end_time":"2026-01-01T05:00:00Z","paused_at":"2026-01-01T01:00:00Z","stuck_count":0,"cycle_count":2}'
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
-  [ -z "$output" ]
-}
-
 @test "--json: missing, malformed or garbage state gives autopilot null, exit 0" {
   local repo; repo=$(_make_repo r-bad)
   _state "$repo" '{not json'
@@ -178,52 +169,6 @@ EOT
   ! grep -nE 'curl|wget|https?://|> *"?\$HOME|~/\.claude' "$HUD"
 }
 
-# --- heartbeat-driven minimal statusline ---------------------------------
-
-_line() { # $1 repo
-  printf '{"cwd":"%s","session_id":"sess1","context_window":{"remaining_percentage":64}}' "$1" | bash "$SCRIPT"
-}
-
-@test "heartbeat 'on' and fresh: statusline shrinks to ctx | branch" {
-  local repo; repo=$(_make_repo r-hb-on)
-  mkdir -p "$HUD_ACTIVE_DIR"; printf 'on\n' > "$HUD_ACTIVE_DIR/sess1"
-  run _line "$repo"
-  [ "$output" = "ctx: 64% left | branch: main" ]
-}
-
-@test "no heartbeat: statusline prints in full" {
-  local repo; repo=$(_make_repo r-hb-none)
-  run _line "$repo"
-  [[ "$output" == *"no claimed task"* ]]
-}
-
-@test "heartbeat 'off': statusline prints in full" {
-  local repo; repo=$(_make_repo r-hb-off)
-  mkdir -p "$HUD_ACTIVE_DIR"; printf 'off\n' > "$HUD_ACTIVE_DIR/sess1"
-  run _line "$repo"
-  [[ "$output" == *"no claimed task"* ]]
-}
-
-@test "stale heartbeat (older than the max age): statusline prints in full" {
-  local repo; repo=$(_make_repo r-hb-stale)
-  mkdir -p "$HUD_ACTIVE_DIR"; printf 'on\n' > "$HUD_ACTIVE_DIR/sess1"
-  touch -t 202001010000 "$HUD_ACTIVE_DIR/sess1"
-  run _line "$repo"
-  [[ "$output" == *"no claimed task"* ]]
-}
-
-@test "heartbeat for another session does not shrink this one" {
-  local repo; repo=$(_make_repo r-hb-other)
-  mkdir -p "$HUD_ACTIVE_DIR"; printf 'on\n' > "$HUD_ACTIVE_DIR/other"
-  run _line "$repo"
-  [[ "$output" == *"no claimed task"* ]]
-}
-
-@test "a path-like session id never reads outside the heartbeat dir" {
-  run bash -c "source '$SCRIPT'; sl-hud-active '$HUD_ACTIVE_DIR' '../x'"
-  [ "$status" -ne 0 ]
-}
-
 @test "--json: merged_count is surfaced, a missing one is 0, ledger is null without a file" {
   local repo; repo=$(_make_repo r-merged)
   _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4,\"merged_count\":3}"
@@ -237,8 +182,8 @@ _line() { # $1 repo
 
 @test "--json: ledger written by ledger.sh is passed through; corrupt ledger is null" {
   local repo; repo=$(_make_repo r-ledger)
-  bash "$REPO_ROOT/statusline-setup/scripts/ledger.sh" start 230 "do it"
-  bash "$REPO_ROOT/statusline-setup/scripts/ledger.sh" park k5
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 230 "do it"
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" park k5
   run _hud "$repo" --json
   [ "$(jq -r .ledger.lifetime_jobs <<<"$output")" = "230" ]
   [ "$(jq -r '.ledger.running[0].title' <<<"$output")" = "do it" ]

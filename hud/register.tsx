@@ -2,7 +2,7 @@
 //
 //  - styles the user's own prompt rows (UserMessage render site)
 //  - draws a status band above the prompt (AbovePrompt) fed by the bash helper
-//    statusline-setup/scripts/hud-data.sh --json (claimant secret stays in bash)
+//    hud/scripts/hud-data.sh --json (claimant secret stays in bash)
 //  - /hud on|off|status|pane
 //
 // ON by default; `enabled: false` in ~/.claude/ccxp-hud.json (or a project
@@ -104,7 +104,7 @@ async function refresh($: any, cfg: HudConfig) {
   try {
     const cwd: string = await $.session.cwd()
     const sessionId: string = await $.session.id()
-    const argv = ['bash', `${$.plugin.root}/statusline-setup/scripts/hud-data.sh`, '--json']
+    const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
       stdin: JSON.stringify({ cwd, session_id: sessionId }),

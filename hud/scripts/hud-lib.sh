@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# Claude Code statusLine command — surfaces the task claimed by THIS clone.
+# Shared bash data layer for the ccxp-hud mod (sourced by hud-data.sh): the task
+# claimed by THIS clone, branch, autopilot state, job ledger and last-input time.
+# It was the statusLine command's library; the statusLine itself (the
+# statusline-setup skill) is retired in favour of the ccxp-hud band.
 #
 # Repo root, TODO dir, and clone-id are all derived from the SESSION cwd, so the
-# same global (~/.claude/settings.json) statusLine works across every
-# clone/session regardless of which folder Claude was launched in.
+# same data works across every clone/session regardless of which folder Claude
+# was launched in.
 #
 # The clone-id is NOT reimplemented here. It used to be (`$(hostname):$root`),
 # coupled to task_claim.sh by nothing but a comment, which meant a format change
@@ -12,7 +15,7 @@
 # (T20260911-698434). It now sources the single definition instead.
 #
 # _session/_lib.sh is deliberately NOT sourced: it runs `set -uo pipefail` and
-# loads ~/.claude/.env at source time, and this runs on every prompt render.
+# loads ~/.claude/.env at source time, and this runs on every HUD poll.
 # claimant-id.sh is side-effect-free for exactly this caller.
 
 # Last-user-input timestamp dir: last-input-hook.sh's UserPromptSubmit hook
@@ -21,13 +24,6 @@
 # prompt text. Mirrors claimant-id.sh's CLAIMANT_STATE_DIR override
 # convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
 LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
-
-# ccxp-hud heartbeat dir (T20261022-345549): the hud mod writes "on" to
-# <dir>/<session_id> every poll while it draws the band for that session, so
-# this line can shrink to ctx | branch instead of showing everything twice.
-# Honours CLAUDE_CONFIG_DIR like the other state roots; BATS overrides it.
-HUD_ACTIVE_DIR="${HUD_ACTIVE_DIR:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/state/hud-active}"
-HUD_ACTIVE_MAX_AGE="${HUD_ACTIVE_MAX_AGE:-120}"
 
 _SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh" \
@@ -44,15 +40,15 @@ sl-repo-root() {
 }
 
 sl-clone-id() {
-  # Must equal `_tc_claimant_id` for this clone or the statusline silently shows
-  # no task; tests/statusline_setup.bats pins that equality directly.
+  # Must equal `_tc_claimant_id` for this clone or the HUD silently shows no
+  # task; tests/hud_lib.bats pins that equality directly.
   local repo_root="$1"
   if declare -F claimant_id >/dev/null 2>&1; then
     claimant_id "$repo_root"
   else
     # Lib not found (unusual install layout). Emit nothing rather than a
-    # wrong-format guess: a guess would match no task anyway, and the statusline
-    # must never fail the prompt.
+    # wrong-format guess: a guess would match no task anyway, and this must
+    # never fail.
     printf ''
   fi
 }
@@ -113,8 +109,8 @@ sl-iso-to-epoch() {
 # dismiss/expiry, same as the state file itself (autopilot/SKILL.md Phase 5
 # never deletes it). Never fails the prompt: any missing/malformed field
 # just degrades to printing nothing (same convention as every other sl-
-# helper). The ONE place the state file is parsed: sl-autopilot-part (text
-# line) and hud-data.sh (--json) both render from this record.
+# helper). The ONE place the state file is parsed; hud-data.sh (--json) renders
+# from this record.
 sl-autopilot-fields() {
   local repo_root="$1" state_file line
   state_file="$repo_root/dev/.autopilot-state.json"
@@ -184,21 +180,6 @@ sl-autopilot-fields() {
   printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}${requested_hr}${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${stop_reason}${sep}${merged_count}"
 }
 
-# $1 repo_root -> "ap:[r]/[b]/[s] <elapsed>/<requested>hr [⚠<stuck>] loops <cycle> ✓<merged>"
-# (the text statusline segment; ⚠ only when stuck > 0), or nothing; rendered
-# from sl-autopilot-fields.
-sl-autopilot-part() {
-  local rec ap_status prefix elapsed_hr requested_hr stuck cycle last_outcome last_task stuck_reason stop_reason merged
-  rec=$(sl-autopilot-fields "$1")
-  [ -n "$rec" ] || return 0
-  IFS=$'\x1f' read -r ap_status prefix elapsed_hr requested_hr stuck cycle last_outcome last_task stuck_reason stop_reason merged <<<"$rec"
-  # The text statusline has never shown a paused run; keep it that way.
-  [ "$ap_status" = "paused" ] && return 0
-  local warn=""
-  [ "$stuck" -gt 0 ] && warn=" ⚠${stuck}"
-  printf 'ap:%s %s/%shr%s loops %s ✓%s' "$prefix" "$elapsed_hr" "$requested_hr" "$warn" "$cycle" "${merged:-0}"
-}
-
 # Job ledger (written by ledger.sh). Same default path convention as the other
 # state files: CLAUDE_CONFIG_DIR, else ~/.claude. CCXP_LEDGER_FILE overrides.
 sl-ledger-file() {
@@ -220,13 +201,6 @@ sl-ledger-json() {
                 | {job: (.job | numbers // 0), title: (.title | strings // "")}]}' "$f" 2>/dev/null || true
 }
 
-# -> "jobs run <R> · total <L> · parked <P>", or nothing without a ledger.
-sl-ledger-part() {
-  local j; j=$(sl-ledger-json)
-  [ -n "$j" ] || return 0
-  jq -r '"jobs run \(.running | length) · total \(.lifetime_jobs) · parked \(.parked)"' <<<"$j" 2>/dev/null || true
-}
-
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt
 # this session submitted (the cache file's mtime, written by the
 # UserPromptSubmit hook), or nothing. A session_id with a path separator (or
@@ -244,80 +218,3 @@ sl-last-input-epoch() {
   [[ "$mtime" =~ ^[0-9]+$ ]] && printf '%s' "$mtime"
   return 0
 }
-
-# $1 heartbeat dir, $2 session_id -> exit 0 when the hud mod is actively drawing
-# its band for this session: the file holds "on" and was touched within
-# HUD_ACTIVE_MAX_AGE seconds. Anything else (no file, "off", stale, unsafe id)
-# is "not active", so the classic full line prints.
-sl-hud-active() {
-  local dir="$1" session_id="$2" file mtime now
-  [ -n "$session_id" ] || return 1
-  case "$session_id" in
-    */*|.|..) return 1 ;;
-  esac
-  file="$dir/$session_id"
-  [ -r "$file" ] || return 1
-  [ "$(head -n1 "$file" 2>/dev/null)" = "on" ] || return 1
-  mtime=$(stat -c %Y "$file" 2>/dev/null || stat -f %m "$file" 2>/dev/null) || return 1
-  [[ "$mtime" =~ ^[0-9]+$ ]] || return 1
-  now=$(date +%s)
-  [ $(( now - mtime )) -le "$HUD_ACTIVE_MAX_AGE" ]
-}
-
-# Join non-empty parts with " | " (array-expansion IFS only uses its first
-# char, so build the separator explicitly).
-sl-join() {
-  local out="" p
-  for p in "$@"; do
-    [ -z "$p" ] && continue
-    if [ -z "$out" ]; then out="$p"; else out="$out | $p"; fi
-  done
-  printf '%s' "$out"
-}
-
-statusline-command() {
-  local input cwd remaining session_id
-  input=$(cat)
-  cwd=$(printf '%s' "$input" | jq -r '.cwd // .workspace.current_dir // ""')
-  remaining=$(printf '%s' "$input" | jq -r '.context_window.remaining_percentage // 100')
-  session_id=$(printf '%s' "$input" | jq -r '.session_id // empty')
-  [ -n "$cwd" ] || cwd="$PWD"
-
-  local repo_root clone_id todo_dir task_label
-  repo_root=$(sl-repo-root "$cwd")
-  clone_id=$(sl-clone-id "$repo_root")
-  todo_dir="$repo_root/dev/TODO"
-  task_label=$(sl-claimed-task-label "$todo_dir" "$clone_id")
-
-  local ap_part="" ctx_part="" branch_part="" task_part branch_name
-  ap_part=$(sl-autopilot-part "$repo_root")
-  if [ -n "$remaining" ]; then
-    ctx_part="ctx: $(printf '%.0f' "$remaining")% left"
-  fi
-  branch_name=$(sl-branch-name "$repo_root")
-  if [ -n "$branch_name" ]; then
-    branch_part="branch: $branch_name"
-  fi
-  if [ -n "$task_label" ]; then
-    task_part="TASK: $task_label"
-  else
-    task_part="no claimed task"
-  fi
-  local jobs_part; jobs_part=$(sl-ledger-part)
-
-  # The hud band already shows autopilot, task and last-input time: keep only the
-  # always-useful ctx | branch while it is live.
-  if sl-hud-active "$HUD_ACTIVE_DIR" "$session_id"; then
-    sl-join "$ctx_part" "$branch_part"
-    return 0
-  fi
-
-  sl-join "$ap_part" "$ctx_part" "$branch_part" "$task_part" "$jobs_part"
-}
-
-# Run only when executed directly (not when sourced), matching the
-# quality-probe/scripts/probe.sh convention so BATS can source this file and
-# unit-test the helper functions without invoking the stdin-reading main.
-if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
-  statusline-command
-fi

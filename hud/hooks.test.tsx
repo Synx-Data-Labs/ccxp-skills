@@ -184,7 +184,7 @@ test('the band shows helper data once the session started, and the helper gets a
   expect(w.runs.length).toBeGreaterThan(0)
   for (const argv of w.runs) {
     expect(argv[0]).toBe('bash')
-    expect(argv[1]).toMatch(/statusline-setup\/scripts\/hud-data\.sh$/)
+    expect(argv[1]).toMatch(/hud\/scripts\/hud-data\.sh$/)
     expect(argv.slice(2)).toEqual(['--json'])
   }
 })

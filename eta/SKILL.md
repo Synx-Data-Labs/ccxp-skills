@@ -42,8 +42,8 @@ bash <skills-root>/eta/scripts/eta.sh
    - No argument → resolve via `claimant_id` (`_session/claimant-id.sh`) and
      grep `dev/TODO/*.md` frontmatter for a `claimed_by:` line matching this
      clone's id — the same lookup
-     `statusline-setup/scripts/statusline-command.sh` uses for the `TASK:`
-     segment of the statusline, so the two always agree on "what's current."
+     `hud/scripts/hud-lib.sh` uses for the HUD `task`
+     field, so the two always agree on "what's current."
    - Neither resolves → exit 1 with `no current task` (never a silent empty
      output).
 2. **Read `estimation:`** — a bare Fibonacci-style point, one of

@@ -1,15 +1,14 @@
 #!/usr/bin/env bats
-# Tests for statusline-setup/scripts/statusline-command.sh — the Claude Code
-# statusLine command that surfaces the task claimed by the calling clone plus
-# the remaining context-window percentage.
+# Tests for hud/scripts/hud-lib.sh — the bash data layer behind the ccxp-hud
+# mod (task claimed by this clone, branch, autopilot fields, last-input time).
+# Carried over from the retired statusline-setup skill's suite; the text
+# statusline segment tests (sl-autopilot-part, sl-join, the stdin entrypoint)
+# went with it.
 #
-# Helper functions are sourced and tested directly (function-wrapped, see the
-# BASH_SOURCE guard at the bottom of the script — same pattern as
-# quality-probe/scripts/probe.sh). The stdin entrypoint statusline-command is
-# tested end-to-end by piping a synthetic hook-input JSON payload.
+# Helper functions are sourced and tested directly.
 
 load test_helper
-SCRIPT="$REPO_ROOT/statusline-setup/scripts/statusline-command.sh"
+SCRIPT="$REPO_ROOT/hud/scripts/hud-lib.sh"
 
 setup() {
   # The machine-id/secret cache lives under ~/.claude/state by default; tests
@@ -20,12 +19,10 @@ setup() {
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
 }
 
-_load() { source "$SCRIPT"; }
-
 # The clone-id for a path, computed exactly the way production computes it.
 # Fixtures MUST go through this rather than hardcoding a format: hardcoding is
-# what let the old suite stay green while the statusline silently matched
-# nothing (T20260911-698434).
+# what let the old suite stay green while the HUD silently matched nothing
+# (T20260911-698434).
 _clone_id() { bash -c "source '$SCRIPT'; sl-clone-id '$1'"; }
 
 # Build a throwaway git repo with a dev/TODO dir under $BATS_TEST_TMPDIR and
@@ -37,18 +34,31 @@ _make_repo() {
   printf '%s' "$dir"
 }
 
+# sl-autopilot-fields record -> the compact "ap:[r] <elapsed>/<requested>hr
+# [⚠stuck] loops <cycle> ✓<merged>" line, so the happy-path assertions stay
+# readable. Empty record -> empty output.
+_ap_line() {
+  local rec st prefix el req stuck cycle lo lt sr stop merged warn=""
+  rec=$(bash -c "source '$SCRIPT'; sl-autopilot-fields '$1'")
+  [ -n "$rec" ] || return 0
+  IFS=$'\x1f' read -r st prefix el req stuck cycle lo lt sr stop merged <<<"$rec"
+  [ "$stuck" -gt 0 ] && warn=" ⚠${stuck}"
+  printf 'ap:%s %s/%shr%s loops %s ✓%s' "$prefix" "$el" "$req" "$warn" "$cycle" "$merged"
+}
+
 # ---------------------------------------------------------------------------
 # Sourceable / structure
 # ---------------------------------------------------------------------------
 
-@test "statusline-command.sh exists and is executable" {
-  [ -x "$SCRIPT" ]
-}
-
-@test "statusline-command.sh is sourceable without executing its main (function-wrapped)" {
-  run bash -c "source '$SCRIPT'; type statusline-command >/dev/null 2>&1 && echo OK"
+@test "hud-lib.sh is sourceable and defines the sl-* helpers without running anything" {
+  run bash -c "source '$SCRIPT'; type sl-claimed-task-label sl-autopilot-fields sl-ledger-json sl-last-input-epoch >/dev/null 2>&1 && echo OK"
   [ "$status" -eq 0 ]
   [[ "$output" == *"OK"* ]]
+}
+
+@test "hud-lib.sh no longer ships the retired statusline entrypoint or text segments" {
+  run bash -c "source '$SCRIPT'; type statusline-command sl-autopilot-part sl-hud-active 2>&1"
+  [ "$status" -ne 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -202,28 +212,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# sl-join
-# ---------------------------------------------------------------------------
-
-@test "sl-join joins non-empty parts with ' | '" {
-  run bash -c "source '$SCRIPT'; sl-join 'a' 'b'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "a | b" ]
-}
-
-@test "sl-join skips empty parts" {
-  run bash -c "source '$SCRIPT'; sl-join '' 'b' ''"
-  [ "$status" -eq 0 ]
-  [ "$output" = "b" ]
-}
-
-@test "sl-join returns empty string when all parts are empty" {
-  run bash -c "source '$SCRIPT'; sl-join '' ''"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-# ---------------------------------------------------------------------------
 # sl-last-input-epoch (timestamp only; the `last: <text>` part is retired)
 # ---------------------------------------------------------------------------
 
@@ -252,67 +240,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# statusline-command (full stdin -> stdout pipeline)
-# ---------------------------------------------------------------------------
-
-@test "statusline-command reports no claimed task and the given context percentage" {
-  local repo branch
-  repo=$(_make_repo repo6)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 42% left | branch: $branch | no claimed task" ]
-}
-
-@test "statusline-command reports the claimed task label when claimed_by matches" {
-  local repo clone_id branch
-  repo=$(_make_repo repo7)
-  # statusline-command resolves cwd to git's realpath toplevel internally
-  # (see the macOS /var->/private/var note above), so build clone_id from
-  # that same resolved path rather than the raw $repo.
-  clone_id="$(_clone_id "$(git -C "$repo" rev-parse --show-toplevel)")"
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  cat > "$repo/dev/TODO/T20260427-242654.md" <<EOF
----
-claimed_by: ${clone_id}
----
-# T20260427-242654: Fix the thing
-EOF
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":80}}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 80% left | branch: $branch | TASK: T20260427-242654: Fix the thing" ]
-}
-
-@test "statusline-command defaults remaining_percentage to 100 when absent" {
-  local repo branch
-  repo=$(_make_repo repo8)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "echo '{\"cwd\":\"$repo\"}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 100% left | branch: $branch | no claimed task" ]
-}
-
-@test "statusline-command falls back to PWD when cwd is absent from the payload" {
-  local repo branch
-  repo=$(_make_repo repo9)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "cd '$repo' && echo '{}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 100% left | branch: $branch | no claimed task" ]
-}
-
-@test "statusline-command never prints a last: segment, even when a cached file holds old text" {
-  local repo branch
-  repo=$(_make_repo repo10)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  mkdir -p "$LAST_INPUT_STATE_DIR"
-  printf '%s' 'fix the thing' > "$LAST_INPUT_STATE_DIR/sess-xyz"
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":55},\"session_id\":\"sess-xyz\"}' | LAST_INPUT_STATE_DIR='$LAST_INPUT_STATE_DIR' '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 55% left | branch: $branch | no claimed task" ]
-}
-
-# ---------------------------------------------------------------------------
 # sl-iso-to-epoch
 # ---------------------------------------------------------------------------
 
@@ -323,18 +250,18 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# sl-autopilot-part
+# sl-autopilot-fields (parsing and validation)
 # ---------------------------------------------------------------------------
 
-@test "sl-autopilot-part prints nothing when the state file doesn't exist" {
+@test "sl-autopilot-fields prints nothing when the state file doesn't exist" {
   local repo
   repo=$(_make_repo repo-ap-absent)
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints ap:[s] with elapsed from last_cycle_at when stopped" {
+@test "sl-autopilot-fields prints ap:[s] with elapsed from last_cycle_at when stopped" {
   local repo
   repo=$(_make_repo repo-ap-stopped)
   mkdir -p "$repo/dev"
@@ -343,24 +270,24 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<'EOF'
 {"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 1, "cycle_count": 3, "last_outcome": "stuck", "last_cycle_at": "2026-01-01T02:00:00Z"}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run _ap_line "$repo"
   [ "$status" -eq 0 ]
   [ "$output" = "ap:[s] 2/5hr ⚠1 loops 3 ✓0" ]
 }
 
-@test "sl-autopilot-part prints ap:[s] with elapsed 0 when stopped and last_cycle_at is null" {
+@test "sl-autopilot-fields prints ap:[s] with elapsed 0 when stopped and last_cycle_at is null" {
   local repo
   repo=$(_make_repo repo-ap-stopped-no-cycle)
   mkdir -p "$repo/dev"
   cat > "$repo/dev/.autopilot-state.json" <<'EOF'
 {"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 0, "cycle_count": 0, "last_outcome": null, "last_cycle_at": null}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run _ap_line "$repo"
   [ "$status" -eq 0 ]
   [ "$output" = "ap:[s] 0/5hr loops 0 ✓0" ]
 }
 
-@test "sl-autopilot-part prints ap:[r] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged> when running normally" {
+@test "sl-autopilot-fields prints ap:[r] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged> when running normally" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-running)
   mkdir -p "$repo/dev"
@@ -372,12 +299,12 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 3, "cycle_count": 10}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run _ap_line "$repo"
   [ "$status" -eq 0 ]
   [ "$output" = "ap:[r] 2/5hr ⚠3 loops 10 ✓0" ]
 }
 
-@test "sl-autopilot-part prints ap:[b] when running and last_outcome is stuck" {
+@test "sl-autopilot-fields prints ap:[b] when running and last_outcome is stuck" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-backing-off)
   mkdir -p "$repo/dev"
@@ -386,62 +313,34 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 2, "cycle_count": 4, "last_outcome": "stuck"}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run _ap_line "$repo"
   [ "$status" -eq 0 ]
   [ "$output" = "ap:[b] 2/5hr ⚠2 loops 4 ✓0" ]
 }
 
-@test "sl-autopilot-part prints nothing when the JSON is malformed" {
+@test "sl-autopilot-fields prints nothing when the JSON is malformed" {
   local repo
   repo=$(_make_repo repo-ap-malformed)
   mkdir -p "$repo/dev"
   printf '{not valid json' > "$repo/dev/.autopilot-state.json"
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when end_time is before started_at" {
+@test "sl-autopilot-fields prints nothing when end_time is before started_at" {
   local repo
   repo=$(_make_repo repo-ap-backwards)
   mkdir -p "$repo/dev"
   cat > "$repo/dev/.autopilot-state.json" <<'EOF'
 {"status": "running", "started_at": "2026-01-01T05:00:00Z", "end_time": "2026-01-01T00:00:00Z", "stuck_count": 0, "cycle_count": 1}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-# ---------------------------------------------------------------------------
-# statusline-command wiring (ap_part first)
-# ---------------------------------------------------------------------------
-
-@test "statusline-command prepends ap: before ctx: when autopilot is running" {
-  local repo branch started_at end_time
-  repo=$(_make_repo repo-ap-e2e-running)
-  mkdir -p "$repo/dev"
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 3, "cycle_count": 10}
-EOF
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ap:[r] 2/5hr ⚠3 loops 10 ✓0 | ctx: 42% left | branch: $branch | no claimed task" ]
-}
-
-@test "statusline-command output is unchanged when autopilot state file is absent" {
-  local repo branch
-  repo=$(_make_repo repo-ap-e2e-absent)
-  branch=$(git -C "$repo" symbolic-ref --short HEAD)
-  run bash -c "echo '{\"cwd\":\"$repo\",\"context_window\":{\"remaining_percentage\":42}}' | '$SCRIPT'"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ctx: 42% left | branch: $branch | no claimed task" ]
-}
-
-@test "sl-autopilot-part prints nothing when started_at is in the future (clock skew)" {
+@test "sl-autopilot-fields prints nothing when started_at is in the future (clock skew)" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-future-start)
   mkdir -p "$repo/dev"
@@ -450,12 +349,12 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 0, "cycle_count": 1}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when stuck_count/cycle_count are missing" {
+@test "sl-autopilot-fields prints nothing when stuck_count/cycle_count are missing" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-null-counts)
   mkdir -p "$repo/dev"
@@ -464,12 +363,12 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time"}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when stuck_count is negative" {
+@test "sl-autopilot-fields prints nothing when stuck_count is negative" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-negative-count)
   mkdir -p "$repo/dev"
@@ -478,24 +377,24 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": -5, "cycle_count": 3}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when stuck_count is negative and status is stopped" {
+@test "sl-autopilot-fields prints nothing when stuck_count is negative and status is stopped" {
   local repo
   repo=$(_make_repo repo-ap-negative-count-stopped)
   mkdir -p "$repo/dev"
   cat > "$repo/dev/.autopilot-state.json" <<'EOF'
 {"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": -5, "cycle_count": 3}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-part prints nothing when cycle_count is non-numeric" {
+@test "sl-autopilot-fields prints nothing when cycle_count is non-numeric" {
   local repo started_at end_time
   repo=$(_make_repo repo-ap-nonnumeric-count)
   mkdir -p "$repo/dev"
@@ -504,7 +403,7 @@ EOF
   cat > "$repo/dev/.autopilot-state.json" <<EOF
 {"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 1, "cycle_count": "abc"}
 EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-part '$repo'"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

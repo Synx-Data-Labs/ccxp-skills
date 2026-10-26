@@ -1,8 +1,8 @@
 #!/usr/bin/env bats
-# Tests for statusline-setup/scripts/ledger.sh (HUD jobs ledger).
+# Tests for hud/scripts/ledger.sh (HUD jobs ledger).
 
 load test_helper
-LEDGER="$REPO_ROOT/statusline-setup/scripts/ledger.sh"
+LEDGER="$REPO_ROOT/hud/scripts/ledger.sh"
 
 setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
 
@@ -42,10 +42,3 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ "$(ls "$(dirname "$CCXP_LEDGER_FILE")" | wc -l | tr -d ' ')" = "1" ]
 }
 
-@test "statusline text line shows the ledger section, hidden without a ledger" {
-  run bash -c "source '$REPO_ROOT/statusline-setup/scripts/statusline-command.sh'; sl-ledger-part"
-  [ -z "$output" ]
-  bash "$LEDGER" start 230 "x"; bash "$LEDGER" park 1
-  run bash -c "source '$REPO_ROOT/statusline-setup/scripts/statusline-command.sh'; sl-ledger-part"
-  [ "$output" = "jobs run 1 · total 230 · parked 1" ]
-}

@@ -83,7 +83,7 @@ else
     echo "eta: no current task (could not resolve claimant id — pass T<id> explicitly)" >&2
     exit 1
   fi
-  # Same convention as statusline-setup/scripts/statusline-command.sh's
+  # Same convention as hud/scripts/hud-lib.sh's
   # sl-claimed-task-label: escape regex-special chars in the id, anchor the
   # tail so a longer sibling claimant-id can't match as a prefix.
   eta_esc_id="${eta_clone_id//\\/\\\\}"
