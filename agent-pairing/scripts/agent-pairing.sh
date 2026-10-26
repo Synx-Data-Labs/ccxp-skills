@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agent-pairing.sh <on|off|status|update> [--yes] [--claude-dir DIR]
+# agent-pairing.sh <on|off|status|update> [--dry-run|-n] [--claude-dir DIR]
 #
 # Toggles the "ccxp-agent" main-session agent persona (a dispatcher) as a
 # Claude Code profile's default (~/.claude unless --claude-dir overrides
@@ -12,17 +12,19 @@
 # touch: `off` never deletes a *different* custom agent someone else set.
 #
 # `update` refreshes what `on` installed: the agents/ccxp-agent.md definition
-# (diff, then replace-with-backup only under --yes) and the managed settings
-# (today only the `.agent` key, re-asserted only when it is already
-# "ccxp-agent" -- `update` never changes on/off state). Without --yes it is a
-# dry run. It reports, never edits, dependencies it does not own.
+# and the managed settings (today only the `.agent` key, re-asserted only when
+# it is already "ccxp-agent" -- `update` never changes on/off state). By
+# default it keeps a timestamped .bak-* copy of every file it is about to
+# change, then replaces it atomically; nothing is asked. --dry-run (-n) shows
+# the diff and writes nothing. --yes is accepted and ignored (legacy). It
+# reports, never edits, dependencies it does not own.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ASSET="$SCRIPT_DIR/../assets/ccxp-agent.md"
 
 usage() {
-  echo "usage: agent-pairing.sh <on|off|status|update> [--yes] [--claude-dir DIR]" >&2
+  echo "usage: agent-pairing.sh <on|off|status|update> [--dry-run|-n] [--claude-dir DIR]" >&2
 }
 
 ACTION="${1:-}"
@@ -33,16 +35,17 @@ esac
 shift
 
 CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
-YES=0
-DIR_ARG=""
+DRY_RUN=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --claude-dir) CLAUDE_DIR="${2:?--claude-dir requires a value}"; DIR_ARG="$CLAUDE_DIR"; shift 2 ;;
-    --yes)
+    --claude-dir) CLAUDE_DIR="${2:?--claude-dir requires a value}"; shift 2 ;;
+    --dry-run|-n|--yes)
+      # --yes: legacy no-op (update no longer asks), accepted so old docs/habits work.
       if [ "$ACTION" != "update" ]; then
-        echo "agent-pairing.sh: --yes is only valid with update" >&2; usage; exit 64
+        echo "agent-pairing.sh: $1 is only valid with update" >&2; usage; exit 64
       fi
-      YES=1; shift ;;
+      [ "$1" = "--yes" ] || DRY_RUN=1
+      shift ;;
     *) echo "agent-pairing.sh: unknown argument: $1" >&2; usage; exit 64 ;;
   esac
 done
@@ -112,10 +115,12 @@ backup_path() {
   echo "$cand"
 }
 
-rerun_hint() {
-  local dir_part=""
-  [ -n "$DIR_ARG" ] && dir_part=" --claude-dir $DIR_ARG"
-  echo "bash $SCRIPT_DIR/agent-pairing.sh update --yes$dir_part"
+diffstat() {
+  # $1 old, $2 new: "+A -R lines" from a unified diff.
+  diff -u "$1" "$2" | awk '
+    /^\+\+\+ / || /^--- / { next }
+    /^\+/ { a++ } /^-/ { r++ }
+    END { printf "+%d -%d lines", a, r }'
 }
 
 agent_def_state() {
@@ -135,11 +140,11 @@ update_agent_definition() {
       echo "agent-pairing: agent definition: up to date (identical to the bundled ccxp-agent.md)"
       return 0 ;;
   esac
-  echo "agent-pairing: agent definition: OUTDATED -- installed file differs from the bundled ccxp-agent.md:"
-  diff -u -L "installed: $AGENT_FILE" -L "bundled: assets/ccxp-agent.md" "$AGENT_FILE" "$ASSET"
-  if [ "$YES" -ne 1 ]; then
-    echo "agent-pairing: dry run -- nothing written. Any local edits in the installed file are shown above as removed lines. To replace it (a backup is kept), run:"
-    echo "  $(rerun_hint)"
+  local stat
+  stat="$(diffstat "$AGENT_FILE" "$ASSET")"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "agent-pairing: agent definition: OUTDATED ($stat) -- dry run, nothing written. Diff (- = installed, incl. local edits; + = bundled):"
+    diff -u -L "installed: $AGENT_FILE" -L "bundled: assets/ccxp-agent.md" "$AGENT_FILE" "$ASSET"
     return 0
   fi
   local bak tmp
@@ -153,7 +158,7 @@ update_agent_definition() {
   fi
   chmod "$(file_perm "$AGENT_FILE")" "$tmp"
   mv "$tmp" "$AGENT_FILE"
-  echo "agent-pairing: agent definition: UPDATED (backup: $bak) -- takes effect at the next session start"
+  echo "agent-pairing: agent definition: UPDATED ($stat); previous version kept at $bak -- takes effect at the next session start"
 }
 
 update_settings() {
@@ -174,18 +179,16 @@ update_settings() {
     echo "agent-pairing: settings.json: nothing to change ($mode_note)"
     return 0
   fi
-  echo "agent-pairing: settings.json: managed keys differ from the desired state:"
-  diff -u -L "current: $SETTINGS" -L "desired" <(echo "$before") <(echo "$after")
-  if [ "$YES" -ne 1 ]; then
-    echo "agent-pairing: dry run -- settings.json not written. To apply, run:"
-    echo "  $(rerun_hint)"
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "agent-pairing: settings.json: managed keys differ from the desired state -- dry run, not written:"
+    diff -u -L "current: $SETTINGS" -L "desired" <(echo "$before") <(echo "$after")
     return 0
   fi
   local bak
   bak="$(backup_path "$SETTINGS")"
   cp -p "$SETTINGS" "$bak" || { echo "agent-pairing.sh: could not write backup $bak -- $SETTINGS left untouched" >&2; return 1; }
   write_settings "$filter" || return 1
-  echo "agent-pairing: settings.json: UPDATED (backup: $bak) -- takes effect at the next session start"
+  echo "agent-pairing: settings.json: UPDATED (managed key re-asserted); previous version kept at $bak -- takes effect at the next session start"
 }
 
 report_unmanaged() {
