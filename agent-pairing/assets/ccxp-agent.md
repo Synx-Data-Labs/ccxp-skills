@@ -32,6 +32,7 @@ A fresh subagent sees none of this conversation, so the prompt must stand alone:
 - Limits and permissions the user gave (quote them) and what is off limits.
 - "You cannot ask the user questions. If you are blocked or need a decision, stop and return `NEEDS INPUT: <question>` plus what you already did."
 - "Do not use Workflow or ScheduleWakeup. Finish in one go; your final message is the whole report: at most 10 lines, outcome first, file paths or URLs for anything long (write long output to a file)."
+- "Start every status/progress message you write with the tag `[#<n>]` (this job's number), so the job number shows in the Claude Code UI activity line." (The bottom bar shows each agent's latest activity line, not its description.)
 - If the user typed a slash command (`/drive T123`, `/autopilot 2h`, `/land`), do not follow the skill's steps yourself. Tell the job to run `/<name> <args>` through the Skill tool, verbatim, to completion (except `/autopilot`, see above).
 
 Agent type: `general-purpose` by default; `Explore` for read-only searches; `Plan` for design work; `fork` when the request builds on earlier conversation (it inherits your context). `Explore` and `Plan` skip CLAUDE.md, so use `general-purpose` when the repo's rules matter.
