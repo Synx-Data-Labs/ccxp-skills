@@ -25,7 +25,8 @@ description: Live-UI smoke test of the ccxp-hud mod by a human, plus decide the 
 - [ ] CI cell: with `"ci": {"workflow": "<real workflow file>"}` in `ccxp-hud.json` it shows pass/fail/running with a date within a few minutes (first fetch is cached 2 minutes); unset, or a workflow the repo lacks, or `gh` signed out: no cell and no error.
 - [ ] `/hud setup`: the dialogs appear in order (workflow, branch, repo, scope, confirm), the confirm shows the `ci` block and file, `write` saves it with other keys intact, cancel and Esc write nothing, an invalid workflow name is refused.
 - [ ] `/hud pane` toggles: first run opens the pane, second closes it, third opens it again.
-- [ ] The settings statusline shrinks to `ctx | branch` while the band is live and returns to the full line after `/hud off`.
+- [ ] `/hud setup` with project scope in a repo that has no `.claude/` directory: the file is created (the engine write makes the directory) or setup says so; it must not report a silent cancel.
+- [ ] A corrupt `ccxp-hud.json` (e.g. a comment in it): `/hud setup` refuses with "left alone" and the file is unchanged.
 - [ ] `/hud off` and `/hud on` take effect immediately; editing `~/.claude/ccxp-hud.json` takes effect within 15 seconds.
 - [ ] A task-notification or peer row is not framed.
 
