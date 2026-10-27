@@ -3,7 +3,7 @@
 A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by default**.
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
-- **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
+- **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
 - **`/hud`**: `on | off | status | pane | setup`. `pane` is a toggle (run it again to close the pane); `setup` asks for the CI source and writes it (see below).
 
 ## Turn it off (without uninstalling ccxp-skills)
@@ -23,10 +23,10 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `band` | `true` | status band |
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `fields` | `repo,branch,task,ap,ctx,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `jobs` and `last` are ignored. An old explicit `fields` list without `repo`/`ci` hides those cells until you add them |
+| `fields` | `repo,branch,task,ap,ctx,jobs,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
 | `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud setup` writes it for you |
 | `pollSeconds` | `15` | minimum 5 |
-| `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
+| `ctxWarn` / `ctxCrit` | `75` / `50` | context-LEFT colour thresholds, see "Colours" below. Defaults were `40` / `15`; a value you set yourself is kept, but the red boundary is now strict (red AT `ctxCrit` and below, was below) |
 
 Example, in a repo whose nightly orchestrator workflow is `nightly-orchestrator.yml` (`<project>/.claude/ccxp-hud.json`):
 
@@ -40,8 +40,8 @@ The mode is picked automatically: **AP on** while autopilot is running (backing 
 
 | Mode | Row |
 |---|---|
-| AP off | `repo \| branch \| T<id> <task slug> \| CI ✗ failing 10-26 \| you 09:05` (no AP cell, no ctx) |
-| AP on | `AP 2/6h loops 3 ✓2 merged \| ctx 64% ▓▓▓▓▓▓░░░░ \| CI ✗ failing 10-26 \| you 09:05` (no repo, branch or task); paused reads `AP ⏸ paused 2/6h ...` |
+| AP off | `acme/widgets @ main* \| T<id> <task slug> \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no AP cell, no ctx) |
+| AP on | `AP 2/6h loops 3 ✓2 merged \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
 
 | Width | Tier | CI | AP | ctx |
 |---|---|---|---|---|
@@ -49,9 +49,29 @@ The mode is picked automatically: **AP on** while autopilot is running (backing 
 | 70-99 | compact | `CI ✗ 10-26` | `AP 2/6h loops 3 ✓2` | `ctx 64%` |
 | >= 100 | wide | `CI ✗ failing 10-26` | `AP 2/6h loops 3 ✓2 merged` | `ctx 64% ▓▓▓▓▓▓░░░░` |
 
-- Tiers only set how detailed the AP, ctx and CI cells start. When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), CI detail (word, then date), task slug (the task ID stays), branch, task ID, then the repo name is cut. AP on: last input, CI detail, ctx meter, AP words, then ctx. Repo (or AP) and CI stay longest.
+- Tiers only set how detailed the AP, ctx and CI cells start. When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), CI detail (word, then date), `WORKING (N)` loses its count, task slug (the task ID stays), repo cell detail (worktree, account, then owner and long names), task ID, then the repo cell loses its branch. AP on: last input, CI detail, jobs count, ctx meter, AP words, then ctx. Repo (or AP), jobs and CI stay longest.
+- `READY` has one form; `WORKING (N)` becomes `WORKING` when narrow.
 - The AP elapsed/requested pair keeps its `h` so `2/6h` cannot read as loops.
 - `stale` (the helper failed) is a dim tail cell that goes first.
+
+## Repo cell (AP off)
+
+- Shape: `[→ ]owner/name @ branch* (wt X) (account) (root: X)`, following the CURRENT session cwd, not the directory Claude was launched in. Outside git it is just the folder name.
+  - `owner/name` comes from `origin` (a repo with no remote shows its folder name); `branch` is `detached <sha>` on a detached HEAD.
+  - `*` (yellow) = changed tracked files; untracked files are not scanned (slow on big trees). The helper reports the count (capped at 99); the band only shows the mark.
+  - `(wt X)` = a linked git worktree; `(account)` = the `gh` account of that directory.
+  - `→` leads for about two refreshes after the working tree changed; `(root: X)` (yellow) shows when a shell `cd` left the session root.
+- gh account: from the session cwd, never the helper's inherited environment. `direnv exec <root> printenv GH_CONFIG_DIR`, else the nearest `.envrc` (`export GH_CONFIG_DIR=...` with `~`, `$HOME`, quotes, `source_up`), else the default gh config; then the `user:` line of `hosts.yml`. The token is never read. Cached 60 s per repo in `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache/` (the helper's only write besides the CI cache); no network. It is what direnv says, not necessarily what a Bash tool call will use.
+- Following `/cd`: the mod reads `$.session.cwd()` on every refresh (falling back to the session root), and a 5 s tick refreshes at once when cwd or root changed. A `command.run` hook for `cd` refreshes right after `/cd`; the 15 s poll is the backstop.
+- Unverified in a real session: that `session.cwd()` moves on `/cd`, and that `command.run` fires for the built-in `/cd` (the tick covers latency, but not a `cwd()` that never moves; then use `root()`).
+- Helper JSON (`hud-data.sh --json`): `repo` is unchanged (name only, always present); new `cwd`, `repo_slug`, `repo_root`, `head`, `dirty`, `gh_account` (null outside a repo).
+- AP-on rows have no repo cell, same as before.
+
+## Colours
+
+- ctx is context LEFT (100 minus the engine's percent used). Green above 75, yellow above 50 up to 75, red at 50 or less; the boundaries are strict (75 is yellow, 50 is red) and compare the rounded number shown.
+- Jobs cell: green `READY` when the job ledger (`hud/scripts/ledger.md`) has no running job, yellow `WORKING (N)` while N run. No ledger, no cell. It reads the ledger, not the engine's agent list (that stays in `/hud pane`).
+- Theme tokens only (`success`, `warning`, `error`), no escape codes: themes and `NO_COLOR` keep working.
 
 ## CI cell
 

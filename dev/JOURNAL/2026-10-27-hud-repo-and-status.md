@@ -1,0 +1,39 @@
+# HUD: repo cell follows the cwd, ctx colours, READY / WORKING (re-done on the one-row band)
+
+- **Why**: PRs 442 (`hud-repo-field`) and 445 (`hud-status-colors`) no longer merged after main replaced the multi-row band with the strict one-row band (6e809fa, 717c295). Owner chose "Re-do both on the new HUD": same features, built on the existing `repo` cell and the `ci`/band model
+- **Owner asks (quoted)**
+  - "in the ccxp-hud, we should also share which repo we are on"; "if the `/cd` works, then we can support the `/cd` in our ccxp-hud"
+  - "if the ctx is more than 75%, then it's green, if more than 50% then it's yellow, and otherwise, it's red"; all jobs finished = GREEN READY, otherwise YELLOW WORKING
+- **Repo cell** (AP off row; `hud/model.ts` `repoVariants`)
+  - `[→ ]owner/name @ branch* (wt X) (account) (root: X)`; `detached <sha>`; the branch cell steps aside because the repo cell carries it
+  - Shrinks as one of the existing steps: worktree, account, owner and long names, then (after the task ID) the branch
+  - Reconciled with main's JSON: `repo` stays the always-present name string (hud_ci tests rely on it); new `repo_slug`, `repo_root`, `cwd`, `head`, `dirty`, `gh_account` are null outside a git repo
+  - gh account: direnv or `.envrc`, then `hosts.yml` `user:` (never the token), 60 s cache per repo, no network. Not the launch directory's environment
+- **Following the cwd** (`hud/register.tsx`)
+  - Helper cwd = `$.session.cwd()`, falling back to `$.session.root()`; both read every refresh
+  - 5 s tick refreshes at once when cwd or root changed; a `command.run` hook for `cd`; the 15 s poll stays
+  - `→` for two refreshes after the working tree changed; `(root: X)` when the cwd is outside the session root
+- **ctx colours**
+  - `ctx` is context LEFT (`usagePart`: `100 - percent used`). `ctxTone`: green `> ctxWarn`, yellow `> ctxCrit`, red otherwise; the rounded number shown is compared
+  - Defaults `ctxWarn` 40 to 75, `ctxCrit` 15 to 50. Users with their own values keep them, but the red boundary is now strict (was `>=` for yellow, so exactly `ctxCrit` was yellow)
+- **Jobs cell**
+  - `jobs` is a field again (default on, before `ci` in both orderings). It is only `READY` (green) or `WORKING (N)` (yellow), not the old `run/park/tot` line
+  - Source is the job ledger (`ledger.running.length`); no ledger, no cell. `WORKING (N)` drops the count when narrow, then the cell stays
+  - An old explicit `fields` list that names `jobs` now gets this cell
+- **Colours**: theme tokens (`success`, `warning`, `error`) through the existing `Seg.color`; no escape codes
+- **Tests**
+  - `tests/hud_data.bats`: remotes, worktree, detached, dirty (cap 99, no index write), non-repo, follows the given cwd, `.envrc`/`hosts.yml`/direnv cases, cache, timeout helper, ledger running count
+  - `hud/pure.test.ts`: `ctxTone` and the band tone at 100/76/75/51/50/0; `jobState` and the cell at 0/1/5 jobs, no ledger, narrow; repo cell for dirty/clean/detached/worktree/non-repo, arrow, root marker, shrink; existing row, order and width tests updated
+  - `hud/hooks.test.tsx`: helper runs in the session cwd, `/cd`, tick without an event, shell cd, non-repo folder, rendered colours
+- **UNVERIFIED, do not assume**
+  - `session.cwd()` moves on `/cd` (the API doc only says `session.root()` does). If it stays put the cell keeps the old repo; fix is to use `root()` as the helper cwd
+  - `command.run` fires for the built-in `/cd` (latency only; tick and poll cover it)
+  - Colours were not looked at in a real session
+  - A `/cd` into a repo under another workspace dir changes the Bash tool's `GH_CONFIG_DIR`; the cell shows the directory's account, not necessarily Bash's. Check with `echo $GH_CONFIG_DIR` and `gh auth status`
+- **Manual check** (real session)
+  - `/cd <another repo>`: within about 15 s the row shows `→ owner/name @ branch ...` for the new repo; after 30 s without a change, report it
+  - `! cd <another repo>`: the row switches too and adds `(root: <launch dir>)`
+  - ctx: confirm green above 75% left, yellow 51 to 75, red at 50 or less
+  - jobs: `READY` green when idle; start a ledger job (`ledger.sh start 1 "x"`) and see `WORKING (1)` yellow, `ledger.sh finish 1` back to `READY`
+- **Version**: new capability plus changed ctx defaults is MINOR at least per `dev/guidelines.md`; the bump is a separate maintainer PR (not done here)
+- **Supersedes**: PRs 442 and 445

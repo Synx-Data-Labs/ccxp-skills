@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'ci' | 'rate' | 'cost' | 'lastat'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -61,12 +61,24 @@ export type Ci = {
 }
 
 export type HelperData = {
-  /** Repository name (origin's last path part, else the folder name). */
+  /** Repository name (origin's last path part, else the folder name); always present. */
   repo: string
   task_id: string
   task_title: string
   branch: string
   worktree: string
+  /** The session cwd the helper ran for ('' when unknown). */
+  cwd: string
+  /** owner/name (or the main worktree's folder name when there is no remote); null outside a git repo. */
+  repo_slug: string | null
+  /** Working-tree root of `cwd`; null outside a git repo. */
+  repo_root: string | null
+  /** Short commit id when HEAD is detached, else ''. */
+  head: string
+  /** Changed tracked files (capped at 99); null when unknown or not a repo. */
+  dirty: number | null
+  /** gh account of the directory (direnv GH_CONFIG_DIR + hosts.yml, never the token); null when unknown. */
+  gh_account: string | null
   autopilot: Autopilot | null
   /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null
@@ -87,6 +99,10 @@ export type Snapshot = {
   jobs: Jobs
   /** True when the last helper run failed: the helper part is the previous one. */
   stale: boolean
+  /** True for a couple of refreshes after the working repo changed (a `/cd`, or a shell cd). */
+  moved: boolean
+  /** `$.session.root()` at the last refresh (null when unreadable); the band shows `(root: X)` only when the cwd is outside it. */
+  sessionRoot: string | null
 }
 
 declare module 'claude-code' {

@@ -61,6 +61,147 @@ sl-branch-name() {
   git -C "$repo_root" symbolic-ref --short HEAD 2>/dev/null || true
 }
 
+# --- Repo identity for the HUD `repo` cell (repo_slug, head, dirty, gh_account) -------------
+# All of it is derived from the SESSION cwd the mod passes in, never from this
+# process's inherited environment (the launch directory's direnv env is stale
+# after `/cd`). No network. Read-only, except the tiny per-root gh-account
+# cache below.
+
+# Run "$@" with a wall-clock limit of $1 seconds; non-zero when it timed out.
+# macOS ships no `timeout`, so fall back to a background watchdog.
+sl-run-timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then timeout "$secs" "$@"; return; fi
+  if command -v gtimeout >/dev/null 2>&1; then gtimeout "$secs" "$@"; return; fi
+  local pid watcher rc=0
+  "$@" & pid=$!
+  # The watchdog must not hold the caller's stdout open (a $(...) would wait for it).
+  ( sleep "$secs"; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
+  watcher=$!
+  wait "$pid" 2>/dev/null || rc=$?
+  kill "$watcher" 2>/dev/null || true
+  return "$rc"
+}
+
+# Short commit id when HEAD is detached, else nothing.
+sl-detached-head() {
+  local repo_root="$1"
+  git -C "$repo_root" symbolic-ref -q HEAD >/dev/null 2>&1 && return 0
+  git -C "$repo_root" rev-parse --short HEAD 2>/dev/null || true
+}
+
+# owner/name from remote.origin.url (https, ssh, scp-style and ssh-alias hosts
+# all end in owner/name[.git]); with no remote, the basename of the main
+# worktree (so a linked worktree still names its repo, not its own folder).
+sl-repo-slug() {
+  local repo_root="$1" url name rest owner common
+  url=$(git -C "$repo_root" config --get remote.origin.url 2>/dev/null) || url=""
+  url="${url%/}"; url="${url%.git}"
+  if [ -n "$url" ]; then
+    name="${url##*[/:]}"
+    rest="${url%"$name"}"; rest="${rest%[/:]}"
+    owner="${rest##*[/:]}"
+    case "$owner" in ''|*@*) owner="" ;; esac
+    if [ -n "$name" ]; then
+      if [ -n "$owner" ]; then printf '%s/%s' "$owner" "$name"; else printf '%s' "$name"; fi
+      return 0
+    fi
+  fi
+  common=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || common=""
+  case "$common" in
+    */.git) basename "$(dirname "$common")" ;;
+    *) basename "$repo_root" ;;
+  esac
+}
+
+# Count of changed TRACKED files (capped at 99); nothing when git is slow or
+# fails (the HUD then shows no marker). Untracked files are not scanned (slow
+# on big trees) and optional locks are off so this never writes to the repo.
+sl-dirty-count() {
+  local repo_root="$1" out
+  out=$(GIT_OPTIONAL_LOCKS=0 sl-run-timeout 2 git -C "$repo_root" status --porcelain --untracked-files=no 2>/dev/null) || return 0
+  if [ -z "$out" ]; then printf '0'; return 0; fi
+  out=$(printf '%s\n' "$out" | grep -c .) || out=0
+  [ "$out" -gt 99 ] && out=99
+  printf '%s' "$out"
+}
+
+# GH_CONFIG_DIR a shell started in $1 would have, from .envrc files only:
+# direnv loads the NEAREST .envrc, which may chain to a parent with source_up.
+# Understands `export GH_CONFIG_DIR=<path>` with ~, $HOME, ${HOME} and quotes;
+# anything else (other variables, command substitution) is treated as unknown.
+sl-gh-config-dir-from-envrc() {
+  local dir="$1" f line val
+  while [ -n "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ]; do
+    f="$dir/.envrc"
+    if [ -r "$f" ]; then
+      line=$(grep -E '^[[:space:]]*(export[[:space:]]+)?GH_CONFIG_DIR=' "$f" 2>/dev/null | tail -n 1) || line=""
+      if [ -n "$line" ]; then
+        val="${line#*GH_CONFIG_DIR=}"
+        val="${val%%[[:space:]]#*}"
+        val="${val%\"}"; val="${val#\"}"; val="${val%\'}"; val="${val#\'}"
+        val="${val//\$\{HOME\}/$HOME}"; val="${val//\$HOME/$HOME}"
+        if [ "${val:0:1}" = "~" ] && { [ "${#val}" -eq 1 ] || [ "${val:1:1}" = "/" ]; }; then val="$HOME${val:1}"; fi
+        case "$val" in *'$'*|*'`'*|'') return 0 ;; esac
+        printf '%s' "$val"
+        return 0
+      fi
+      grep -qE '^[[:space:]]*source_up(_if_exists)?([[:space:]]|$)' "$f" 2>/dev/null || return 0
+    fi
+    dir=$(dirname "$dir")
+  done
+}
+
+# gh's own config dir for a shell in $1: direnv's answer when direnv is
+# installed and allows the .envrc, else the .envrc parse, else empty.
+sl-gh-config-dir() {
+  local root="$1" d=""
+  if command -v direnv >/dev/null 2>&1; then
+    # The launch directory's value must not leak into the answer.
+    d=$( (unset GH_CONFIG_DIR; cd "$root" 2>/dev/null && sl-run-timeout 2 direnv exec "$root" printenv GH_CONFIG_DIR) 2>/dev/null ) || d=""
+  fi
+  [ -n "$d" ] || d=$(sl-gh-config-dir-from-envrc "$root")
+  printf '%s' "$d"
+}
+
+# Account name (the `user:` line only; never the token) from <dir>/hosts.yml,
+# preferring the github.com host.
+sl-gh-hosts-user() {
+  local f="$1/hosts.yml" u
+  [ -r "$f" ] || return 0
+  u=$(awk '/^github\.com:/ {g=1; next} /^[^[:space:]#]/ {g=0} g && $1=="user:" {print $2; exit}' "$f" 2>/dev/null)
+  [ -n "$u" ] || u=$(awk '$1=="user:" {print $2; exit}' "$f" 2>/dev/null)
+  u="${u%\"}"; u="${u#\"}"; u="${u%\'}"; u="${u#\'}"
+  printf '%s' "$u"
+}
+
+# gh account for a shell in repo_root $1, cached per root for
+# CCXP_HUD_CACHE_TTL seconds (default 60; 0 disables) so the 15 s poll stays
+# cheap. Cache: $CCXP_HUD_CACHE_DIR (default ${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache), one
+# tiny file per root; failures to write are ignored.
+sl-gh-account() {
+  local root="$1" ttl="${CCXP_HUD_CACHE_TTL:-60}" cdir="${CCXP_HUD_CACHE_DIR:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/state/hud-cache}"
+  local key f now stamp croot cacct dir acct
+  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=60
+  now=$(date +%s)
+  key=$(printf '%s' "$root" | cksum | awk '{print $1}')
+  f="$cdir/gh-account-$key"
+  if [ "$ttl" -gt 0 ] && [ -r "$f" ]; then
+    IFS=$'\t' read -r stamp croot cacct < "$f" || true
+    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$croot" = "$root" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ]; then
+      printf '%s' "$cacct"
+      return 0
+    fi
+  fi
+  dir=$(sl-gh-config-dir "$root")
+  [ -n "$dir" ] || dir="${XDG_CONFIG_HOME:-${HOME}/.config}/gh"
+  acct=$(sl-gh-hosts-user "$dir")
+  if [ "$ttl" -gt 0 ]; then
+    { mkdir -p "$cdir" && printf '%s\t%s\t%s\n' "$now" "$root" "$acct" > "$f.$$" && mv "$f.$$" "$f"; } 2>/dev/null || rm -f "$f.$$" 2>/dev/null || true
+  fi
+  printf '%s' "$acct"
+}
+
 # Find the task file whose frontmatter `claimed_by:` matches this clone-id and
 # print "<task-id>: <title>" (or just "<task-id>" if no title), else nothing.
 sl-claimed-task-label() {

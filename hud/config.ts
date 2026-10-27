@@ -5,7 +5,7 @@ import type { CiConfig, Field, HudConfig } from '../types'
 
 export type { CiConfig, Field, HudConfig }
 
-export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'ci', 'rate', 'cost', 'lastat']
+export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
 export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']
@@ -16,10 +16,10 @@ export const DEFAULTS: HudConfig = {
   band: true,
   userBorder: 'quote',
   userColor: 'suggestion',
-  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'ci', 'lastat'],
+  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'ci', 'lastat'],
   pollSeconds: 15,
-  ctxWarn: 40,
-  ctxCrit: 15,
+  ctxWarn: 75,
+  ctxCrit: 50,
 }
 
 type Raw = Record<string, unknown>
