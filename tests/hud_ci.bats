@@ -96,7 +96,7 @@ EOT
 @test "a bad ci config (metacharacters, spaces, bad repo, wrong types) is ignored; gh never runs" {
   local repo bad; repo=$(_make_repo r-bad)
   _fake_gh "$OK_RUN"
-  for bad in '{"workflow":"a b.yml"}' '{"workflow":"x;touch pwn"}' '{"workflow":"$(id)"}' '{"workflow":"w.yml","repo":"no-slash"}' '{"workflow":"w.yml","branch":"-x"}' '{"workflow":5}' '"str"' '[]'; do
+  for bad in '{"workflow":"a b.yml"}' '{"workflow":"x;touch pwn"}' '{"workflow":"$(id)"}' '{"workflow":"w.yml","repo":"no-slash"}' '{"workflow":"w.yml","branch":"-x"}' '{"workflow":"w.yml","repo":"--web/x"}' '{"workflow":"w.yml","repo":"a/-x"}' '{"workflow":5}' '"str"' '[]'; do
     run _hud_ci "$repo" "$bad"
     [ "$status" -eq 0 ]
     [ "$(jq -r .ci <<<"$output")" = "null" ]
@@ -141,6 +141,22 @@ EOT
   run _hud_ci "$repo" '{"workflow":"w.yml"}'
   [ "$(jq -r .ci.state <<<"$output")" = "failing" ]
   [ "$(wc -l < "$GH_LOG")" -eq 2 ]
+}
+
+@test "a dead (old) lock is cleared so the refresh runs again; a fresh lock blocks it" {
+  local repo; repo=$(_make_repo r-lock)
+  _fake_gh "$OK_RUN"
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  local f; f=$(ls "$HUD_CI_STATE_DIR"/*.json)
+  jq '.fetched = 1' "$f" > "$f.t" && mv "$f.t" "$f"
+  mkdir "${f%.json}.lock"
+  _fake_gh '[{"status":"completed","conclusion":"failure","createdAt":"2026-10-27T03:00:00Z"}]'
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = "passing" ]
+  [ ! -s "$GH_LOG" ]
+  touch -t 202001010000 "${f%.json}.lock"
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = "failing" ]
 }
 
 @test "the default path never waits for gh: it answers ci null at once and fills the cache in the background" {

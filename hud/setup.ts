@@ -2,7 +2,7 @@
 // few primitives in as `io`, so the unit tests can drive every branch with fakes.
 
 import type { CiConfig } from '../types'
-import { ciFromAnswers, withCi } from './config'
+import { ciFromAnswers, isRewritable, withCi } from './config'
 
 export const CANCEL = 'cancel'
 export const NONE = 'none (hide CI)'
@@ -48,9 +48,11 @@ export async function setupCi(io: SetupIo): Promise<string> {
     if (scope === CANCEL) return NOTHING
     const file = scope === SCOPE_USER ? io.paths.user : scope === SCOPE_PROJECT ? io.paths.project : undefined
     if (!file) return 'ccxp-hud setup: no such place to save to. Nothing written.'
+    const existing = await io.read(file)
+    if (!isRewritable(existing)) return `ccxp-hud setup: ${file} is not a valid JSON object, so it was left alone. Fix or remove it, then run /hud setup again. Nothing written.`
     const ok = await io.ask(`Write "ci": ${JSON.stringify(ci)} to ${file}?`, { header: 'Confirm', options: [WRITE, CANCEL] })
     if (ok !== WRITE) return NOTHING
-    await io.write(file, withCi(await io.read(file), ci))
+    await io.write(file, withCi(existing, ci))
     return `ccxp-hud: ci ${ci ? 'set' : 'hidden'} in ${file}. The first CI result can take a couple of minutes (results are cached).`
   } catch {
     // A dismissed dialog rejects; nothing has been written at that point.

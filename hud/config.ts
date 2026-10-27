@@ -41,7 +41,7 @@ function parseFields(x: unknown): Field[] | undefined {
 
 const WORKFLOW_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/
 const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/
-const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+const REPO_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/
 
 /** `ci` as `{workflow, branch?, repo?}` (or a bare workflow string); anything invalid means no CI segment. */
 export function parseCi(x: unknown): CiConfig | undefined {
@@ -134,6 +134,16 @@ export function ciFromAnswers(a: { workflow: string; branch: string; repo: strin
   if (branch) ci.branch = branch
   if (repo) ci.repo = repo
   return { ok: true, ci }
+}
+
+/** True when `/hud setup` may rewrite this file text: empty, or a JSON object (never clobber an unparsable file). */
+export function isRewritable(text: string | undefined | null): boolean {
+  if (!text || !text.trim()) return true
+  try {
+    return isRecord(JSON.parse(text))
+  } catch {
+    return false
+  }
 }
 
 /** Text of a config file after `/hud setup`: only the `ci` key is set (null hides CI); other keys are kept. */
