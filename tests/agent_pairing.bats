@@ -216,6 +216,43 @@ EOF
   grep -q 'repo context block (see "Repo context per job")' "$f"
 }
 
+@test "asset: HUD job ledger section has the start/finish lines every job prompt must carry" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## HUD job ledger' "$f"
+  grep -q 'hud/scripts/ledger.sh"; bash "\$L" start <n> "<title>"' "$f"
+  grep -q 'bash "\$L" finish <n>' "$f"
+  grep -q 'As your very first action, before reading CLAUDE.md' "$f"
+  grep -q 'As your very last action' "$f"
+  grep -q 'The two HUD ledger lines (see "HUD job ledger")' "$f"
+  grep -q '`#<n> <title>`' "$f"
+}
+
+@test "asset: ledger carve-out is limited to finish/park/unpark and Bash stays otherwise read-only" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'Job died early' "$f"
+  grep -q 'no follow-up job' "$f"
+  grep -q 'bash "\$L" park <n>' "$f"
+  grep -q '`unpark <n>`' "$f"
+  grep -q 'only `finish`, `park` and `unpark`' "$f"
+  grep -q 'Bash is read-only only' "$f"
+}
+
+@test "asset: the ledger lines in the asset actually work against ledger.sh" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
+  L="$REPO_ROOT/hud/scripts/ledger.sh"
+  bash "$L" start 7 "Fix the thing"
+  [ "$(jq -r '.running[0].job' "$CCXP_LEDGER_FILE")" = "7" ]
+  bash "$L" park 2
+  [ "$(jq -r '.parked' "$CCXP_LEDGER_FILE")" = "1" ]
+  bash "$L" unpark k2
+  bash "$L" finish 7
+  bash "$L" finish 7
+  [ "$(jq -r '.running | length' "$CCXP_LEDGER_FILE")" = "0" ]
+  [ "$(jq -r '.lifetime_jobs' "$CCXP_LEDGER_FILE")" = "7" ]
+  [ "$(jq -r '.parked' "$CCXP_LEDGER_FILE")" = "0" ]
+}
+
 @test "status: calls out a stale pre-rename agent=dispatcher distinctly from an unrelated custom agent" {
   mk_settings_with_agent dispatcher
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
