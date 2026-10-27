@@ -49,7 +49,11 @@ export function bandTree(
 export function paneTree(ui: { Box: any; Text: any }, snap: Snapshot, cfg: HudConfig) {
   const { Box, Text } = ui
   const ap = snap.helper?.autopilot
+  const h = snap.helper
   const lines: string[] = [
+    h?.repo
+      ? `repo: ${h.repo} @ ${h.branch || (h.head ? `detached ${h.head}` : '?')}${h.dirty ? ` (${h.dirty}${h.dirty >= 99 ? '+' : ''} changed)` : ''}${h.gh_account ? `  gh: ${h.gh_account}` : ''}  at ${h.repo_root}`
+      : `dir: ${h?.cwd || '(unknown)'} (not a git repo)`,
     `enabled: ${cfg.enabled}   band: ${cfg.band}   userMessage: ${cfg.userMessage}`,
     ap
       ? `autopilot ${ap.status} ${ap.prefix}  ${ap.elapsed_hr}/${ap.requested_hr}h  ${ap.stuck > 0 ? `⚠${ap.stuck} ` : ''}loops ${ap.cycle} ✓${ap.merged}`

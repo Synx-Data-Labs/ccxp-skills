@@ -31,6 +31,31 @@ const mem = {
   lastHelperAt: 0,
   heartbeatIsOn: null as boolean | null,
   started: false,
+  // Which repo the last good helper run described, and how many more refreshes
+  // the "moved" arrow stays up. A hot reload starting these over is harmless.
+  lastRepoKey: null as string | null,
+  movedLeft: 0,
+  // cwd + root at the last refresh: a change refreshes at once instead of at the next poll.
+  lastWhere: null as string | null,
+}
+
+/** Refreshes the arrow stays after the working repo changed. */
+const MOVED_REFRESHES = 2
+
+async function readWhere($: any): Promise<{ cwd: string; root: string | null }> {
+  let cwd = ''
+  let root: string | null = null
+  try {
+    cwd = await $.session.cwd()
+  } catch {
+    cwd = ''
+  }
+  try {
+    root = (await $.session.root()) ?? null
+  } catch {
+    root = null
+  }
+  return { cwd, root }
 }
 
 async function envPaths($: any) {
@@ -101,8 +126,12 @@ async function refresh($: any, cfg: HudConfig) {
   mem.lastHelperAt = await $.clock.now()
   let helper = null
   let isOk = false
+  // The session cwd is read fresh on every refresh (never cached), so the repo
+  // follows /cd and shell cd alike. root() is read for the "(root: X)" marker only.
+  const where = await readWhere($)
+  mem.lastWhere = `${where.cwd}\n${where.root ?? ''}`
   try {
-    const cwd: string = await $.session.cwd()
+    const cwd: string = where.cwd || (await $.session.cwd())
     const sessionId: string = await $.session.id()
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
@@ -122,9 +151,18 @@ async function refresh($: any, cfg: HudConfig) {
     agents = []
   }
   const usage = await readUsage($)
+  if (isOk && helper) {
+    // A different working tree than last time (or a different folder outside any repo) is a move.
+    const key = helper.repo_root ?? (helper.cwd || where.cwd)
+    if (mem.lastRepoKey !== null && key !== mem.lastRepoKey) mem.movedLeft = MOVED_REFRESHES
+    else if (mem.movedLeft > 0) mem.movedLeft -= 1
+    mem.lastRepoKey = key
+  }
   await update($, snapshotAtom, (prev: Snapshot) => ({
     ...prev,
     ...usage,
+    moved: mem.movedLeft > 0,
+    sessionRoot: where.root,
     helper: isOk ? helper : prev.helper,
     stale: !isOk,
     jobs: countJobs(agents),
@@ -185,7 +223,11 @@ async function tickOnce($: any) {
     return
   }
   const now = await $.clock.now()
-  if (now - mem.lastHelperAt >= cfg.pollSeconds * 1000) await refresh($, cfg)
+  // Poll on the configured interval, or at once when the session moved (a /cd
+  // changes cwd and root; both are cheap in-process reads on every 5 s tick).
+  const where = await readWhere($)
+  const moved = mem.lastWhere !== null && mem.lastWhere !== `${where.cwd}\n${where.root ?? ''}`
+  if (moved || now - mem.lastHelperAt >= cfg.pollSeconds * 1000) await refresh($, cfg)
   await syncHeartbeat($, cfg)
   await mirrorStatus($, cfg)
 }
@@ -232,6 +274,20 @@ export const register: Register = on => {
       /* ignore */
     }
     return next(e)
+  })
+
+  // /cd moves the session to another directory. Refresh once it has run so the
+  // band names the new repo now, not at the next poll. UNVERIFIED that this
+  // fires for the built-in /cd; the 5 s tick above covers it either way.
+  on('command.run', { command: 'cd' }, async ($, e, next) => {
+    const out = await next(e)
+    try {
+      const cfg = await read($, configAtom)
+      if (cfg.enabled) await refresh($, cfg)
+    } catch {
+      /* ignore */
+    }
+    return out
   })
 
   on('command.run', { command: 'hud' }, async ($, e) => {

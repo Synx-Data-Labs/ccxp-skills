@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
-import { EMPTY, bandRows, compactLine, countJobs, ctxTone, formatStamp, meter, parseHelper, tierOf, truncateWords } from './model'
+import { EMPTY, baseName, bandRows, compactLine, countJobs, ctxTone, formatStamp, meter, isWithin, parseHelper, tierOf, truncateWords } from './model'
 
 const HELPER = JSON.stringify({
   task_id: 'T20261021-354035',
@@ -251,4 +251,94 @@ test('compactLine is one plain line within the 2,000 character limit', async () 
   const line = compactLine(snap(), DEFAULTS)
   expect(line).not.toContain('\n')
   expect(line.length).toBeLessThanOrEqual(2000)
+})
+
+// --- repo field (multi-repo Phase 1) ---
+
+const REPO_HELPER = (over: object = {}) => ({
+  ...parseHelper(HELPER)!,
+  cwd: '/w/acme/widgets',
+  repo: 'acme/widgets',
+  repo_root: '/w/acme/widgets',
+  branch: 'main',
+  head: '',
+  dirty: 0,
+  gh_account: 'octo',
+  ...over,
+})
+const REPO_ONLY = { ...DEFAULTS, fields: ['repo' as const] }
+
+test('parseHelper: repo fields default to unknown, and a helper without them still parses', async () => {
+  const h = parseHelper(HELPER)!
+  expect([h.cwd, h.repo, h.repo_root, h.head, h.dirty, h.gh_account]).toEqual(['', null, null, '', null, null])
+  const r = parseHelper('{"branch":"m","cwd":"/a","repo":"o/r","repo_root":"/a","head":"abc1234","dirty":3,"gh_account":"octo"}')!
+  expect([r.cwd, r.repo, r.repo_root, r.head, r.dirty, r.gh_account]).toEqual(['/a', 'o/r', '/a', 'abc1234', 3, 'octo'])
+  expect(parseHelper('{"branch":"m","repo":"","dirty":"x","gh_account":""}')).toMatchObject({ repo: null, dirty: null, gh_account: null })
+})
+
+test('repo: wide shows slug, branch, dirty marker, worktree and account; the branch field steps aside', async () => {
+  const wide = (over: object) => text(bandRows(snap({ helper: REPO_HELPER(over) }), REPO_ONLY, 140))
+  expect(wide({})).toBe('repo: acme/widgets @ main (octo)')
+  expect(wide({ dirty: 4 })).toBe('repo: acme/widgets @ main* (octo)')
+  expect(wide({ worktree: 'widgets-wt' })).toBe('repo: acme/widgets @ main (wt widgets-wt) (octo)')
+  expect(wide({ gh_account: null })).toBe('repo: acme/widgets @ main')
+  expect(wide({ dirty: null })).toBe('repo: acme/widgets @ main (octo)')
+  const both = text(bandRows(snap({ helper: REPO_HELPER() }), { ...DEFAULTS, fields: ['repo', 'branch'] }, 140))
+  expect(both.match(/main/g)?.length).toBe(1)
+  // Default fields: the repo comes first and the branch is not repeated.
+  const all = text(bandRows(snap({ helper: REPO_HELPER({ branch: 't1-x' }) }), DEFAULTS, 140))
+  expect(all.startsWith('repo: acme/widgets @ t1-x (octo) │ AP')).toBe(true)
+  expect(all.match(/t1-x/g)?.length).toBe(1)
+})
+
+test('repo: detached HEAD shows the short id; the marker colours', async () => {
+  expect(text(bandRows(snap({ helper: REPO_HELPER({ branch: '', head: 'abc1234' }) }), REPO_ONLY, 140))).toContain('@ detached abc1234')
+  const row = bandRows(snap({ helper: REPO_HELPER({ dirty: 2 }) }), REPO_ONLY, 140)[0]
+  expect(row.find(s => s.text === '*')?.color).toBe('warning')
+  expect(row.find(s => s.text === 'acme/widgets')?.bold).toBe(true)
+})
+
+test('repo: compact uses the short name, tiny keeps name and dirty star only', async () => {
+  expect(text(bandRows(snap({ helper: REPO_HELPER({ dirty: 1 }) }), REPO_ONLY, 80))).toBe('widgets @ main* (octo)')
+  expect(text(bandRows(snap({ helper: REPO_HELPER({ dirty: 1 }) }), REPO_ONLY, 60))).toBe('widgets*')
+  expect(text(bandRows(snap({ helper: REPO_HELPER() }), REPO_ONLY, 60))).toBe('widgets')
+  const rows = bandRows(snap({ helper: REPO_HELPER() }), DEFAULTS, 60)
+  expect(rows.length).toBe(1)
+  expect(text(rows)).toContain('widgets')
+  expect(text(rows)).toContain('AP ')
+})
+
+test('repo: outside a repo only the folder name shows; no cwd at all shows nothing', async () => {
+  const none = { repo: null, repo_root: null, dirty: null, gh_account: null, branch: '', cwd: '/home/u/notes' }
+  expect(text(bandRows(snap({ helper: REPO_HELPER(none) }), REPO_ONLY, 140))).toBe('dir: notes')
+  expect(text(bandRows(snap({ helper: REPO_HELPER(none) }), REPO_ONLY, 80))).toBe('notes')
+  expect(bandRows(snap({ helper: REPO_HELPER({ ...none, cwd: '' }) }), REPO_ONLY, 140)).toEqual([])
+})
+
+test('repo: the moved arrow leads the repo; the root marker shows only when the cwd left the session root', async () => {
+  const moved = bandRows(snap({ helper: REPO_HELPER(), moved: true }), REPO_ONLY, 140)[0]
+  expect(moved[0]).toMatchObject({ text: '→ ', bold: true })
+  expect(text([moved])).toBe('→ repo: acme/widgets @ main (octo)')
+  expect(text(bandRows(snap({ helper: REPO_HELPER() }), REPO_ONLY, 140))).not.toContain('→')
+  // Same root as the cwd, or the cwd below the root: no marker.
+  expect(text(bandRows(snap({ helper: REPO_HELPER(), sessionRoot: '/w/acme/widgets' }), REPO_ONLY, 140))).not.toContain('root')
+  expect(text(bandRows(snap({ helper: REPO_HELPER({ cwd: '/w/acme/widgets/sub' }), sessionRoot: '/w/acme/widgets' }), REPO_ONLY, 140))).not.toContain('root')
+  // A shell cd into another repo leaves the root behind.
+  const half = text(bandRows(snap({ helper: REPO_HELPER(), sessionRoot: '/w/other/launch' }), REPO_ONLY, 140))
+  expect(half).toBe('repo: acme/widgets @ main (octo) (root: launch)')
+  expect(text(bandRows(snap({ helper: REPO_HELPER(), sessionRoot: '/w/other/launch' }), REPO_ONLY, 60))).not.toContain('root')
+})
+
+test('baseName and isWithin', async () => {
+  expect([baseName('/a/b/'), baseName('/'), baseName('')]).toEqual(['b', '', ''])
+  expect([isWithin('/a/b', '/a/b'), isWithin('/a/b/c', '/a/b/'), isWithin('/a/bc', '/a/b')]).toEqual([true, true, false])
+})
+
+test('repo: long names are cut and every row fits the width', async () => {
+  const h = REPO_HELPER({ repo: 'some-long-organisation/a-really-quite-long-repository-name-here', branch: 'feature/' + 'x'.repeat(60) })
+  for (const cols of [60, 80, 100, 140]) {
+    for (const r of bandRows(snap({ helper: h }), DEFAULTS, cols)) {
+      expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(cols - 2)
+    }
+  }
 })

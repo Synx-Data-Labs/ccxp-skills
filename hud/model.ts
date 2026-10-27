@@ -11,10 +11,16 @@ export const EMPTY: Snapshot = {
   costUsd: null,
   jobs: { running: 0, waiting: 0, failed: 0 },
   stale: false,
+  moved: false,
+  sessionRoot: null,
 }
 
 function str(x: unknown): string {
   return typeof x === 'string' ? x : ''
+}
+
+function strOrNull(x: unknown): string | null {
+  return typeof x === 'string' && x !== '' ? x : null
 }
 
 function num(x: unknown): number {
@@ -71,6 +77,12 @@ export function parseHelper(stdout: string): HelperData | null {
     task_title: str(r.task_title),
     branch: str(r.branch),
     worktree: str(r.worktree),
+    cwd: str(r.cwd),
+    repo: strOrNull(r.repo),
+    repo_root: strOrNull(r.repo_root),
+    head: str(r.head),
+    dirty: typeof r.dirty === 'number' && Number.isFinite(r.dirty) ? r.dirty : null,
+    gh_account: strOrNull(r.gh_account),
     autopilot,
     ledger,
     last_input_at: num(r.last_input_at),
@@ -149,6 +161,8 @@ export function truncateWords(text: string, max: number): string {
   return kept.trimEnd() + '…'
 }
 
+const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
+
 /** A band block: fixed segments plus an optional part that fills whatever room is left on its row. */
 type Block = { segs: Seg[]; grow?: (room: number) => Seg[]; minRoom?: number }
 
@@ -217,9 +231,78 @@ function jobsBlock(snap: Snapshot, tier: Tier): Block | null {
   return { segs, grow, minRoom: tier === 'wide' ? 90 : 12 }
 }
 
-function blockFor(field: Field, snap: Snapshot, cfg: HudConfig, tier: Tier): Block | null {
+/** Last path segment; '' for an empty path. */
+export function baseName(path: string): string {
+  const parts = path.split('/').filter(p => p !== '')
+  return parts.length ? parts[parts.length - 1] : ''
+}
+
+/** True when `cwd` is `root` or below it. */
+export function isWithin(cwd: string, root: string): boolean {
+  const r = root.replace(/\/+$/, '')
+  return cwd === r || cwd.startsWith(r + '/')
+}
+
+/**
+ * Which repo the session is working in, following the session cwd:
+ * `repo: owner/name @ branch* (wt X) (account)`, a leading `→` for a couple of
+ * refreshes after the repo changed, and `(root: X)` when a shell cd left the
+ * session root behind. Outside a git repo it is just the folder name.
+ * The branch is part of this block, so the separate `branch` field steps aside (see bandRows).
+ */
+function repoBlock(snap: Snapshot, tier: Tier, width: number): Block | null {
+  const h = snap.helper
+  if (!h) return null
+  // Most to least detail; the first one that fits the row wins (a long branch or account must not overflow).
+  const attempts: { tier: Tier; wt: boolean; root: boolean; acct: boolean }[] = [
+    { tier, wt: true, root: true, acct: true },
+    { tier, wt: false, root: true, acct: true },
+    { tier, wt: false, root: false, acct: true },
+    { tier, wt: false, root: false, acct: false },
+  ]
+  if (tier !== 'tiny') attempts.push({ tier: 'tiny', wt: false, root: false, acct: false })
+  let last: Block | null = null
+  for (const a of attempts) {
+    last = repoSegs(snap, a.tier, a.wt, a.root, a.acct)
+    if (last === null || widthOf(last.segs) <= width) return last
+  }
+  return last
+}
+
+function repoSegs(snap: Snapshot, tier: Tier, wt: boolean, withRoot: boolean, acct: boolean): Block | null {
+  const h = snap.helper!
+  const segs: Seg[] = []
+  if (snap.moved) segs.push({ text: '→ ', color: 'suggestion', bold: true })
+  const root = withRoot && snap.sessionRoot && h.cwd && !isWithin(h.cwd, snap.sessionRoot) ? baseName(snap.sessionRoot) : ''
+  const rootSeg: Seg[] = root && tier !== 'tiny' ? [{ text: ` (root: ${truncate(root, 20)})`, color: 'warning' }] : []
+  if (!h.repo) {
+    const dir = baseName(h.cwd)
+    if (!dir) return null
+    segs.push({ text: tier === 'wide' ? `dir: ${truncate(dir, 40)}` : truncate(dir, tier === 'tiny' ? 16 : 24), dim: true }, ...rootSeg)
+    return { segs }
+  }
+  const dirty = h.dirty !== null && h.dirty > 0
+  if (tier === 'tiny') {
+    segs.push({ text: truncate(baseName(h.repo), 16), bold: true })
+    if (dirty) segs.push({ text: '*', color: 'warning' })
+    return { segs }
+  }
+  if (tier === 'wide') segs.push({ text: 'repo: ', dim: true })
+  segs.push({ text: tier === 'wide' ? truncate(h.repo, 48) : truncate(baseName(h.repo), 24), bold: true })
+  const where = h.branch ? (tier === 'wide' ? truncate(h.branch, 40) : truncate(h.branch, 24)) : h.head ? `detached ${h.head}` : ''
+  if (where) segs.push({ text: ` @ ${where}` })
+  if (dirty) segs.push({ text: '*', color: 'warning' })
+  if (wt && tier === 'wide' && h.worktree) segs.push({ text: ` (wt ${truncate(h.worktree, 24)})`, dim: true })
+  if (acct && h.gh_account) segs.push({ text: ` (${truncate(h.gh_account, 24)})`, dim: true })
+  segs.push(...rootSeg)
+  return { segs }
+}
+
+function blockFor(field: Field, snap: Snapshot, cfg: HudConfig, tier: Tier, width: number): Block | null {
   const h = snap.helper
   switch (field) {
+    case 'repo':
+      return repoBlock(snap, tier, width)
     case 'ap':
       return apBlock(snap, tier)
     case 'ctx': {
@@ -252,7 +335,6 @@ function blockFor(field: Field, snap: Snapshot, cfg: HudConfig, tier: Tier): Blo
   }
 }
 
-const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
 const SEP = ' │ '
 
 /** Greedy row packing; null when the blocks need more than `maxRows` rows. */
@@ -289,8 +371,13 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
   const maxRows = tier === 'tiny' ? 1 : tier === 'compact' ? 2 : 3
   const entries: { field: string; block: Block }[] = []
   for (const f of cfg.fields) {
-    const block = blockFor(f, snap, cfg, tier)
+    const block = blockFor(f, snap, cfg, tier, width)
     if (block) entries.push({ field: f, block })
+  }
+  // The repo block already carries the branch: do not say it twice.
+  if (entries.some(e => e.field === 'repo')) {
+    const i = entries.findIndex(e => e.field === 'branch')
+    if (i >= 0) entries.splice(i, 1)
   }
   if (snap.stale) entries.push({ field: 'stale', block: { segs: [{ text: 'stale', dim: true }] } })
   if (entries.length === 0) return []

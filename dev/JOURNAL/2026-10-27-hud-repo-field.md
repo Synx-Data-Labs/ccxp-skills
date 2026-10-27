@@ -1,0 +1,24 @@
+# HUD shows which repo the session is on (multi-repo Phase 1)
+
+- **Why**: owner ask, "in the ccxp-hud, we should also share which repo we are on", and, since `/cd` exists, "support the `/cd` in our ccxp-hud, so that we know what's the current repo". Phase 1 of the multi-repo design; later phases (repo registry, `/switch`) are not started
+- **Added**: a `repo` field, first in the default `fields`
+  - Wide `repo: owner/name @ branch* (wt X) (account)`, compact `name @ branch* (account)`, tiny `name*`; outside a git repo only the folder name
+  - `hud-data.sh --json` gains `cwd`, `repo`, `repo_root`, `head` (short id when detached), `dirty` (changed tracked files, capped 99), `gh_account`; `repo`, `repo_root`, `dirty`, `gh_account` are `null` outside a repo; existing fields unchanged
+  - The `branch` field steps aside when `repo` is listed (the repo segment already carries the branch)
+- **gh account**: derived from the session cwd, never from the helper's inherited env (that is the launch directory's direnv env)
+  - `direnv exec <root> printenv GH_CONFIG_DIR` (launch `GH_CONFIG_DIR` removed first), else the nearest `.envrc` parsed (`~`, `$HOME`, `${HOME}`, quotes, `source_up`), else the default gh config; then `user:` from `hosts.yml`, never the token
+  - Cached 60 s per root under `~/.claude/state/hud-cache/`, the helper's only write
+  - The account shown is what direnv says, not what `_gh/gh.sh` would probe; they can differ
+- **Following the cwd**: `hud/register.tsx`
+  - `refresh()` already read `session.cwd()` fresh each time; now also reads `session.root()`
+  - A 5 s tick refreshes at once when cwd or root changed (cheap in-process reads), a `command.run` hook for `cd` refreshes right after `/cd`; the 15 s poll stays as the backstop
+  - `→` leads the segment for two refreshes after the working tree changed; `(root: X)` shows when the cwd is outside the session root (a shell `cd`, the half-switch)
+- **Tests**: `tests/hud_data.bats` (remotes, worktree, detached, dirty and cap, no index write, non-repo, follows the given cwd, `.envrc` and `hosts.yml` cases, direnv precedence, cache, timeout helper); `hud/pure.test.ts` (segment tiers, arrow, root marker, width); `hud/hooks.test.tsx` (helper runs in the session cwd, `/cd`, tick without any event, shell cd, non-repo folder)
+- **UNVERIFIED, do not assume**:
+  - `session.cwd()` moves on `/cd`. The API doc only says `session.root()` does. If `cwd()` stays put the HUD keeps showing the old repo; the fix is to use `root()` as the helper cwd
+  - The `command.run` hook fires for the built-in `/cd`. Only matters for latency, the tick and poll cover it
+  - A `/cd` into a repo under the other workspace dir changes the Bash tool's `GH_CONFIG_DIR` (the HUD shows the directory's account, not what Bash will use). Check with `echo $GH_CONFIG_DIR` and `gh auth status` after a `/cd`
+- **Manual check** (real session):
+  - Run `/cd <another repo>`; within about 15 s the band should show `→ repo: ... (account)` for the new repo. After 30 s without a change, report it
+  - Run `! cd <another repo>`; the band should switch too and add `(root: <launch repo>)`
+- **Version**: new backward-compatible capability = MINOR per `dev/guidelines.md`; the bump is a separate maintainer PR

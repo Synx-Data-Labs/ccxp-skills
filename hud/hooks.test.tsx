@@ -17,14 +17,19 @@ type World = {
   helper?: { exitCode: number; stdout: string } | 'throw'
   writes: { path: string; text: string }[]
   runs: string[][]
+  cwds: string[]
+  now?: number
+  cwd?: string
+  root?: string
+  helperByCwd?: Record<string, string>
   statuses: (string | undefined)[]
 }
 
 // Stands for the engine beneath the mod: every hook here answers `{ value }`.
 function world($: any, on: any, w: World) {
   on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/u' : undefined }))
-  on('session.root', () => ({ value: '/proj' }))
-  on('session.cwd', () => ({ value: '/proj' }))
+  on('session.root', () => ({ value: w.root ?? '/proj' }))
+  on('session.cwd', () => ({ value: w.cwd ?? '/proj' }))
   on('session.id', () => ({ value: 'sess1' }))
   on('fs.read', (_: any, e: any) => {
     if (e.path === '/home/u/.claude/ccxp-hud.json' && w.cfg !== undefined) return { value: w.cfg }
@@ -39,12 +44,14 @@ function world($: any, on: any, w: World) {
   })
   on('process.run', (_: any, e: any) => {
     w.runs.push([...e.argv])
+    w.cwds.push(e.init?.cwd)
     if (w.helper === 'throw') throw new Error('boom')
+    if (w.helperByCwd?.[e.init?.cwd]) return { value: { exitCode: 0, stdout: w.helperByCwd[e.init?.cwd], stderr: '' } }
     return { value: w.helper ?? { exitCode: 0, stdout: HELPER, stderr: '' } }
   })
   on('agent.list', () => ({ value: [{ status: 'running' }, { status: 'failed' }] }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [] } }))
-  on('clock.now', () => ({ value: 1_000_000 }))
+  on('clock.now', () => ({ value: w.now ?? 1_000_000 }))
   on('clock.every', () => ({ value: undefined }))
   on('command.register', () => ({ value: { command: 'hud' } }))
   on('ui.status', (_: any, e: any) => {
@@ -59,7 +66,7 @@ function world($: any, on: any, w: World) {
   })
 }
 
-const fresh = (): World => ({ writes: [], runs: [], statuses: [] })
+const fresh = (): World => ({ writes: [], runs: [], cwds: [], statuses: [] })
 
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as const
 
@@ -257,5 +264,107 @@ test('a partial session.measure updates context and keeps the other units', asyn
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /5h 42%/ })).toBeDefined()
+  await band.unmount()
+})
+
+// --- repo field follows the session cwd (multi-repo Phase 1) ---
+
+const IN_REPO = (repo: string, root: string, over: object = {}) =>
+  JSON.stringify({ ...JSON.parse(HELPER), cwd: root, repo, repo_root: root, branch: 'main', head: '', dirty: 0, gh_account: 'octo', ...over })
+
+const REPOS = { '/w/a': IN_REPO('acme/alpha', '/w/a'), '/w/b': IN_REPO('acme/beta', '/w/b', { branch: 'dev', dirty: 3 }) }
+
+test('the helper runs in the session cwd, and the band names that repo', async ($: any, on: any) => {
+  const w = fresh()
+  w.cwd = '/w/a'
+  w.root = '/w/a'
+  w.helperByCwd = REPOS
+  world($, on, w)
+  await $.session.start(START)
+  expect(w.cwds.at(-1)).toBe('/w/a')
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /acme\/alpha/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /→/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test('after /cd the helper reruns at once in the new directory and the band shows the new repo with an arrow', async ($: any, on: any) => {
+  const w = fresh()
+  w.cwd = '/w/a'
+  w.root = '/w/a'
+  w.helperByCwd = REPOS
+  world($, on, w)
+  on('command.run', (_: any, e: any) => ({ value: { text: `cd ${e.args}` } }))
+  await $.session.start(START)
+  const before = w.runs.length
+  // The engine moves cwd and root, then the /cd command returns.
+  w.cwd = '/w/b'
+  w.root = '/w/b'
+  await $.command.run({ command: 'cd', args: '/w/b' })
+  expect(w.runs.length).toBeGreaterThan(before)
+  expect(w.cwds.at(-1)).toBe('/w/b')
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /acme\/beta/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /dev/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /→/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /root:/ })).toBeUndefined()
+  await band.unmount()
+})
+
+test('without any /cd event the tick still notices a changed cwd (poll is the backstop)', async ($: any, on: any) => {
+  const w = fresh()
+  w.cwd = '/w/a'
+  w.root = '/w/a'
+  w.helperByCwd = REPOS
+  world($, on, w)
+  await $.session.start(START)
+  w.cwd = '/w/b'
+  w.root = '/w/b'
+  await $.session.start(START) // runs a tick; the clock has not advanced, so only the move can trigger a refresh
+  expect(w.cwds.at(-1)).toBe('/w/b')
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /acme\/beta/ })).toBeDefined()
+  await band.unmount()
+})
+
+test('a shell cd (cwd moved, root did not) shows the root marker; the arrow settles after two refreshes', async ($: any, on: any) => {
+  const w = fresh()
+  w.cwd = '/w/a'
+  w.root = '/w/a'
+  w.helperByCwd = REPOS
+  world($, on, w)
+  await $.session.start(START)
+  w.cwd = '/w/b'
+  await $.session.start(START)
+  let band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /\(root: a\)/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /→/ })).toBeDefined()
+  await band.unmount()
+  // Poll refreshes in the same repo: the arrow stays for two refreshes in all, then settles.
+  for (const [i, arrow] of [true, false].entries()) {
+    w.now = 1_000_000 + (i + 1) * 20_000
+    await $.session.start(START)
+    band = await $.ui.mount(BAND(140))
+    expect(!!(await band.find({ type: 'Text', text: /→/ }))).toBe(arrow)
+    await band.unmount()
+  }
+})
+
+test('/cd to a folder that is not a repo shows only the folder name; the helper failing keeps the last repo', async ($: any, on: any) => {
+  const w = fresh()
+  w.cwd = '/w/a'
+  w.root = '/w/a'
+  w.helperByCwd = {
+    ...REPOS,
+    '/home/u/notes': JSON.stringify({ ...JSON.parse(HELPER), cwd: '/home/u/notes', repo: null, repo_root: null, branch: '', dirty: null, gh_account: null }),
+  }
+  world($, on, w)
+  await $.session.start(START)
+  w.cwd = '/home/u/notes'
+  w.root = '/home/u/notes'
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /dir: notes/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /acme/ })).toBeUndefined()
   await band.unmount()
 })

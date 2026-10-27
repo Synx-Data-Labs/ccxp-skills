@@ -7,6 +7,10 @@
 # leaves bash (the mod only ever sees task id/title, never the claimed_by value):
 #
 #   {"task_id","task_title","branch","worktree",
+#    "cwd","repo","repo_root","head","dirty","gh_account",  # repo identity, derived from the
+#                         # session cwd (null outside a git repo; head = short id when detached;
+#                         # dirty = changed tracked files, capped 99, null when unknown;
+#                         # gh_account from direnv/.envrc GH_CONFIG_DIR + hosts.yml, no network)
 #    "autopilot": null | {"status","prefix","elapsed_hr","requested_hr",
 #                         "stuck","cycle","last_outcome","last_task",
 #                         "stuck_reason","stop_reason","merged"},
@@ -45,6 +49,17 @@ hud-data() {
   if [ -n "$gd" ] && [ -n "$cd_" ] && [ "$gd" != "$cd_" ]; then worktree=$(basename "$repo_root"); fi
   rec=$(sl-autopilot-fields "$repo_root")
 
+  # Repo identity: only when cwd is really inside a git work tree. Outside one
+  # these stay empty and become JSON null (the mod then shows the folder name).
+  local repo="" top="" head="" dirty="" gh_account=""
+  top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || top=""
+  if [ -n "$top" ]; then
+    repo=$(sl-repo-slug "$top")
+    head=$(sl-detached-head "$top")
+    dirty=$(sl-dirty-count "$top")
+    gh_account=$(sl-gh-account "$top")
+  fi
+
   local ledger; ledger=$(sl-ledger-json)
   [ -n "$ledger" ] || ledger="null"
 
@@ -54,9 +69,14 @@ hud-data() {
 
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
-    --arg branch "$branch" --arg worktree "$worktree" --arg rec "$rec" --argjson ledger "$ledger" --argjson last_input_at "$last_input_at" '
+    --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg repo "$repo" --arg top "$top" \
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
+       cwd: $cwd, repo: (if $repo == "" then null else $repo end),
+       repo_root: (if $top == "" then null else $top end), head: $head,
+       dirty: (if $dirty == "" then null else ($dirty | tonumber? // null) end),
+       gh_account: (if $gh_account == "" then null else $gh_account end),
        autopilot: (if $rec == "" then null else {
          status: $f[0], prefix: $f[1],
          elapsed_hr: ($f[2] | tonumber), requested_hr: ($f[3] | tonumber),
