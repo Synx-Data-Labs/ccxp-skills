@@ -18,8 +18,8 @@ export const DEFAULTS: HudConfig = {
   userColor: 'suggestion',
   fields: ['repo', 'ap', 'ctx', 'branch', 'task', 'jobs', 'lastat'],
   pollSeconds: 15,
-  ctxWarn: 40,
-  ctxCrit: 15,
+  ctxWarn: 75,
+  ctxCrit: 50,
 }
 
 type Raw = Record<string, unknown>

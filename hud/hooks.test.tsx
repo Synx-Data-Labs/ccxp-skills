@@ -144,6 +144,16 @@ test('userMessage:false switches only the prompt styling off; the band still dra
   await band.unmount()
 })
 
+test('band colours: ctx 64% left is yellow, a running job shows yellow WORKING (1)', async ($: any, on: any) => {
+  const w = fresh()
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /ctx 64%/, color: 'warning' })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: 'WORKING (1)', color: 'warning' })).toBeDefined()
+  await band.unmount()
+})
+
 test('band:false switches only the band off; prompt styling stays', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"band": false}'

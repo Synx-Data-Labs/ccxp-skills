@@ -1,7 +1,8 @@
 # Job ledger (`ledger.sh`)
 
 The HUD `jobs` section reads `${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-ledger.json}`
-and shows `jobs run <R> · park <P> · tot <L>` in the band (zero counts are
+and shows `jobs READY` (green, nothing running) or `jobs WORKING (<R>)` (yellow)
+`· park <P> · tot <L>` in the band (a zero park count is
 hidden; running ids `r<id>` when narrow, with titles when wide; no ledger hides
 the cell; the text line prints its own section only when the ledger exists).
 `tot` = highest job number ever

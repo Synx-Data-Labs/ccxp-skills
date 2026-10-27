@@ -102,11 +102,19 @@ export function countJobs(agents: ReadonlyArray<{ status: string }>): Jobs {
 
 export type Tone = 'success' | 'warning' | 'error'
 
-/** Green above `ctxWarn`, yellow down to `ctxCrit`, red below. */
+/**
+ * Colour of the context-left percentage: green when strictly more than `ctxWarn` (default 75)
+ * is left, yellow when strictly more than `ctxCrit` (default 50), red at or below that.
+ */
 export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'>): Tone {
   if (left > cfg.ctxWarn) return 'success'
-  if (left >= cfg.ctxCrit) return 'warning'
+  if (left > cfg.ctxCrit) return 'warning'
   return 'error'
+}
+
+/** Job state shown in the jobs cell: green READY when nothing runs, yellow WORKING (N) otherwise. */
+export function jobState(running: number): { text: string; color: Tone } {
+  return running > 0 ? { text: `WORKING (${running})`, color: 'warning' } : { text: 'READY', color: 'success' }
 }
 
 export function meter(left: number, width = 10): string {
@@ -196,7 +204,8 @@ function jobsBlock(snap: Snapshot, tier: Tier): Block | null {
   const dot = (): void => {
     if (segs.length > head) segs.push({ text: ' · ' })
   }
-  if (run > 0) segs.push({ text: `run ${run}`, color: 'success' })
+  const state = jobState(run)
+  segs.push({ text: state.text, color: state.color })
   if (l.parked > 0) {
     dot()
     segs.push({ text: `park ${l.parked}`, color: 'warning' })
@@ -204,7 +213,7 @@ function jobsBlock(snap: Snapshot, tier: Tier): Block | null {
   if (tier !== 'tiny') {
     dot()
     segs.push({ text: `tot ${l.lifetime_jobs}`, dim: run + l.parked > 0 })
-  } else if (segs.length === head) segs.push({ text: `tot ${l.lifetime_jobs}`, dim: true })
+  }
   if (run === 0 || tier === 'tiny') return { segs }
   // Short ids when narrow, ids with titles when wide; only whole items, then "+N".
   const grow = (room: number): Seg[] => {

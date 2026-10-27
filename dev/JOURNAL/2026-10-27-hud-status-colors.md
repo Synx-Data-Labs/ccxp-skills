@@ -1,0 +1,23 @@
+# HUD: ctx colored by remaining headroom, READY / WORKING job state
+
+- **Why**: owner ask, "if the ctx is more than 75%, then it's green, if more than 50% then it's yellow, and otherwise, it's red. also, ... if all jobs are finished, we show a GREEN READY indicator, otherwise, we show a YELLOW WORKING indicator"
+- **Interpretation**: the `ctx` field is context **left** (`register.tsx`: `ctxLeft = 100 - percent used`), so the thresholds apply to the percentage left
+  - Green above 75, yellow above 50 up to 75, red at 50 or less; "more than" is strict, so exactly 75 is yellow and exactly 50 is red
+- **ctx change**
+  - `ctxTone` now reads `left > ctxWarn` green, `left > ctxCrit` yellow, else red (was `>=` for yellow)
+  - Defaults `ctxWarn` 40 to 75 and `ctxCrit` 15 to 50; the config keys are unchanged
+  - Anyone who already set `ctxWarn`/`ctxCrit` in `ccxp-hud.json` keeps their own values, but yellow/red at exactly `ctxCrit` is now red
+- **Jobs change**
+  - New `jobState(running)` in `hud/model.ts`: `READY` (green, `success`) at 0 running, `WORKING (N)` (yellow, `warning`) from 1
+  - Replaces the old green `run N` cell; `park`, `tot` and the running-id list are unchanged
+  - Shows at all widths; no ledger still hides the cell (no READY without a ledger)
+  - Source is the ledger's running list (`hud-data.sh --json` `.ledger.running`), not the `ListAgents` count in the `/hud pane` view
+  - At 80 columns the longer word leaves less room, so the id list shrinks (`(r230 +4)`)
+- **Colours**: theme tokens through `<Text color=...>`, no escape codes, so light/dark themes and `NO_COLOR` keep working
+- **Tests**
+  - `hud/pure.test.ts`: `ctxTone` at 100/76/75/51/50/0 and custom thresholds; band ctx colour at the same values; `jobState` at 0/1/5; READY and WORKING cells at wide/compact/tiny
+  - `hud/hooks.test.tsx`: rendered band carries a yellow `ctx 64%` and yellow `WORKING (1)`
+  - `tests/hud_data.bats`: `.ledger.running` length is 1, 2, then 0 after both jobs finish (the input to READY/WORKING)
+- **Stacked**: based on `hud-repo-field` (PR 442), which also changes `hud/model.ts` band code and `hud/README.md`; retarget to `main` once 442 merges
+- **UNVERIFIED**: colours were not looked at in a real session. Manual check: run the HUD, confirm ctx green above 75% left, yellow 51 to 75, red at 50 or less, and READY green when idle, WORKING (N) yellow while a ledger job runs
+- **Version**: behavior change to an existing field, bump is a separate maintainer PR

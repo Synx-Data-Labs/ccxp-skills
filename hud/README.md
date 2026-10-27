@@ -25,7 +25,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `userColor` | `suggestion` | a theme key or a hex colour |
 | `fields` | `repo,ap,ctx,branch,task,jobs,lastat` | `repo` is the repo segment (see "Repo segment"); when it is listed the `branch` field steps aside because `repo` already shows the branch. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted. It needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden; also `rate`, `cost`. The old `last` (prompt text) field is retired and ignored |
 | `pollSeconds` | `15` | minimum 5 |
-| `ctxWarn` / `ctxCrit` | `40` / `15` | context colour thresholds |
+| `ctxWarn` / `ctxCrit` | `75` / `50` | context-left colour thresholds: green above `ctxWarn`, yellow above `ctxCrit`, red at or below it (see "Colours"). A `ctxWarn`/`ctxCrit` you set yourself in `ccxp-hud.json` still wins |
 
 ## Layout by width
 
@@ -33,13 +33,31 @@ The band adapts to the terminal width (`bodyColumns`); sections with nothing to 
 
 | Width | Tier | AP | ctx | Jobs |
 |---|---|---|---|---|
-| < 70 | tiny, one row | `AP ○ 13/24h ✓2` | `ctx 89%` | `run 5 · park 3` |
-| 70-99 | compact, up to two rows | `AP ○ stop 13/24h c6 ✓2` | `ctx 89%` | `run 5 · park 3 · tot 242 (r230 r231 +3)` |
-| >= 100 | wide, up to three rows | `AP ○ stopped 13/24h · cycle 6 ✓2 merged` | `ctx 89% ▓▓▓▓▓▓▓▓▓░` | `jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR, … +1)` |
+| < 70 | tiny, one row | `AP ○ 13/24h ✓2` | `ctx 89%` | `WORKING (5) · park 3` |
+| 70-99 | compact, up to two rows | `AP ○ stop 13/24h c6 ✓2` | `ctx 89%` | `WORKING (5) · park 3 · tot 242 (r230 +4)` |
+| >= 100 | wide, up to three rows | `AP ○ stopped 13/24h · cycle 6 ✓2 merged` | `ctx 89% ▓▓▓▓▓▓▓▓▓░` | `jobs WORKING (5) · park 3 · tot 242 (r230 Retention keep-set first PR, … +1)` |
 
 - Narrow tiers drop the least important fields first (`lastat`, `cost`, `rate`, `branch`, `task`, then `jobs`) when a row budget is short; tiny also hides branch, task and `lastat`.
 - Wide puts running jobs with titles on their own row; titles are cut at word boundaries and extra jobs collapse to `+N`.
 - No claimed task, no branch, no ledger: the cell is omitted (no `no claimed task`, no `jobs —`).
+
+## Colours
+
+- The mod uses theme tokens (`success`, `warning`, `error`), never raw escape codes, so light and dark themes both work and `NO_COLOR` is honoured.
+- **ctx** is context **left** (`100 - used`), coloured by how much headroom remains:
+
+  | Left | Colour |
+  |---|---|
+  | above 75% (76 to 100) | green |
+  | above 50% up to 75% (51 to 75) | yellow |
+  | 50% or less (0 to 50) | red |
+
+  - Boundaries are strict: exactly 75 is yellow, exactly 50 is red.
+  - Override with `ctxWarn` / `ctxCrit` (same strict reading).
+- **jobs** shows one state word first, from the job ledger's running list:
+  - **READY** (green) when no job is running, that is, all jobs are finished.
+  - **WORKING (N)** (yellow) while one or more jobs run; `N` is the running count.
+  - The word and count show at every width. No ledger still hides the whole cell, so there is no READY without a ledger.
 
 ## Repo segment
 
@@ -70,7 +88,7 @@ The band adapts to the terminal width (`bodyColumns`); sections with nothing to 
 
 ## Jobs and autopilot segments
 
-- Jobs, from the job ledger (`hud/scripts/ledger.sh`, default `~/.claude/ccxp-ledger.json`, override `CCXP_LEDGER_FILE`): `run <R>` (green, shown when above 0), `park <P>` (yellow, shown when above 0), `tot <L>` (lifetime jobs, dim while run or park is shown). Running jobs follow as `r<id>` (titles when wide). No ledger hides the cell.
+- Jobs, from the job ledger (`hud/scripts/ledger.sh`, default `~/.claude/ccxp-ledger.json`, override `CCXP_LEDGER_FILE`): `READY` (green, nothing running) or `WORKING (<R>)` (yellow, R running), then `park <P>` (yellow, shown when above 0), `tot <L>` (lifetime jobs, dim while run or park is shown). Running jobs follow as `r<id>` (titles when wide). No ledger hides the cell.
 - AP, from `dev/.autopilot-state.json`: `AP <glyph> <state> <elapsed>/<requested>h [⚠stuck] [cycle N] ✓<merged>`. The `h` marks `13/24` as hours elapsed over requested, `cycle`/`c` is the loop count, `✓` the merged PR count. Running green, paused yellow, stopped grey (red for a failure-type stop reason), `⚠` red only when stuck, `✓` green. A missing `merged_count` counts as 0.
 
 ## Notes

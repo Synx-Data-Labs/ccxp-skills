@@ -203,6 +203,23 @@ EOT
   [ "$(jq -r .ledger <<<"$output")" = "null" ]
 }
 
+# The mod shows green READY when ledger.running is empty and yellow WORKING (N) otherwise
+# (jobState in hud/model.ts); this pins the count it reads: 0 jobs, 1 job, N jobs, back to 0.
+@test "--json: ledger.running length is 0 when all jobs finished, N while N run" {
+  local repo; repo=$(_make_repo r-jobstate)
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 230 "first"
+  run _hud "$repo" --json
+  [ "$(jq -r '.ledger.running | length' <<<"$output")" = "1" ]
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 231 "second"
+  run _hud "$repo" --json
+  [ "$(jq -r '.ledger.running | length' <<<"$output")" = "2" ]
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" finish 230
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" finish 231
+  run _hud "$repo" --json
+  [ "$(jq -r '.ledger.running | length' <<<"$output")" = "0" ]
+  [ "$(jq -r '.ledger.lifetime_jobs' <<<"$output")" = "231" ]
+}
+
 @test "--json: last_input_at is the cache file mtime, 0 when there is none" {
   local repo; repo=$(_make_repo r-lastat)
   run _hud "$repo" --json

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
-import { EMPTY, baseName, bandRows, compactLine, countJobs, ctxTone, formatStamp, meter, isWithin, parseHelper, tierOf, truncateWords } from './model'
+import { EMPTY, baseName, bandRows, compactLine, countJobs, ctxTone, formatStamp, jobState, meter, isWithin, parseHelper, tierOf, truncateWords } from './model'
 
 const HELPER = JSON.stringify({
   task_id: 'T20261021-354035',
@@ -74,12 +74,22 @@ test('parseHelper: accepts the helper object, rejects garbage and its failure an
   expect(parseHelper('{"branch":"main","autopilot":null}')?.autopilot).toBeNull()
 })
 
-test('ctxTone: green above warn, yellow to crit, red below', async () => {
-  expect(ctxTone(64, DEFAULTS)).toBe('success')
-  expect(ctxTone(40, DEFAULTS)).toBe('warning')
-  expect(ctxTone(15, DEFAULTS)).toBe('warning')
-  expect(ctxTone(14, DEFAULTS)).toBe('error')
+test('ctxTone: green above 75 left, yellow above 50, red at 50 and below (strict boundaries)', async () => {
+  expect([DEFAULTS.ctxWarn, DEFAULTS.ctxCrit]).toEqual([75, 50])
+  const tone = (n: number) => ctxTone(n, DEFAULTS)
+  expect([100, 89, 76].map(tone)).toEqual(['success', 'success', 'success'])
+  expect([75, 64, 51].map(tone)).toEqual(['warning', 'warning', 'warning'])
+  expect([50, 49, 15, 0].map(tone)).toEqual(['error', 'error', 'error', 'error'])
+  // Custom thresholds keep the same strict reading.
+  const custom = { ctxWarn: 40, ctxCrit: 15 }
+  expect([41, 40, 16, 15].map(n => ctxTone(n, custom))).toEqual(['success', 'warning', 'warning', 'error'])
   expect(meter(50)).toBe('▓▓▓▓▓░░░░░')
+})
+
+test('jobState: green READY with zero running jobs, yellow WORKING (N) from one up', async () => {
+  expect(jobState(0)).toEqual({ text: 'READY', color: 'success' })
+  expect(jobState(1)).toEqual({ text: 'WORKING (1)', color: 'warning' })
+  expect(jobState(5)).toEqual({ text: 'WORKING (5)', color: 'warning' })
 })
 
 test('countJobs groups agent statuses', async () => {
@@ -89,13 +99,13 @@ test('countJobs groups agent statuses', async () => {
 test('band: wide shows every default field in full; running jobs get a row with room for titles', async () => {
   const rows = bandRows(snap(), DEFAULTS, 140)
   expect(rows.length).toBeLessThanOrEqual(3)
-  expect(text(rows.slice(-1))).toContain("jobs run 1")
+  expect(text(rows.slice(-1))).toContain("jobs WORKING (1)")
   const t = text(rows)
   expect(t).toContain('AP ● running 2/6h · cycle 3 ✓2 merged')
   expect(t).toContain('ctx 64% ▓▓▓▓▓▓░░░░')
   expect(t).toContain('t20261021-354035-decouple')
   expect(t).toContain('T20261021-354035 Decouple the nightly orchestrator')
-  expect(t).toContain('jobs run 1 · park 3 · tot 230 (r230 fix hud)')
+  expect(t).toContain('jobs WORKING (1) · park 3 · tot 230 (r230 fix hud)')
   expect(t).not.toContain('stuck')
 })
 
@@ -106,7 +116,7 @@ test('band: compact (70-99 cols) uses short labels, short ids, at most two rows'
   expect(t).toContain('AP ● run 2/6h c3 ✓2')
   expect(t).toContain('ctx 64%')
   expect(t).not.toContain('▓')
-  expect(t).toContain('run 1 · park 3 · tot 230 (r230)')
+  expect(t).toContain('WORKING (1) · park 3 · tot 230 (r230)')
   expect(t).not.toContain('fix hud')
   for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(78)
 })
@@ -143,10 +153,10 @@ const PASTED = snap({
 
 test('band at 60/80/100/160 columns on the pasted example: fits, no blank cells, unambiguous labels', async () => {
   const cases: [number, string[], number][] = [
-    [60, ['AP ○ 13/24h ✓2', 'ctx 89%', 'run 5 · park 3'], 1],
-    [80, ['AP ○ stop 13/24h c6 ✓2', 'ctx 89%', 'run 5 · park 3 · tot 242 (r230 r231 +3)'], 1],
-    [100, ['AP ○ stopped 13/24h · cycle 6 ✓2 merged', 'jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR +4)'], 2],
-    [160, ['jobs run 5 · park 3 · tot 242 (r230 Retention keep-set first PR, r231 iceberg-gopher 4.0.7 publish, r239 Silent drift in the nightly…, r240 Fix hud +1)'], 2],
+    [60, ['AP ○ 13/24h ✓2', 'ctx 89%', 'WORKING (5) · park 3'], 1],
+    [80, ['AP ○ stop 13/24h c6 ✓2', 'ctx 89%', 'WORKING (5) · park 3 · tot 242 (r230 +4)'], 1],
+    [100, ['AP ○ stopped 13/24h · cycle 6 ✓2 merged', 'jobs WORKING (5) · park 3 · tot 242 (r230 Retention keep-set first PR +4)'], 2],
+    [160, ['jobs WORKING (5) · park 3 · tot 242 (r230 Retention keep-set first PR, r231 iceberg-gopher 4.0.7 publish, r239 Silent drift in the nightly…, r240 Fix hud +1)'], 2],
   ]
   for (const [cols, expected, nrows] of cases) {
     const rows = bandRows(PASTED, DEFAULTS, cols)
@@ -172,11 +182,13 @@ test('band: unclaimed task, empty branch and a missing ledger leave no cell at a
   expect(t).toBe('AP ● running 2/6h · cycle 3 ✓2 merged │ ctx 64% ▓▓▓▓▓▓░░░░')
 })
 
-test('band: jobs with nothing running or parked shows just the total; running ids vanish at tiny width', async () => {
+test('band: jobs with nothing running shows READY (green) and the total; running ids vanish at tiny width', async () => {
   const h = parseHelper(HELPER)!
   const idle = { ...h.ledger!, running: [], parked: 0 }
-  expect(text(bandRows(snap({ helper: { ...h, ledger: idle } }), { ...DEFAULTS, fields: ['jobs'] }, 140))).toBe('jobs tot 230')
-  expect(text(bandRows(snap(), { ...DEFAULTS, fields: ['jobs'] }, 60))).toBe('run 1 · park 3')
+  expect(text(bandRows(snap({ helper: { ...h, ledger: idle } }), { ...DEFAULTS, fields: ['jobs'] }, 140))).toBe('jobs READY · tot 230')
+  expect(text(bandRows(snap({ helper: { ...h, ledger: idle } }), { ...DEFAULTS, fields: ['jobs'] }, 60))).toBe('READY')
+  expect(text(bandRows(snap({ helper: { ...h, ledger: { ...idle, parked: 3 } } }), { ...DEFAULTS, fields: ['jobs'] }, 80))).toBe('READY · park 3 · tot 230')
+  expect(text(bandRows(snap(), { ...DEFAULTS, fields: ['jobs'] }, 60))).toBe('WORKING (1) · park 3')
 })
 
 test('band: when the row budget is short, low-priority fields (last input, branch, task) go first', async () => {
@@ -216,13 +228,24 @@ test('band: autopilot looks per state; an unclaimed task shows nothing', async (
   expect(text(bandRows(mk('[r]', 'running'), DEFAULTS, 140))).not.toContain('no claimed')
 })
 
+test('band: ctx text is coloured by context left at the 75/50 boundaries', async () => {
+  const colour = (n: number) => bandRows(snap({ ctxLeft: n }), { ...DEFAULTS, fields: ['ctx'] }, 140)[0][0].color
+  expect([100, 76, 75, 51, 50, 0].map(colour)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+})
+
 test('band: AP colours and stuck marker, jobs colours; no ledger means no jobs cell', async () => {
   const h = parseHelper(HELPER)!
   expect(bandRows(snap({ helper: { ...h, ledger: null } }), { ...DEFAULTS, fields: ['jobs'] }, 140)).toEqual([])
   const wide = bandRows(snap(), { ...DEFAULTS, fields: ['jobs'] }, 140)
   expect(text(wide)).toContain('r230 fix hud')
   expect(wide[0].find(s => s.text === 'park 3')?.color).toBe('warning')
-  expect(wide[0].find(s => s.text === 'run 1')?.color).toBe('success')
+  expect(wide[0].find(s => s.text === 'WORKING (1)')?.color).toBe('warning')
+  const idleLedger = { ...h.ledger!, running: [] }
+  const idle = bandRows(snap({ helper: { ...h, ledger: idleLedger } }), { ...DEFAULTS, fields: ['jobs'] }, 140)
+  expect(idle[0].find(s => s.text === 'READY')?.color).toBe('success')
+  expect(idle[0].some(s => s.text.includes('WORKING'))).toBe(false)
+  const three = { ...h.ledger!, running: [1, 2, 3].map(job => ({ job, title: 't' })) }
+  expect(bandRows(snap({ helper: { ...h, ledger: three } }), { ...DEFAULTS, fields: ['jobs'] }, 140)[0].find(s => s.text === 'WORKING (3)')?.color).toBe('warning')
   const ap = (over: object) => bandRows(snap({ helper: { ...h, autopilot: { ...h.autopilot!, ...over } } }), { ...DEFAULTS, fields: ['ap'] }, 140)[0]
   expect(ap({ stuck: 2 }).find(s => s.text === ' ⚠2')?.color).toBe('error')
   expect(ap({}).some(s => s.text.includes('⚠'))).toBe(false)
@@ -244,7 +267,7 @@ test('formatStamp: HH:MM today, with the date otherwise; lastat field hidden whe
 })
 
 test('compactLine joins rows with the separator, never a bare space', async () => {
-  expect(compactLine(snap(), DEFAULTS)).not.toMatch(/[^│] (?=jobs run)/)
+  expect(compactLine(snap(), DEFAULTS)).not.toMatch(/[^│] (?=jobs WORKING)/)
 })
 
 test('compactLine is one plain line within the 2,000 character limit', async () => {
