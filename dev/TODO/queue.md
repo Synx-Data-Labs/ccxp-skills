@@ -46,3 +46,4 @@ reprioritize.
 - [T20261026-542905](T20261026-542905-lint-nudge-frontmatter-field-length.md): lint_tasks.py nudge for over-long frontmatter field values
 - [T20260813-406012](T20260813-406012-ccxp-phase0-sync-abandons-unmerged-self-authored-pr.md): `ccxp` Phase 0 sync silently switches away from a self-authored branch with an open, unmerged PR
 - [T20261026-665838](T20261026-665838-finish-migrate-task-live-push.md): Finish /migrate-task live push half
+- [T20261027-237157](T20261027-237157-ccxp-hud-one-row-modes-ci.md): ccxp-hud one-row band, AP on/off modes, configurable CI cell

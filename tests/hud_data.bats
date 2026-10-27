@@ -165,7 +165,7 @@ EOT
   jq -e . <<<"$output" >/dev/null
 }
 
-@test "the helper makes no network call and writes nothing" {
+@test "the helper makes no direct network call or home write (CI goes through hud-ci.sh, see hud_ci.bats)" {
   ! grep -nE 'curl|wget|https?://|> *"?\$HOME|~/\.claude' "$HUD"
 }
 
