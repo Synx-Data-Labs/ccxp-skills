@@ -14,10 +14,11 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import type { HudConfig, Snapshot } from '../types'
+import type { CiConfig, HudConfig, Snapshot } from '../types'
 import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { EMPTY, compactLine, countJobs, parseHelper } from './model'
 import { bandTree, paneTree, userMessageTree } from './render'
+import { setupCi, togglePane } from './setup'
 
 const PANE = 'ccxp-hud'
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
@@ -107,7 +108,7 @@ async function refresh($: any, cfg: HudConfig) {
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
-      stdin: JSON.stringify({ cwd, session_id: sessionId }),
+      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds }),
       timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null
@@ -198,7 +199,7 @@ export const register: Register = on => {
       if (!mem.started) {
         mem.started = true
         try {
-          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | pane' })
+          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | pane | setup' })
         } catch {
           /* the command is optional */
         }
@@ -253,11 +254,33 @@ export const register: Register = on => {
         return { text: `ccxp-hud ${cfg.enabled ? 'on' : 'off'} (${file}). Takes effect now.` }
       }
       if (arg === 'pane') {
-        await $.ui.open({ id: PANE, title: 'ccxp-hud' })
-        return { text: 'ccxp-hud pane opened.' }
+        // Toggle: the engine's own record ($.ui.panes) says whether our pane is up.
+        return {
+          text: await togglePane({
+            isOpen: async () => (await $.ui.panes()).some((p: any) => p.id === PANE),
+            open: async () => void (await $.ui.open({ id: PANE, title: 'ccxp-hud' })),
+            close: () => $.ui.close({ id: PANE }),
+          }),
+        }
+      }
+      if (arg === 'setup') {
+        let root: string | undefined
+        try {
+          root = await $.session.root()
+        } catch {
+          root = undefined
+        }
+        const text = await setupCi({
+          ask: (question, options) => $.ui.ask(question, options),
+          paths: configPaths(env, root),
+          read: path => readText($, path),
+          write: (path, body) => $.fs.write(path, body),
+        })
+        await loadConfig($)
+        return { text }
       }
       const cfg = await read($, configAtom)
-      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | pane` }
+      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | pane | setup` }
     } catch {
       return { text: 'ccxp-hud: something went wrong; the session is unaffected.' }
     }

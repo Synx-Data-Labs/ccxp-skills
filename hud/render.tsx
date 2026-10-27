@@ -60,6 +60,8 @@ export function paneTree(ui: { Box: any; Text: any }, snap: Snapshot, cfg: HudCo
   if (ap?.stop_reason) lines.push(`stop reason: ${ap.stop_reason}`)
   const led = snap.helper?.ledger
   lines.push(led ? `jobs: run ${led.running.length} · total ${led.lifetime_jobs} · parked ${led.parked}${led.parked_ids.length ? ` (${led.parked_ids.join(' ')})` : ''}` : 'jobs: no ledger')
+  const ci = snap.helper?.ci
+  lines.push(cfg.ci ? `ci (${cfg.ci.workflow}): ${ci ? ci.state : 'no data'}` : 'ci: not configured (/hud setup)')
   lines.push(`agents: ${snap.jobs.running} running, ${snap.jobs.waiting} waiting, ${snap.jobs.failed} failed`)
   if (snap.ctxLeft !== null) lines.push(`context left: ${Math.round(snap.ctxLeft)}%`)
   if (snap.stale) lines.push('data is stale (the helper failed or timed out)')

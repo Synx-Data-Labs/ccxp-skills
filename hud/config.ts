@@ -1,11 +1,11 @@
 // ccxp-hud config: pure functions only (no `$`), so the unit tests can pin them.
 // Missing, empty or malformed input always means the defaults, which are ON.
 
-import type { Field, HudConfig } from '../types'
+import type { CiConfig, Field, HudConfig } from '../types'
 
-export type { Field, HudConfig }
+export type { CiConfig, Field, HudConfig }
 
-export const ALL_FIELDS: readonly Field[] = ['ap', 'ctx', 'branch', 'task', 'jobs', 'rate', 'cost', 'lastat']
+export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
 export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']
@@ -16,7 +16,7 @@ export const DEFAULTS: HudConfig = {
   band: true,
   userBorder: 'quote',
   userColor: 'suggestion',
-  fields: ['ap', 'ctx', 'branch', 'task', 'jobs', 'lastat'],
+  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'ci', 'lastat'],
   pollSeconds: 15,
   ctxWarn: 40,
   ctxCrit: 15,
@@ -36,6 +36,22 @@ function parseFields(x: unknown): Field[] | undefined {
     const name = String(item).trim() as Field
     if (ALL_FIELDS.includes(name) && !out.includes(name)) out.push(name)
   }
+  return out
+}
+
+const WORKFLOW_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/
+const BRANCH_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/
+const REPO_RE = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/
+
+/** `ci` as `{workflow, branch?, repo?}` (or a bare workflow string); anything invalid means no CI segment. */
+export function parseCi(x: unknown): CiConfig | undefined {
+  const raw: unknown = typeof x === 'string' ? { workflow: x } : x
+  if (!isRecord(raw) || typeof raw.workflow !== 'string') return undefined
+  const workflow = raw.workflow.trim()
+  if (!WORKFLOW_RE.test(workflow)) return undefined
+  const out: CiConfig = { workflow }
+  if (typeof raw.branch === 'string' && BRANCH_RE.test(raw.branch.trim())) out.branch = raw.branch.trim()
+  if (typeof raw.repo === 'string' && REPO_RE.test(raw.repo.trim())) out.repo = raw.repo.trim()
   return out
 }
 
@@ -60,6 +76,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   for (const key of ['pollSeconds', 'ctxWarn', 'ctxCrit'] as const) {
     if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) out[key] = raw[key] as number
   }
+  if ('ci' in raw) out.ci = parseCi(raw.ci)
   return out
 }
 
@@ -103,4 +120,30 @@ export function heartbeatPath(env: { configDir?: string; home?: string }, sessio
   const base = env.configDir || (env.home ? `${env.home}/.claude` : undefined)
   if (!base || !sessionId || /[\\/]/.test(sessionId) || sessionId === '.' || sessionId === '..') return undefined
   return `${base}/state/hud-active/${sessionId}`
+}
+
+/** Answers of `/hud setup` to a `ci` block (a blank means "default"); `null` hides the segment. Never throws. */
+export function ciFromAnswers(a: { workflow: string; branch: string; repo: string }): { ok: true; ci: CiConfig } | { ok: false; error: string } {
+  const workflow = a.workflow.trim()
+  if (!WORKFLOW_RE.test(workflow)) return { ok: false, error: 'workflow must be a plain file name or id (letters, digits, . _ -; no spaces or slashes)' }
+  const branch = a.branch.trim()
+  if (branch && !BRANCH_RE.test(branch)) return { ok: false, error: 'branch must look like a git ref (letters, digits, . _ - /)' }
+  const repo = a.repo.trim()
+  if (repo && !REPO_RE.test(repo)) return { ok: false, error: 'repo must be owner/name' }
+  const ci: CiConfig = { workflow }
+  if (branch) ci.branch = branch
+  if (repo) ci.repo = repo
+  return { ok: true, ci }
+}
+
+/** Text of a config file after `/hud setup`: only the `ci` key is set (null hides CI); other keys are kept. */
+export function withCi(text: string | undefined | null, ci: CiConfig | null): string {
+  let raw: Raw = {}
+  try {
+    const parsed: unknown = text ? JSON.parse(text) : {}
+    if (isRecord(parsed)) raw = parsed
+  } catch {
+    raw = {}
+  }
+  return JSON.stringify({ ...raw, ci }, null, 2) + '\n'
 }

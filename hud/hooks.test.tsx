@@ -3,13 +3,17 @@ import { expect, test } from 'claude-code/testing'
 import { USER_TEXT_COLOR } from './config'
 
 const HELPER = JSON.stringify({
+  repo: 'proj',
   task_id: 'T20261021-354035',
   task_title: 'Decouple',
   branch: 'main',
   worktree: '',
   autopilot: null,
-  ledger: { running: [{ job: 230, title: 'x' }], lifetime_jobs: 230, parked: 2, parked_ids: ['k1', 'k2'], next_job: 231, updated_at: '' },
+  ledger: null,
+  ci: { state: 'failing', at: 0 },
+  last_input_at: 0,
 })
+const HELPER_AP = JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 1, requested_hr: 4, stuck: 0, cycle: 2, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 1 } })
 
 type World = {
   cfg?: string
@@ -17,6 +21,9 @@ type World = {
   helper?: { exitCode: number; stdout: string } | 'throw'
   writes: { path: string; text: string }[]
   runs: string[][]
+  stdins: string[]
+  panes: { id: string }[]
+  closed: string[]
   statuses: (string | undefined)[]
 }
 
@@ -39,11 +46,22 @@ function world($: any, on: any, w: World) {
   })
   on('process.run', (_: any, e: any) => {
     w.runs.push([...e.argv])
+    w.stdins.push(JSON.stringify(e))
     if (w.helper === 'throw') throw new Error('boom')
     return { value: w.helper ?? { exitCode: 0, stdout: HELPER, stderr: '' } }
   })
   on('agent.list', () => ({ value: [{ status: 'running' }, { status: 'failed' }] }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [] } }))
+  on('ui.panes', () => ({ value: w.panes }))
+  on('ui.open', (_: any, e: any) => {
+    w.panes.push({ id: e.id })
+    return { value: { isPlaced: true } }
+  })
+  on('ui.close', (_: any, e: any) => {
+    w.closed.push(e.id)
+    w.panes = w.panes.filter(p => p.id !== e.id)
+    return { value: undefined }
+  })
   on('clock.now', () => ({ value: 1_000_000 }))
   on('clock.every', () => ({ value: undefined }))
   on('command.register', () => ({ value: { command: 'hud' } }))
@@ -59,7 +77,7 @@ function world($: any, on: any, w: World) {
   })
 }
 
-const fresh = (): World => ({ writes: [], runs: [], statuses: [] })
+const fresh = (): World => ({ writes: [], runs: [], statuses: [], stdins: [], panes: [], closed: [] })
 
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as const
 
@@ -133,7 +151,7 @@ test('userMessage:false switches only the prompt styling off; the band still dra
   expect(await drawsEngine(row)).toBe(true)
   await row.unmount()
   const band = await $.ui.mount(BAND(140))
-  expect(await band.find({ type: 'Text', text: /ctx 64%/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /proj/ })).toBeDefined()
   await band.unmount()
 })
 
@@ -175,12 +193,17 @@ test('project override beats the user file', async ($: any, on: any) => {
 
 test('the band shows helper data once the session started, and the helper gets a fixed argv', async ($: any, on: any) => {
   const w = fresh()
+  w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
   world($, on, w)
   await $.session.start(START)
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /T20261021-354035 Decouple/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /tot 230/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /failing/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /AP / })).toBeUndefined()
   await band.unmount()
+  // The configured ci block reaches the helper on stdin (not argv).
+  expect(w.stdins.some(x => x.includes('nightly.yml'))).toBe(true)
+  for (const argv of w.runs) expect(argv.join(' ')).not.toContain('nightly.yml')
   expect(w.runs.length).toBeGreaterThan(0)
   for (const argv of w.runs) {
     expect(argv[0]).toBe('bash')
@@ -200,13 +223,12 @@ test('a heartbeat is written while the band is on, in the statusline-readable pl
 })
 
 for (const helper of ['throw', { exitCode: 1, stdout: '' }, { exitCode: 0, stdout: 'garbage' }] as const) {
-  test(`helper failure ${JSON.stringify(helper)}: no throw, the band keeps ctx and shows the stale tag`, async ($: any, on: any) => {
+  test(`helper failure ${JSON.stringify(helper)}: no throw, the band shows the stale tag`, async ($: any, on: any) => {
     const w = fresh()
     w.helper = helper as any
     world($, on, w)
     await $.session.start(START)
     const band = await $.ui.mount(BAND(140))
-    expect(await band.find({ type: 'Text', text: /ctx 64%/ })).toBeDefined()
     expect(await band.find({ type: 'Text', text: /stale/ })).toBeDefined()
     await band.unmount()
   })
@@ -249,6 +271,7 @@ test('an empty band (fields: []) never writes an "on" heartbeat', async ($: any,
 test('a partial session.measure updates context and keeps the other units', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"fields": ["ctx", "rate"]}'
+  w.helper = { exitCode: 0, stdout: HELPER_AP }
   world($, on, w)
   on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
   await $.session.start(START)
@@ -258,4 +281,19 @@ test('a partial session.measure updates context and keeps the other units', asyn
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /5h 42%/ })).toBeDefined()
   await band.unmount()
+})
+
+test('/hud pane is a toggle: the first run opens the pane, the second closes it, the third opens it again', async ($: any, on: any) => {
+  const w = fresh()
+  world($, on, w)
+  await $.session.start(START)
+  const first = await $.command.run({ command: 'hud', args: 'pane' })
+  expect(first.text).toMatch(/opened/)
+  expect(w.panes.map(p => p.id)).toEqual(['ccxp-hud'])
+  const second = await $.command.run({ command: 'hud', args: 'pane' })
+  expect(second.text).toMatch(/closed/)
+  expect(w.closed).toEqual(['ccxp-hud'])
+  expect(w.panes).toEqual([])
+  const third = await $.command.run({ command: 'hud', args: 'pane' })
+  expect(third.text).toMatch(/opened/)
 })

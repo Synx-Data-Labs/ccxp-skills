@@ -1,8 +1,8 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Autopilot, Field, HelperData, HudConfig, Jobs, Ledger, Snapshot } from '../types'
+import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, Snapshot } from '../types'
 
-export type { Autopilot, HelperData, Jobs, Snapshot }
+export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
 export const EMPTY: Snapshot = {
   helper: null,
@@ -12,6 +12,8 @@ export const EMPTY: Snapshot = {
   jobs: { running: 0, waiting: 0, failed: 0 },
   stale: false,
 }
+
+const CI_STATES: readonly string[] = ['passing', 'failing', 'running', 'unknown']
 
 function str(x: unknown): string {
   return typeof x === 'string' ? x : ''
@@ -66,13 +68,22 @@ export function parseHelper(stdout: string): HelperData | null {
       updated_at: str(l.updated_at),
     }
   }
+  const c = r.ci
+  let ci: Ci | null = null
+  if (typeof c === 'object' && c !== null && !Array.isArray(c)) {
+    // Untrusted: only the four known states get through, nothing else is ever drawn.
+    const state = str((c as Record<string, unknown>).state)
+    if (CI_STATES.includes(state as CiState)) ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
+  }
   return {
+    repo: str(r.repo),
     task_id: str(r.task_id),
     task_title: str(r.task_title),
     branch: str(r.branch),
     worktree: str(r.worktree),
     autopilot,
     ledger,
+    ci,
     last_input_at: num(r.last_input_at),
   }
 }
@@ -103,18 +114,6 @@ export function meter(left: number, width = 10): string {
 }
 
 export type Seg = { text: string; color?: string; dim?: boolean; bold?: boolean }
-
-const AP_LOOK: Record<string, { glyph: string; word: string; short: string; color: string }> = {
-  '[r]': { glyph: '●', word: 'running', short: 'run', color: 'success' },
-  '[b]': { glyph: '●', word: 'running', short: 'run', color: 'success' }, // backing off is still running; ⚠ carries the stuck count
-  '[s]': { glyph: '○', word: 'stopped', short: 'stop', color: 'inactive' },
-  '[p]': { glyph: '⏸', word: 'paused', short: 'pause', color: 'warning' },
-}
-
-/** A stop reason that means something went wrong (not elapsed / queue-empty / user-requested). */
-export function isFailureStop(reason: string): boolean {
-  return /fail|error|crash|abort/i.test(reason)
-}
 
 /** Timestamp format of the last-input field, in one place: local HH:MM, plus "Mon D" when not today. */
 export function formatStamp(epochSec: number, nowMs: number = Date.now()): string {
@@ -149,180 +148,160 @@ export function truncateWords(text: string, max: number): string {
   return kept.trimEnd() + '…'
 }
 
-/** A band block: fixed segments plus an optional part that fills whatever room is left on its row. */
-type Block = { segs: Seg[]; grow?: (room: number) => Seg[]; minRoom?: number }
+type Variants = Seg[][]
+type Item = { field: string; variants: Variants; at: number }
 
-function apBlock(snap: Snapshot, tier: Tier): Block | null {
-  const ap = snap.helper?.autopilot
-  if (!ap) return null
-  const look = { ...(AP_LOOK[ap.prefix] ?? { glyph: '·', word: ap.status, short: ap.status.slice(0, 5), color: 'inactive' }) }
-  if (ap.prefix === '[s]' && isFailureStop(ap.stop_reason)) look.color = 'error'
-  const word = tier === 'wide' ? look.word : tier === 'compact' ? look.short : ''
-  const segs: Seg[] = [
-    { text: 'AP ', bold: true },
-    { text: word ? `${look.glyph} ${word}` : look.glyph, color: look.color },
-    // Elapsed over requested hours: the "h" stays so 13/24 can never read as cycles.
-    { text: ` ${ap.elapsed_hr}/${ap.requested_hr}h` },
+const joinText = (segs: Seg[]) => segs.map(s => s.text).join('')
+const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
+const SEP = ' │ '
+const CI_LOOK: Record<CiState, { glyph: string; word: string; color: string }> = {
+  passing: { glyph: '✓', word: 'passing', color: 'success' },
+  failing: { glyph: '✗', word: 'failing', color: 'error' },
+  running: { glyph: '◐', word: 'running', color: 'warning' },
+  unknown: { glyph: '?', word: 'unknown', color: 'inactive' },
+}
+
+/** Autopilot counts as ON while running (backing off included) or paused; stopped or absent is OFF. */
+export function isApOn(snap: Snapshot): boolean {
+  const p = snap.helper?.autopilot?.prefix
+  return p === '[r]' || p === '[b]' || p === '[p]'
+}
+
+/** MM-DD of a run, local time. */
+function shortDate(epochSec: number): string {
+  const d = new Date(epochSec * 1000)
+  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function ciVariants(ci: Ci): Variants {
+  const look = CI_LOOK[ci.state]
+  const date = ci.at > 0 ? ` ${shortDate(ci.at)}` : ''
+  const mk = (text: string): Seg[] => [{ text: 'CI ', bold: true }, { text, color: look.color }]
+  return [mk(`${look.glyph} ${look.word}${date}`), mk(`${look.glyph}${date}`), mk(look.glyph)]
+}
+
+function apVariants(ap: Autopilot): Variants {
+  const paused = ap.prefix === '[p]'
+  const mk = (merged: string, loops: string, pause: string): Seg[] => {
+    const segs: Seg[] = [{ text: 'AP ', bold: true }]
+    if (pause) segs.push({ text: pause, color: 'warning' }, { text: ' ' })
+    segs.push({ text: `${ap.elapsed_hr}/${ap.requested_hr}h` })
+    if (ap.stuck > 0) segs.push({ text: ` ⚠${ap.stuck}`, color: 'error' })
+    segs.push({ text: ` ${loops} ` }, { text: merged, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
+    return segs
+  }
+  return [
+    mk(`✓${ap.merged} merged`, `loops ${ap.cycle}`, paused ? '⏸ paused' : ''),
+    mk(`✓${ap.merged}`, `loops ${ap.cycle}`, paused ? '⏸' : ''),
+    mk(`✓${ap.merged}`, `L${ap.cycle}`, paused ? '⏸' : ''),
   ]
-  if (ap.stuck > 0) segs.push({ text: ` ⚠${ap.stuck}`, color: 'error' })
-  if (tier === 'wide') segs.push({ text: ` · cycle ${ap.cycle}` })
-  else if (tier === 'compact') segs.push({ text: ` c${ap.cycle}` })
-  const merged = tier === 'wide' ? `✓${ap.merged} merged` : `✓${ap.merged}`
-  segs.push({ text: ' ' }, { text: merged, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
-  return { segs }
 }
 
-function jobsBlock(snap: Snapshot, tier: Tier): Block | null {
-  const l = snap.helper?.ledger
-  if (!l) return null
-  const run = l.running.length
-  const segs: Seg[] = []
-  const head = tier === 'wide' ? 1 : 0 // the "jobs " label is not a counter
-  if (tier === 'wide') segs.push({ text: 'jobs ' })
-  const dot = (): void => {
-    if (segs.length > head) segs.push({ text: ' · ' })
-  }
-  if (run > 0) segs.push({ text: `run ${run}`, color: 'success' })
-  if (l.parked > 0) {
-    dot()
-    segs.push({ text: `park ${l.parked}`, color: 'warning' })
-  }
-  if (tier !== 'tiny') {
-    dot()
-    segs.push({ text: `tot ${l.lifetime_jobs}`, dim: run + l.parked > 0 })
-  } else if (segs.length === head) segs.push({ text: `tot ${l.lifetime_jobs}`, dim: true })
-  if (run === 0 || tier === 'tiny') return { segs }
-  // Short ids when narrow, ids with titles when wide; only whole items, then "+N".
-  const grow = (room: number): Seg[] => {
-    const items = l.running.map(j => {
-      const id = `r${j.job}`
-      return tier === 'wide' && j.title ? `${id} ${truncateWords(j.title, 28)}` : id
-    })
-    const sep = tier === 'wide' ? ', ' : ' '
-    let out = ''
-    let shown = 0
-    for (const item of items) {
-      const next = out ? out + sep + item : item
-      const rest = items.length - shown - 1
-      // Reserve room for the " +N" tail unless this is the last item.
-      if (next.length + (rest > 0 ? ` +${rest}`.length : 0) > room - 4) break
-      out = next
-      shown += 1
-    }
-    if (shown === 0) return []
-    const hidden = items.length - shown
-    return [{ text: ` (${out}${hidden > 0 ? ` +${hidden}` : ''})`, dim: true }]
-  }
-  // Wide: a running list needs real room, so it takes its own row rather than a 7-column scrap.
-  return { segs, grow, minRoom: tier === 'wide' ? 90 : 12 }
-}
-
-function blockFor(field: Field, snap: Snapshot, cfg: HudConfig, tier: Tier): Block | null {
+function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
   const h = snap.helper
+  const one = (...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
   switch (field) {
-    case 'ap':
-      return apBlock(snap, tier)
+    case 'repo':
+      return h?.repo ? one([{ text: h.repo, bold: true }], [{ text: truncate(h.repo, 14), bold: true }]) : null
+    case 'branch': {
+      const b = h?.branch
+      return b ? one([{ text: ` ${b}` }], [{ text: ` ${truncate(b, 24)}` }], [{ text: ` ${truncate(b, 14)}` }]) : null
+    }
+    case 'task': {
+      if (!h?.task_id) return null
+      const t = h.task_title
+      const v: Variants = []
+      if (t) v.push([{ text: truncateWords(`${h.task_id} ${t}`, 60) }], [{ text: truncateWords(`${h.task_id} ${t}`, 40) }])
+      v.push([{ text: h.task_id }])
+      return one(...v)
+    }
+    case 'ap': {
+      const ap = h?.autopilot
+      return ap ? one(...apVariants(ap)) : null
+    }
     case 'ctx': {
       if (snap.ctxLeft === null) return null
       const left = Math.round(snap.ctxLeft)
-      return { segs: [{ text: tier === 'wide' ? `ctx ${left}% ${meter(left)}` : `ctx ${left}%`, color: ctxTone(left, cfg) }] }
+      const color = ctxTone(left, cfg)
+      return one([{ text: `ctx ${left}% ${meter(left)}`, color }], [{ text: `ctx ${left}%`, color }])
     }
-    case 'branch': {
-      const b = h?.branch
-      if (!b || tier === 'tiny') return null
-      const wt = tier === 'wide' && h?.worktree ? ` (wt ${h.worktree})` : ''
-      return { segs: [{ text: ` ${tier === 'wide' ? b : truncate(b, 24)}${wt}` }] }
-    }
-    case 'task': {
-      // Unclaimed means nothing to show: no placeholder cell.
-      if (!h?.task_id || tier === 'tiny') return null
-      if (tier === 'compact') return { segs: [{ text: h.task_id }], grow: room => (h.task_title && room > 12 ? [{ text: ' ' + truncateWords(h.task_title, Math.min(room - 1, 32)) }] : []) }
-      return { segs: [{ text: truncateWords(`${h.task_id} ${h.task_title}`.trim(), 70) }] }
-    }
-    case 'jobs':
-      return jobsBlock(snap, tier)
+    case 'ci':
+      return cfg.ci && h?.ci ? one(...ciVariants(h.ci)) : null
     case 'rate':
-      return snap.rateUsed === null ? null : { segs: [{ text: `5h ${Math.round(snap.rateUsed)}%` }] }
+      return snap.rateUsed === null ? null : one([{ text: `5h ${Math.round(snap.rateUsed)}%` }])
     case 'cost':
-      return snap.costUsd === null ? null : { segs: [{ text: `$${snap.costUsd.toFixed(2)}` }] }
+      return snap.costUsd === null ? null : one([{ text: `$${snap.costUsd.toFixed(2)}` }])
     case 'lastat': {
       const at = h?.last_input_at
-      return at && tier !== 'tiny' ? { segs: [{ text: `you ${formatStamp(at)}`, dim: true }] } : null
+      return at ? one([{ text: `you ${formatStamp(at)}`, dim: true }], [{ text: formatStamp(at), dim: true }]) : null
     }
   }
 }
 
-const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
-const SEP = ' │ '
+/** Band order per mode; `fields` in the config only switches members of the mode on or off. */
+const ORDER = {
+  off: ['repo', 'branch', 'task', 'ci', 'rate', 'cost', 'lastat'],
+  on: ['ap', 'ctx', 'ci', 'rate', 'cost', 'lastat'],
+} as const
 
-/** Greedy row packing; null when the blocks need more than `maxRows` rows. */
-function pack(blocks: Block[], width: number, maxRows: number): Block[][] | null {
-  const rows: Block[][] = []
-  let used = 0
-  for (const b of blocks) {
-    const w = widthOf(b.segs)
-    const row = rows[rows.length - 1]
-    const fits = row && used + SEP.length + w <= width
-    // A growing block (job ids) wants minRoom spare columns; else it starts a new row when it may.
-    const cramped = b.minRoom !== undefined && fits && width - (used + SEP.length + w) < b.minRoom && rows.length < maxRows
-    if (fits && !cramped) {
-      row.push(b)
-      used += SEP.length + w
-    } else {
-      rows.push([b])
-      used = w
-    }
-    if (rows.length > maxRows) return null
-  }
-  return rows
+/** Shrink and drop steps, applied one at a time until the row fits (see README). */
+const STEPS = {
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:task', 'step:task', 'step:branch', 'step:branch', 'drop:branch', 'drop:task', 'step:repo'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx'],
+}
+
+function render(items: Item[]): Seg[] {
+  const out: Seg[] = []
+  items.forEach((it, i) => {
+    if (i > 0) out.push({ text: SEP, dim: true })
+    out.push(...it.variants[it.at])
+  })
+  return out
 }
 
 /**
- * The band as rows of segments, laid out for the terminal width (tiny / compact / wide).
- * Sections with nothing to say are dropped, not padded. When the blocks do not fit the
- * rows allowed (one row when tiny, two when compact, three when wide) the least important ones are dropped.
- * Empty when there is nothing to show (the caller then yields to the engine).
+ * The band: ALWAYS one row (or none). Two modes: autopilot ON (AP, ctx, CI, last input)
+ * and OFF (repo, branch, task, CI, last input). The tier only picks how abbreviated each
+ * field starts; when the row is still too wide the steps in STEPS shrink or drop fields.
+ * Returns [] when there is nothing to show (the caller then yields to the engine).
  */
 export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[][] {
   const tier = tierOf(columns)
   const width = Math.max(20, columns - 2) // the band has one column of padding each side
-  const maxRows = tier === 'tiny' ? 1 : tier === 'compact' ? 2 : 3
-  const entries: { field: string; block: Block }[] = []
-  for (const f of cfg.fields) {
-    const block = blockFor(f, snap, cfg, tier)
-    if (block) entries.push({ field: f, block })
+  const mode = isApOn(snap) ? 'on' : 'off'
+  const start = tier === 'wide' ? 0 : tier === 'compact' ? 1 : 2
+  let items: Item[] = []
+  for (const f of ORDER[mode]) {
+    if (!cfg.fields.includes(f)) continue
+    const it = itemFor(f, snap, cfg)
+    // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
+    if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
   }
-  if (snap.stale) entries.push({ field: 'stale', block: { segs: [{ text: 'stale', dim: true }] } })
-  if (entries.length === 0) return []
+  if (snap.stale) items.push({ field: 'stale', variants: [[{ text: 'stale', dim: true }]], at: 0 })
+  if (items.length === 0) return []
 
-  // Keep order as configured, but when space runs out drop in this order: lastat, cost, rate, branch, task.
-  const droppable = ['lastat', 'cost', 'rate', 'branch', 'task', 'jobs']
-  let kept = entries
-  while (kept.length > 1 && pack(kept.map(e => e.block), width, maxRows) === null) {
-    const victim = droppable.map(f => kept.findIndex(e => e.field === f)).find(i => i >= 0)
-    kept = victim === undefined ? kept.slice(0, -1) : kept.filter((_, i) => i !== victim)
+  const total = () => widthOf(render(items))
+  for (const step of STEPS[mode]) {
+    if (total() <= width) break
+    const [op, field] = step.split(':')
+    if (op === 'drop') items = items.filter(it => it.field !== field)
+    else items = items.map(it => (it.field === field && it.at < it.variants.length - 1 ? { ...it, at: it.at + 1 } : it))
   }
-  const rows = pack(kept.map(e => e.block), width, maxRows) ?? [kept.map(e => e.block).slice(0, 1)]
-
-  return rows.map(row => {
-    const used = widthOf(row.flatMap(b => b.segs)) + SEP.length * (row.length - 1)
-    let room = width - used
-    const out: Seg[] = []
-    row.forEach((b, i) => {
-      if (i > 0) out.push({ text: SEP, dim: true })
-      out.push(...b.segs)
-      if (b.grow && room > 0) {
-        const extra = b.grow(room)
-        out.push(...extra)
-        room -= widthOf(extra)
-      }
-    })
-    return out
-  })
+  if (items.length === 0) return []
+  const row = render(items)
+  // Last resort on absurdly narrow terminals: cut the text, never wrap.
+  if (widthOf(row) > width) {
+    let over = widthOf(row) - width
+    for (let i = row.length - 1; i >= 0 && over > 0; i--) {
+      const cut = Math.min(over, row[i].text.length)
+      row[i] = { ...row[i], text: row[i].text.slice(0, row[i].text.length - cut) }
+      over -= cut
+    }
+  }
+  return [row]
 }
 
 /** One plain line for surfaces with no band (VS Code `$.ui.status`), 2,000 chars at most. */
 export function compactLine(snap: Snapshot, cfg: HudConfig): string {
-  const rows = bandRows(snap, cfg, 200)
-  return rows.map(r => r.map(s => s.text).join('')).join(SEP).slice(0, 2000)
+  return bandRows(snap, cfg, 200).map(joinText).join(SEP).slice(0, 2000)
 }

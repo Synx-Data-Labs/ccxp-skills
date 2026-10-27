@@ -2,7 +2,17 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'ap' | 'ctx' | 'branch' | 'task' | 'jobs' | 'rate' | 'cost' | 'lastat'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'ci' | 'rate' | 'cost' | 'lastat'
+
+/** Which CI run the band shows; unset (undefined) means no CI segment. */
+export type CiConfig = {
+  /** Workflow file name (e.g. `nightly.yml`) or numeric id. Required. */
+  workflow: string
+  /** Branch to look at; undefined means the repo's default branch. */
+  branch?: string
+  /** `owner/repo`; undefined means the current repo. */
+  repo?: string
+}
 
 export type HudConfig = {
   enabled: boolean
@@ -14,6 +24,8 @@ export type HudConfig = {
   pollSeconds: number
   ctxWarn: number
   ctxCrit: number
+  /** CI segment source; undefined (the default) hides the segment. */
+  ci?: CiConfig
 }
 
 export type Autopilot = {
@@ -40,7 +52,17 @@ export type Ledger = {
   updated_at: string
 }
 
+export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
+
+export type Ci = {
+  state: CiState
+  /** Epoch seconds the last run was created, 0 when unknown. */
+  at: number
+}
+
 export type HelperData = {
+  /** Repository name (origin's last path part, else the folder name). */
+  repo: string
   task_id: string
   task_title: string
   branch: string
@@ -48,6 +70,8 @@ export type HelperData = {
   autopilot: Autopilot | null
   /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null
+  /** Last run of the configured CI workflow (cached by the helper), null when unconfigured or unknown. */
+  ci: Ci | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
   last_input_at: number
 }
