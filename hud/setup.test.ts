@@ -101,3 +101,15 @@ test('pane toggle: open when closed, close when open, and it never opens twice',
   expect(await togglePane(io)).toMatch(/opened/)
   expect(calls).toEqual(['open', 'close', 'open'])
 })
+
+test('setup: an unparsable existing config file is left alone and nothing is written', async () => {
+  const files = { '/h/.claude/ccxp-hud.json': '{ "band": true, // comment\n }' }
+  const r = await run(['w.yml', DEFAULT_BRANCH, CURRENT_REPO, SCOPE_USER, WRITE], files)
+  expect(r.writes.length).toBe(0)
+  expect(r.out).toContain('left alone')
+})
+
+test('setup: a repo that starts with - or . is rejected', async () => {
+  const r = await run(['w.yml', DEFAULT_BRANCH, '--web/x', SCOPE_USER, WRITE])
+  expect(r.writes.length).toBe(0)
+})

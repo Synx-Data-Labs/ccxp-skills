@@ -36,7 +36,7 @@ hci-valid() { # $1 kind (workflow|branch|repo) $2 value
   case "$1" in
     workflow) [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$ ]] ;;
     branch) [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$ ]] ;;
-    repo) [[ "$2" =~ ^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$ ]] ;;
+    repo) [[ "$2" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$ ]] ;;
     *) return 1 ;;
   esac
 }
@@ -112,8 +112,8 @@ hud-ci-json() {
 
   if [ $((now - fetched)) -ge "$ttl" ] && command -v gh >/dev/null 2>&1 && mkdir -p "$dir" 2>/dev/null; then
     local lock="$dir/$key.lock"
-    # A lock older than 30 s is a dead refresh.
-    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +0.5 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; fi
+    # A lock older than a minute is a dead refresh (integer -mmin: BSD find rejects fractions).
+    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; fi
     if mkdir "$lock" 2>/dev/null; then
       if [ "${CCXP_HUD_CI_SYNC:-}" = 1 ]; then
         hci-refresh "$file" "$wf" "$branch" "$repo"
