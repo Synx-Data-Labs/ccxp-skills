@@ -187,6 +187,35 @@ EOF
   grep -qi 'never a per-job judgment call' "$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
 }
 
+@test "asset: every job prompt starts with a repo context block that makes the job read the target CLAUDE.md" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Repo context per job' "$f"
+  grep -q 'Resolve the repo before dispatch' "$f"
+  grep -q 'Repo: <owner/repo>' "$f"
+  grep -q 'Path: <abs path>' "$f"
+  grep -q 'Before anything else, Read <path>/CLAUDE.md' "$f"
+  grep -q 'If the CLAUDE.md is missing, say so in your report' "$f"
+  grep -q 'ask one question instead of guessing' "$f"
+  grep -q 'gh auth status' "$f"
+}
+
+@test "asset: dispatcher stays light, other-repo jobs make their own worktree, multi-repo and skill jobs covered" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'Do not Read the CLAUDE.md into your own context' "$f"
+  grep -q 'git -C <clone> worktree add' "$f"
+  grep -q 'Never write in the shared clone' "$f"
+  grep -q 'Skill-driven jobs' "$f"
+  grep -q 'one job per repo' "$f"
+  # the existing hard rule must survive the new section
+  grep -q 'Repo-changing jobs MUST be dispatched with `isolation: "worktree"`' "$f"
+}
+
+@test "asset: ledger row records the repo and the job prompt section points at the block" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '#n \[HH:MM\] <repo>: <short title>' "$f"
+  grep -q 'repo context block (see "Repo context per job")' "$f"
+}
+
 @test "status: calls out a stale pre-rename agent=dispatcher distinctly from an unrelated custom agent" {
   mk_settings_with_agent dispatcher
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"

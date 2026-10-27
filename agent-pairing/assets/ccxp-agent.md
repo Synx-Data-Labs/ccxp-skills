@@ -26,20 +26,36 @@ A background job cannot schedule wakeups or receive pause/stop, so a looping ski
 
 A fresh subagent sees none of this conversation, so the prompt must stand alone:
 
+- The repo context block (see "Repo context per job"), first, before anything else.
 - The goal, with the user's own words quoted.
-- Where: repo path, branch, files, and any facts from this conversation it needs.
+- Where: branch, files, and any facts from this conversation it needs.
 - Limits and permissions the user gave (quote them) and what is off limits.
 - "You cannot ask the user questions. If you are blocked or need a decision, stop and return `NEEDS INPUT: <question>` plus what you already did."
 - "Do not use Workflow or ScheduleWakeup. Finish in one go; your final message is the whole report: at most 10 lines, outcome first, file paths or URLs for anything long (write long output to a file)."
 - If the user typed a slash command (`/drive T123`, `/autopilot 2h`, `/land`), do not follow the skill's steps yourself. Tell the job to run `/<name> <args>` through the Skill tool, verbatim, to completion (except `/autopilot`, see above).
 
-Agent type: `general-purpose` by default; `Explore` for read-only searches; `Plan` for design work; `fork` when the request builds on earlier conversation (it inherits your context).
+Agent type: `general-purpose` by default; `Explore` for read-only searches; `Plan` for design work; `fork` when the request builds on earlier conversation (it inherits your context). `Explore` and `Plan` skip CLAUDE.md, so use `general-purpose` when the repo's rules matter.
+
+## Repo context per job
+
+A subagent starts in your cwd and loads only that repo's CLAUDE.md. It has no cwd parameter, and a `cd` inside its Bash call neither persists nor loads the other repo's CLAUDE.md or settings. So every job must be told its repo and made to read that repo's CLAUDE.md itself.
+
+1. **Resolve the repo before dispatch.** Sources in order: the user's message (a path, an `org/repo` slug, a PR/issue URL, a task id plus the repo it lives in), then your session cwd's repo, then an optional registry (`~/.claude/ccxp-repos.json`, or a configured roots folder) if one exists. If the repo is ambiguous or unknown, ask one question instead of guessing. Resolve to a local clone's absolute path and an `owner/repo` slug with read-only checks: `git -C <path> rev-parse --show-toplevel` and `git -C <path> remote get-url origin`. Record the repo in the ledger row.
+2. **Start every job prompt with this block**, before the goal:
+   - `Repo: <owner/repo>` and `Path: <abs path>`.
+   - "Before anything else, Read <path>/CLAUDE.md (and any guidelines file it tells you to read, e.g. dev/guidelines.md, plus nested CLAUDE.md files in directories you will touch) and follow them; they override your defaults. If the CLAUDE.md is missing, say so in your report."
+   - GitHub account hint: if `<path>/.envrc` sets `GH_CONFIG_DIR` (or the path is under a known account directory), name that value or `env -u GH_CONFIG_DIR`. If unknown: "run `gh auth status` and `gh repo view` before any write."
+3. **Keep yourself light.** Do not Read the CLAUDE.md into your own context; only verify it exists (`ls <path>/CLAUDE.md`, also `<path>/.claude/CLAUDE.md`). You may add a 2-3 line digest of hard rules you already know from this conversation. The job does the reading.
+4. **Other-repo isolation.** `isolation: "worktree"` only makes a worktree of your cwd's repo. A repo-changing job for a different repo gets no `isolation` at dispatch; its prompt must say: "Never write in the shared clone. First run `git -C <clone> fetch origin`, then `git -C <clone> worktree add -b <branch> <scratch-dir> origin/<default-branch>` and work only there." Same repo as your cwd: unchanged, see "Jobs that could collide".
+5. **Skill-driven jobs** (`/drive`, `/land`, `/address-pr`, `/autopilot`) get the block too: the job reads the CLAUDE.md first, then runs the skill, which manages its own clones and worktrees.
+6. **Multi-repo requests**: one job per repo, each with its own block. A single job spanning repos needs one block per repo and a stated worktree per repo.
 
 ## Detached jobs (`claude --bg`)
 
 Use a detached job instead of an Agent-tool subagent for work that is long (builds, promotes, nightly or release work, waits over ~10 minutes), risky, or must survive a dispatcher restart. Short read-only lookups and quick isolated edits stay as Agent jobs. Details and verified limits: `agent-pairing/bg-jobs.md` in the ccxp-skills plugin dir (`ls -d ~/.claude*/plugins/cache/ccxp-skills/ccxp-skills/*/agent-pairing`, newest version); read it before the first detached launch of a session.
 
 - **Launch** (the one allowed state-changing Bash call besides `/autopilot` bookkeeping): write the job prompt to a file (same rules as above, plus a quoted `## Authorization` section with `allow: push|pr-create|pr-merge|workflow-run` lines ONLY for what the user authorized), then `bash <plugin-dir>/agent-pairing/scripts/job-launch.sh <n> "<title>" <prompt-file> [--cwd DIR] [--add-dir CLONE] [--allow RULE] [--env NAME]`. It prints the job id; the job name is `j<n>-<slug>`. Never put secrets in a prompt, argv or `--env` values you typed; `--env` takes names only.
+- **Repo context**: the prompt file starts with the same repo context block ("Repo context per job"); a detached job's `--cwd` is usually a non-git dir, so its repo's CLAUDE.md does not load unless the job reads it.
 - **Ledger**: same `#n` row; note the bg name. The user can watch with `claude attach <name>` (or a herdr pane, see the doc).
 - **Learn results without polling**: completion and `NEEDS INPUT` arrive as cross-session messages; subscribe once per job with SendMessage `notify_when_idle: true`. Also run `bash <plugin-dir>/agent-pairing/scripts/job-status.sh [--report]` at the start of a turn and when the user asks for status. Never loop or sleep.
 - **NEEDS INPUT**: ask the user, then `bash <plugin-dir>/agent-pairing/scripts/job-resume.sh <n> "<answer>"`. A job `blocked` on a permission prompt cannot be answered by message; tell the user to run `claude attach <name>`.
@@ -48,7 +64,7 @@ Use a detached job instead of an Agent-tool subagent for work that is long (buil
 
 ## Ledger
 
-Keep a numbered ledger in your replies, one row per job (`#n` is also the prefix of that job's Agent `description`): `#n [HH:MM] <short title>: needs input | running | failed | done`, e.g. `#4 [14:09] address-pr PR 3802: running`.
+Keep a numbered ledger in your replies, one row per job (`#n` is also the prefix of that job's Agent `description`): `#n [HH:MM] <repo>: <short title>: needs input | running | failed | done`, e.g. `#4 [14:09] ccxp-skills: address-pr PR 3802: running` (`<repo>` is the short repo name the job runs under).
 
 - **Order**: needs input first (top), then running, then failed (a group shown only when non-empty), then done (bottom). Within a group, oldest start first; done jobs newest start first. Job numbers never change, so rows may look out of sequence.
 - **Needs input**: this group holds every open question for the user. Each item is self-contained: the repo (`org/repo`), PR/issue/task numbers with a few words of title, and the exact question or decision. Never end a reply with a vague pointer like "still waiting on your answers about X". Things only the user can do (not answer) go in a separate `Needs your action` line.
@@ -61,7 +77,7 @@ Keep a numbered ledger in your replies, one row per job (`#n` is also the prefix
 ## Jobs that could collide
 
 - **Read-only** jobs: always run in parallel.
-- **Repo-changing jobs MUST be dispatched with `isolation: "worktree"` — this is a hard rule, never a per-job judgment call.** Any job that will write, edit, stage, commit, or check out a branch in this repo is repo-changing; if there is any doubt whether a job touches the repo, isolate it. Operating directly in the shared clone risks silently destroying another concurrent job's — or the user's own — uncommitted or staged work: this already happened once in production (a background job ran without worktree isolation, checked out whatever branch the shared clone happened to have, and overwrote the user's own staged, uncommitted change with no way to recover it). Exception: skill-driven jobs (`/drive`, `/autopilot`, `/land`, `/address-pr`) manage their own clone or worktree isolation internally as part of the skill itself, so give them no isolation at the dispatch level — that is the one carve-out, not a precedent for skipping isolation on anything else.
+- **Repo-changing jobs MUST be dispatched with `isolation: "worktree"` — this is a hard rule, never a per-job judgment call.** Any job that will write, edit, stage, commit, or check out a branch in this repo (your cwd's repo; for another repo see "Repo context per job" item 4) is repo-changing; if there is any doubt whether a job touches the repo, isolate it. Operating directly in the shared clone risks silently destroying another concurrent job's — or the user's own — uncommitted or staged work: this already happened once in production (a background job ran without worktree isolation, checked out whatever branch the shared clone happened to have, and overwrote the user's own staged, uncommitted change with no way to recover it). Exception: skill-driven jobs (`/drive`, `/autopilot`, `/land`, `/address-pr`) manage their own clone or worktree isolation internally as part of the skill itself, so give them no isolation at the dispatch level — that is the one carve-out, not a precedent for skipping isolation on anything else.
 - **Machine-state** jobs (disk cleanup, installs, settings, anything under `~/.claude*`): one at a time. Queue the next one and tell the user it is waiting.
 - Two jobs that would change the same files and cannot be isolated: run them in sequence and say so.
 
