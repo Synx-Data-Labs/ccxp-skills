@@ -11,12 +11,18 @@ export const EMPTY: Snapshot = {
   costUsd: null,
   jobs: { running: 0, waiting: 0, failed: 0 },
   stale: false,
+  moved: false,
+  sessionRoot: null,
 }
 
 const CI_STATES: readonly string[] = ['passing', 'failing', 'running', 'unknown']
 
 function str(x: unknown): string {
   return typeof x === 'string' ? x : ''
+}
+
+function strOrNull(x: unknown): string | null {
+  return typeof x === 'string' && x !== '' ? x : null
 }
 
 function num(x: unknown): number {
@@ -81,6 +87,12 @@ export function parseHelper(stdout: string): HelperData | null {
     task_title: str(r.task_title),
     branch: str(r.branch),
     worktree: str(r.worktree),
+    cwd: str(r.cwd),
+    repo_slug: strOrNull(r.repo_slug),
+    repo_root: strOrNull(r.repo_root),
+    head: str(r.head),
+    dirty: typeof r.dirty === 'number' && Number.isFinite(r.dirty) ? r.dirty : null,
+    gh_account: strOrNull(r.gh_account),
     autopilot,
     ledger,
     ci,
@@ -101,11 +113,21 @@ export function countJobs(agents: ReadonlyArray<{ status: string }>): Jobs {
 
 export type Tone = 'success' | 'warning' | 'error'
 
-/** Green above `ctxWarn`, yellow down to `ctxCrit`, red below. */
+/**
+ * Colour of the context LEFT percentage (register.tsx: ctxLeft = 100 - percent used):
+ * green when strictly more than `ctxWarn` (default 75) is left, yellow when strictly more
+ * than `ctxCrit` (default 50), red at or below that. So 75 is yellow and 50 is red.
+ */
 export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'>): Tone {
   if (left > cfg.ctxWarn) return 'success'
-  if (left >= cfg.ctxCrit) return 'warning'
+  if (left > cfg.ctxCrit) return 'warning'
   return 'error'
+}
+
+/** Jobs cell: green READY when nothing runs, yellow WORKING (N) otherwise; `withCount: false` is the narrow form. */
+export function jobState(running: number, withCount = true): { text: string; color: Tone } {
+  if (running <= 0) return { text: 'READY', color: 'success' }
+  return { text: withCount ? `WORKING (${running})` : 'WORKING', color: 'warning' }
 }
 
 export function meter(left: number, width = 10): string {
@@ -167,6 +189,18 @@ export function isApOn(snap: Snapshot): boolean {
   return p === '[r]' || p === '[b]' || p === '[p]'
 }
 
+/** Last path segment; '' for an empty path. */
+export function baseName(path: string): string {
+  const parts = path.split('/').filter(p => p !== '')
+  return parts.length ? parts[parts.length - 1] : ''
+}
+
+/** True when `cwd` is `root` or below it. */
+export function isWithin(cwd: string, root: string): boolean {
+  const r = root.replace(/\/+$/, '')
+  return cwd === r || cwd.startsWith(r + '/')
+}
+
 /** MM-DD of a run, local time. */
 function shortDate(epochSec: number): string {
   const d = new Date(epochSec * 1000)
@@ -197,12 +231,53 @@ function apVariants(ap: Autopilot): Variants {
   ]
 }
 
+/**
+ * The repo cell, most to least detail:
+ * `[→ ]owner/name @ branch* (wt X) (account) (root: X)`. It follows the session cwd (the helper is
+ * run for it). `→` leads for a couple of refreshes after the working repo changed; `(root: X)` shows
+ * when a shell cd left the session root; a detached HEAD reads `detached <sha>`; `*` = changed
+ * tracked files. Shrinking drops the worktree, then the account, then shortens the names, last the branch.
+ */
+function repoVariants(snap: Snapshot): Variants | null {
+  const h = snap.helper
+  const full = h?.repo_slug || h?.repo
+  if (!h || !full) return null
+  const root = snap.sessionRoot && h.cwd && !isWithin(h.cwd, snap.sessionRoot) ? baseName(snap.sessionRoot) : ''
+  const dirty = h.dirty !== null && h.dirty > 0
+  const where = h.branch || (h.head ? `detached ${h.head}` : '')
+  const build = (o: { name: number; slug: boolean; branch: number; wt: boolean; acct: boolean; root: number }): Seg[] => {
+    const segs: Seg[] = []
+    if (snap.moved) segs.push({ text: '→ ', color: 'suggestion', bold: true })
+    segs.push({ text: truncate(o.slug ? full : baseName(full) || full, o.name), bold: true })
+    if (where && o.branch > 0) segs.push({ text: ` @ ${truncate(where, o.branch)}` })
+    if (dirty) segs.push({ text: '*', color: 'warning' })
+    if (o.wt && h.worktree) segs.push({ text: ` (wt ${truncate(h.worktree, 24)})`, dim: true })
+    if (o.acct && h.gh_account) segs.push({ text: ` (${truncate(h.gh_account, 24)})`, dim: true })
+    if (o.root > 0 && root) segs.push({ text: ` (root: ${truncate(root, o.root)})`, color: 'warning' })
+    return segs
+  }
+  const all = [
+    build({ name: 48, slug: true, branch: 40, wt: true, acct: true, root: 20 }),
+    build({ name: 48, slug: true, branch: 40, wt: false, acct: true, root: 20 }),
+    build({ name: 48, slug: true, branch: 40, wt: false, acct: false, root: 20 }),
+    build({ name: 24, slug: false, branch: 24, wt: false, acct: false, root: 20 }),
+    build({ name: 16, slug: false, branch: 14, wt: false, acct: false, root: 10 }),
+    build({ name: 16, slug: false, branch: 0, wt: false, acct: false, root: 0 }),
+  ]
+  // Identical neighbours would waste a shrink step.
+  const out: Variants = []
+  for (const v of all) if (out.length === 0 || joinText(out[out.length - 1]) !== joinText(v)) out.push(v)
+  return out
+}
+
 function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
   const h = snap.helper
   const one = (...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
   switch (field) {
-    case 'repo':
-      return h?.repo ? one([{ text: h.repo, bold: true }], [{ text: truncate(h.repo, 14), bold: true }]) : null
+    case 'repo': {
+      const v = repoVariants(snap)
+      return v ? one(...v) : null
+    }
     case 'branch': {
       const b = h?.branch
       return b ? one([{ text: ` ${b}` }], [{ text: ` ${truncate(b, 24)}` }], [{ text: ` ${truncate(b, 14)}` }]) : null
@@ -225,6 +300,14 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
       const color = ctxTone(left, cfg)
       return one([{ text: `ctx ${left}% ${meter(left)}`, color }], [{ text: `ctx ${left}%`, color }])
     }
+    case 'jobs': {
+      const led = h?.ledger
+      if (!led) return null // no ledger: no READY either
+      const n = led.running.length
+      const full = jobState(n)
+      const slim = jobState(n, false)
+      return one([{ text: full.text, color: full.color }], [{ text: slim.text, color: slim.color }])
+    }
     case 'ci':
       return cfg.ci && h?.ci ? one(...ciVariants(h.ci)) : null
     case 'rate':
@@ -240,14 +323,14 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'ci', 'rate', 'cost', 'lastat'],
-  on: ['ap', 'ctx', 'ci', 'rate', 'cost', 'lastat'],
+  off: ['repo', 'branch', 'task', 'jobs', 'ci', 'rate', 'cost', 'lastat'],
+  on: ['ap', 'ctx', 'jobs', 'ci', 'rate', 'cost', 'lastat'],
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:task', 'step:task', 'step:branch', 'step:branch', 'drop:branch', 'drop:task', 'step:repo'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -277,6 +360,8 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
     // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
   }
+  // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
+  if (items.some(it => it.field === 'repo')) items = items.filter(it => it.field !== 'branch')
   if (snap.stale) items.push({ field: 'stale', variants: [[{ text: 'stale', dim: true }]], at: 0 })
   if (items.length === 0) return []
 
