@@ -259,3 +259,16 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   HOME="$BATS_TEST_TMPDIR/nohome" run _ap notify idle "x"
   [ "$status" -eq 0 ]; [ "$output" = fallback ]
 }
+
+@test "busy off clears the mark even after off, so a later on is not refused" {
+  _ap start >/dev/null; _ap busy on; _ap off >/dev/null
+  _ap busy off
+  [ "$(_j .busy_since)" = null ]
+  run _ap start; [ "$output" = started ]
+}
+
+@test "report: a fresh run with no next_wake_at is not flagged overdue" {
+  _ap start >/dev/null
+  AUTOPILOT_NOW="2026-10-28T10:20:00Z" run _ap report
+  [[ "$output" != *overdue* ]]
+}

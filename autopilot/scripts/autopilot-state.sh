@@ -36,6 +36,7 @@ ap-today() { printf '%s' "${AUTOPILOT_TODAY:-$(date +%F)}"; }
 
 # ISO-8601 UTC -> epoch seconds (GNU or BSD date); empty when unparseable.
 _ap_epoch() {
+  [ -n "${1:-}" ] || return 0
   date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s 2>/dev/null || true
 }
 _ap_iso() {
@@ -140,9 +141,9 @@ ap-off() {
 }
 
 ap-busy() {
-  [ "$(ap-status)" = off ] && return 0
+  [ -f "$(ap-state-file)" ] || return 0
   case "${1:-}" in
-    on) _ap_update --arg now "$(ap-now)" '.busy_since = $now' ;;
+    on) [ "$(ap-status)" = off ] || _ap_update --arg now "$(ap-now)" '.busy_since = $now' ;;
     off) _ap_update '.busy_since = null' ;;
     *) echo "busy <on|off>" >&2; return 2 ;;
   esac
@@ -259,7 +260,7 @@ ap-report() {
          (.needs_attention[]? | "needs attention: \(.id) — \(.reason)"),
          (.notices[-3:][]? | "notice [\(.via)] \(.kind): \(.text)")' "$f"
   if [ "$st" = on ] && ! _ap_is_busy; then
-    local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "${w:-}"); now=$(_ap_epoch "$(ap-now)")
+    local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
     if [ -n "$we" ] && [ -n "$now" ] && [ $(( now - we )) -gt 600 ]; then echo "overdue: no wake fired since $w — type /autopilot on to recover"; fi
   fi
 }

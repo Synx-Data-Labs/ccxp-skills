@@ -93,7 +93,7 @@ Toggles the band between the one-row view and up to five detail lines (this sess
 | 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
 | 2 usage | `ctx N% ▓▓▓▓░░░░░░` (same colours as the band), `5h N%` rate limit, `$cost` |
 | 3 jobs | `READY` / `WORKING (N)`, each running job as `r70 title`, `parked N (k1 k2)`, `tot N` (from the ledger; no ledger, no line) |
-| 4 autopilot and CI | `AP on 2h ⚠1 loops 3 ✓2 merged` (`AP on idle 2h …` when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
+| 4 autopilot and CI | `AP 2h ⚠1 loops 3 ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
 | 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
 
 - Every line is cut to the terminal width with the band's shrinking idea: titles and ages shorten first (job titles to 24, then 12 characters, then bare `r70`), then lower-value cells drop (`tot`, parked ids, `5h`, `$`), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
