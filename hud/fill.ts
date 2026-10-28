@@ -44,18 +44,22 @@ export function charWidth(cp: number): number {
   return inRanges(cp, WIDE) ? 2 : 1
 }
 
-/** Display width of text in columns; ANSI escapes cost nothing. */
-export function displayWidth(text: string): number {
-  let n = 0
-  let prev = 0
+/** [char, columns] pairs of the text with ANSI stripped; a narrow symbol's emoji selector (U+FE0F) adds the second column. */
+function cells(text: string): Array<[string, number]> {
+  const out: Array<[string, number]> = []
+  let prevNarrow = false
   for (const ch of stripAnsi(text)) {
     const cp = ch.codePointAt(0)!
-    const w = charWidth(cp)
-    // A narrow symbol followed by the emoji selector (U+FE0F), such as a warning sign, draws 2 wide.
-    n += cp === 0xfe0f && prev === 1 ? 1 : w
-    prev = w === 0 && cp === 0xfe0f ? 2 : w
+    const w = cp === 0xfe0f && prevNarrow ? 1 : charWidth(cp)
+    out.push([ch, w])
+    prevNarrow = charWidth(cp) === 1
   }
-  return n
+  return out
+}
+
+/** Display width of text in columns; ANSI escapes cost nothing. */
+export function displayWidth(text: string): number {
+  return cells(text).reduce((n, [, w]) => n + w, 0)
 }
 
 /** Cuts text to at most `max` columns, ending in "…" when it was cut; never splits a wide character. */
@@ -69,8 +73,7 @@ export function truncateDisplay(text: string, max: number): string {
 function takeColumns(text: string, max: number): string {
   let out = ''
   let used = 0
-  for (const ch of stripAnsi(text)) {
-    const w = charWidth(ch.codePointAt(0)!)
+  for (const [ch, w] of cells(text)) {
     if (used + w > max) break
     out += ch
     used += w

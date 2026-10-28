@@ -619,6 +619,10 @@ test('fill: overflow is cut with an ellipsis before padding and never exceeds th
   expect(edge.map(s => s.text).join('')).toBe('abcd…')
   for (let max = 1; max < 12; max++) expect(fillWidth(fitSegs([{ text: '任务a' }, { text: '标题🚀b' }, { text: 'xyz' }], max))).toBeLessThanOrEqual(max)
   expect(truncateDisplay('你好世界', 4)).toBe('你…')
+  for (let max = 1; max < 12; max++) {
+    expect(fillWidth(fitSegs([{ text: '⚠\ufe0f'.repeat(4) }], max))).toBeLessThanOrEqual(max)
+    expect(displayWidth(truncateDisplay('⚠\ufe0fab⚠\ufe0f'.repeat(3), max))).toBeLessThanOrEqual(max)
+  }
 })
 
 test('fill: unknown width or below the minimum falls back (null), never wraps', async () => {
