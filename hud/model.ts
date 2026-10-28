@@ -365,8 +365,18 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
   if (snap.stale) items.push({ field: 'stale', variants: [[{ text: 'stale', dim: true }]], at: 0 })
   if (items.length === 0) return []
 
+  const row = fitRow(items, STEPS[mode], width)
+  return row.length === 0 ? [] : [row]
+}
+
+/**
+ * Applies the shrink and drop steps one at a time until the row fits `width`, then, as a last
+ * resort on absurdly narrow terminals, cuts the text (never wraps). [] when nothing is left.
+ */
+function fitRow(all: Item[], steps: readonly string[], width: number): Seg[] {
+  let items = all
   const total = () => widthOf(render(items))
-  for (const step of STEPS[mode]) {
+  for (const step of steps) {
     if (total() <= width) break
     const [op, field] = step.split(':')
     if (op === 'drop') items = items.filter(it => it.field !== field)
@@ -374,7 +384,6 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
   }
   if (items.length === 0) return []
   const row = render(items)
-  // Last resort on absurdly narrow terminals: cut the text, never wrap.
   if (widthOf(row) > width) {
     let over = widthOf(row) - width
     for (let i = row.length - 1; i >= 0 && over > 0; i--) {
@@ -383,7 +392,121 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
       over -= cut
     }
   }
-  return [row]
+  return row
+}
+
+/** "just now", "5m ago", "3h ago", "2d ago" for an epoch-seconds time (never negative). */
+export function formatAge(epochSec: number, nowMs: number = Date.now()): string {
+  const s = Math.max(0, Math.floor(nowMs / 1000 - epochSec))
+  if (s < 60) return 'just now'
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`
+  return `${Math.floor(s / 86400)}d ago`
+}
+
+const ageSegs = (at: number, nowMs: number): Seg[] => (at > 0 ? [{ text: ` (${formatAge(at, nowMs)})`, dim: true }] : [])
+
+/** The running jobs as `r70 title`, titles shortened step by step, last as bare ids. */
+function runningVariants(running: ReadonlyArray<{ job: number; title: string }>): Variants {
+  const mk = (titleMax: number): Seg[] => {
+    const segs: Seg[] = []
+    running.forEach((j, i) => {
+      if (i > 0) segs.push({ text: '  ' })
+      segs.push({ text: `r${j.job}`, bold: true })
+      if (titleMax > 0 && j.title) segs.push({ text: ` ${truncate(j.title, titleMax)}` })
+    })
+    return segs
+  }
+  const out: Variants = []
+  for (const v of [mk(40), mk(24), mk(12), mk(0)]) if (out.length === 0 || joinText(out[out.length - 1]) !== joinText(v)) out.push(v)
+  return out
+}
+
+/** Detail lines, drop and shrink order per line (see README "Details"). */
+const DETAIL_STEPS = {
+  where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
+  usage: ['drop:cost', 'drop:rate', 'step:ctx', 'drop:ctx'],
+  jobs: ['drop:tot', 'step:run', 'step:run', 'step:parked', 'step:run', 'drop:parked', 'drop:state'],
+  ap: ['step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap'],
+  you: ['step:lastat', 'step:lastat'],
+} as const
+
+/**
+ * `/hud details`: the one-row band expanded to up to five live lines, each cut to the terminal
+ * width with the same variant shrinking as the band. Lines with nothing to say are left out.
+ *   1 repo, branch, dirty mark, claimed task   2 ctx left, rate limit, cost
+ *   3 jobs (ledger)   4 autopilot and CI   5 last prompt (stamp and age)
+ * It ignores `fields`: the five lines are the view. [] when there is no data at all.
+ */
+export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
+  const h = snap.helper
+  const width = Math.max(20, columns - 2)
+  const one = (field: string, ...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
+  const pick = (f: Field) => itemFor(f, snap, cfg)
+  const lines: Seg[][] = []
+  const add = (items: Array<Item | null>, steps: readonly string[]) => {
+    const row = fitRow(items.filter((x): x is Item => x !== null), steps, width)
+    if (row.length > 0) lines.push(row)
+  }
+
+  // 1. where you are
+  add(
+    [pick('repo'), pick('task'), snap.stale ? one('stale', [{ text: 'stale', dim: true }]) : null],
+    DETAIL_STEPS.where,
+  )
+
+  // 2. context and cost
+  add([pick('ctx'), pick('rate'), pick('cost')], DETAIL_STEPS.usage)
+
+  // 3. jobs, from the ledger (no ledger: no line)
+  const led = h?.ledger
+  if (led) {
+    const state = jobState(led.running.length)
+    const ids = led.parked_ids.length ? ` (${led.parked_ids.join(' ')})` : ''
+    add(
+      [
+        one('state', [{ text: state.text, color: state.color }]),
+        led.running.length ? one('run', ...runningVariants(led.running)) : null,
+        one('parked', [{ text: `parked ${led.parked}${ids}`, dim: led.parked === 0 }], [{ text: `parked ${led.parked}`, dim: led.parked === 0 }]),
+        one('tot', [{ text: `tot ${led.lifetime_jobs}`, dim: true }]),
+      ],
+      DETAIL_STEPS.jobs,
+    )
+  }
+
+  // 4. autopilot and CI
+  const ap = h?.autopilot
+  let apItem: Item | null = null
+  if (ap) {
+    const full = apVariants(ap)
+    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0] : [full[0][0], { text: `${truncate(ap.status, 14)} ` }, ...full[0].slice(1)]
+    apItem = one('ap', withStatus, ...full)
+  } else if (h) {
+    apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
+  }
+  let ciItem: Item | null = null
+  if (cfg.ci && h?.ci) {
+    const look = CI_LOOK[h.ci.state]
+    const date = h.ci.at > 0 ? ` ${shortDate(h.ci.at)}` : ''
+    const mk = (workflow: boolean, word: boolean): Seg[] => [
+      { text: 'CI ', bold: true },
+      ...(workflow ? [{ text: `(${truncate(cfg.ci!.workflow, 30)}) `, dim: true }] : []),
+      { text: `${look.glyph}${word ? ` ${look.word}` : ''}${date}`, color: look.color },
+      ...ageSegs(h.ci.at, nowMs),
+    ]
+    ciItem = one('ci', mk(true, true), mk(false, true), mk(false, false), ...ciVariants(h.ci).slice(2))
+  }
+  add([apItem, ciItem], DETAIL_STEPS.ap)
+
+  // 5. you: the last prompt, stamp and age
+  const at = h?.last_input_at
+  if (at) {
+    add(
+      [one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }])],
+      DETAIL_STEPS.you,
+    )
+  }
+  return lines
 }
 
 /** One plain line for surfaces with no band (VS Code `$.ui.status`), 2,000 chars at most. */

@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | pane | setup`. `pane` is a toggle (run it again to close the pane); `setup` asks for the CI source and writes it (see below).
+- **`/hud`**: `on | off | status | details | setup`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `setup` asks for the CI source and writes it (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -70,7 +70,7 @@ The mode is picked automatically: **AP on** while autopilot is running (backing 
 ## Colours
 
 - ctx is context LEFT (100 minus the engine's percent used). Green above 75, yellow above 50 up to 75, red at 50 or less; the boundaries are strict (75 is yellow, 50 is red) and compare the rounded number shown.
-- Jobs cell: green `READY` when the job ledger (`hud/scripts/ledger.md`) has no running job, yellow `WORKING (N)` while N run. No ledger, no cell. It reads the ledger, not the engine's agent list (that stays in `/hud pane`).
+- Jobs cell: green `READY` when the job ledger (`hud/scripts/ledger.md`) has no running job, yellow `WORKING (N)` while N run. No ledger, no cell. It reads the ledger, not the engine's agent list.
 - Theme tokens only (`success`, `warning`, `error`), no escape codes: themes and `NO_COLOR` keep working.
 
 ## CI cell
@@ -80,10 +80,25 @@ The mode is picked automatically: **AP on** while autopilot is running (backing 
 - Never blocks the band: the helper answers from an on-disk cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-ci/`) and starts one detached refresh when the cache is older than 120 s (or `pollSeconds`, whichever is larger), 5 s timeout per call. The first result can take a couple of minutes.
 - No such workflow, `gh` missing, signed out or offline: the cell is silently dropped (an older cached answer is kept). Tokens and `gh` output are never shown; the JSON is untrusted and only an enumerated state plus a timestamp survive.
 
-## `/hud setup` and `/hud pane`
+## `/hud setup`
 
 - `/hud setup` asks (through the engine's question dialog; type values under "Other"): workflow file or `none`, branch (default = repo default branch), repo (default = current), scope (user file or this project's `.claude/ccxp-hud.json`). It validates every answer, shows the resulting `"ci"` block and the file, and writes only after you pick `write`. Only the `ci` key is merged in; other keys are kept. Cancelling or dismissing any question writes nothing.
-- `/hud pane` toggles the detail pane: the engine's own pane list (`$.ui.panes`) says whether it is open, so there is no mod-side flag to go stale.
+
+## `/hud details`
+
+Toggles the band between the one-row view and up to five detail lines (this session only; a new session starts collapsed). It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
+
+| Line | Shows |
+|---|---|
+| 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
+| 2 usage | `ctx N% ▓▓▓▓░░░░░░` (same colours as the band), `5h N%` rate limit, `$cost` |
+| 3 jobs | `READY` / `WORKING (N)`, each running job as `r70 title`, `parked N (k1 k2)`, `tot N` (from the ledger; no ledger, no line) |
+| 4 autopilot and CI | `AP running 2/6h ⚠1 loops 3 ✓2 merged` (`AP off` when none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
+| 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
+
+- Every line is cut to the terminal width with the band's shrinking idea: titles and ages shorten first (job titles to 24, then 12 characters, then bare `r70`), then lower-value cells drop (`tot`, parked ids, `5h`, `$`), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
+- The VS Code compact status line stays one line.
+- The retired `/hud pane` is not an alias: it prints the usage line.
 
 ## Notes
 

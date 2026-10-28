@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { CANCEL, CURRENT_REPO, DEFAULT_BRANCH, NONE, SCOPE_PROJECT, SCOPE_USER, WRITE, setupCi, togglePane } from './setup'
+import { CANCEL, CURRENT_REPO, DEFAULT_BRANCH, NONE, SCOPE_PROJECT, SCOPE_USER, WRITE, setupCi } from './setup'
 
 type Run = { out: string; writes: { path: string; text: string }[]; asked: string[] }
 
@@ -80,26 +80,6 @@ test('setup: cancel at any step, a declined confirmation, or a dismissed dialog 
 
 test('setup: an unknown scope answer or a missing path writes nothing', async () => {
   expect((await run(['w.yml', DEFAULT_BRANCH, CURRENT_REPO, '/etc/passwd', WRITE])).writes).toEqual([])
-})
-
-test('pane toggle: open when closed, close when open, and it never opens twice', async () => {
-  let isUp = false
-  const calls: string[] = []
-  const io = {
-    isOpen: async () => isUp,
-    open: async () => {
-      calls.push('open')
-      isUp = true
-    },
-    close: async () => {
-      calls.push('close')
-      isUp = false
-    },
-  }
-  expect(await togglePane(io)).toMatch(/opened/)
-  expect(await togglePane(io)).toMatch(/closed/)
-  expect(await togglePane(io)).toMatch(/opened/)
-  expect(calls).toEqual(['open', 'close', 'open'])
 })
 
 test('setup: an unparsable existing config file is left alone and nothing is written', async () => {

@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withCi, withEnabled } from './config'
-import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, formatStamp, isApOn, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
+import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -184,7 +184,7 @@ test('jobState: READY green at 0, WORKING (N) yellow from 1; narrow form drops t
   expect(jobState(0, false)).toEqual({ text: 'READY', color: 'success' })
 })
 
-test('countJobs groups agent statuses (the pane still shows them)', async () => {
+test('countJobs groups agent statuses', async () => {
   expect(countJobs([{ status: 'running' }, { status: 'pending' }, { status: 'idle' }, { status: 'waiting' }, { status: 'failed' }, { status: 'completed' }])).toEqual({ running: 2, waiting: 2, failed: 1 })
 })
 
@@ -470,4 +470,78 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
   expect(seenBare).toBe(true)
   expect(text(bandRows(idle, CI, 60))).toContain('READY')
   expect(text(bandRows(withHelper(ledgerOf(2)), CI, 60))).toMatch(/WORKING/)
+})
+
+// --- /hud details: the band expanded to five live lines ---
+
+const DETAIL_NOW = Date.now()
+const detail = (s: object, cols = 140, cfg = CI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
+const fullSnap = (over = {}) => ({
+  ...withHelper({
+    repo_slug: 'acme/widgets',
+    dirty: 2,
+    autopilot: AP,
+    ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, parked: 2, parked_ids: ['k1', 'k2'], next_job: 83, updated_at: '' },
+    ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
+    last_input_at: Math.floor(DETAIL_NOW / 1000) - 300,
+  }),
+  ...over,
+})
+
+test('formatAge: just now, minutes, hours, days; a future stamp is just now', async () => {
+  const at = 1_000_000
+  const age = (secs: number) => formatAge(at, (at + secs) * 1000)
+  expect([age(0), age(59), age(60), age(3599), age(3600), age(86399), age(86400), age(259200)]).toEqual(['just now', 'just now', '1m ago', '59m ago', '1h ago', '23h ago', '1d ago', '3d ago'])
+  expect(formatAge(at, (at - 50) * 1000)).toBe('just now')
+})
+
+test('details: five lines in order: where, usage, jobs, autopilot with CI, last prompt', async () => {
+  const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
+  expect(lines.length).toBe(5)
+  expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
+  expect(lines[1]).toBe('ctx 64% ▓▓▓▓▓▓░░░░ │ 5h 42% │ $1.50')
+  expect(lines[2]).toBe('WORKING (2) │ r70 Redo HUD repo field  r73 Autopilot cycle 2 │ parked 2 (k1 k2) │ tot 82')
+  expect(lines[3]).toMatch(/^AP running 2\/6h loops 3 ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
+})
+
+test('details: colours match the band (ctx tone, READY/WORKING, CI state) and the dirty mark is yellow', async () => {
+  const rows = detailRows(fullSnap({ ctxLeft: 40 }) as any, CI, 140, DETAIL_NOW)
+  expect(rows[1].find(s => s.text.startsWith('ctx '))?.color).toBe('error')
+  expect(rows[2][0]).toEqual({ text: 'WORKING (2)', color: 'warning' })
+  expect(rows[0].find(s => s.text === '*')?.color).toBe('warning')
+  expect(rows[3].find(s => s.text.includes('passing'))?.color).toBe('success')
+  const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: 0, parked_ids: [], next_job: 83, updated_at: '' } }) as any, CI, 140, DETAIL_NOW)
+  expect(idle[2][0]).toEqual({ text: 'READY', color: 'success' })
+})
+
+test('details: lines with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
+  const lines = detail({ ...withHelper({ ledger: null, last_input_at: 0 }), ctxLeft: null }, 140, DEFAULTS)
+  expect(lines.length).toBe(2) // where, autopilot (off)
+  expect(lines[1]).toBe('AP off')
+  expect(lines.join('\n')).not.toMatch(/READY|WORKING|you |CI/)
+})
+
+test('details: every line fits the terminal at every width and the band row is untouched', async () => {
+  for (let cols = 140; cols >= 22; cols--) {
+    for (const s of [fullSnap(), fullSnap({ stale: true, rateUsed: 99, costUsd: 123.45 })]) {
+      for (const line of detail(s, cols)) expect(line.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    }
+  }
+  expect(bandRows(fullSnap() as any, CI, 140).length).toBe(1)
+})
+
+test('details: a narrow terminal shrinks titles and ages before it cuts', async () => {
+  const wide = detail(fullSnap(), 140)
+  const narrow = detail(fullSnap(), 70)
+  expect(narrow[2]).toMatch(/^WORKING \(2\) │ r70/)
+  expect(narrow[2].length).toBeLessThan(wide[2].length)
+  const old = Math.floor(DETAIL_NOW / 1000) - 3 * 86400
+  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 140)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
+  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d$/)
+})
+
+test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {
+  expect(detailRows(EMPTY, DEFAULTS, 140, DETAIL_NOW)).toEqual([])
+  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['stale'])
 })

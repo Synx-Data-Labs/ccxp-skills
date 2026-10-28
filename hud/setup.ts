@@ -1,4 +1,4 @@
-// ccxp-hud `/hud setup` and `/hud pane` logic. No `$`: the register module passes the
+// ccxp-hud `/hud setup` logic. No `$`: the register module passes the
 // few primitives in as `io`, so the unit tests can drive every branch with fakes.
 
 import type { CiConfig } from '../types'
@@ -58,20 +58,4 @@ export async function setupCi(io: SetupIo): Promise<string> {
     // A dismissed dialog rejects; nothing has been written at that point.
     return NOTHING
   }
-}
-
-export type PaneIo = {
-  isOpen: () => Promise<boolean>
-  open: () => Promise<void>
-  close: () => Promise<void>
-}
-
-/** `/hud pane` is a toggle: open when closed, close when open. */
-export async function togglePane(io: PaneIo): Promise<string> {
-  if (await io.isOpen()) {
-    await io.close()
-    return 'ccxp-hud pane closed.'
-  }
-  await io.open()
-  return 'ccxp-hud pane opened. Run /hud pane again to close it.'
 }
