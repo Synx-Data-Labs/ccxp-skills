@@ -21,7 +21,7 @@ description: Orchestrator design (inversion of control) and implementation drivi
 
 ## Design phase (merged from T20261019-311265)
 
-T20261019-311265 ("Redesign customer-support as an orchestrator that drives /drive + /address-pr + /eta internally", research/design-only, staged in PR #367, never on main) was folded into this task on 2026-10-21 (maintainer decision) so there is ONE orchestrator task. **The first deliverable is the design doc** (`repo-conventions/templates/design-doc.md`, scored by `design-score`); no implementation or edits to `customer-support/scripts/*.sh` / `SKILL.md` before it clears `/drive` Phase 2.
+T20261019-311265 ("Redesign customer-support as an orchestrator that drives /drive + /address-pr + /eta internally", research/design-only, staged in [PR #367](https://github.com/Synx-Data-Labs/ccxp-skills/pull/367), never on main) was folded into this task on 2026-10-21 (maintainer decision) so there is ONE orchestrator task. **The first deliverable is the design doc** (`repo-conventions/templates/design-doc.md`, scored by `design-score`); no implementation or edits to `customer-support/scripts/*.sh` / `SKILL.md` before it clears `/drive` Phase 2.
 
 - **Problem (from 311265)**: `/customer-support` (T20261012-373882) is a passive label-state machine (`triage -> accepted -> in-progress -> delivered -> (closed)`, plus `blocked`/`needs-upstream`). A human or `/drive` calls its subcommands via `transition.sh` after the fact to mirror engineering milestones onto the issue. It never calls another skill and never reads `/drive` state.
 - **Maintainer direction** (shine@synxdata.com, paraphrased): "the customer-support skill would call /drive and /address-pr as well as /eta when walking through the lifecycle of a given customer issue. not the other way around." Invert control: `/customer-support` is the orchestrator for an issue's whole lifecycle, not a label mirror waiting to be told what happened.
@@ -68,3 +68,67 @@ The ETA/status-reporting part of this orchestrator overlaps P2 (reporter engine 
 - Implementation with bats tests, including gate-bypass regression tests (`accept` identity gate, `deliver` evidence gate, synxdb-support#21 case).
 - Dry-run on a test issue.
 - One real issue driven end to end.
+
+## Decisions (2026-10-28)
+
+Maintainer accepted the recommendations on the three open design questions. Design source: a private design note (not committed; it names real support issues). The content below is its sanitized summary, enough for a future `/drive` to implement.
+
+### The three decisions
+
+- **Home and name**: a new subcommand `/customer-support run <issue-ref>` of the existing skill, not a new skill.
+  - Same `transition.sh` entrypoint, same gates; the 12 existing verbs stay standalone (manual walks, `audit`, `sweep`, `close-support-issue` depend on them).
+  - Keep `SKILL.md` small: one table row plus a short pointer; orchestration prose in `customer-support/run.md`, deterministic planner in `customer-support/scripts/run_plan.sh`.
+  - Do NOT name it `drive` (collides with `/drive`, which `run` calls).
+- **Tracking comment**: `run` skips the `triage --task` comment by default and keeps the task link private.
+  - The existing comment exposes an internal task ID, a hub repo path and a customer-bearing title in a customer-readable issue. That is a defect, tracked separately (T20261028-392844).
+  - `transition.sh triage` gains `--no-task-comment`, which `run` always passes.
+- **Scope of v1**: `run` does NOT automate the confirmation nudge (`request-confirm`) or ETA/stall comments.
+  - The nudge is a drafted-then-approved text: v1 stops at `delivered` with NEEDS INPUT for a nudge draft.
+  - ETA / status comments stay in epic phases P2/P3 (T20261012-949870, T20261012-383399).
+
+### Design summary
+
+- **Shape**: a stateless loop (observe, plan next step, execute or stop). State is derived from durable facts, never held by `run`:
+  - lifecycle position = the single `status:*` label; backing task = `source-url:` frontmatter (dedup key)
+  - work progress = task status, claim, PRs on the branch; draft approval = private draft file plus a `.sha256` sidecar
+  - delivery done = `delivered` label AND a bot comment carrying a hidden `<!-- cs-delivered -->` marker
+- **Steps**: intake (`/to-task`) -> triage (label only) -> claim + `start` -> `/drive T<id>` -> evidence (`links`, or `partner-download-url.sh` fallback, HTTP-verify each URL) -> draft customer reply to a private file -> STOP for approval -> post the exact approved text + `deliver --urls|--release` -> stop at `delivered`.
+- **Idempotence**: every step checks "already done?" and skips; re-running on a delivered issue reports the next human action; `blocked` / `needs-upstream` report and exit.
+- **Customer-visible text**: never posted directly.
+  - A draft file is written, its path shown, NEEDS INPUT returned; on resume the post happens only if the file's sha256 matches the approved hash.
+  - A mechanical lint fails the step on: task IDs (`T\d{8}-\d{6}`), customer org/person names, internal repo names or paths, long tokens outside evidence-step download URLs. Reuse the P2 renderer + deny-list lint (T20261012-949870) when it lands.
+- **Hard gates**: each pauses with a dry-run and its own approval; the answer is scoped to (issue, action, resolved target) and expires with the session.
+  - real build dispatch; tag creation/push; promote/publish to a customer-visible repo (incl. entitlement-token creation); manifest/default-version change; posting customer text
+- **Never automated, no flag overrides**:
+  - `accept`, `reject`, close, `sweep --apply` (support-team-only; `run` never reads `SUPPORT_TEAM_LOGINS` or passes `--actor`)
+  - self-reported delivery (no `--force`; regression synxdb-support#21)
+  - direct `labels.sh apply/toggle` (all label writes via `transition.sh`)
+- **Background-job contract**: `run <ref> [--plan] [--until <step>]` never blocks on a prompt; last message is at most 10 lines: `OUTCOME: <step>`, issue state, then `DONE: awaiting support team` or `NEEDS INPUT: <one question>` plus the artifact path.
+  - NEEDS INPUT points: reply-draft approval; each hard-gate dry-run; missing credential (never prompt for a secret); ambiguous target artifact; closed issue / PR URL.
+  - Resume = re-spawn `run <ref>`; long builds exit with `OUTCOME: waiting on run <id>` instead of sleeping.
+- **Edge cases to cover in tests**:
+  - premature `delivered` without links (evidence gate blocks; refuse if the artifact is not in the customer-visible repo)
+  - no SBOM for the package -> `partner-download-url.sh` fallback
+  - `cloudsmith cp` needs the bare repo name, not `owner/repo` (detect before running)
+  - customer clarification pending -> stop with `awaiting customer`
+  - artifact platform tag differs from the issue's stated platform
+  - customer comment after delivery -> report, do not close
+  - non-support / PR URL / closed issue -> change nothing
+  - task already Done -> resume from evidence
+  - concurrent runs -> `claim` plus label check
+
+### Implementation steps (about 11-12 points total; the frontmatter `estimation: 1` is revised by `/incept`, not here)
+
+1. **Design doc** (1 pt): `repo-conventions/templates/design-doc.md` built from this section, scored by `design-score`; reconcile P2/P3 scope there.
+2. **`scripts/run_plan.sh`** (2 pts): read-only planner (label + task + PR + marker -> `NEXT=<step> REASON=...`), BATS fixtures including a premature-deliver timeline; also serves `run --plan`.
+3. **`scripts/draft_reply.sh` + lint** (2 pts): deny-list lint, private draft path (chmod 600), approval-hash check.
+4. **`transition.sh`** (1 pt): `--no-task-comment` for `triage`; `cs-delivered` marker on `deliver`; BATS.
+5. **Artifact-evidence helper** (2 pts): wraps `partner-download-url.sh`, HTTP-verifies URLs, checks the `cloudsmith cp` bare-repo form and artifact platform tag.
+6. **`run.md` + `SKILL.md` row + evals** (2 pts): orchestration prose, `argument-hint` update, evals (`tool_not_called` accept/close, `command_not_ran` `gh issue close`).
+7. **Bypass regression tests + dry-run + first real run** (1-2 pts): no `run` path reaches a label write outside `transition.sh`; `accept` unreachable; dry-run on a test issue, then the next real package request.
+
+### Related
+
+- Complementary to synxdb-build-pipeline T20261012-612044 (rewrites `close-support-issue` Phase 4 to call `deliver`/`links`/`accept`): land in parallel, do not merge. Add a cross-reference there once `run` exists (package/request issue -> `run`; bug issue -> `close-support-issue` Phases 1-3, optionally handing to `run` at evidence).
+- `run` from ccxp-skills needs a hub clone for `partner-download-url.sh` (same ephemeral-clone pattern as `links.sh`).
+- Defect found by this design, filed separately: `triage --task` leaks internal task details into a customer-visible comment (T20261028-392844).
