@@ -207,13 +207,13 @@ test('AP OFF row: repo @ branch | task ID + slug | jobs | CI | you HH:MM; no AP,
 test('AP ON row: AP elapsed/duration loops n done | ctx % | jobs | CI | you HH:MM; no repo, branch or task', async () => {
   const rows = bandRows(snapAp(), CI, 160)
   expect(rows.length).toBe(1)
-  expect(text(rows)).toMatch(/^AP 2\/6h loops 3 ✓2 merged │ ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING \(1\) │ CI ✗ failing 10-26 │ you \d\d:\d\d$/)
+  expect(text(rows)).toMatch(/^AP 2\/6h 3 loops ✓2 merged │ ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING \(1\) │ CI ✗ failing 10-26 │ you \d\d:\d\d$/)
   for (const gone of ['synxdb', 't20261021', 'T20261021']) expect(text(rows)).not.toContain(gone)
 })
 
 test('AP ON: paused is marked and stuck shows; a stopped autopilot gets the OFF row', async () => {
   const paused = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[p]', status: 'paused', stuck: 2 } }), CI, 160))
-  expect(paused).toContain('AP ⏸ paused 2/6h ⚠2 loops 3')
+  expect(paused).toContain('AP ⏸ paused 2/6h ⚠2 3 loops')
   const stopped = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[s]', status: 'stopped' } }), CI, 160))
   expect(stopped).not.toContain('AP')
   expect(stopped).toContain('synxdb-build-pipeline')
@@ -237,11 +237,11 @@ test('tiers only change abbreviation: wide full labels, compact short, tiny mini
   expect(text(bandRows(snapAp(), CI, 140))).toContain('✓2 merged')
   const compact = text(bandRows(snapAp(), CI, 80))
   expect(compact).toContain('CI ✗ 10-26')
-  expect(compact).toContain('AP 2/6h loops 3 ✓2')
+  expect(compact).toContain('AP 2/6h 3 loops ✓2')
   expect(compact).not.toContain('merged')
   expect(compact).not.toContain('▓')
   const tiny = text(bandRows(snapAp(), CI, 60))
-  expect(tiny).toContain('AP 2/6h L3 ✓2')
+  expect(tiny).toContain('AP 2/6h 3L ✓2')
   expect(tiny).toContain('ctx 64%')
 })
 
@@ -265,7 +265,7 @@ test('CI missing (no data from the helper): the segment is dropped silently, not
 })
 
 test('fields can switch a member off; retired names have no effect', async () => {
-  expect(text(bandRows(snapAp(), { ...CI, fields: ['ap', 'ci'] }, 160))).toBe('AP 2/6h loops 3 ✓2 merged │ CI ✗ failing 10-26')
+  expect(text(bandRows(snapAp(), { ...CI, fields: ['ap', 'ci'] }, 160))).toBe('AP 2/6h 3 loops ✓2 merged │ CI ✗ failing 10-26')
   expect(bandRows(snap(), { ...DEFAULTS, fields: ['ctx'] }, 160)).toEqual([]) // ctx is not part of the OFF row
 })
 
@@ -498,7 +498,7 @@ test('formatAge: just now, minutes, hours, days; a future stamp is just now', as
 
 test('AP ON (no duration): elapsed shows without a requested window; idle names its state', async () => {
   const on = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', requested_hr: 0 } }), CI, 160))
-  expect(on).toContain('AP 2h loops 3 ✓2 merged')
+  expect(on).toContain('AP 2h 3 loops ✓2 merged')
   expect(on).not.toContain('/0h')
   const idle = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', prefix: '[i]', last_outcome: 'idle', requested_hr: 0 } }), CI, 160))
   expect(idle).toContain('AP idle 2h')
@@ -512,7 +512,7 @@ test('details: five lines in order: where, usage, jobs, autopilot with CI, last 
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[1]).toBe('ctx 64% ▓▓▓▓▓▓░░░░ │ 5h 42% │ $1.50')
   expect(lines[2]).toBe('WORKING (2) │ r70 Redo HUD repo field  r73 Autopilot cycle 2 │ parked 2 (k1 k2) │ tot 82')
-  expect(lines[3]).toMatch(/^AP on 2\/6h loops 3 ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
 
