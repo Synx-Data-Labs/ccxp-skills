@@ -15,7 +15,8 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { CiConfig, HudConfig, Snapshot } from '../types'
-import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
+import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled, withFill } from './config'
+import { fillStyleFor } from './fill'
 import { EMPTY, compactLine, countJobs, parseHelper } from './model'
 import { bandTree, userMessageTree } from './render'
 import { setupCi } from './setup'
@@ -74,6 +75,15 @@ async function envPaths($: any) {
     /* no env: defaults below stay undefined, config then means defaults */
   }
   return { configDir, home }
+}
+
+/** The person's `/config` theme value, or undefined when it cannot be read (the fill then uses reverse video). */
+async function themeOf($: any): Promise<unknown> {
+  try {
+    return (await $.config.list()).find((r: any) => r.key === 'theme')?.value
+  } catch {
+    return undefined
+  }
 }
 
 async function readText($: any, path: string | undefined): Promise<string | undefined> {
@@ -245,7 +255,7 @@ export const register: Register = on => {
       if (!mem.started) {
         mem.started = true
         try {
-          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | setup' })
+          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | fill on|off | setup' })
         } catch {
           /* the command is optional */
         }
@@ -313,6 +323,17 @@ export const register: Register = on => {
         await mirrorStatus($, cfg)
         return { text: `ccxp-hud ${cfg.enabled ? 'on' : 'off'} (${file}). Takes effect now.` }
       }
+      if (arg === 'fill on' || arg === 'fill off') {
+        const on = arg === 'fill on'
+        if (!file) return { text: 'ccxp-hud: cannot find the config dir. Edit ccxp-hud.json by hand: {"fill": ' + on + '}' }
+        try {
+          await $.fs.write(file, withFill(await readText($, file), on))
+        } catch {
+          return { text: `ccxp-hud: could not write ${file}. Set "fill": ${on} in it by hand.` }
+        }
+        await loadConfig($)
+        return { text: `ccxp-hud fill ${on ? 'on' : 'off'} (${file}). Takes effect now; a project file's "fill" still wins.` }
+      }
       if (arg === 'details') {
         // Toggle: the expanded view is a live part of the band, so the flag lives in an atom the band reads.
         const cfg = await read($, configAtom)
@@ -343,7 +364,7 @@ export const register: Register = on => {
         return { text }
       }
       const cfg = await read($, configAtom)
-      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | setup` }
+      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | fill on|off | setup` }
     } catch {
       return { text: 'ccxp-hud: something went wrong; the session is unaffected.' }
     }
@@ -364,7 +385,8 @@ export const register: Register = on => {
     const cfg = await read($, configAtom)
     if (!cfg.enabled || !cfg.band || e.props.hasSurvey) return next(e)
     const expanded = await read($, detailsAtom)
-    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows)
+    const fill = cfg.fill ? fillStyleFor(await themeOf($)) : null
+    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows, fill)
     mem.bandSurface = tree ? e.surface : null
     return tree ?? next(e)
   }).catch(($, e, next) => next(e))
