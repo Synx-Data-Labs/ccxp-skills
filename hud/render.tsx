@@ -43,10 +43,12 @@ export function bandTree(
   const filled = fill ? rows.map(row => fillRow(row, columns)) : []
   if (fill && filled.every(r => r !== null)) {
     const style = fill.bg ? { backgroundColor: fill.bg } : { inverse: true }
+    // Reverse video is a Text style; a Box has no such prop.
+    const boxStyle = fill.bg ? style : {}
     return (
-      <Box flexDirection="column" {...style}>
+      <Box flexDirection="column" {...boxStyle}>
         {filled.map(row => (
-          <Box flexDirection="row" {...style}>
+          <Box flexDirection="row" {...boxStyle}>
             {row!.map(seg => (
               <Text color={seg.color} dimColor={seg.dim} bold={seg.bold} {...style}>
                 {seg.text}

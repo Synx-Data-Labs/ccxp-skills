@@ -384,9 +384,16 @@ test('fill is off by default: the band carries no background', async ($: any, on
   await $.session.start(START)
   const band = await $.ui.mount(BAND(100))
   expect(await band.find({ type: 'Text', text: /proj/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', backgroundColor: FILL_BG.dark })).toBeUndefined()
+  expect(await hasProps(band, { backgroundColor: FILL_BG.dark })).toBe(false)
+  expect(await band.find({ type: 'Text', text: /^ {5,}$/ })).toBeUndefined()
   await band.unmount()
 })
+
+// find() does not filter on style props, so read them off the matched Texts.
+async function hasProps(band: any, want: Record<string, unknown>) {
+  const texts = await band.findAll({ type: 'Text' })
+  return texts.some((t: any) => Object.entries(want).every(([k, v]) => t.props[k] === v))
+}
 
 async function fillBand($: any, on: any, theme: string, props: object) {
   const w = fresh()
@@ -395,7 +402,7 @@ async function fillBand($: any, on: any, theme: string, props: object) {
   world($, on, w)
   await $.session.start(START)
   const band = await $.ui.mount(BAND(100))
-  const found = (await band.find({ type: 'Text', ...props })) !== undefined
+  const found = await hasProps(band, props)
   await band.unmount()
   return found
 }
@@ -419,7 +426,7 @@ test('fill on but a too-narrow terminal: the plain row, no background', async ($
   world($, on, w)
   await $.session.start(START)
   const band = await $.ui.mount(BAND(30))
-  expect(await band.find({ type: 'Text', backgroundColor: FILL_BG.dark })).toBeUndefined()
+  expect(await hasProps(band, { backgroundColor: FILL_BG.dark })).toBe(false)
   await band.unmount()
 })
 
