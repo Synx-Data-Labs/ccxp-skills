@@ -48,4 +48,3 @@ reprioritize.
 - [T20261026-665838](T20261026-665838-finish-migrate-task-live-push.md): Finish /migrate-task live push half
 - [T20261027-237157](T20261027-237157-ccxp-hud-one-row-modes-ci.md): ccxp-hud one-row band, AP on/off modes, configurable CI cell
 - [T20261028-392844](T20261028-392844-triage-task-comment-leaks-internal-details-to-customer-issue.md): triage --task posts internal task ID/hub path/title into a customer-visible issue comment
-- [T20261028-322058](T20261028-322058-ccxp-agent-autopilot-wording.md): Update ccxp-agent.md for the new /autopilot grammar
