@@ -574,6 +574,7 @@ test('fill: displayWidth counts ASCII 1, CJK and emoji 2, marks and joiners 0', 
   expect(displayWidth('你好')).toBe(4)
   expect(displayWidth('ab你')).toBe(4)
   expect(displayWidth('🚀')).toBe(2)
+  expect(displayWidth('⚠\ufe0f')).toBe(2)
   expect(displayWidth('✓ ok')).toBe(4)
   expect(displayWidth('e\u0301')).toBe(1)
   expect(displayWidth('a\u200db')).toBe(2)
@@ -612,6 +613,12 @@ test('fill: overflow is cut with an ellipsis before padding and never exceeds th
   expect(fitSegs([{ text: 'abcdef' }], 4)).toEqual([{ text: 'abc…' }])
   const fits = [{ text: 'ok' }]
   expect(fitSegs(fits, 10)).toBe(fits)
+  // A segment exactly one column over the room must still be cut (no max+1 row).
+  const edge = fitSegs([{ text: 'ab' }, { text: 'cde' }, { text: 'x' }], 5)
+  expect(fillWidth(edge)).toBeLessThanOrEqual(5)
+  expect(edge.map(s => s.text).join('')).toBe('abcd…')
+  for (let max = 1; max < 12; max++) expect(fillWidth(fitSegs([{ text: '任务a' }, { text: '标题🚀b' }, { text: 'xyz' }], max))).toBeLessThanOrEqual(max)
+  expect(truncateDisplay('你好世界', 4)).toBe('你…')
 })
 
 test('fill: unknown width or below the minimum falls back (null), never wraps', async () => {
