@@ -132,6 +132,8 @@ or merge status) — don't re-derive it.
 
 ## Important Notes
 
+- **Mirror repos are off limits for issues.** If the task is about a defect in a `hashdata-*` mirror repo (prefix, or listed in the hub's `upstream/repos.yml`), do not open a GitHub issue there: mirrors only receive fixes via upstream sync. Create the issue upstream on HashData's GitLab (`synx-skills:upstream-issue`) and link that URL from the task, noting "waiting on upstream; fixes arrive via sync".
+
 - This skill only **creates and stages** the task. It does not claim,
   design, or implement it — that's `/claim` or `/drive`.
 - Don't hand-roll a separate commit/PR for the new file — `/stage` handles
