@@ -122,3 +122,16 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   run bash "$LEDGER" show --brief
   [ "$output" = "running=1 parked=1 inputs_open=1 actions_open=0" ]
 }
+
+@test "huge ref numbers are rejected and do not poison the counter" {
+  run bash "$LEDGER" ref bump a99999999999999999999
+  [ "$status" -ne 0 ]
+  run bash "$LEDGER" park k99999999999999999999
+  [ "$status" -ne 0 ]
+  [ "$(bash "$LEDGER" ref next a)" = "a1" ]
+}
+
+@test "text is truncated by characters, not bytes" {
+  bash "$LEDGER" input add "$(printf 'é%.0s' $(seq 1 400))"
+  [ "$(bash "$LEDGER" show | jq '.inputs[0].text | length')" = "300" ]
+}
