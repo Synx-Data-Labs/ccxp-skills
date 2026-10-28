@@ -34,16 +34,16 @@ _make_repo() {
   printf '%s' "$dir"
 }
 
-# sl-autopilot-fields record -> the compact "ap:[r] <elapsed>/<requested>hr
-# [⚠stuck] loops <cycle> ✓<merged>" line, so the happy-path assertions stay
-# readable. Empty record -> empty output.
+# sl-autopilot-fields record -> the compact "ap:[r] <elapsed>hr [⚠stuck]
+# loops <cycle> ✓<merged>" line, so the happy-path assertions stay readable.
+# Empty record -> empty output.
 _ap_line() {
   local rec st prefix el req stuck cycle lo lt sr stop merged warn=""
   rec=$(bash -c "source '$SCRIPT'; sl-autopilot-fields '$1'")
   [ -n "$rec" ] || return 0
   IFS=$'\x1f' read -r st prefix el req stuck cycle lo lt sr stop merged <<<"$rec"
   [ "$stuck" -gt 0 ] && warn=" ⚠${stuck}"
-  printf 'ap:%s %s/%shr%s loops %s ✓%s' "$prefix" "$el" "$req" "$warn" "$cycle" "$merged"
+  printf 'ap:%s %shr%s loops %s ✓%s' "$prefix" "$el" "$warn" "$cycle" "$merged"
 }
 
 # ---------------------------------------------------------------------------
@@ -250,8 +250,12 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# sl-autopilot-fields (parsing and validation)
+# sl-autopilot-fields (schema 2: on / paused / off, no duration)
 # ---------------------------------------------------------------------------
+
+# $1 repo, $2 json body (written verbatim to the state file)
+_ap_state() { mkdir -p "$1/dev"; printf '%s' "$2" > "$1/dev/.autopilot-state.json"; }
+_ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 minutes ago" +%Y-%m-%dT%H:%M:%SZ; }
 
 @test "sl-autopilot-fields prints nothing when the state file doesn't exist" {
   local repo
@@ -261,149 +265,97 @@ EOF
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-fields prints ap:[s] with elapsed from last_cycle_at when stopped" {
+@test "sl-autopilot-fields prints nothing when off (AP off)" {
   local repo
-  repo=$(_make_repo repo-ap-stopped)
-  mkdir -p "$repo/dev"
-  # last_cycle_at is 2hr after started_at — elapsed must come from that, not
-  # from "now" (the run is long over; "now" would give a bogus huge elapsed).
-  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
-{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 1, "cycle_count": 3, "last_outcome": "stuck", "last_cycle_at": "2026-01-01T02:00:00Z"}
-EOF
-  run _ap_line "$repo"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ap:[s] 2/5hr ⚠1 loops 3 ✓0" ]
-}
-
-@test "sl-autopilot-fields prints ap:[s] with elapsed 0 when stopped and last_cycle_at is null" {
-  local repo
-  repo=$(_make_repo repo-ap-stopped-no-cycle)
-  mkdir -p "$repo/dev"
-  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
-{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": 0, "cycle_count": 0, "last_outcome": null, "last_cycle_at": null}
-EOF
-  run _ap_line "$repo"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ap:[s] 0/5hr loops 0 ✓0" ]
-}
-
-@test "sl-autopilot-fields prints ap:[r] <elapsed>/<requested>hr [⚠stuck] loops <cycle> ✓<merged> when running normally" {
-  local repo started_at end_time
-  repo=$(_make_repo repo-ap-running)
-  mkdir -p "$repo/dev"
-  # Real wall-clock offsets, not mocked time — 90 minutes ago rounds to 2hr
-  # elapsed (awk %.0f rounds, doesn't truncate); requested window is a fixed
-  # 5 real hours from started_at.
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 3, "cycle_count": 10}
-EOF
-  run _ap_line "$repo"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ap:[r] 2/5hr ⚠3 loops 10 ✓0" ]
-}
-
-@test "sl-autopilot-fields prints ap:[b] when running and last_outcome is stuck" {
-  local repo started_at end_time
-  repo=$(_make_repo repo-ap-backing-off)
-  mkdir -p "$repo/dev"
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 2, "cycle_count": 4, "last_outcome": "stuck"}
-EOF
-  run _ap_line "$repo"
-  [ "$status" -eq 0 ]
-  [ "$output" = "ap:[b] 2/5hr ⚠2 loops 4 ✓0" ]
-}
-
-@test "sl-autopilot-fields prints nothing when the JSON is malformed" {
-  local repo
-  repo=$(_make_repo repo-ap-malformed)
-  mkdir -p "$repo/dev"
-  printf '{not valid json' > "$repo/dev/.autopilot-state.json"
+  repo=$(_make_repo repo-ap-off)
+  _ap_state "$repo" '{"schema": 2, "status": "off", "started_at": "2026-01-01T00:00:00Z", "stuck_count": 0, "cycle_count": 3}'
   run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-fields prints nothing when end_time is before started_at" {
+@test "sl-autopilot-fields treats an old-format state file as off, whatever its status" {
+  local repo status_word
+  repo=$(_make_repo repo-ap-legacy)
+  for status_word in running paused stopped; do
+    _ap_state "$repo" "{\"status\": \"$status_word\", \"started_at\": \"$(_ap_ago 90)\", \"end_time\": \"2099-01-01T00:00:00Z\", \"paused_at\": \"$(_ap_ago 30)\", \"stuck_count\": 1, \"cycle_count\": 3}"
+    run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "sl-autopilot-fields prints ap:[r] <elapsed>hr [⚠stuck] loops <cycle> ✓<merged> when on and working" {
   local repo
-  repo=$(_make_repo repo-ap-backwards)
-  mkdir -p "$repo/dev"
-  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
-{"status": "running", "started_at": "2026-01-01T05:00:00Z", "end_time": "2026-01-01T00:00:00Z", "stuck_count": 0, "cycle_count": 1}
-EOF
+  repo=$(_make_repo repo-ap-running)
+  # Real wall-clock offset: 90 minutes ago rounds to 2hr (awk %.0f rounds).
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", \"stuck_count\": 1, \"cycle_count\": 10, \"merged_count\": 4, \"last_outcome\": \"progress\"}"
+  run _ap_line "$repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap:[r] 2hr ⚠1 loops 10 ✓4" ]
+}
+
+@test "sl-autopilot-fields prints ap:[b] when on and last_outcome is stuck" {
+  local repo
+  repo=$(_make_repo repo-ap-backing-off)
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", \"stuck_count\": 2, \"cycle_count\": 4, \"last_outcome\": \"stuck\"}"
+  run _ap_line "$repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap:[b] 2hr ⚠2 loops 4 ✓0" ]
+}
+
+@test "sl-autopilot-fields prints ap:[i] when on and idle or capped" {
+  local repo outcome
+  repo=$(_make_repo repo-ap-idle)
+  for outcome in idle capped; do
+    _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", \"stuck_count\": 0, \"cycle_count\": 4, \"last_outcome\": \"$outcome\"}"
+    run _ap_line "$repo"
+    [ "$output" = "ap:[i] 2hr loops 4 ✓0" ]
+  done
+}
+
+@test "sl-autopilot-fields prints ap:[p] frozen at paused_at when paused" {
+  local repo
+  repo=$(_make_repo repo-ap-paused)
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"paused\", \"started_at\": \"$(_ap_ago 240)\", \"paused_at\": \"$(_ap_ago 180)\", \"stuck_count\": 0, \"cycle_count\": 2}"
+  run _ap_line "$repo"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ap:[p] 1hr loops 2 ✓0" ]
+}
+
+@test "sl-autopilot-fields prints nothing for a paused file with no paused_at" {
+  local repo
+  repo=$(_make_repo repo-ap-paused-bad)
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"paused\", \"started_at\": \"$(_ap_ago 240)\", \"stuck_count\": 0, \"cycle_count\": 2}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-fields prints nothing when the JSON is malformed" {
+  local repo
+  repo=$(_make_repo repo-ap-malformed)
+  _ap_state "$repo" '{not valid json'
   run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
 @test "sl-autopilot-fields prints nothing when started_at is in the future (clock skew)" {
-  local repo started_at end_time
+  local repo started_at
   repo=$(_make_repo repo-ap-future-start)
-  mkdir -p "$repo/dev"
   started_at=$(date -u -v+10M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '10 minutes' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 0, "cycle_count": 1}
-EOF
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$started_at\", \"stuck_count\": 0, \"cycle_count\": 1}"
   run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
-  [ "$status" -eq 0 ]
   [ -z "$output" ]
 }
 
-@test "sl-autopilot-fields prints nothing when stuck_count/cycle_count are missing" {
-  local repo started_at end_time
-  repo=$(_make_repo repo-ap-null-counts)
-  mkdir -p "$repo/dev"
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time"}
-EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test "sl-autopilot-fields prints nothing when stuck_count is negative" {
-  local repo started_at end_time
-  repo=$(_make_repo repo-ap-negative-count)
-  mkdir -p "$repo/dev"
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": -5, "cycle_count": 3}
-EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test "sl-autopilot-fields prints nothing when stuck_count is negative and status is stopped" {
-  local repo
-  repo=$(_make_repo repo-ap-negative-count-stopped)
-  mkdir -p "$repo/dev"
-  cat > "$repo/dev/.autopilot-state.json" <<'EOF'
-{"status": "stopped", "started_at": "2026-01-01T00:00:00Z", "end_time": "2026-01-01T05:00:00Z", "stuck_count": -5, "cycle_count": 3}
-EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test "sl-autopilot-fields prints nothing when cycle_count is non-numeric" {
-  local repo started_at end_time
-  repo=$(_make_repo repo-ap-nonnumeric-count)
-  mkdir -p "$repo/dev"
-  started_at=$(date -u -v-90M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago' +%Y-%m-%dT%H:%M:%SZ)
-  end_time=$(date -u -v-90M -v+5H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 minutes ago + 5 hours' +%Y-%m-%dT%H:%M:%SZ)
-  cat > "$repo/dev/.autopilot-state.json" <<EOF
-{"status": "running", "started_at": "$started_at", "end_time": "$end_time", "stuck_count": 1, "cycle_count": "abc"}
-EOF
-  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
+@test "sl-autopilot-fields prints nothing when a counter is missing, negative or non-numeric" {
+  local repo body
+  repo=$(_make_repo repo-ap-bad-counts)
+  for body in '"stuck_count": 1' '"stuck_count": -5, "cycle_count": 3' '"stuck_count": 1, "cycle_count": "abc"'; do
+    _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", $body}"
+    run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+  done
 }

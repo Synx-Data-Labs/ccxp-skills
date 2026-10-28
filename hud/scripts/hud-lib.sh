@@ -243,15 +243,16 @@ sl-iso-to-epoch() {
 # so an empty field survives `read`):
 #   <status> <prefix> <elapsed_hr> <requested_hr> <stuck> <cycle> <last_outcome>
 #   <last_task_id> <stuck_reason> <stop_reason> <merged_count>
-# when /autopilot's dev/.autopilot-state.json exists and status is "running",
-# "paused" or "stopped", else nothing. prefix: [r] running normally, [p] paused
-# (clock frozen at paused_at), [b] running but
-# backing off (last_outcome == "stuck"), [s] stopped — [s] lingers with no
-# dismiss/expiry, same as the state file itself (autopilot/SKILL.md Phase 5
-# never deletes it). Never fails the prompt: any missing/malformed field
-# just degrades to printing nothing (same convention as every other sl-
-# helper). The ONE place the state file is parsed; hud-data.sh (--json) renders
-# from this record.
+# when /autopilot's dev/.autopilot-state.json (schema 2) has status "on" or
+# "paused", else nothing (off, a legacy pre-redesign file, missing or malformed:
+# the band then shows AP off). prefix: [p] paused (clock frozen at paused_at),
+# [b] on but backing off (last_outcome == "stuck"), [i] on and idle or capped
+# (last_outcome idle|capped), [r] on and working. requested_hr is always 0
+# (there is no duration any more) and stop_reason is empty; both keep the
+# record shape stable for hud-data.sh. Never fails the prompt: any
+# missing/malformed field degrades to printing nothing (same convention as every
+# other sl- helper). The ONE place the state file is parsed; hud-data.sh (--json)
+# renders from this record.
 sl-autopilot-fields() {
   local repo_root="$1" state_file line
   state_file="$repo_root/dev/.autopilot-state.json"
@@ -259,66 +260,48 @@ sl-autopilot-fields() {
 
   # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
-  line=$(jq -r '[.status, .started_at, .end_time, .stuck_count, .cycle_count, .last_outcome, .last_cycle_at, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .stop_reason, .merged_count] | map(. // "" | tostring) | join("\u001f")' \
+  line=$(jq -r 'select(.schema == 2) | [.status, .started_at, .stuck_count, .cycle_count, .last_outcome, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .merged_count] | map(. // "" | tostring) | join("\u001f")' \
     "$state_file" 2>/dev/null) || return 0
+  [ -n "$line" ] || return 0
 
-  local ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason merged_count
-  IFS=$'\x1f' read -r ap_status started_at end_time stuck_count cycle_count last_outcome last_cycle_at paused_at last_task stuck_reason stop_reason merged_count <<<"$line"
-  case "$ap_status" in running|paused|stopped) ;; *) return 0 ;; esac
+  local ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count
+  IFS=$'\x1f' read -r ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count <<<"$line"
+  case "$ap_status" in on|paused) ;; *) return 0 ;; esac
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
   # negative, or non-numeric value degrades to nothing rather than a
-  # garbled segment (e.g. "ap:[r] 2/5hr /" or "ap:[r] 2/5hr abc/3").
+  # garbled segment.
   [[ "$stuck_count" =~ ^[0-9]+$ ]] || return 0
   [[ "$cycle_count" =~ ^[0-9]+$ ]] || return 0
-  # merged_count is newer than the state file format: missing/invalid means 0.
   [[ "$merged_count" =~ ^[0-9]+$ ]] || merged_count=0
 
-  local started_epoch end_epoch now_epoch
+  local started_epoch now_epoch
   started_epoch=$(sl-iso-to-epoch "$started_at")
-  end_epoch=$(sl-iso-to-epoch "$end_time")
-  [ -n "$started_epoch" ] && [ -n "$end_epoch" ] || return 0
-  [ "$end_epoch" -gt "$started_epoch" ] || return 0
+  [ -n "$started_epoch" ] || return 0
   now_epoch=$(date +%s)
   [ "$started_epoch" -le "$now_epoch" ] || return 0
 
   local prefix elapsed_secs
   if [ "$ap_status" = "paused" ]; then
-    # Pausing stops the clock: elapsed is frozen at paused_at (autopilot/SKILL.md
-    # Phase 0), not live. A missing/unparseable paused_at degrades to nothing.
+    # Pausing stops the clock: elapsed is frozen at paused_at, not live.
     local paused_epoch
     paused_epoch=$(sl-iso-to-epoch "$paused_at")
     [ -n "$paused_epoch" ] && [ "$paused_epoch" -ge "$started_epoch" ] || return 0
     prefix='[p]'
     elapsed_secs=$(( paused_epoch - started_epoch ))
-  elif [ "$ap_status" = "stopped" ]; then
-    prefix='[s]'
-    # Elapsed for a stopped run is last_cycle_at - started_at (or 0 if no
-    # cycle ever ran), not now - started_at — the run is long over, so
-    # "now" would give an ever-growing, meaningless elapsed. Mirrors
-    # autopilot/SKILL.md Phase 0's own status-report elapsed rule.
-    if [ -n "$last_cycle_at" ]; then
-      local last_cycle_epoch
-      last_cycle_epoch=$(sl-iso-to-epoch "$last_cycle_at")
-      if [ -n "$last_cycle_epoch" ] && [ "$last_cycle_epoch" -ge "$started_epoch" ]; then
-        elapsed_secs=$(( last_cycle_epoch - started_epoch ))
-      else
-        elapsed_secs=0
-      fi
-    else
-      elapsed_secs=0
-    fi
   else
-    if [ "$last_outcome" = "stuck" ]; then prefix='[b]'; else prefix='[r]'; fi
+    case "$last_outcome" in
+      stuck) prefix='[b]' ;;
+      idle|capped) prefix='[i]' ;;
+      *) prefix='[r]' ;;
+    esac
     elapsed_secs=$(( now_epoch - started_epoch ))
   fi
 
-  local requested_secs elapsed_hr requested_hr sep=$'\x1f'
-  requested_secs=$(( end_epoch - started_epoch ))
+  local elapsed_hr sep=$'\x1f'
   elapsed_hr=$(awk -v s="$elapsed_secs" 'BEGIN{printf "%.0f", s/3600}')
-  requested_hr=$(awk -v s="$requested_secs" 'BEGIN{printf "%.0f", s/3600}')
 
-  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}${requested_hr}${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${stop_reason}${sep}${merged_count}"
+  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}"
 }
 
 # Job ledger (written by ledger.sh). Same default path convention as the other

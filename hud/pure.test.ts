@@ -188,9 +188,9 @@ test('countJobs groups agent statuses', async () => {
   expect(countJobs([{ status: 'running' }, { status: 'pending' }, { status: 'idle' }, { status: 'waiting' }, { status: 'failed' }, { status: 'completed' }])).toEqual({ running: 2, waiting: 2, failed: 1 })
 })
 
-test('mode: AP ON while running, backing off or paused; OFF when stopped, absent or no data', async () => {
+test('mode: AP ON while working, backing off, idle or paused; OFF when off, absent or no data', async () => {
   const mk = (prefix: string) => withHelper({ autopilot: { ...AP, prefix } })
-  expect([isApOn(mk('[r]')), isApOn(mk('[b]')), isApOn(mk('[p]'))]).toEqual([true, true, true])
+  expect([isApOn(mk('[r]')), isApOn(mk('[b]')), isApOn(mk('[i]')), isApOn(mk('[p]'))]).toEqual([true, true, true, true])
   expect([isApOn(mk('[s]')), isApOn(snap()), isApOn(EMPTY)]).toEqual([false, false, false])
 })
 
@@ -493,6 +493,16 @@ test('formatAge: just now, minutes, hours, days; a future stamp is just now', as
   const age = (secs: number) => formatAge(at, (at + secs) * 1000)
   expect([age(0), age(59), age(60), age(3599), age(3600), age(86399), age(86400), age(259200)]).toEqual(['just now', 'just now', '1m ago', '59m ago', '1h ago', '23h ago', '1d ago', '3d ago'])
   expect(formatAge(at, (at - 50) * 1000)).toBe('just now')
+})
+
+test('AP ON (no duration): elapsed shows without a requested window; idle names its state', async () => {
+  const on = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', requested_hr: 0 } }), CI, 160))
+  expect(on).toContain('AP on 2h loops 3 ✓2 merged')
+  expect(on).not.toContain('/0h')
+  const idle = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', prefix: '[i]', last_outcome: 'idle', requested_hr: 0 } }), CI, 160))
+  expect(idle).toContain('AP on idle 2h')
+  const paused = text(bandRows(withHelper({ autopilot: { ...AP, status: 'paused', prefix: '[p]', requested_hr: 0 } }), CI, 160))
+  expect(paused).toContain('AP ⏸ paused 2h')
 })
 
 test('details: five lines in order: where, usage, jobs, autopilot with CI, last prompt', async () => {
