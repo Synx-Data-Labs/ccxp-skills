@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { USER_TEXT_COLOR } from './config'
+import { FILL_BG } from './fill'
 
 const HELPER = JSON.stringify({
   repo: 'proj',
@@ -28,6 +29,7 @@ type World = {
   helperByCwd?: Record<string, string>
   stdins: string[]
   statuses: (string | undefined)[]
+  theme?: string
 }
 
 // Stands for the engine beneath the mod: every hook here answers `{ value }`.
@@ -65,6 +67,7 @@ function world($: any, on: any, w: World) {
     return { value: undefined }
   })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
+  on('config.list', () => ({ value: w.theme === undefined ? [] : [{ key: 'theme', value: w.theme }] }))
   // The engine's own drawing of every site the mod hooks.
   on('ui.render', ($: any, e: any) => {
     const { Text } = $.ui.resolve(e)
@@ -356,6 +359,68 @@ test('the retired /hud pane is gone: it falls through to the usage line, which d
   expect(out.text).toMatch(/Usage:/)
   expect(out.text).toContain('details')
   expect(out.text).not.toContain('pane')
+})
+
+// --- fill mode ---
+
+test('/hud fill on|off writes only the fill key, keeps the rest, and the usage line offers it', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"band": true}'
+  world($, on, w)
+  await $.session.start(START)
+  const onOut = await $.command.run({ command: 'hud', args: 'fill on' })
+  expect(onOut.text).toMatch(/fill on/)
+  expect(JSON.parse(w.writes[w.writes.length - 1].text)).toEqual({ band: true, fill: true })
+  const offOut = await $.command.run({ command: 'hud', args: 'fill off' })
+  expect(offOut.text).toMatch(/fill off/)
+  expect(JSON.parse(w.writes[w.writes.length - 1].text)).toEqual({ band: true, fill: false })
+  expect((await $.command.run({ command: 'hud', args: 'bogus' })).text).toContain('fill on|off')
+})
+
+test('fill is off by default: the band carries no background', async ($: any, on: any) => {
+  const w = fresh()
+  w.theme = 'dark'
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(100))
+  expect(await band.find({ type: 'Text', text: /proj/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', backgroundColor: FILL_BG.dark })).toBeUndefined()
+  await band.unmount()
+})
+
+async function fillBand($: any, on: any, theme: string, props: object) {
+  const w = fresh()
+  w.cfg = '{"fill": true}'
+  w.theme = theme
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(100))
+  const found = (await band.find({ type: 'Text', ...props })) !== undefined
+  await band.unmount()
+  return found
+}
+
+test('fill on, dark theme: the dark background', async ($: any, on: any) => {
+  expect(await fillBand($, on, 'dark', { backgroundColor: FILL_BG.dark })).toBe(true)
+})
+
+test('fill on, light theme: the light background', async ($: any, on: any) => {
+  expect(await fillBand($, on, 'light', { backgroundColor: FILL_BG.light })).toBe(true)
+})
+
+test('fill on, unknown theme: reverse video', async ($: any, on: any) => {
+  expect(await fillBand($, on, 'auto', { inverse: true })).toBe(true)
+})
+
+test('fill on but a too-narrow terminal: the plain row, no background', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"fill": true}'
+  w.theme = 'dark'
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(30))
+  expect(await band.find({ type: 'Text', backgroundColor: FILL_BG.dark })).toBeUndefined()
+  await band.unmount()
 })
 
 // --- repo cell follows the session cwd ---

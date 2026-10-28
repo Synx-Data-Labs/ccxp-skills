@@ -20,6 +20,7 @@ export const DEFAULTS: HudConfig = {
   pollSeconds: 15,
   ctxWarn: 75,
   ctxCrit: 50,
+  fill: false,
 }
 
 type Raw = Record<string, unknown>
@@ -66,7 +67,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band', 'fill'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
@@ -105,6 +106,15 @@ export function configPaths(env: { configDir?: string; home?: string }, projectR
 
 /** Text of the user file after `/hud on|off`: other keys kept, `enabled` set. */
 export function withEnabled(text: string | undefined | null, enabled: boolean): string {
+  return withFlag(text, 'enabled', enabled)
+}
+
+/** Text of the user file after `/hud fill on|off`: other keys kept, `fill` set. */
+export function withFill(text: string | undefined | null, fill: boolean): string {
+  return withFlag(text, 'fill', fill)
+}
+
+function withFlag(text: string | undefined | null, key: 'enabled' | 'fill', value: boolean): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -112,7 +122,7 @@ export function withEnabled(text: string | undefined | null, enabled: boolean): 
   } catch {
     raw = {}
   }
-  return JSON.stringify({ ...raw, enabled }, null, 2) + '\n'
+  return JSON.stringify({ ...raw, [key]: value }, null, 2) + '\n'
 }
 
 /** Where the heartbeat for a session lives (the statusline reads the same path). */

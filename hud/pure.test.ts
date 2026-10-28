@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withCi, withEnabled } from './config'
+import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withCi, withEnabled, withFill } from './config'
+import { FILL_BG, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
@@ -554,4 +555,81 @@ test('details: a narrow terminal shrinks titles and ages before it cuts', async 
 test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {
   expect(detailRows(EMPTY, DEFAULTS, 140, DETAIL_NOW)).toEqual([])
   expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['stale'])
+})
+
+const fillWidth = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
+
+test('fill: config defaults to false, parses booleans only, withFill keeps other keys', async () => {
+  expect(DEFAULTS.fill).toBe(false)
+  expect(mergeConfig(parseConfigText('{"fill": true}'), {}).fill).toBe(true)
+  expect(mergeConfig(parseConfigText('{"fill": "yes"}'), {}).fill).toBe(false)
+  expect(mergeConfig(parseConfigText('{"fill": true}'), parseConfigText('{"fill": false}')).fill).toBe(false)
+  expect(JSON.parse(withFill('{"band": false}', true))).toEqual({ band: false, fill: true })
+  expect(JSON.parse(withFill('garbage', false))).toEqual({ fill: false })
+})
+
+test('fill: displayWidth counts ASCII 1, CJK and emoji 2, marks and joiners 0', async () => {
+  expect(displayWidth('abc')).toBe(3)
+  expect(displayWidth('')).toBe(0)
+  expect(displayWidth('你好')).toBe(4)
+  expect(displayWidth('ab你')).toBe(4)
+  expect(displayWidth('🚀')).toBe(2)
+  expect(displayWidth('✓ ok')).toBe(4)
+  expect(displayWidth('e\u0301')).toBe(1)
+  expect(displayWidth('a\u200db')).toBe(2)
+  expect(charWidth(0x41)).toBe(1)
+})
+
+test('fill: ANSI codes are stripped before measuring', async () => {
+  const colored = '\u001b[31mred\u001b[0m \u001b[1;38;5;196m你\u001b[0m'
+  expect(stripAnsi(colored)).toBe('red 你')
+  expect(displayWidth(colored)).toBe(6)
+})
+
+test('fill: truncateDisplay cuts to the width with an ellipsis and never splits a wide character', async () => {
+  expect(truncateDisplay('hello', 10)).toBe('hello')
+  expect(truncateDisplay('hello world', 6)).toBe('hello…')
+  expect(truncateDisplay('你好世界', 5)).toBe('你好…')
+  expect(displayWidth(truncateDisplay('你好世界', 4))).toBeLessThanOrEqual(4)
+  expect(truncateDisplay('abc', 0)).toBe('')
+})
+
+test('fill: fillRow pads every row to exactly the width, ASCII, emoji and CJK alike', async () => {
+  for (const text of ['hi', 'repo @ main 🚀', '任务 标题', '']) {
+    const row = fillRow([{ text, color: 'success' }], 60)!
+    expect(fillWidth(row)).toBe(60)
+    expect(row[0].text).toBe(' ')
+  }
+})
+
+test('fill: overflow is cut with an ellipsis before padding and never exceeds the width', async () => {
+  const long = [{ text: 'owner/some-very-long-repo-name @ ', bold: true }, { text: 'a-very-long-branch-name-here-' }, { text: '任务标题'.repeat(10), color: 'error' }]
+  for (const w of [40, 45, 61]) {
+    const row = fillRow(long, w)!
+    expect(fillWidth(row)).toBe(w)
+    expect(row.map(s => s.text).join('')).toContain('…')
+  }
+  expect(fitSegs([{ text: 'abcdef' }], 4)).toEqual([{ text: 'abc…' }])
+  const fits = [{ text: 'ok' }]
+  expect(fitSegs(fits, 10)).toBe(fits)
+})
+
+test('fill: unknown width or below the minimum falls back (null), never wraps', async () => {
+  for (const bad of [undefined, null, NaN, Infinity, 0, -5, 39]) expect(fillRow([{ text: 'x' }], bad as any)).toBeNull()
+  expect(fillRow([{ text: 'x' }], 40)).not.toBeNull()
+  expect(fillRow([{ text: 'x' }], 20, 10)).not.toBeNull()
+})
+
+test('fill: a real band row fills to the width and keeps its colours', async () => {
+  const [row] = bandRows(snap(), CI, 100)
+  const filled = fillRow(row, 100)!
+  expect(fillWidth(filled)).toBe(100)
+  expect(filled.some(s => s.color === 'error')).toBe(true)
+})
+
+test('fill: style follows the theme; unknown theme means reverse video', async () => {
+  expect(fillStyleFor('dark')).toEqual({ bg: FILL_BG.dark })
+  expect(fillStyleFor('dark-ansi')).toEqual({ bg: FILL_BG.dark })
+  expect(fillStyleFor('light-daltonized')).toEqual({ bg: FILL_BG.light })
+  for (const t of ['auto', '', undefined, 5, null]) expect(fillStyleFor(t)).toEqual({ inverse: true })
 })

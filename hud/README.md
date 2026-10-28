@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | setup`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `setup` asks for the CI source and writes it (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **`/hud`**: `on | off | status | details | fill on|off | setup`. `fill on|off` writes `fill` (see "Fill" below). `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `setup` asks for the CI source and writes it (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -25,6 +25,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `userColor` | `suggestion` | a theme key or a hex colour |
 | `fields` | `repo,branch,task,ap,ctx,jobs,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
 | `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud setup` writes it for you |
+| `fill` | `false` | draw the band as a full-width tinted bar (see "Fill" below); `/hud fill on|off` writes it |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `75` / `50` | context-LEFT colour thresholds, see "Colours" below. Defaults were `40` / `15`; a value you set yourself is kept, but the red boundary is now strict (red AT `ctxCrit` and below, was below) |
 
@@ -83,6 +84,14 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 ## `/hud setup`
 
 - `/hud setup` asks (through the engine's question dialog; type values under "Other"): workflow file or `none`, branch (default = repo default branch), repo (default = current), scope (user file or this project's `.claude/ccxp-hud.json`). It validates every answer, shows the resulting `"ci"` block and the file, and writes only after you pick `write`. Only the `ci` key is merged in; other keys are kept. Cancelling or dismissing any question writes nothing.
+
+## `/hud fill on|off`
+
+- Off by default. On, the band is padded with spaces to the band's width and drawn on a background, so it reads as a solid bar apart from the rest of the output. Still one row (or the detail lines under `/hud details`).
+- Width: the engine's `bodyColumns` for the band (the terminal, or the transcript's column beside a docked pane, less the five columns the engine keeps for its `[-]` mark), so the bar ends just before that mark. The band is redrawn by the engine when the width changes.
+- Measured in display columns (`hud/fill.ts`): emoji and CJK count 2, combining marks and joiners 0, ANSI codes 0. Content wider than the bar is cut with an ellipsis before padding, so a row never exceeds the width.
+- Colour follows the `/config` theme: a dark gray-blue for `dark*` themes, a light gray for `light*`, reverse video for anything else (auto, unreadable). The cell colours (CI, AP, jobs) stay as they are.
+- Falls back to the plain unfilled row when the width is unknown or under 40 columns. `fill` is a plain config key: a project file's value wins over the user file's.
 
 ## `/hud details`
 
