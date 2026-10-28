@@ -198,7 +198,7 @@ Branch naming in the target repo uses the same `t<task-id>-<slug>` pattern as si
 - `--recurse-submodules`: correct for repos with submodules. Skip with `SUBMODULES=0` env var if the user wants faster clones for repos without them.
 - For very large repos (e.g. a large monorepo), the user can additionally pass `--filter=blob:none` via a `CLONE_EXTRA_FLAGS` env var; defaults stay simple.
 
-- **Orphan cleanup**: explicit `rm -rf` at Phase 7 covers normal completion; an aborted run leaves its clone behind, so a weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed at its own Phase 5 stop, but orphaned the same way on a crash).
+- **Orphan cleanup**: explicit `rm -rf` at Phase 7 covers normal completion; an aborted run leaves its clone behind, so a weekly sweep (ccxp Phase 0 addition, optional) prunes `/tmp/T*-target/` older than 7 days as a backstop — the same sweep should also glob `/tmp/autopilot-clone-*/` (`autopilot/SKILL.md` Phase 3's dispatch clone, normally removed by `/autopilot off`, but orphaned the same way on a crash).
 
 ### Phase 2: Design — write, raise design PR, get reviewed, merge
 

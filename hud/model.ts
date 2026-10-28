@@ -216,9 +216,12 @@ function ciVariants(ci: Ci): Variants {
 
 function apVariants(ap: Autopilot): Variants {
   const paused = ap.prefix === '[p]'
+  // Idle or capped (still on): name the state so a quiet loop is not mistaken for a working one.
+  const quiet = ap.prefix === '[i]' ? ap.last_outcome : ''
   const mk = (merged: string, loops: string, pause: string): Seg[] => {
     const segs: Seg[] = [{ text: 'AP ', bold: true }]
     if (pause) segs.push({ text: pause, color: 'warning' }, { text: ' ' })
+    if (quiet) segs.push({ text: quiet, color: 'warning' }, { text: ' ' })
     segs.push({ text: ap.requested_hr > 0 ? `${ap.elapsed_hr}/${ap.requested_hr}h` : `${ap.elapsed_hr}h` })
     if (ap.stuck > 0) segs.push({ text: ` ⚠${ap.stuck}`, color: 'error' })
     segs.push({ text: ` ${loops} ` }, { text: merged, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
@@ -479,8 +482,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   let apItem: Item | null = null
   if (ap) {
     const full = apVariants(ap)
-    const statusWord = ap.prefix === '[i]' && ap.last_outcome ? `${ap.status} ${ap.last_outcome}` : ap.status
-    const withStatus: Seg[] = ap.prefix === '[p]' || !statusWord ? full[0] : [full[0][0], { text: `${truncate(statusWord, 14)} ` }, ...full[0].slice(1)]
+    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0] : [full[0][0], { text: `${truncate(ap.status, 14)} ` }, ...full[0].slice(1)]
     apItem = one('ap', withStatus, ...full)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])

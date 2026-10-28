@@ -5,7 +5,7 @@ import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows,
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
-const AP = { status: 'running', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2 }
+const AP = { status: 'on', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2 }
 const BASE = {
   repo: 'synxdb-build-pipeline',
   task_id: 'T20261021-354035',
@@ -497,10 +497,10 @@ test('formatAge: just now, minutes, hours, days; a future stamp is just now', as
 
 test('AP ON (no duration): elapsed shows without a requested window; idle names its state', async () => {
   const on = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', requested_hr: 0 } }), CI, 160))
-  expect(on).toContain('AP on 2h loops 3 ✓2 merged')
+  expect(on).toContain('AP 2h loops 3 ✓2 merged')
   expect(on).not.toContain('/0h')
   const idle = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', prefix: '[i]', last_outcome: 'idle', requested_hr: 0 } }), CI, 160))
-  expect(idle).toContain('AP on idle 2h')
+  expect(idle).toContain('AP idle 2h')
   const paused = text(bandRows(withHelper({ autopilot: { ...AP, status: 'paused', prefix: '[p]', requested_hr: 0 } }), CI, 160))
   expect(paused).toContain('AP ⏸ paused 2h')
 })
@@ -511,7 +511,7 @@ test('details: five lines in order: where, usage, jobs, autopilot with CI, last 
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[1]).toBe('ctx 64% ▓▓▓▓▓▓░░░░ │ 5h 42% │ $1.50')
   expect(lines[2]).toBe('WORKING (2) │ r70 Redo HUD repo field  r73 Autopilot cycle 2 │ parked 2 (k1 k2) │ tot 82')
-  expect(lines[3]).toMatch(/^AP running 2\/6h loops 3 ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[3]).toMatch(/^AP on 2\/6h loops 3 ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
 
