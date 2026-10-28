@@ -70,14 +70,19 @@ ledger-update() {
 
 ledger-int() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "ledger: not a number: $1" >&2; return 2; }; }
 
-ledger-kid() { local k="${1#[kK]}"; ledger-int "$k" || return 2; printf 'k%s' "$k"; }
+ledger-kid() { local k; k=$(ledger-refnum "${1:-}") || return 2; printf 'k%s' "$k"; }
 
-ledger-text() { printf '%s' "${1:-}" | tr -d '\000-\037\177' | cut -c1-300; }
+ledger-text() { printf '%s' "${1:-}" | tr -d '\000-\037\177' | jq -Rrs '.[0:300]'; }
 
 ledger-prefix() { [[ "${1:-}" =~ ^[iask]$ ]] || { echo "ledger: prefix must be i, a, s or k: ${1:-}" >&2; return 2; }; }
 
 # i3 / I3 / 3 -> 3
-ledger-refnum() { local n="${1:-}"; n="${n#[iaskIASK]}"; ledger-int "$n" || return 2; printf '%s' "$n"; }
+ledger-refnum() {
+  local n="${1:-}"; n="${n#[iaskIASK]}"
+  ledger-int "$n" || return 2
+  [[ ${#n} -le 9 ]] || { echo "ledger: number too large: $n" >&2; return 2; }
+  printf '%s' "$((10#$n))"
+}
 
 # $1 list field (inputs|actions), $2 prefix, $3 text; prints the new ref
 ledger-add() {

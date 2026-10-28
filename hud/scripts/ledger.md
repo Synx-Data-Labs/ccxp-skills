@@ -27,6 +27,7 @@ ledger.sh ref bump <ref>        # raise the counter to at least this number
 
 - Fields: `inputs` and `actions` (`[{ref,text,added_at}]`), `ref_counters` (`{i,a,s,k}`, highest number ever used, never lowered), `show` also reports `inputs_open` and `actions_open`.
 - `park <k>` also bumps `ref_counters.k`; `done` on an unknown ref is a no-op.
+- Not locked: two writers racing can hand out the same ref (last write wins); the dispatcher is the single writer for refs.
 - Text is cut to 300 characters and control characters are stripped. Titles and questions only: never pass secrets, tokens or credentials (the file is plain JSON, mode 600).
 - Old files without these fields keep working; the fields appear on the next write.
 
