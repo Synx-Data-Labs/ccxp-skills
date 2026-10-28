@@ -107,6 +107,6 @@ export type Snapshot = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'ccxp-skills': { snapshot: Snapshot; config: HudConfig }
+    'ccxp-skills': { snapshot: Snapshot; config: HudConfig; details: boolean }
   }
 }
