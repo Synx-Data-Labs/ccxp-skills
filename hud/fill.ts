@@ -47,7 +47,14 @@ export function charWidth(cp: number): number {
 /** Display width of text in columns; ANSI escapes cost nothing. */
 export function displayWidth(text: string): number {
   let n = 0
-  for (const ch of stripAnsi(text)) n += charWidth(ch.codePointAt(0)!)
+  let prev = 0
+  for (const ch of stripAnsi(text)) {
+    const cp = ch.codePointAt(0)!
+    const w = charWidth(cp)
+    // A narrow symbol followed by the emoji selector (U+FE0F), such as a warning sign, draws 2 wide.
+    n += cp === 0xfe0f && prev === 1 ? 1 : w
+    prev = w === 0 && cp === 0xfe0f ? 2 : w
+  }
   return n
 }
 
@@ -55,15 +62,20 @@ export function displayWidth(text: string): number {
 export function truncateDisplay(text: string, max: number): string {
   if (max <= 0) return ''
   if (displayWidth(text) <= max) return text
+  return takeColumns(text, max - 1) + '…'
+}
+
+/** The longest prefix of text that fits `max` columns (no ellipsis). */
+function takeColumns(text: string, max: number): string {
   let out = ''
   let used = 0
   for (const ch of stripAnsi(text)) {
     const w = charWidth(ch.codePointAt(0)!)
-    if (used + w > max - 1) break
+    if (used + w > max) break
     out += ch
     used += w
   }
-  return out + '…'
+  return out
 }
 
 /** Cuts a row of segments to `max` columns (the last kept segment takes the ellipsis); same row when it fits. */
@@ -78,7 +90,7 @@ export function fitSegs(segs: Seg[], max: number): Seg[] {
       left -= w
       continue
     }
-    const cut = truncateDisplay(s.text, left + 1).replace(/…$/, '')
+    const cut = takeColumns(s.text, left)
     if (cut) out.push({ ...s, text: cut })
     break
   }
