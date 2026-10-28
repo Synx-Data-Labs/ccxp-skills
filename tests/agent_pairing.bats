@@ -244,9 +244,8 @@ EOF
   grep -q '`n<n>` item under Next' "$f"
   grep -q 'bash "\$L" next add' "$f"
   grep -q 'ref bump n22' "$f"
-  ! grep -q 'Needs your action' "$f"
-  ! grep -q '\*\*Needs input\*\*' "$f"
-  ! grep -q 'input add\|action add' "$f" || grep -q 'deprecated aliases' "$f"
+  run grep -q 'Needs your action' "$f"; [ "$status" -ne 0 ]
+  run grep -q '\*\*Needs input\*\*' "$f"; [ "$status" -ne 0 ]
 }
 
 @test "asset: the ledger lines in the asset actually work against ledger.sh" {

@@ -120,7 +120,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
 @test "bad new-subcommand args fail without touching the file" {
   bash "$LEDGER" start 1 "t"
   before=$(cat "$CCXP_LEDGER_FILE")
-  for args in "next add" "next add ''" "next done x" "next nope" "input add" "action done" "ref next r" "ref next" "ref bump x5" "ref bump n" "ref nope"; do
+  for args in "next add" "next add ''" "next done x" "next nope" "input add" "action done" "ref next r" "ref next i" "ref next a" "ref next" "ref bump x5" "ref bump n" "ref nope"; do
     run bash -c "bash '$LEDGER' $args"
     [ "$status" -ne 0 ]
   done
