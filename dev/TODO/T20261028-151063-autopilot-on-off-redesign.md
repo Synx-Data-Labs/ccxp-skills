@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: Conversation 2026-10-28 (user spec for the /autopilot redesign)
 description: Redesign /autopilot as on/off/pause/resume/status with no duration; loops /drive until off, notifies once when idle
+claimed_by: cc1-50ac6891:628a122d26bbecbf
+claimed_role: interactive
+scheduled: 2026-10-26
 ---
 
 # T20261028-151063: Redesign /autopilot as an on/off background /drive loop
