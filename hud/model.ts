@@ -228,9 +228,9 @@ function apVariants(ap: Autopilot): Variants {
     return segs
   }
   return [
-    mk(`✓${ap.merged} merged`, `loops ${ap.cycle}`, paused ? '⏸ paused' : ''),
-    mk(`✓${ap.merged}`, `loops ${ap.cycle}`, paused ? '⏸' : ''),
-    mk(`✓${ap.merged}`, `L${ap.cycle}`, paused ? '⏸' : ''),
+    mk(`✓${ap.merged} merged`, `${ap.cycle} loops`, paused ? '⏸ paused' : ''),
+    mk(`✓${ap.merged}`, `${ap.cycle} loops`, paused ? '⏸' : ''),
+    mk(`✓${ap.merged}`, `${ap.cycle}L`, paused ? '⏸' : ''),
   ]
 }
 

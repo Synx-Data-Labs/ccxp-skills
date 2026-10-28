@@ -42,13 +42,13 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 | Mode | Row |
 |---|---|
 | AP off | `acme/widgets @ main* \| T<id> <task slug> \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no AP cell, no ctx) |
-| AP on | `AP 2/6h loops 3 ✓2 merged \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
+| AP on | `AP 2/6h 3 loops ✓2 merged \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
 
 | Width | Tier | CI | AP | ctx |
 |---|---|---|---|---|
-| < 70 | tiny | `CI ✗` | `AP 2/6h L3 ✓2` | `ctx 64%` |
-| 70-99 | compact | `CI ✗ 10-26` | `AP 2/6h loops 3 ✓2` | `ctx 64%` |
-| >= 100 | wide | `CI ✗ failing 10-26` | `AP 2/6h loops 3 ✓2 merged` | `ctx 64% ▓▓▓▓▓▓░░░░` |
+| < 70 | tiny | `CI ✗` | `AP 2/6h 3L ✓2` | `ctx 64%` |
+| 70-99 | compact | `CI ✗ 10-26` | `AP 2/6h 3 loops ✓2` | `ctx 64%` |
+| >= 100 | wide | `CI ✗ failing 10-26` | `AP 2/6h 3 loops ✓2 merged` | `ctx 64% ▓▓▓▓▓▓░░░░` |
 
 - Tiers only set how detailed the AP, ctx and CI cells start. When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), CI detail (word, then date), `WORKING (N)` loses its count, task slug (the task ID stays), repo cell detail (worktree, account, then owner and long names), task ID, then the repo cell loses its branch. AP on: last input, CI detail, jobs count, ctx meter, AP words, then ctx. Repo (or AP), jobs and CI stay longest.
 - `READY` has one form; `WORKING (N)` becomes `WORKING` when narrow.
@@ -102,7 +102,7 @@ Toggles the band between the one-row view and up to five detail lines (this sess
 | 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
 | 2 usage | `ctx N% ▓▓▓▓░░░░░░` (same colours as the band), `5h N%` rate limit, `$cost` |
 | 3 jobs | `READY` / `WORKING (N)`, each running job as `r70 title`, `parked N (k1 k2)`, `tot N` (from the ledger; no ledger, no line) |
-| 4 autopilot and CI | `AP 2h ⚠1 loops 3 ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
+| 4 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
 | 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
 
 - Every line is cut to the terminal width with the band's shrinking idea: titles and ages shorten first (job titles to 24, then 12 characters, then bare `r70`), then lower-value cells drop (`tot`, parked ids, `5h`, `$`), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
