@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 5
 source: Conversation 2026-10-28 (user spec for the /autopilot redesign)
 description: Redesign /autopilot as on/off/pause/resume/status with no duration; loops /drive until off, notifies once when idle
-claimed_by: cc1-50ac6891:628a122d26bbecbf
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-26
 ---
 
@@ -79,10 +79,17 @@ scheduled: 2026-10-26
 - [ ] Docs and references updated (`README.md:106`, `hud/README.md`; `hooks/ask-skills.txt` unchanged by design)
 - [ ] Follow-up filed for `agent-pairing/assets/ccxp-agent.md` (its `/autopilot 2h` example and a precise allowance wording): the existing carve-out already permits `/autopilot` bookkeeping Bash, which covers `autopilot-state.sh`; the file is out of scope here because another job has an open PR on that file (filed as T20261028-322058)
 
-## Closed
+## Closed (2026-10-28)
 
-- Open: filled at close.
+- Design PR #456; implementation PR (this one) ships `autopilot/SKILL.md`, `autopilot/scripts/autopilot-state.sh`, `tests/autopilot_state.bats`, HUD reader and cell updates, docs
+- Met: five-command grammar, loop-until-off, idle notify-once, daily soft cap from config, Slack-or-fallback notifier, HUD AP on/off for the new states (`tests/autopilot_state.bats`, `tests/hud_lib.bats`, `tests/hud_data.bats`; all pass locally)
+- Unverified: `hud/pure.test.ts` and `hud/model.ts` edits (no bun runtime here, and CI does not run them); a real `/autopilot on` session, deliberately not run
+- Quality probe: shellcheck info +8 (SC2016 on jq filters, intended), file LOC +256 (new script and tests), design score 86
+- Follow-up filed: T20261028-322058 (`agent-pairing/assets/ccxp-agent.md` wording, blocked on another job's open PR on that file)
 
 ## Skills invoked
 
-- Pending until close.
+- TDD (`superpowers:test-driven-development`): no, not invoked as a skill; the BATS suite was written alongside the script and run until green
+- Verification (`superpowers:verification-before-completion`): no skill call; bats and conventions checks run before the PR
+- Systematic debugging (`superpowers:systematic-debugging`): no, didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no skill call; 6 design-review rounds addressed on PR #456
