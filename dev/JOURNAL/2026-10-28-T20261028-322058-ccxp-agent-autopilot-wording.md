@@ -22,3 +22,16 @@ description: Update ccxp-agent.md for the new /autopilot grammar (on/off/pause/r
 - Replaced the stale `/autopilot 2h` example at `ccxp-agent.md:37` with `/address-pr 42` (`/autopilot` is already excepted on that line)
 - The exception section (`ccxp-agent.md:23`) already names `dev/.autopilot-state.json` and the dispatch clone; no change needed
 - Verified: `grep -rn "autopilot 2h" agent-pairing/` returns nothing
+
+## Closed (2026-10-28)
+
+- Shipped in PR #458; CI green (bats, Markdown Lint, lint-tasks, skill-quality, sync-tasks)
+- Design PR and separate claim PR skipped: one-line self-evident docs fix, approved in-conversation 2026-10-28 (coordinator brief)
+- No follow-up tasks filed
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — docs-class
+- Verification (`superpowers:verification-before-completion`): yes — `bats tests/agent_pairing.bats` and grep
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no — no review comments yet
