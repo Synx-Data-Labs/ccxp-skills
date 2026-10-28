@@ -227,13 +227,13 @@ EOF
   grep -q '`#<n> <title>`' "$f"
 }
 
-@test "asset: ledger carve-out is limited to finish/park/unpark and Bash stays otherwise read-only" {
+@test "asset: ledger carve-out is limited to the ledger.sh subcommands and Bash stays otherwise read-only" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
   grep -q 'Job died early' "$f"
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `finish`, `park` and `unpark`' "$f"
+  grep -q 'only `finish`, `park`, `unpark`, `input`, `action`, `ref` and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
 }
 
