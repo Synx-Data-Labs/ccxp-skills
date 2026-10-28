@@ -240,7 +240,7 @@ EOF
 @test "asset: reply format is one Next: section with n refs, no Needs input / Needs your action" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
   grep -q '^- \*\*Next:\*\*' "$f"
-  grep -q 'Section order: Next, Running, Parked (revisit later)' "$f"
+  grep -q 'Section order: Next, Running, Parked' "$f"
   grep -q '`n<n>` item under Next' "$f"
   grep -q 'bash "\$L" next add' "$f"
   grep -q 'ref bump n22' "$f"
