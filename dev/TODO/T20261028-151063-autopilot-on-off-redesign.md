@@ -36,8 +36,10 @@ scheduled: 2026-10-26
 - **Commands**: `on`, `off`, `pause`, `resume`, `status`; nothing else. No duration, no `--now`, no `until <ISO>` or `stuck=` resume token
   - The ScheduleWakeup prompt is simply `/autopilot on`; no resume token. Wakes are told apart from a typed `on` by the state file: `next_wake_at` (set when a wake is scheduled) and `busy_since` (set while a cycle is dispatched)
     - `on` when `off` starts a run; when `on`, it dispatches only if `now >= next_wake_at` and no cycle is busy (a busy mark older than 3 h is treated as crashed), else it reports `already on, next cycle at <time>` and does nothing
-    - A stale wake (after `off`, or `off` then `on`) finds `off`, or fires before the new `next_wake_at`, and does nothing; an early wake that is the only pending one re-arms `ScheduleWakeup` for the remaining delay instead of dropping the loop
+    - A stale wake (after `off`, or `off` then `on`) finds `off`, or fires before the new `next_wake_at`, and does nothing (an early wake is never re-armed, since `ScheduleWakeup` cannot list pending wakes; that would spawn parallel chains). Every path that hands control back (`on`, `resume`, Phase 4) arms exactly one fresh wake, and `pause`/`off` cancel the pending one
     - `on` while `paused` is a no-op that says so; `status` and the HUD mark a run `overdue` when `now` is more than 10 min past `next_wake_at` with no busy cycle (lost wake after a session restart), and a typed `on` recovers it
+  - `busy_since` is set when a cycle is dispatched and cleared by Phase 4's `record`, and by `off`/`pause` once the interrupted sub-agent has reported; `off` also clears `next_wake_at` and `skip_ids`
+  - `resume` while the interrupted cycle is still busy dispatches nothing and arms a 60 s wake (the helper prints `rearm`), so the loop is never lost
   - Phase 4 re-reads `status` before scheduling any wake and schedules only if still `on`; `off` also calls `ScheduleWakeup(stop: true)`
   - `off` or `pause` during a cycle does not kill the sub-agent (no `--now`): it `SendMessage`s it to finish or push WIP and report, then the loop stops with the result recorded
   - An old state file (no `"schema": 2`, or `status` of `running`/`stopped`) is read as `off`; `on` overwrites it. A leftover wake prompt in the old format (`/autopilot until <ISO> stuck=<n>`, or `<duration>`) is refused: the skill reports the current status and does nothing
@@ -48,12 +50,12 @@ scheduled: 2026-10-26
   - progress: wake in 60 s; stuck: back-off 5, 10, 20, 30 min (cap 30); waiting for human approval: same ladder; idle: config `idle_retry_minutes` (default 45, valid 30-60); capped: re-check hourly
 - **Eligibility** (guardrails; report under "Needs your attention", never auto-driven)
   - `autopilot-state.sh eligible <task-file>` rejects a status line containing SUPERVISED, BLOCKED, "needs a human", "needs manual" or "sign-off"
-  - The dispatch prompt tells `/drive` to stop before claiming and answer `NEEDS-ATTENTION: <reason>` when the design calls for a real build, a publish/promote/tag, a customer-visible post or HashData action; the id joins `skip_ids` so the next tick picks a different task; `skip_ids` clears at the daily rollover and on `off`, so a task a human fixed is retried the next day
+  - The dispatch prompt tells `/drive` to stop before claiming and answer `NEEDS-ATTENTION: <reason>` when the design calls for a real build, a publish/promote/tag, a customer-visible post or HashData action; the id joins `skip_ids` so the next tick picks a different task; `skip_ids` clears at the daily rollover and on `off`, so a task a human fixed is retried the next day (a still-flagged task is re-notified once per day, deliberately)
   - Existing merge gates are untouched: green CI, independent review, `gh pr merge --rebase`
 - **Idle**: nothing eligible gives outcome `idle`; notify once (`idle_notified`, text names the skipped ids and says retries are silent), stay quiet on retries, notify again only when work resumes (`resumed`, clears `idle_notified`), or on stuck (`stuck_count` reaches 3, once; `stuck_notified` clears on the next progress), or when `waiting` (a PR needs a human approval) repeats twice (`waiting_notified`, cleared on progress). Each newly skipped task also notifies once (`attention`) with its reason, so a needs-attention task is reported even while other tasks keep merging. The cap notice has its own `capped_notified`, cleared at the daily rollover
 - **Daily soft cap**: config `dev/.autopilot-config.json` (gitignored) `{"daily_cycle_cap": 24, "daily_merge_cap": 12, "idle_retry_minutes": 45}`; missing file or key means these defaults. Counters roll over at local midnight. At the cap the loop stays `on`, dispatches nothing, notifies once, re-checks hourly
 - **Notifier**: `autopilot-state.sh notify <kind> <text>` tries `slack/scripts/slack-send.sh --channel dev`; on any failure (unset env var, network) it still returns 0. Every notice is appended to `notices` with `via: slack|fallback`; `status` lists the last ones and `needs_attention`, so a Slack outage or unset env var loses nothing. The once-flags are set when the notice is sent or durably recorded
-- **HUD**: `sl-autopilot-fields` drops its `end_time` checks (`hud/scripts/hud-lib.sh:265-272`) and its `running|paused|stopped` allowlist, accepting schema 2 `on|paused|off`; `off` and legacy files print nothing, so the band shows `AP off`. Field order is unchanged (`hud/scripts/hud-data.sh:95`); `requested_hr` is 0, and `apVariants` (`hud/model.ts:222`) drops the `/requested` part when it is 0. The band prints `AP on 3h ✓2 merged` (`⏸ paused`, `⚠n` when stuck, `idle` marker); `AP off` otherwise. Prefix precedence: `[p]` paused, then `[b]` when `last_outcome` is `stuck`, then `[i]` when it is `idle` or `capped` (cell `AP on idle` / `AP on capped`), else `[r]`; `[i]` counts as on in `isApOn`
+- **HUD**: `sl-autopilot-fields` drops its `end_time` checks (`hud/scripts/hud-lib.sh:265-272`) and its `running|paused|stopped` allowlist, accepting schema 2 `on|paused|off`; `off` and legacy files print nothing, and the band shows `AP off` through the existing helper-present path (`hud/model.ts:481`). Field order is unchanged (`hud/scripts/hud-data.sh:95`); `requested_hr` is 0, and `apVariants` (`hud/model.ts:222`) drops the `/requested` part when it is 0. The band prints `AP on 3h ✓2 merged` (`⏸ paused`, `⚠n` when stuck, `idle` marker); `AP off` otherwise. Prefix precedence: `[p]` paused, then `[b]` when `last_outcome` is `stuck`, then `[i]` when it is `idle` or `capped` (cell `AP on idle` / `AP on capped`), else `[r]`; `[i]` counts as on in `isApOn`
 - **Alternatives rejected**
   - Detached `claude --bg` loop: no way to receive pause/off or reschedule from a skill today; kept as a later upgrade
   - Daily cap as a command argument: violates the five-command grammar and invites forgetting it
@@ -63,7 +65,7 @@ scheduled: 2026-10-26
 ## Test plan
 
 - [ ] Unit: `tests/autopilot_state.bats` covers status normalisation (legacy and malformed files read as off), on/off/pause/resume transitions, delay ladder, cap rollover, notify-once flags, eligibility, notifier fallback with unset env vars
-- [ ] Unit: updated `tests/hud_lib.bats` and `tests/hud_data.bats` for schema 2 states; `hud/pure.test.ts` for the new cell text
+- [ ] Unit: updated `tests/hud_lib.bats` and `tests/hud_data.bats` for schema 2 states; `hud/pure.test.ts` (the `isApOn` case near line 193 and the new cell text)
 - [ ] Docs: `.gitignore` ignores the config file; `grep` finds no remaining `/autopilot <duration>`, `until <ISO>` or `stuck=` references outside JOURNAL
 - [ ] Post-merge, manual by the maintainer: a real `/autopilot on` session (not run here)
 
@@ -75,7 +77,7 @@ scheduled: 2026-10-26
 - [ ] Notifier never errors when Slack env vars are unset (`tests/autopilot_state.bats` fallback test)
 - [ ] HUD shows AP on/off for the new states (`tests/hud_lib.bats`, `hud/pure.test.ts`)
 - [ ] Docs and references updated (`README.md:106`, `hud/README.md`; `hooks/ask-skills.txt` unchanged by design)
-- [ ] Follow-up filed for `agent-pairing/assets/ccxp-agent.md` (its `/autopilot 2h` example and Bash allowance for the new script): out of scope here because another job has an open PR on that file (`dev/TODO` follow-up task id recorded at close)
+- [ ] Follow-up filed for `agent-pairing/assets/ccxp-agent.md` (its `/autopilot 2h` example and a precise allowance wording): the existing carve-out already permits `/autopilot` bookkeeping Bash, which covers `autopilot-state.sh`; the file is out of scope here because another job has an open PR on that file (`dev/TODO` follow-up task id recorded at close)
 
 ## Closed
 
