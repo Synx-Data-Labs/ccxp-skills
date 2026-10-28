@@ -27,8 +27,6 @@ type World = {
   root?: string
   helperByCwd?: Record<string, string>
   stdins: string[]
-  panes: { id: string }[]
-  closed: string[]
   statuses: (string | undefined)[]
 }
 
@@ -59,16 +57,6 @@ function world($: any, on: any, w: World) {
   })
   on('agent.list', () => ({ value: [{ status: 'running' }, { status: 'failed' }] }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [] } }))
-  on('ui.panes', () => ({ value: w.panes }))
-  on('ui.open', (_: any, e: any) => {
-    w.panes.push({ id: e.id })
-    return { value: { isPlaced: true } }
-  })
-  on('ui.close', (_: any, e: any) => {
-    w.closed.push(e.id)
-    w.panes = w.panes.filter(p => p.id !== e.id)
-    return { value: undefined }
-  })
   on('clock.now', () => ({ value: w.now ?? 1_000_000 }))
   on('clock.every', () => ({ value: undefined }))
   on('command.register', () => ({ value: { command: 'hud' } }))
@@ -84,7 +72,7 @@ function world($: any, on: any, w: World) {
   })
 }
 
-const fresh = (): World => ({ writes: [], runs: [], cwds: [], statuses: [], stdins: [], panes: [], closed: [] })
+const fresh = (): World => ({ writes: [], runs: [], cwds: [], statuses: [], stdins: [] })
 
 const START = { cwd: '/proj', surface: 'terminal', isInteractive: true } as const
 
@@ -290,19 +278,84 @@ test('a partial session.measure updates context and keeps the other units', asyn
   await band.unmount()
 })
 
-test('/hud pane is a toggle: the first run opens the pane, the second closes it, the third opens it again', async ($: any, on: any) => {
+const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, parked: 1, parked_ids: ['k2'], next_job: 83, updated_at: '' }
+const HELPER_FULL = JSON.stringify({
+  ...JSON.parse(HELPER_AP),
+  ledger: LEDGER,
+  repo_slug: 'acme/proj',
+  repo_root: '/proj',
+  cwd: '/proj',
+  dirty: 2,
+  last_input_at: Math.floor(Date.now() / 1000) - 180,
+})
+
+test('/hud details is a toggle: the first run expands the band to detail lines, the second collapses it, the third expands again', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
+  w.helper = { exitCode: 0, stdout: HELPER_FULL }
+  world($, on, w)
+  await $.session.start(START)
+  // Only the expanded view has the lifetime job count.
+  const expanded = async () => {
+    const band = await $.ui.mount(BAND(140))
+    const isExpanded = (await band.find({ type: 'Text', text: /^tot 82$/ })) !== undefined
+    await band.unmount()
+    return isExpanded
+  }
+  expect(await expanded()).toBe(false)
+  const first = await $.command.run({ command: 'hud', args: 'details' })
+  expect(first.text).toMatch(/details on/)
+  expect(await expanded()).toBe(true)
+  const second = await $.command.run({ command: 'hud', args: 'details' })
+  expect(second.text).toMatch(/details off/)
+  expect(await expanded()).toBe(false)
+  const third = await $.command.run({ command: 'hud', args: 'details' })
+  expect(third.text).toMatch(/details on/)
+  expect(await expanded()).toBe(true)
+})
+
+test('/hud details: the five lines carry repo, ctx, jobs, autopilot with CI, and the last prompt, and follow new data live', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
+  w.helper = { exitCode: 0, stdout: HELPER_FULL }
+  world($, on, w)
+  on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
+  await $.session.start(START)
+  await $.command.run({ command: 'hud', args: 'details' })
+  const band = await $.ui.mount(BAND(140))
+  expect(await band.find({ type: 'Text', text: /acme\/proj/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /ctx 64%/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^WORKING \(1\)$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /Redo HUD repo field/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /parked 1 \(k2\)/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /running/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /failing/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /\(3m ago\)/ })).toBeDefined()
+  await band.unmount()
+  // A new measurement shows up in the expanded view without toggling again.
+  await $.session.measure({ context: { window: 200000, percent: 90 }, changed: ['context'] })
+  const again = await $.ui.mount(BAND(140))
+  expect(await again.find({ type: 'Text', text: /ctx 10%/ })).toBeDefined()
+  await again.unmount()
+})
+
+test('/hud details with the band off says so and changes nothing', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"band": false}'
+  world($, on, w)
+  await $.session.start(START)
+  const out = await $.command.run({ command: 'hud', args: 'details' })
+  expect(out.text).toMatch(/band is off/)
+})
+
+test('the retired /hud pane is gone: it falls through to the usage line, which does not offer it', async ($: any, on: any) => {
   const w = fresh()
   world($, on, w)
   await $.session.start(START)
-  const first = await $.command.run({ command: 'hud', args: 'pane' })
-  expect(first.text).toMatch(/opened/)
-  expect(w.panes.map(p => p.id)).toEqual(['ccxp-hud'])
-  const second = await $.command.run({ command: 'hud', args: 'pane' })
-  expect(second.text).toMatch(/closed/)
-  expect(w.closed).toEqual(['ccxp-hud'])
-  expect(w.panes).toEqual([])
-  const third = await $.command.run({ command: 'hud', args: 'pane' })
-  expect(third.text).toMatch(/opened/)
+  const out = await $.command.run({ command: 'hud', args: 'pane' })
+  expect(out.text).toMatch(/Usage:/)
+  expect(out.text).toContain('details')
+  expect(out.text).not.toContain('pane')
 })
 
 // --- repo cell follows the session cwd ---

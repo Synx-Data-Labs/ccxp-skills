@@ -3,7 +3,7 @@
 //  - styles the user's own prompt rows (UserMessage render site)
 //  - draws a status band above the prompt (AbovePrompt) fed by the bash helper
 //    hud/scripts/hud-data.sh --json (claimant secret stays in bash)
-//  - /hud on|off|status|pane
+//  - /hud on|off|status|details|setup
 //
 // ON by default; `enabled: false` in ~/.claude/ccxp-hud.json (or a project
 // override) makes every hook a pass-through. The file is re-read on every poll
@@ -17,12 +17,13 @@ import type { Register } from 'claude-code'
 import type { CiConfig, HudConfig, Snapshot } from '../types'
 import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { EMPTY, compactLine, countJobs, parseHelper } from './model'
-import { bandTree, paneTree, userMessageTree } from './render'
-import { setupCi, togglePane } from './setup'
+import { bandTree, userMessageTree } from './render'
+import { setupCi } from './setup'
 
-const PANE = 'ccxp-hud'
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
 const configAtom = atom({ plugin: 'ccxp-skills', key: 'config' } as const, DEFAULTS)
+// `/hud details`: true while the band is expanded to its five detail lines (this session only).
+const detailsAtom = atom({ plugin: 'ccxp-skills', key: 'details' } as const, false)
 
 // Module-level state: a hot reload starts it over, which is fine (the config and
 // snapshot live in $.state; these are only throttles and flags).
@@ -244,7 +245,7 @@ export const register: Register = on => {
       if (!mem.started) {
         mem.started = true
         try {
-          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | pane | setup' })
+          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | setup' })
         } catch {
           /* the command is optional */
         }
@@ -312,14 +313,17 @@ export const register: Register = on => {
         await mirrorStatus($, cfg)
         return { text: `ccxp-hud ${cfg.enabled ? 'on' : 'off'} (${file}). Takes effect now.` }
       }
-      if (arg === 'pane') {
-        // Toggle: the engine's own record ($.ui.panes) says whether our pane is up.
+      if (arg === 'details') {
+        // Toggle: the expanded view is a live part of the band, so the flag lives in an atom the band reads.
+        const cfg = await read($, configAtom)
+        if (!cfg.enabled || !cfg.band) return { text: 'ccxp-hud: the band is off, so there are no details to show. Run /hud on first.' }
+        const isOn = !(await read($, detailsAtom))
+        await update($, detailsAtom, () => isOn)
+        if (isOn) await refresh($, cfg) // fresh numbers in the first draw
         return {
-          text: await togglePane({
-            isOpen: async () => (await $.ui.panes()).some((p: any) => p.id === PANE),
-            open: async () => void (await $.ui.open({ id: PANE, title: 'ccxp-hud' })),
-            close: () => $.ui.close({ id: PANE }),
-          }),
+          text: isOn
+            ? 'ccxp-hud details on: the band is expanded and updates live. Run /hud details again to collapse it.'
+            : 'ccxp-hud details off: back to the one-line band.',
         }
       }
       if (arg === 'setup') {
@@ -339,7 +343,7 @@ export const register: Register = on => {
         return { text }
       }
       const cfg = await read($, configAtom)
-      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | pane | setup` }
+      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | setup` }
     } catch {
       return { text: 'ccxp-hud: something went wrong; the session is unaffected.' }
     }
@@ -359,13 +363,9 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const cfg = await read($, configAtom)
     if (!cfg.enabled || !cfg.band || e.props.hasSurvey) return next(e)
-    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns)
+    const expanded = await read($, detailsAtom)
+    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows)
     mem.bandSurface = tree ? e.surface : null
     return tree ?? next(e)
-  }).catch(($, e, next) => next(e))
-
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
-    const cfg = await read($, configAtom)
-    return paneTree($.ui.resolve(e), await read($, snapshotAtom), cfg)
   }).catch(($, e, next) => next(e))
 }
