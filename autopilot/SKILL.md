@@ -1,99 +1,66 @@
 ---
 name: autopilot
-description: Use when the user explicitly asks to keep working tasks unattended for a set duration — e.g. "/autopilot for the next 6 hours" or "/autopilot 6h"
-argument-hint: "<duration> | status | pause [--now] | resume | stop [--now]"
+description: Use when the user explicitly asks to turn the unattended background /drive loop on or off, pause or resume it, or check its status — "/autopilot on", "/autopilot off", "/autopilot pause", "/autopilot resume", "/autopilot status"
+argument-hint: "on | off | pause | resume | status"
 ---
 
-Keep dispatching `/drive T<id>` cycles until `<duration>` elapses, using `ScheduleWakeup` to survive without one long turn. No standup/IPM/retro — that's `/ccxp`'s job; this skill owns only duration/loop/pause/stop bookkeeping, not selection/implementation/merging. Each cycle's `/drive` runs in a dispatched sub-agent (Phase 3), not inline, so context only grows by one report per cycle — compaction is a backstop, not the mechanism.
+While `on`, keep running `/drive` one task after another, using `ScheduleWakeup` to survive without one long turn, until `/autopilot off`. Nothing drivable → notify once, wait, try again. No standup/IPM/retro (that is `/ccxp`'s job). This skill owns the on/off/loop/pause bookkeeping, not selection, implementation or merging. Each cycle's `/drive` runs in a dispatched sub-agent, so context grows by one report per cycle.
 
 ## Argument
 
-- `<duration>` — free text, read directly rather than parsed by a script: `6h`, `90m`, `for the next 6 hours`, etc. Compute an absolute end-time from it (see Phase 1) — never re-derive "N hours from now" on a later wake, or the window drifts later every cycle.
-- `status` — exact match, case-insensitive, no other text. Read-only report of the current/last run; see Phase 0. Does not start or continue the loop.
-- `pause [--now]` — freeze bookkeeping, suppress the next cycle, don't end the run. See Phase 0.1.
-- `resume` — un-pause. Distinct from the internal `/autopilot until <ISO> stuck=<n>` wake format Phase 1 reads. See Phase 0.1.
-- `stop [--now]` — end the run now, reporting true elapsed time. See Phase 0.1.
+Exactly one of these (case-insensitive, nothing else). There is no duration argument and no resume token.
 
-## State file
+- `on` — start the loop, or (when already on) run the next cycle if one is due. See Phase 1.
+- `off` — stop the loop and remove the dispatch clone. Phase 0.1.
+- `pause` / `resume` — stop dispatching but keep the clone and state / continue. Phase 0.1.
+- `status` — read-only report. Phase 0.
 
-`dev/.autopilot-state.json` (gitignored) — written by this skill only, at the phase transitions below. It exists purely so a run's status survives a `/clear` (the resume-prompt contract in Phase 1 stays the loop's real, authoritative control values — this file is additive, never load-bearing for the loop itself). Fields:
+Anything else (including a leftover pre-redesign wake such as `/autopilot until <ISO> stuck=<n>` or `/autopilot 6h`): run Phase 0's report, say the command is not supported, and do nothing else. A state file from the old design (no `"schema": 2`) reads as `off`.
 
-```json
-{
-  "status": "running|paused|stopped",
-  "started_at": "2026-09-17T14:30:00Z", "end_time": "2026-09-17T20:30:00Z",
-  "paused_at": null,
-  "stuck_count": 0, "waiting_count": 0, "cycle_count": 0, "merged_count": 0,
-  "last_cycle_at": null, "last_outcome": null,
-  "last_task": null, "last_stuck_reason": null,
-  "stop_reason": null,
-  "dispatch_clone_path": null
-}
-```
+## Helper and files
 
-`merged_count`: tasks merged this run — set in Phase 1, bumped in Phase 4 Progress; readers treat a missing value as `0`.
+All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.sh` (unit-tested in `tests/autopilot_state.bats`); call it instead of editing JSON by hand. Run it with `bash`, one command per call.
 
-`last_task` is `{"id": "T...", "slug": "..."}` or `null`. Everything else this skill might want to report (which tasks merged, which PRs are still open) is **not** stored here — Phase 0 derives it live from `dev/TODO/`, `dev/JOURNAL/`, and `gh`, since those are the actual source of truth and a cached copy here would drift.
-
-`dispatch_clone_path` is the dedicated clone Phase 3 dispatches `/drive` into — `null` until first created, then the same path all run. Phase 5 removes the directory on stop; Phase 0.1's `--now` never removes it mid-run.
-
-`paused_at` is the timestamp of the most recent `pause`, cleared on `resume` (which shifts `started_at`/`end_time` forward by that duration — Phase 0.1).
+- `dev/.autopilot-state.json` (gitignored, schema 2) — the loop's source of truth. Fields: `status` on|paused|off, `started_at`, `paused_at`, counters (`cycle_count`, `merged_count`, `stuck_count`, `waiting_count`, `*_today`), `last_outcome`/`last_task`/`last_stuck_reason`, `next_wake_at`, `busy_since`, `dispatch_clone_path`, notify-once flags, `skip_ids`, `needs_attention`, `notices`. Writes are atomic.
+- `dev/.autopilot-config.json` (gitignored, optional) — `{"daily_cycle_cap": 24, "daily_merge_cap": 12, "idle_retry_minutes": 45}`. A missing file or key uses these defaults; they are not command arguments.
+- This skill must run in the main session: only it can `ScheduleWakeup` and receive `pause`/`off`.
 
 ## Workflow
 
 ### Phase 0: Status (read-only)
 
-If the argument is exactly `status` (case-insensitive, nothing else): read `dev/.autopilot-state.json`.
+For `status` (and for an unsupported argument): run `autopilot-state.sh report` and relay it. Then add, derived live and never from a cache:
 
-- **Missing file**: report "autopilot has never run in this repo" and stop. No further phases.
-- **Present**: reuse Phase 5's Done/Needs-your-attention bullet formats (its header line is `stopped`-specific — Phase 0 has its own, below) and report it to the user. Do not post to Slack, do not call `ScheduleWakeup` — this phase never touches the loop.
-  - Header line: `running` → `<requested-vs-elapsed>, ends <end_time>` from `started_at`/`end_time` (elapsed vs `now`); `paused` → `<requested-vs-elapsed-at-pause>, paused since <paused_at>` (own branch — frozen at `paused_at`, not live, since pausing stops the clock); `stopped` → `<requested> requested, <elapsed> elapsed — stopped: <stop_reason>` (elapsed = `last_cycle_at − started_at` — no separate stop timestamp, `0` if `last_cycle_at` is still `null`; `now − started_at` would overstate it).
-  - **Done**: `git log --since=<started_at> --diff-filter=A --name-only -- dev/JOURNAL/` to find task files journaled since this run started; for each, read its frontmatter for the `(<repo>#<num>)` PR ref to fill the bullet. Empty → "No tasks merged this run" (or "yet" if `status: running`).
-  - **Needs your attention**: apply the **Needs-your-attention filter** (see Important Notes) — in practice this means: skip `status: Blocked by T{id}` entirely (that's a dependency chain, `/drive` Phase 6 recurses into it on its own) and skip any `status: Review` PR that's merely open with routine CI/review/rebase work left (the next cycle's Phase 0 `/address-pr` drains it automatically). Only list a PR here if it's already stuck in a way no skill can resolve unattended — check the task's own `status:` line for a human-only marker (`SUPERVISED`, "needs a human", "needs manual", an external/live-environment spot-check, a maintainer sign-off) — and confirm via `gh pr view <n>` if a PR ref is present. If `last_outcome == "stuck"` (not merely `stuck_count > 0`, which can be stale — see Phase 4's `queue-empty` branch), add a bullet from `last_task`/`last_stuck_reason` — Phase 5's exact wording ("...still backing off when the window closed") only when `status == "stopped"`; if `status == "running"` (still mid-backoff, not yet re-woken), swap the trailing clause for "...currently backing off" instead, since the window hasn't closed. Empty → "Nothing outstanding".
+- **Done**: `git log --since=<started_at> --diff-filter=A --name-only -- dev/JOURNAL/`, read each file's frontmatter for its PR ref. Empty: "No tasks merged this run".
+- **Needs your attention**: the `needs_attention` list, plus a task whose `status:` flags a human-only condition (`SUPERVISED`, "needs a human", a sign-off) and an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
 
-### Phase 0.1: Pause / resume / stop (control commands)
+No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 
-`pause [--now]` / `resume` / `stop [--now]` (case-insensitive) must be typed into this exact session — only it can cancel its own `ScheduleWakeup` or see a new message mid-cycle while Phase 3 waits on a subagent.
+### Phase 0.1: off / pause / resume
 
-Read `dev/.autopilot-state.json`. `pause`/`stop` need `status: running`; `resume` needs `status: paused`. Any other combination: report current state via Phase 0, no-op.
+1. `ScheduleWakeup(stop: true)` first, always (for `off` and `pause`).
+2. A sub-agent dispatched (mid-cycle)? `SendMessage` it to commit and push WIP (no PR needed, `/drive` resumes from a pushed branch) and report; wait up to 2 minutes, then `TaskStop`. When it has reported (or been stopped), run `autopilot-state.sh busy off`.
+3. `off`: `autopilot-state.sh off` prints `off <clone-path>`; remove that clone directory with `trash` or plain directory removal, then post the final report (Phase 5) to the user. `off` while already off: report that and stop.
+4. `pause`: `autopilot-state.sh pause`; keep the clone and state; report.
+5. `resume`: `autopilot-state.sh resume` prints `dispatch` (go to Phase 3 for one cycle now) or `busy` (the interrupted cycle is still finishing: do nothing, its Phase 4 re-reads `on` and arms the next wake) or `noop` (not paused: report).
 
-**`pause [--now]`**:
+### Phase 1: on
 
-1. `ScheduleWakeup(stop: true)` first, always — else the loop keeps dispatching on schedule.
-2. Subagent dispatched (mid-wait)? **Subagent interrupt** below — also resolves `last_task`.
-3. `status: "paused"`, `paused_at: now`, `last_task` per step 2. Leave `started_at`/`end_time`/`stuck_count` as-is.
-4. Report to the user (no Slack). Nothing runs until `resume`.
+Run `autopilot-state.sh start`:
 
-**`resume`**:
+- `started` — fresh run; go to Phase 2.
+- `dispatch` — already on and a cycle is due (the wake fired); go to Phase 2.
+- `already-on` — a typed `on` before the next wake is due, or a cycle is running: report `already on, next cycle at <next_wake_at>` and stop. Never dispatch, never schedule.
+- `busy` — a previous run's cycle is still finishing: report it and do nothing; that cycle's Phase 4 arms the next wake.
+- `paused` — report "paused; use /autopilot resume" and stop.
 
-1. Shift **both** `started_at` and `end_time` forward by `now - paused_at` (not `end_time` alone — the elapsed-math formula has no pause term; shifting `started_at` keeps it and Phase 2's check correct).
-2. `status: "running"`, `paused_at: null`.
-3. Go to Phase 3. If `last_task` is set, dispatch `/drive T<last_task.id> --auto-selected` this one cycle instead of a fresh pick. Already Done/claimed elsewhere → fall through to a fresh pick, same cycle, not Stuck.
-4. Phase 3 onward proceeds normally; Phase 4 re-establishes `ScheduleWakeup`.
+### Phase 2: Cap check
 
-**`stop [--now]`**:
-
-1. `ScheduleWakeup(stop: true)` (no-op if `pause` already did it).
-2. Subagent dispatched? **Subagent interrupt** below.
-3. Go to Phase 5, stop reason `user-requested`.
-
-**Subagent interrupt** (shared above, also resolves `last_task`):
-
-- **Graceful (default)**: `SendMessage` the subagent (`agentId` from Phase 3) to commit+push any WIP (no PR needed — `/drive` Phase 6 resumes from a pushed branch) and report its task/branch before ending its turn. 2-minute timeout, then `--now`.
-- **`--now`**: `TaskStop` immediately, no cleanup, WIP lost. Recover `last_task` from `git -C "$CLONE_PATH" branch --show-current` (`t<id>-<slug>`), else leave it unchanged. Never `rm -rf`/recreate `dispatch_clone_path` — same fallback as a crash. Priority work runs from the user's own clone, never this one.
-
-### Phase 1: Establish the end-time
-
-- **Resumed invocation**: the prompt matches `/autopilot until <ISO-8601 timestamp> stuck=<n>` *exactly* (e.g. `/autopilot until 2026-09-17T20:30:00Z stuck=2`) — a strict format check on the timestamp, not a loose match on the word "until". Reuse `end_time` and `stuck_count = <n>` verbatim. The running summary tally does not survive a resume in the prompt text — reconstruct what you can for the final report from this conversation's history, but don't block the loop on it; the loop's correctness depends only on `end_time` and `stuck_count`, both of which ARE threaded through every resume, never on the tally.
-- **First invocation** (anything else, including free text that happens to contain the word "until" — e.g. `/autopilot until 5pm` — since it doesn't match the strict resume format above): treat the whole argument as `<duration>` and compute `end_time = now + <duration>` (ISO 8601, e.g. `2026-09-17T20:30:00Z`). Initialize `stuck_count = 0` and start a running tally of the summary this run will report at Phase 5 (cycles run, tasks merged, time spent backing off). Write a fresh `dev/.autopilot-state.json` (see § State file): `status: running`, `started_at: now`, `end_time`, `stuck_count: 0`, `cycle_count: 0`, `merged_count: 0`, `last_cycle_at/last_outcome/last_task/last_stuck_reason/stop_reason/dispatch_clone_path: null` — this overwrites any stale file left by a previous, already-stopped run (a prior run's dispatch clone, if any, was already removed at its own Phase 5 stop; `null` here just means Phase 3 will create one fresh on this run's first dispatch).
-
-### Phase 2: Stop check
-
-If `now >= end_time`: go to Phase 5 with stop reason `elapsed`.
+`autopilot-state.sh cap` prints `ok` or `capped:cycles|merges`. On `capped:*`: `autopilot-state.sh record capped`, send its notice kind if not `none` (Phase 4 Notify), then `ScheduleWakeup(<delay capped>, "/autopilot on")` and end the turn. The loop stays on; it re-checks hourly and resumes after the daily rollover.
 
 ### Phase 3: Run one cycle
 
-**Ensure the dispatch clone exists (once per run, then reuse it every cycle).** Read `dispatch_clone_path` from `dev/.autopilot-state.json`. If `null` or the directory no longer exists (e.g. `/tmp` cleared since a `/clear`/resume), create it and record the path back into `dispatch_clone_path`:
+**Dispatch clone** (once per run, reused every cycle). Read `dispatch_clone_path`; if `null` or missing, create it and record the path in the state file:
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -102,96 +69,71 @@ CLONE_PATH="/tmp/autopilot-clone-$(basename "$REPO_ROOT")-${REPO_HASH}"
 [ -d "$CLONE_PATH" ] || git clone --recurse-submodules "$(git -C "$REPO_ROOT" remote get-url origin)" "$CLONE_PATH"
 ```
 
-If a prior cycle left it dirty or mid-rebase (crashed before Phase 7 cleanup), just `rm -rf "$CLONE_PATH"` and re-run the block above.
+A dirty or mid-rebase leftover: remove the directory and re-run the block. Full clone, never a worktree or shallow; the same path every cycle keeps the same `claimant_id` (`_session/claimant-id.sh`).
 
-- **Full clone (own `.git`), not a worktree, not shallow.** A worktree shares `.git` with the parent — git refuses a branch already checked out elsewhere, and `/drive` checks out `main` constantly while the parent session normally sits there at rest, so a worktree would collide almost every cycle. `--dispatch-blockers` gets away with `isolation: "worktree"` only because it's one-off, not reused. Non-shallow since this clone lives for potentially hours.
-- **Reused, never recreated, for the run's life.** Same path every cycle → same `claimant_id` (`_session/claimant-id.sh` hashes the clone's toplevel path) → claims behave like a normal peer clone (`_session/task_claim.sh` peer-mode already supports this). A fresh clone/worktree per dispatch would instead give every cycle a different identity, breaking "same clone = same claimant".
+**Resolve the pick in this turn.** `git -C "$CLONE_PATH" checkout main -q && git -C "$CLONE_PATH" pull -q`, then with cwd `$CLONE_PATH` run `/todo sweep` (a Step B park ask needs a human: treat as Stuck) and walk `/todo next`'s ranking top-down. For each candidate skip it when its id is in `skip_ids`, or `autopilot-state.sh eligible <task-file>` exits non-zero (status marks `SUPERVISED`, `BLOCKED`, "needs a human", "needs manual", "sign-off"); a status-skipped task goes to `needs_attention` via `autopilot-state.sh skip <id> "<reason>"`. No candidate left: go to Phase 4 `idle` without dispatching.
 
-**Resolve `<id>` in this turn, before dispatching** — visible at the orchestrator level, not opaque in the sub-agent. `git -C "$CLONE_PATH" checkout main -q && git -C "$CLONE_PATH" pull -q`, then with cwd `$CLONE_PATH` run `/todo sweep` (a Step B park ask needs a human — treat as Stuck) and take `/todo next`'s #1 pick. Pure read; `/drive`'s Phase 1 still claims (peer races handled there). Nothing pickable → skip dispatch, go to Phase 4 `queue-empty`.
+**Dispatch** `/drive T<id> --auto-selected` via the `Agent` tool (`subagent_type: general-purpose`, no `isolation`) after `autopilot-state.sh busy on`; note the `agentId`. One `/drive` at a time (16 GB machine): never start a second while one is busy. The prompt is self-contained: name the id and `$CLONE_PATH`, require `/drive` to run to completion, give Phase 4's classification rules, and add the guardrail below. **Every bash command for the whole `/drive` run begins `cd "$CLONE_PATH" &&`** (a sub-agent's Bash does not keep `cd` between calls).
 
-Dispatch `/drive T<id> --auto-selected` via the `Agent` tool — `subagent_type: general-purpose`, no `isolation`. Note the returned `agentId` every time — Phase 0.1's graceful pause/stop `SendMessage`s it to interrupt the subagent. `--auto-selected` (`drive/SKILL.md` Argument/Phase 0) keeps Phase 0's PR-drain running every cycle despite the explicit id.
+**Eligibility guardrail (in the prompt).** Before claiming anything, `/drive` reads the design. If it calls for a real build, a publish/promote/tag, a customer-visible post, or HashData's action, it must stop without claiming and answer `NEEDS-ATTENTION: <reason>`. Existing merge gates stay: green CI, independent review posted on the PR, `gh pr merge --rebase`.
 
-- A `resume`'s first cycle (Phase 0.1) dispatches `/drive T<last_task.id> --auto-selected` instead of resolving a fresh pick.
-
-The prompt must be self-contained: this is `/autopilot` invoking `/drive T<id> --auto-selected` for its next cycle, naming the resolved `<id>` and `$CLONE_PATH`; require `/drive` run to completion. Give it Phase 4's classification criteria too, not just the report shape (a commit alone is not advancement — only a merge counts as Progress).
-
-**Verified, not assumed: a dispatched sub-agent's Bash tool does not keep a `cd` across separate calls** — `cd` in one call, then a bare `pwd` in the next, landed back in the original directory every time. A one-time "`cd` there first" instruction isn't enough and would silently put most of `/drive`'s work back in the interactive session's clone — the exact collision this exists to prevent. **Every bash command for the whole `/drive` run must begin with `cd "$CLONE_PATH" &&`** — never a bare command trusting a prior `cd`.
-
-End its final message in exactly this format, so Phase 4 can classify mechanically without reading the sub-agent's full transcript:
+End the sub-agent's final message in exactly this format:
 
 ```
-MERGED: T<id> (<slug>) — PR #<n>
-(one line per task merged this cycle, including via blocker recursion; omit the whole section if none)
-
-STUCK: <short reason> — last task T<id> (<slug>) [or "no task identified" if /drive errored before selecting one]
-(only if /drive stopped without merging or hit one of its own Escalation Rules — see Phase 4's Stuck conditions; omit otherwise)
-
-QUEUE-EMPTY
-(only if /todo next found no free, unblocked, ungated task; omit otherwise)
-
-WAITING: <what's pending — the only legitimate case is address-pr's wait-for-approval merge tier (address-pr/SKILL.md §3): the hard gate already passed (CI green, Claude Code review addressed, test plan verified) but merge needs a human's formal GitHub review approval, e.g. "PR #<n> ready to merge, awaiting human review approval (wait-for-approval tier)">
-(only if the cycle ended waiting on a human's formal approval; Phase 4 backs this off, it is not Progress; omit otherwise. CI-in-progress is never this case: /drive waits it out internally, per drive/SKILL.md Phase 5 / "Background waits are not blockers")
+MERGED: T<id> (<slug>) — PR #<n>      (one line per merged task; omit if none)
+STUCK: <short reason> — last task T<id> (<slug>)   (only if it stopped without merging or hit its own Escalation Rules)
+NEEDS-ATTENTION: T<id> — <reason>     (only per the guardrail above)
+WAITING: <what is pending>            (only address-pr's wait-for-approval tier, a human's formal approval; CI-in-progress is never this)
 ```
 
-Wait for the dispatched agent's completion notification before Phase 4 — don't poll, don't schedule a separate `ScheduleWakeup` (same as any background-agent wait). If the dispatch fails or the final message doesn't parse into the format above, treat it as **Stuck** in Phase 4: `last_stuck_reason: "dispatch failed or report unparseable"`.
+Wait for the completion notification; don't poll. A failed dispatch or an unparseable report is **Stuck** ("dispatch failed or report unparseable"). An `off`/`pause` arriving during the wait takes priority (Phase 0.1).
 
-- Exception: a `pause [--now]`/`stop [--now]` message arriving during this wait takes priority over it — see Phase 0.1.
+### Phase 4: Classify, notify, reschedule
 
-### Phase 4: Classify the outcome and reschedule
+First re-read `autopilot-state.sh status`: not `on` means off/pause won while the cycle ran; run `busy off`, record nothing further and schedule nothing.
 
-Everything below reads off the dispatched agent's final report (Phase 3's fixed format), not a directly-witnessed `/drive` run — "`/drive` reports/returns/errored" means what the report says (or its absence/malformed shape, per Phase 3's parse-failure fallback). Exception: Phase 3's `queue-empty` short-circuit skips dispatch, straight into the Empty-queue bucket below.
+Classify, in this order, then run `autopilot-state.sh record <outcome> <merged-count> <task-id> "<reason>"`; it prints a notice kind or `none` and sets the next wake time.
 
-- **Progress** — none of the four Stuck conditions below fired this cycle, **and** `/drive` merged something (a wait-for-approval end state alone is **not** Progress — see Waiting below). The all-four-clear condition gates the whole bucket, since a multi-task cycle can merge one task via blocker recursion and still hit a Stuck condition on another before returning. Reset `stuck_count = 0` and `waiting_count = 0`. Update the state file: `stuck_count: 0`, `waiting_count: 0`, `cycle_count += 1`, `merged_count` += this report's `MERGED:` line count, `last_cycle_at: now`, `last_outcome: "progress"`, `last_task`/`last_stuck_reason: null`. Then `ScheduleWakeup(delaySeconds: 60, prompt: "/autopilot until <end_time> stuck=0", noop: false, reason: "continuing autopilot — last /drive cycle made progress")`. Done with this turn.
-- **Waiting** — nothing merged, no Stuck condition, and the report is `WAITING:` (`/address-pr`'s wait-for-approval tier, `address-pr/SKILL.md` §3). Not Progress: a 60 s re-dispatch would re-run `/drive` Phase 0 on the same unapproved PR every minute. Back off: `waiting_count += 1`, `delay = min(300 * 2^(waiting_count - 1), 1800)`; `stuck_count` unchanged. State file: `waiting_count`, `cycle_count += 1`, `last_cycle_at: now`, `last_outcome: "waiting"`, `last_task`/`last_stuck_reason: null`. If `now + delay >= end_time` → Phase 5 `elapsed`; else `ScheduleWakeup(delaySeconds: delay, prompt: "/autopilot until <end_time> stuck=<stuck_count>", noop: true, reason: "waiting on human approval (waiting_count=<n>)")`. Done with this turn.
-- **Empty queue / nothing actionable** — `/drive` reports no free, unblocked, ungated task exists: update the state file (`cycle_count += 1`, `last_cycle_at: now`, `last_outcome: "queue-empty"`, `stuck_count: 0`, `last_task`/`last_stuck_reason: null` — clearing these prevents a stale Stuck bullet in a later `status` report for a run that actually stopped cleanly), then go to Phase 5 with stop reason `queue-empty`. Don't reschedule — there is nothing a further wake would change.
-- **Stuck** — any of the following, regardless of whether an intermediate commit exists (a commit alone is not advancement — only a merge counts as Progress): `/drive` errored; returned having neither merged anything nor advanced any task's state; stopped via its own Escalation Rules (`drive/SKILL.md`'s table — sent a Slack notification and stopped, e.g. repeated test/CI failure, missing credentials); **or `/drive`'s delegated `/address-pr` call stopped-and-reported without merging** (its §2.f safety valve — 5 full iterations, or a fix that introduces new failures — an unresolvable rebase conflict in §2.b, or an unverifiable manual test-plan item in §2.e — none of these route through `drive/SKILL.md`'s Escalation Rules table or post their own Slack message, so this is the one Stuck case with no notification of its own until Phase 5). On any of these: `stuck_count += 1`, `delay = min(300 * 2^(stuck_count - 1), 1800)` seconds (5m → 10m → 20m → 30m, capped). Update the state file: `stuck_count`, `cycle_count += 1`, `last_cycle_at: now`, `last_outcome: "stuck"`, `last_task` (the task this cycle was working, or `null` if `/drive` errored before selecting one), `last_stuck_reason` (a short phrase — which of the conditions above fired). If `now + delay >= end_time`: go to Phase 5 with stop reason `elapsed` (don't schedule a wake past the window's own end). Otherwise `ScheduleWakeup(delaySeconds: delay, prompt: "/autopilot until <end_time> stuck=<stuck_count>", noop: true, reason: "backing off after a stuck /drive cycle (stuck_count=<n>)")`. Done with this turn.
+- `NEEDS-ATTENTION` lines: for each, `autopilot-state.sh skip <id> "<reason>"` (prints `attention` when new, which is a notice kind to send). Then run another cycle in 60 s unless it is the only outcome, in which case record `idle`/`progress` per what else happened.
+- **progress** — something merged and nothing Stuck. Wake in 60 s.
+- **waiting** — nothing merged, `WAITING:` reported. Back-off ladder 5, 10, 20, 30 min (capped), using `waiting_count`.
+- **stuck** — `/drive` errored, merged and advanced nothing, hit its own Escalation Rules, or its `/address-pr` stopped without merging. Same ladder, using `stuck_count`.
+- **idle** — no eligible task (Phase 3 found none, or `/drive` reported none). Retry every `idle_retry_minutes` (default 45, valid range 30-60).
 
-### Phase 5: Stop
+**Notify** for each non-`none` kind returned: `autopilot-state.sh notify <kind> "<text>"`, one concise bullet list (kind `idle` names the `needs_attention` ids and says retries are silent; `resumed` says work is flowing again; `stuck` names the task and reason; `waiting` names the PR; `capped` names the cap; `attention` names the task and reason). `notify` tries `/slack --channel dev` and, when the env vars are unset or the post fails, records the notice in the state file (shown by `status` and the HUD); it never errors, so never retry or escalate it.
 
-Build one report, in this exact bullet-list template — never a prose paragraph — and use it verbatim for both the Slack post and the in-chat report below: a wall-of-text summary is a bug, not a style choice.
+Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt: "/autopilot on", reason: "autopilot <outcome>")` and end the turn. Every wake carries the same prompt; the state file decides whether it dispatches (Phase 1).
+
+### Phase 5: Final report (on `off`)
+
+One bullet-list template, never prose, for the user (and the `off` notice, kind `off`, via `notify`):
 
 ```
-Autopilot run: <requested> requested, <elapsed> elapsed — stopped: <reason>
+Autopilot run: <elapsed> elapsed — stopped: user-requested
 
 Done:
 - Merged T<id> (<slug>) — PR #<n>
-(one bullet per merged task this run; "- No tasks merged this run" if none)
+(one bullet per merged task this run, from Phase 0's journal scan; "- No tasks merged this run" if none)
 
 Needs your attention:
-- PR #<n> (T<id>, <slug>) still open — <specific status>, pick up via /address-pr <n>
-- Stuck after <k> consecutive backoff cycles (most recently on T<id>, <slug> — or "no task identified" if /drive errored before selecting one) — <reason>, still backing off when the window closed
-(one bullet per item left mid-flight that no skill can resolve unattended; "- Nothing outstanding" if there is truly nothing left)
+- <needs_attention entries, stuck tasks, PRs stuck beyond any skill>
+(or "- Nothing outstanding")
 ```
 
-1. **Every `T<id>` or `PR #<n>` reference carries a short slug** — a few words on what it's actually about (task title or a one-line gist), not the bare id — so the report is scannable without looking anything up. Best-effort from this conversation's history; if a slug genuinely can't be recovered (e.g. after a resume with no surviving context), fall back to the bare id rather than guessing.
-2. **Done** lists only what actually merged this run. **Needs your attention** applies the same **Needs-your-attention filter** as Phase 0 (see Important Notes) — a Stuck task still mid-backoff when `elapsed` fired always qualifies (that's the definition of Stuck: no skill resolved it); a merely-open PR or a task `Blocked by T{id}` does not, since a fresh `/autopilot`/`/drive` invocation drains/recurses into those automatically — omit them even though the run has stopped. For the `queue-empty` stop reason this is usually "Nothing outstanding". The tally isn't guaranteed to survive a `ScheduleWakeup` resume — reconstruct what you can from this conversation's history, but don't claim precision it can't back up.
-3. Update the state file: `status: "stopped"`, `stop_reason: <reason>` (`"user-requested"` from Phase 0.1), `paused_at: null`. Leave `stuck_count`/`waiting_count`/`cycle_count`/`last_*` at whatever Phase 4 (or `queue-empty`) last set.
-4. **Remove the dispatch clone**: if `dispatch_clone_path` is set, `rm -rf "$dispatch_clone_path"` (plain directory removal — it's a real clone, not a worktree) and set `dispatch_clone_path: null` in the state file.
-5. Post the report to `/slack --channel dev` (`#acme-dev-notifications` — not the default automation-alerts channel).
-6. Report the same template, filled in the same way, to the user in this turn's response.
+Every `T<id>`/`PR #<n>` carries a short slug (bare id if it cannot be recovered).
 
 ## Important Notes
 
-- **Needs-your-attention filter (applies to both Phase 0 and Phase 5).** Only surface an item if no existing skill can resolve it unattended. Concretely, **exclude**:
-  - A task that's merely `status: Blocked by T{id}` — that's a dependency chain; `/drive` Phase 6 recurses into the blocker on its own, no human input needed.
-  - A PR that's merely open with routine CI failures, a pending review, or a rebase-able conflict — `/address-pr` fixes and drives all of that automatically; the next `/drive` cycle's Phase 0 will drain it.
-  **Include** only:
-  - `last_outcome == "stuck"` — the loop's own escalation path already exhausted what a skill can do (safety valve, unresolvable conflict, unverifiable test-plan item, or one of `/drive`'s own Escalation Rules).
-  - A task whose `status:` line itself flags a human-only condition — e.g. `SUPERVISED`, "needs a human", an external/live-environment spot-check, a maintainer sign-off/design decision — since no skill has the access or authority to close it.
-  This keeps the report a to-do list of things only the maintainer can act on, not a live mirror of `/drive`'s in-progress backlog.
-- **Never loop within a single turn.** Each `/drive` cycle is exactly one `ScheduleWakeup` boundary — this lets a multi-hour `/autopilot` survive compaction and interruptions cleanly, the same way `/loop`'s dynamic mode does.
-- **Context growth is bounded by dispatch, not by clearing.** Neither `/clear` nor `/compact` is available to this skill as an action — both are CLI built-ins a human types, not tools. Phase 3's sub-agent dispatch is what keeps `/autopilot`'s own context flat across an arbitrarily long run: a full `/drive` cycle's internal work never enters this conversation, only its compact report does. `last_task`/tally reconstruction (Phase 5, point 1) degrades gracefully for the same reason — fall back to the bare id when detail can't survive a resume or a dispatched agent's summary.
-- **Stuck backoff is silent — from `/autopilot`'s side.** `/autopilot` itself posts to Slack only once, at the final Phase 5 stop — a backing-off cycle just reschedules quietly (`noop: true`). A Stuck cycle from `/drive`'s own Escalation Rules may already have sent its own Slack message (that's `/drive`'s notification, not a repeat, and can recur each retry). The `/address-pr`-delegated Stuck case (safety valve, unresolvable conflict, unverifiable item) posts **no** notification of its own — silent through every retry until the window elapses (never `queue-empty`, only `elapsed`) — so Phase 5's summary is the only visibility.
-- **Queue-empty is a stop, not a backoff case.** If nothing is actionable, waking on a timer won't change that; only new work (`/stage`/`/todo sweep`) would — re-run `/autopilot` then.
-- **This does not replace `/ccxp`.** `/ccxp` is the full ritual-aware orchestrator (standup, IPM, retro) for the daily/weekly cron; `/autopilot` is a plain duration-boxed `/drive` loop for an interactive "go work for N hours" ask.
-- **One active run per repo, best-effort.** The state file assumes a single `/autopilot` loop per repo — there's no lock; a second concurrent run clobbers the first's writes. The dispatch clone's path is also deterministic per repo, so two concurrent runs would share it — two dispatched `/drive` cycles doing live git operations in the same directory at once.
+- **Needs-your-attention filter**: only items no skill can resolve unattended. Exclude `Blocked by T{id}` (a dependency `/drive` recurses into) and an open PR with routine CI/review/rebase work (the next cycle's `/drive` Phase 0 drains it). Include `needs_attention` entries, `last_outcome == "stuck"`, and tasks whose `status:` names a human-only condition.
+- **Never loop inside one turn.** One cycle is exactly one `ScheduleWakeup` boundary.
+- **One run per repo, best-effort.** No lock beyond `busy_since`/`next_wake_at`; the dispatch clone path is deterministic per repo.
+- **Idle is not a stop.** Going idle notifies once; retries are silent; new work (`/stage`, `/todo sweep`) is picked up on the next retry.
+- **A detached `claude --bg` loop** is a possible later upgrade; v1 runs in the main session.
+- **Not `/ccxp`.** `/ccxp` is the ritual-aware orchestrator; this is a plain on/off `/drive` loop.
 
 ## Cross-references
 
-- `/drive` — does all the actual task-selection/implementation/merge work, once per cycle, run via a dispatched sub-agent (Phase 3), not inline
-- `drive/SKILL.md`'s Phase 1.5 ephemeral cross-repo clone — the precedent Phase 3's dispatch clone mirrors, reused across cycles instead of per-task
-- `drive/SKILL.md`'s `--dispatch-blockers` mode — a one-off `isolation: "worktree"` dispatch, fine for a single call but not for `/autopilot`'s repeated cycles (see Phase 3)
-- `/ccxp` — the full ritual-aware orchestrator this skill deliberately does not replace
-- `/slack` — posts the stop summary (`--channel dev`, i.e. `#acme-dev-notifications`)
-- `SendMessage`/`TaskStop` — Phase 0.1's graceful/`--now` subagent interrupt
-- `dev/.autopilot-state.json` — this skill's own gitignored state file (§ State file)
+- `/drive` — does the selection/implementation/merge work, one cycle per dispatch (`--auto-selected`)
+- `/slack` — `notify` posts to `--channel dev` when configured
+- `/todo` — `sweep` and `next` for the pick; `/address-pr` — drains and merges PRs
+- `hud/` — `AP on/off` band reads `dev/.autopilot-state.json` (`hud/scripts/hud-lib.sh`)

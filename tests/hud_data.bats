@@ -80,14 +80,14 @@ EOT
   [ "$(jq -r .task_id <<<"$output")" = "" ]
 }
 
-@test "--json: autopilot running normally" {
+@test "--json: autopilot on and working" {
   local repo; repo=$(_make_repo r-run)
-  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 90)\",\"end_time\":\"$(_iso_ahead 210)\",\"stuck_count\":3,\"cycle_count\":10,\"last_task\":{\"id\":\"T1-2\",\"slug\":\"s\"}}"
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":3,\"cycle_count\":10,\"last_outcome\":\"progress\",\"last_task\":\"T1-2\"}"
   run _hud "$repo" --json
-  [ "$(jq -r .autopilot.status <<<"$output")" = "running" ]
+  [ "$(jq -r .autopilot.status <<<"$output")" = "on" ]
   [ "$(jq -r .autopilot.prefix <<<"$output")" = "[r]" ]
   [ "$(jq -r .autopilot.elapsed_hr <<<"$output")" = "2" ]
-  [ "$(jq -r .autopilot.requested_hr <<<"$output")" = "5" ]
+  [ "$(jq -r .autopilot.requested_hr <<<"$output")" = "0" ]
   [ "$(jq -r .autopilot.stuck <<<"$output")" = "3" ]
   [ "$(jq -r .autopilot.cycle <<<"$output")" = "10" ]
   [ "$(jq -r .autopilot.last_task <<<"$output")" = "T1-2" ]
@@ -95,25 +95,34 @@ EOT
 
 @test "--json: autopilot backing off is [b]" {
   local repo; repo=$(_make_repo r-backoff)
-  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":2,\"cycle_count\":4,\"last_outcome\":\"stuck\",\"last_stuck_reason\":\"ci red\"}"
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":2,\"cycle_count\":4,\"last_outcome\":\"stuck\",\"last_stuck_reason\":\"ci red\"}"
   run _hud "$repo" --json
   [ "$(jq -r .autopilot.prefix <<<"$output")" = "[b]" ]
   [ "$(jq -r .autopilot.last_outcome <<<"$output")" = "stuck" ]
   [ "$(jq -r .autopilot.stuck_reason <<<"$output")" = "ci red" ]
 }
 
-@test "--json: autopilot stopped is [s] with the stop reason" {
-  local repo; repo=$(_make_repo r-stop)
-  _state "$repo" '{"status":"stopped","started_at":"2026-01-01T00:00:00Z","end_time":"2026-01-01T05:00:00Z","stuck_count":1,"cycle_count":3,"last_cycle_at":"2026-01-01T02:00:00Z","stop_reason":"window closed"}'
+@test "--json: autopilot idle is [i], still on" {
+  local repo; repo=$(_make_repo r-idle)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":4,\"last_outcome\":\"idle\"}"
   run _hud "$repo" --json
-  [ "$(jq -r .autopilot.prefix <<<"$output")" = "[s]" ]
-  [ "$(jq -r .autopilot.elapsed_hr <<<"$output")" = "2" ]
-  [ "$(jq -r .autopilot.stop_reason <<<"$output")" = "window closed" ]
+  [ "$(jq -r .autopilot.status <<<"$output")" = "on" ]
+  [ "$(jq -r .autopilot.prefix <<<"$output")" = "[i]" ]
+}
+
+@test "--json: autopilot off (or an old-format file) is null" {
+  local repo; repo=$(_make_repo r-off)
+  _state "$repo" '{"schema":2,"status":"off","started_at":"2026-01-01T00:00:00Z","stuck_count":1,"cycle_count":3}'
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot <<<"$output")" = "null" ]
+  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot <<<"$output")" = "null" ]
 }
 
 @test "--json: autopilot paused is [p], frozen at paused_at" {
   local repo; repo=$(_make_repo r-pause)
-  _state "$repo" '{"status":"paused","started_at":"2026-01-01T00:00:00Z","end_time":"2026-01-01T05:00:00Z","paused_at":"2026-01-01T01:00:00Z","stuck_count":0,"cycle_count":2}'
+  _state "$repo" '{"schema":2,"status":"paused","started_at":"2026-01-01T00:00:00Z","paused_at":"2026-01-01T01:00:00Z","stuck_count":0,"cycle_count":2}'
   run _hud "$repo" --json
   [ "$(jq -r .autopilot.status <<<"$output")" = "paused" ]
   [ "$(jq -r .autopilot.prefix <<<"$output")" = "[p]" ]
@@ -126,7 +135,7 @@ EOT
   run _hud "$repo" --json
   [ "$status" -eq 0 ]
   [ "$(jq -r .autopilot <<<"$output")" = "null" ]
-  _state "$repo" '{"status":"running","started_at":"not-a-date","end_time":"also-not","stuck_count":1,"cycle_count":1}'
+  _state "$repo" '{"schema":2,"status":"on","started_at":"not-a-date","stuck_count":1,"cycle_count":1}'
   run _hud "$repo" --json
   [ "$(jq -r .autopilot <<<"$output")" = "null" ]
 }
@@ -180,11 +189,11 @@ EOT
 
 @test "--json: merged_count is surfaced, a missing one is 0, ledger is null without a file" {
   local repo; repo=$(_make_repo r-merged)
-  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4,\"merged_count\":3}"
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":4,\"merged_count\":3}"
   run _hud "$repo" --json
   [ "$(jq -r .autopilot.merged <<<"$output")" = "3" ]
   [ "$(jq -r .ledger <<<"$output")" = "null" ]
-  _state "$repo" "{\"status\":\"running\",\"started_at\":\"$(_iso_ago 30)\",\"end_time\":\"$(_iso_ahead 270)\",\"stuck_count\":0,\"cycle_count\":4}"
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":4}"
   run _hud "$repo" --json
   [ "$(jq -r .autopilot.merged <<<"$output")" = "0" ]
 }

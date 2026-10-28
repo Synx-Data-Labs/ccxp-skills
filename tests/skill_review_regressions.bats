@@ -18,7 +18,7 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 }
 
 @test "autopilot: WAITING is its own backed-off bucket, not Progress" {
-  grep -q '^- \*\*Waiting\*\*' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q '^- \*\*waiting\*\*' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q 'waiting_count' "$REPO_ROOT/autopilot/SKILL.md"
   run grep -n 'resolves \*\*without further `/drive` action\*\*' "$REPO_ROOT/autopilot/SKILL.md"
   [ "$status" -ne 0 ]

@@ -22,7 +22,7 @@ Example usage (illustrative, not the only options):
 |------|---------|---------|---------|
 | *(none — default)* | `#acme-automation-alerts` | `SLACK_WEBHOOK_URL` | Automation alerts, build notifications, testing |
 | `cloud` | `#acme-cloud` | `SLACK_WEBHOOK_URL_CLOUD` | Release announcements only — use sparingly |
-| `dev` | `#acme-dev-notifications` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` is unavailable or fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* the autopilot stop-summary (`autopilot/SKILL.md` Phase 5) |
+| `dev` | `#acme-dev-notifications` | `SLACK_WEBHOOK_URL_DEV` | Webhook fallback when MCP `slack_send_message` is unavailable or fails (see `ccxp/SKILL.md` Phase 1.4, T20260717-433409) — not for routine use *except* `/autopilot`'s notices (idle, stuck, cap, final report; `autopilot/SKILL.md` Phase 4-5), which fall back to the autopilot state file when the var is unset |
 
 ## Argument
 

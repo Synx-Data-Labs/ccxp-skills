@@ -2,3 +2,4 @@ node_modules/
 __pycache__/
 dev/.autopilot-state.json
 _gh/bin/
+dev/.autopilot-config.json

@@ -183,10 +183,10 @@ const CI_LOOK: Record<CiState, { glyph: string; word: string; color: string }> =
   unknown: { glyph: '?', word: 'unknown', color: 'inactive' },
 }
 
-/** Autopilot counts as ON while running (backing off included) or paused; stopped or absent is OFF. */
+/** Autopilot counts as ON while working, backing off, idle/capped or paused; off (no record) is OFF. */
 export function isApOn(snap: Snapshot): boolean {
   const p = snap.helper?.autopilot?.prefix
-  return p === '[r]' || p === '[b]' || p === '[p]'
+  return p === '[r]' || p === '[b]' || p === '[i]' || p === '[p]'
 }
 
 /** Last path segment; '' for an empty path. */
@@ -219,7 +219,7 @@ function apVariants(ap: Autopilot): Variants {
   const mk = (merged: string, loops: string, pause: string): Seg[] => {
     const segs: Seg[] = [{ text: 'AP ', bold: true }]
     if (pause) segs.push({ text: pause, color: 'warning' }, { text: ' ' })
-    segs.push({ text: `${ap.elapsed_hr}/${ap.requested_hr}h` })
+    segs.push({ text: ap.requested_hr > 0 ? `${ap.elapsed_hr}/${ap.requested_hr}h` : `${ap.elapsed_hr}h` })
     if (ap.stuck > 0) segs.push({ text: ` ⚠${ap.stuck}`, color: 'error' })
     segs.push({ text: ` ${loops} ` }, { text: merged, color: ap.merged > 0 ? 'success' : undefined, dim: ap.merged === 0 })
     return segs
@@ -479,7 +479,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   let apItem: Item | null = null
   if (ap) {
     const full = apVariants(ap)
-    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0] : [full[0][0], { text: `${truncate(ap.status, 14)} ` }, ...full[0].slice(1)]
+    const statusWord = ap.prefix === '[i]' && ap.last_outcome ? `${ap.status} ${ap.last_outcome}` : ap.status
+    const withStatus: Seg[] = ap.prefix === '[p]' || !statusWord ? full[0] : [full[0][0], { text: `${truncate(statusWord, 14)} ` }, ...full[0].slice(1)]
     apItem = one('ap', withStatus, ...full)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])

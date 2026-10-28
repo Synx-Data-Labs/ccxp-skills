@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 5
 source: Conversation 2026-10-28 (user spec for the /autopilot redesign)
 description: Redesign /autopilot as on/off/pause/resume/status with no duration; loops /drive until off, notifies once when idle
@@ -77,7 +77,7 @@ scheduled: 2026-10-26
 - [ ] Notifier never errors when Slack env vars are unset (`tests/autopilot_state.bats` fallback test)
 - [ ] HUD shows AP on/off for the new states (`tests/hud_lib.bats`, `hud/pure.test.ts`)
 - [ ] Docs and references updated (`README.md:106`, `hud/README.md`; `hooks/ask-skills.txt` unchanged by design)
-- [ ] Follow-up filed for `agent-pairing/assets/ccxp-agent.md` (its `/autopilot 2h` example and a precise allowance wording): the existing carve-out already permits `/autopilot` bookkeeping Bash, which covers `autopilot-state.sh`; the file is out of scope here because another job has an open PR on that file (`dev/TODO` follow-up task id recorded at close)
+- [ ] Follow-up filed for `agent-pairing/assets/ccxp-agent.md` (its `/autopilot 2h` example and a precise allowance wording): the existing carve-out already permits `/autopilot` bookkeeping Bash, which covers `autopilot-state.sh`; the file is out of scope here because another job has an open PR on that file (filed as T20261028-322058)
 
 ## Closed
 
