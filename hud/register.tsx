@@ -324,15 +324,15 @@ export const register: Register = on => {
         return { text: `ccxp-hud ${cfg.enabled ? 'on' : 'off'} (${file}). Takes effect now.` }
       }
       if (arg === 'fill on' || arg === 'fill off') {
-        const on = arg === 'fill on'
-        if (!file) return { text: 'ccxp-hud: cannot find the config dir. Edit ccxp-hud.json by hand: {"fill": ' + on + '}' }
+        const enable = arg === 'fill on'
+        if (!file) return { text: 'ccxp-hud: cannot find the config dir. Edit ccxp-hud.json by hand: {"fill": ' + enable + '}' }
         try {
-          await $.fs.write(file, withFill(await readText($, file), on))
+          await $.fs.write(file, withFill(await readText($, file), enable))
         } catch {
-          return { text: `ccxp-hud: could not write ${file}. Set "fill": ${on} in it by hand.` }
+          return { text: `ccxp-hud: could not write ${file}. Set "fill": ${enable} in it by hand.` }
         }
         await loadConfig($)
-        return { text: `ccxp-hud fill ${on ? 'on' : 'off'} (${file}). Takes effect now; a project file's "fill" still wins.` }
+        return { text: `ccxp-hud fill ${enable ? 'on' : 'off'} (${file}). Takes effect now; a project file's "fill" still wins.` }
       }
       if (arg === 'details') {
         // Toggle: the expanded view is a live part of the band, so the flag lives in an atom the band reads.
