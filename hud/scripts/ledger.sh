@@ -131,7 +131,7 @@ ledger() {
       esac ;;
     ref) case "${1:-}" in
         next)
-          ledger-prefix "${2:-}" || return 2
+          [[ "${2:-}" =~ ^[nsk]$ ]] || { echo "ledger: ref next prefix must be n, s or k: ${2:-}" >&2; return 2; }
           ledger-update '.ref_counters[$p] += 1' --arg p "$2" || return 1
           jq -r --arg p "$2" '$p + (.ref_counters[$p] | tostring)' <<<"$LEDGER_LAST" ;;
         bump)
