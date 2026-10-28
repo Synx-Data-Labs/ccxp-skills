@@ -233,8 +233,20 @@ EOF
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `finish`, `park`, `unpark`, `input`, `action`, `ref` and `show`' "$f"
+  grep -q 'only `finish`, `park`, `unpark`, `next`, `ref` and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
+}
+
+@test "asset: reply format is one Next: section with n refs, no Needs input / Needs your action" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^- \*\*Next:\*\*' "$f"
+  grep -q 'Section order: Next, Running, Parked (revisit later)' "$f"
+  grep -q '`n<n>` item under Next' "$f"
+  grep -q 'bash "\$L" next add' "$f"
+  grep -q 'ref bump n22' "$f"
+  ! grep -q 'Needs your action' "$f"
+  ! grep -q '\*\*Needs input\*\*' "$f"
+  ! grep -q 'input add\|action add' "$f" || grep -q 'deprecated aliases' "$f"
 }
 
 @test "asset: the ledger lines in the asset actually work against ledger.sh" {
