@@ -1,7 +1,7 @@
 ---
 name: update
 description: Use when the user explicitly asks to update the ccxp-skills plugin to the latest public release and refresh the installed ccxp-agent definition, or to check whether an update is available
-argument-hint: [--check | --dry-run]
+argument-hint: "[--check | --dry-run] [--claude-dir DIR]"
 ---
 
 # Update

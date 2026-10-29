@@ -51,7 +51,7 @@ function newest_semver() {
 function latest_version() {
   local v=""
   if command -v git >/dev/null 2>&1; then
-    v="$(git ls-remote --tags "$REPO_URL" 2>/dev/null \
+    v="$(GIT_TERMINAL_PROMPT=0 git ls-remote --tags "$REPO_URL" 2>/dev/null \
       | sed -n "s|.*refs/tags/${TAG_PREFIX}\([0-9][0-9.]*\)\$|\1|p" | newest_semver)" || v=""
   fi
   if [ -z "$v" ] && command -v gh >/dev/null 2>&1; then
@@ -78,7 +78,7 @@ function newest_cache_dir() {
 
 function main() {
   local check=0
-  CLAUDE_DIR="${CLAUDE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+  CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --check|--dry-run|-n) check=1; shift ;;
@@ -95,6 +95,7 @@ function main() {
   local before latest
   before="$(installed_version)"
   [ -n "$before" ] || die "$PLUGIN_ID is not installed in $CLAUDE_DIR (or 'claude plugin list --json' failed); nothing changed"
+  [[ "$before" =~ $SEMVER_RE ]] || die "installed version '$before' is not x.y.z; nothing changed"
   latest="$(latest_version)"
   [ -n "$latest" ] || die "could not determine the latest version from $REPO (git ls-remote and gh both failed); nothing changed"
 
@@ -139,13 +140,15 @@ function main() {
   local after
   after="$(installed_version)"
   [ -n "$after" ] || die "plugin no longer listed after update; agent definition NOT refreshed. Check 'claude plugin list'"
+  [[ "$after" =~ $SEMVER_RE ]] || die "version '$after' after update is not x.y.z; agent definition NOT refreshed"
   if [ "$newer" = 1 ] && ! ver_gt "$after" "$before"; then
     echo "update: FAILED: plugin still reports $after after update (latest is $latest). Agent definition NOT refreshed. Try 'claude plugin marketplace update $MARKETPLACE' manually." >&2
     exit 1
   fi
 
   local dir
-  dir="$(newest_cache_dir)"
+  dir="$CLAUDE_DIR/plugins/cache/ccxp-skills/ccxp-skills/$after"
+  [ -d "$dir" ] || dir="$(newest_cache_dir)"
   if [ -z "$dir" ] || [ ! -f "$dir/agent-pairing/scripts/agent-pairing.sh" ]; then
     echo "update: FAILED: plugin updated to $after but no agent-pairing.sh found under $CLAUDE_DIR/plugins/cache/ccxp-skills/ccxp-skills/. Agent definition NOT refreshed." >&2
     exit 1
