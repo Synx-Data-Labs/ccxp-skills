@@ -97,6 +97,16 @@ The HUD jobs cell (READY / WORKING (N), job list) reads a file that only `ledger
 
 Jobs cannot ask the user anything, so you must. Before starting a job that deletes data, pushes, merges, publishes, sends a message, spends money, or is otherwise hard to undo, check that the user's message authorizes exactly that. If not, ask first with AskUserQuestion and start the job only after a yes. When you do start it, put the authorization and its limits into the job prompt, quoted. Authorization for one job does not carry to the next.
 
+## Deleting things
+
+The owner's standing rule: nothing is deleted outright; it goes to the Trash and the owner decides later whether to empty it.
+
+- **Every job prompt** (Agent-tool and detached) carries this line: "Never run `rm`, `rm -rf`, `unlink`, `rmdir` or `find -delete`. To delete anything, run `bash <plugin-dir>/agent-pairing/scripts/trash.sh [--label <job>] <path>...` (or `mv` the path into `~/.Trash/<YYYYMMDD-HHMMSS>-<label>/` yourself if the script is missing) and list what you moved, and the `TRASH <dir>` line it printed, in your report." Resolve `<plugin-dir>` to an absolute path first (`ls -d ~/.claude*/plugins/cache/ccxp-skills/ccxp-skills/*/`, newest version).
+- **You** follow the same rule: if a carve-out ever has to remove something (for example `/autopilot` dropping its dispatch clone), use `trash.sh`, never `rm`.
+- `trash.sh` uses `/usr/bin/trash` (items keep Finder "Put Back") and falls back to `mv` into the timestamped folder; either way `MANIFEST.tsv` in that folder records each original path. `--dry-run` shows the plan. It refuses `/`, `$HOME` and the Trash itself.
+- Items sit in the Finder Trash, and macOS empties it after 30 days when Finder's "Remove items from the Trash after 30 days" is on. Passing this to the owner is part of relaying a delete: say where things went.
+- Trashing is not a consent shortcut: "Consent comes before dispatch" still applies to deletes that matter.
+
 ## When results arrive
 
 - Relay each result in at most 6 lines: what happened, the key facts, paths or links, and anything the user must do. Do not paste long output.

@@ -19,7 +19,7 @@ bash <skills-root>/agent-pairing/scripts/job-launch.sh <N> "<title>" <prompt-fil
 ```
 
 - Writes `$TMPDIR/ccxp-jobs/<name>/{prompt.md,settings.json,job.json}` (dir 0700, settings 0600), runs `claude --bg --agent claude --permission-mode dontAsk --settings ... -- "<prompt>"`.
-- Default settings: narrow allow-list (Read/Grep/Glob/Edit/Write, read-only git and gh, `git add`/`commit`); deny `git push`, `gh pr create|merge`, `gh workflow run`, `gh release`; `crossSessionInbound: accept`; a Stop hook that writes `last-stop`.
+- Default settings: narrow allow-list (Read/Grep/Glob/Edit/Write, read-only git and gh, `git add`/`commit`, and `agent-pairing/scripts/trash.sh`, the only way a job may delete: see the ccxp-agent "Deleting things" section); deny `git push`, `gh pr create|merge`, `gh workflow run`, `gh release`; `crossSessionInbound: accept`; a Stop hook that writes `last-stop`.
 - Prompt file: same rules as an Agent-tool job prompt (goal in the user's words, limits, `NEEDS INPUT: <question>` convention, report of at most 10 lines, consent quoted).
 - Authorization (the only way to lift a deny), a section in the prompt file:
 
