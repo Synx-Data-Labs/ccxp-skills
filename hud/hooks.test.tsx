@@ -202,6 +202,8 @@ test('the band shows helper data once the session started, and the helper gets a
   // The configured ci block reaches the helper on stdin (not argv).
   expect(w.stdins.some(x => x.includes('nightly.yml'))).toBe(true)
   for (const argv of w.runs) expect(argv.join(' ')).not.toContain('nightly.yml')
+  // The version switch reaches the helper on stdin too (default on).
+  expect(w.stdins.some(x => JSON.parse(x).show_version === true)).toBe(true)
   expect(w.runs.length).toBeGreaterThan(0)
   for (const argv of w.runs) {
     expect(argv[0]).toBe('bash')

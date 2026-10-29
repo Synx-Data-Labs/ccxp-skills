@@ -19,10 +19,11 @@
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked",
 #                      "parked_ids","next_job","updated_at"},   # ledger.sh file
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
+#    "plugin": null | {"installed","latest"},   # ccxp-skills version; latest only when strictly newer (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
-# `ci_ttl` (poll seconds). Never exits non-zero: any failure prints "{}" so the mod
+# `ci_ttl` (poll seconds), and `show_version` (bool, default true). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
 # time-limited CI lookup in hud-ci.sh; the only writes are its cache files.
 
@@ -31,15 +32,19 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-lib.sh"
 # shellcheck source=hud-ci.sh
 . "$_HD_DIR/hud-ci.sh"
+# shellcheck source=hud-version.sh
+. "$_HD_DIR/hud-version.sh"
 
 hud-data() {
-  local input cwd session_id ci_cfg ci_ttl
+  local input cwd session_id ci_cfg ci_ttl show_version
   input=$(cat)
   cwd=$(printf '%s' "$input" | jq -r '.cwd // .workspace.current_dir // ""' 2>/dev/null) || cwd=""
   session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null) || session_id=""
   [ -n "$cwd" ] || cwd="$PWD"
   ci_cfg=$(printf '%s' "$input" | jq -c '.ci // null' 2>/dev/null) || ci_cfg="null"
   ci_ttl=$(printf '%s' "$input" | jq -r '(.ci_ttl // 0) | floor' 2>/dev/null) || ci_ttl=0
+
+  show_version=$(printf '%s' "$input" | jq -r 'if .show_version == false then 0 else 1 end' 2>/dev/null) || show_version=1
 
   local repo_root clone_id label task_id="" task_title="" branch rec
   repo_root=$(sl-repo-root "$cwd")
@@ -78,6 +83,10 @@ hud-data() {
   ci=$(hud-ci-json "$repo_root" "$ci_cfg" "$ci_ttl" 2>/dev/null) || ci="null"
   [ -n "$ci" ] || ci="null"
 
+  local plugin
+  plugin=$(hud-version-json "$(cd "$_HD_DIR/../.." && pwd)" "$show_version" 2>/dev/null) || plugin="null"
+  [ -n "$plugin" ] || plugin="null"
+
   local last_input_at
   last_input_at=$(sl-last-input-epoch "$LAST_INPUT_STATE_DIR" "$session_id")
   [[ "$last_input_at" =~ ^[0-9]+$ ]] || last_input_at=0
@@ -85,7 +94,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson ci "$ci" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -98,7 +107,7 @@ hud-data() {
          stuck: ($f[4] | tonumber), cycle: ($f[5] | tonumber),
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0)} end),
-       ledger: $ledger, ci: $ci,
+       ledger: $ledger, ci: $ci, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
 

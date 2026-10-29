@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, Snapshot } from '../types'
+import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -13,6 +13,19 @@ export const EMPTY: Snapshot = {
   stale: false,
   moved: false,
   sessionRoot: null,
+}
+
+const VERSION_RE = /^\d{1,9}\.\d{1,9}\.\d{1,9}(-[0-9A-Za-z.-]{1,40})?$/
+
+/** Strictly newer by numeric semver (10 > 9, not a string compare); a prerelease sorts below its release. */
+export function isNewer(a: string, b: string): boolean {
+  if (!VERSION_RE.test(a) || !VERSION_RE.test(b)) return false
+  const [ca, pa] = a.split('-', 2)
+  const [cb, pb] = b.split('-', 2)
+  const na = ca.split('.').map(Number)
+  const nb = cb.split('.').map(Number)
+  for (let i = 0; i < 3; i++) if (na[i] !== nb[i]) return na[i] > nb[i]
+  return pa === undefined && pb !== undefined
 }
 
 const CI_STATES: readonly string[] = ['passing', 'failing', 'running', 'unknown']
@@ -81,6 +94,14 @@ export function parseHelper(stdout: string): HelperData | null {
     const state = str((c as Record<string, unknown>).state)
     if (CI_STATES.includes(state as CiState)) ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
   }
+  const pl = r.plugin
+  let plugin: PluginVersion | null = null
+  if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
+    // Untrusted: only plain X.Y.Z (optional prerelease) strings get through, nothing else is ever drawn.
+    const installed = str((pl as Record<string, unknown>).installed)
+    const latest = str((pl as Record<string, unknown>).latest)
+    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) && isNewer(latest, installed) ? latest : null }
+  }
   return {
     repo: str(r.repo),
     task_id: str(r.task_id),
@@ -96,6 +117,7 @@ export function parseHelper(stdout: string): HelperData | null {
     autopilot,
     ledger,
     ci,
+    plugin,
     last_input_at: num(r.last_input_at),
   }
 }
@@ -214,6 +236,17 @@ function ciVariants(ci: Ci): Variants {
   return [mk(`${look.glyph} ${look.word}${date}`), mk(`${look.glyph}${date}`), mk(look.glyph)]
 }
 
+/** `ccxp 5.0.0` (dim); with a newer release `ccxp 5.0.0 → 5.1.0` with the new number in the suggestion colour. */
+function versionVariants(p: PluginVersion): Variants {
+  if (!p.latest) return [[{ text: `ccxp ${p.installed}`, dim: true }]]
+  const up = { text: p.latest, color: 'suggestion' }
+  return [
+    [{ text: `ccxp ${p.installed} → `, dim: true }, up],
+    [{ text: 'ccxp ↑', dim: true }, up],
+    [{ text: '↑', dim: true }, up],
+  ]
+}
+
 function apVariants(ap: Autopilot): Variants {
   const paused = ap.prefix === '[p]'
   // Idle or capped (still on): name the state so a quiet loop is not mistaken for a working one.
@@ -321,19 +354,22 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
       const at = h?.last_input_at
       return at ? one([{ text: `you ${formatStamp(at)}`, dim: true }], [{ text: formatStamp(at), dim: true }]) : null
     }
+    case 'ver':
+      // `ver0` (installed only) is dropped early; `ver` (an update is available) is kept almost to the end.
+      return cfg.version && h?.plugin ? { field: h.plugin.latest ? 'ver' : 'ver0', variants: versionVariants(h.plugin), at: 0 } : null
   }
 }
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'ci', 'rate', 'cost', 'lastat'],
-  on: ['ap', 'ctx', 'jobs', 'ci', 'rate', 'cost', 'lastat'],
+  off: ['repo', 'branch', 'task', 'jobs', 'ci', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'ctx', 'jobs', 'ci', 'rate', 'cost', 'lastat', 'ver'],
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -358,7 +394,8 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
   const start = tier === 'wide' ? 0 : tier === 'compact' ? 1 : 2
   let items: Item[] = []
   for (const f of ORDER[mode]) {
-    if (!cfg.fields.includes(f)) continue
+    // The version segment is switched by its own `version` key, not by `fields`.
+    if (f !== 'ver' && !cfg.fields.includes(f)) continue
     const it = itemFor(f, snap, cfg)
     // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
@@ -431,14 +468,14 @@ const DETAIL_STEPS = {
   usage: ['drop:cost', 'drop:rate', 'step:ctx', 'drop:ctx'],
   jobs: ['drop:tot', 'step:run', 'step:run', 'step:parked', 'step:run', 'drop:parked', 'drop:state'],
   ap: ['step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap'],
-  you: ['step:lastat', 'step:lastat'],
+  you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'drop:ver0', 'drop:ver'],
 } as const
 
 /**
  * `/hud details`: the one-row band expanded to up to five live lines, each cut to the terminal
  * width with the same variant shrinking as the band. Lines with nothing to say are left out.
  *   1 repo, branch, dirty mark, claimed task   2 ctx left, rate limit, cost
- *   3 jobs (ledger)   4 autopilot and CI   5 last prompt (stamp and age)
+ *   3 jobs (ledger)   4 autopilot and CI   5 last prompt (stamp and age) and the ccxp version
  * It ignores `fields`: the five lines are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
@@ -503,9 +540,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
 
   // 5. you: the last prompt, stamp and age
   const at = h?.last_input_at
-  if (at) {
+  const verItem = pick('ver')
+  if (at || verItem) {
     add(
-      [one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }])],
+      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }]) : null, verItem],
       DETAIL_STEPS.you,
     )
   }

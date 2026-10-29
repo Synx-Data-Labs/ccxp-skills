@@ -12,6 +12,8 @@ export const CURRENT_REPO = 'current repo'
 export const SCOPE_USER = 'user file'
 export const SCOPE_PROJECT = 'this project'
 export const WRITE = 'write'
+export const VERSION_SHOW = 'show (default)'
+export const VERSION_HIDE = 'hide'
 /** Option label of the default colour; the other palette names are offered as they are. */
 export const COLOR_DEFAULT = `${FILL_DEFAULT} (default)`
 
@@ -27,8 +29,8 @@ export type ConfigIo = {
 const NOTHING = 'ccxp-hud config cancelled; nothing written.'
 
 /**
- * `/hud config`: workflow, branch, repo, fill colour, scope, then a confirmation that shows what is written.
- * Writes only the `ci` and `fillColor` keys, only after "write". Any cancel, dismissal or invalid answer writes nothing.
+ * `/hud config`: workflow, branch, repo, fill colour, plugin version on/off, scope, then a confirmation that shows what is written.
+ * Writes only the `ci`, `fillColor` and `version` keys, only after "write". Any cancel, dismissal or invalid answer writes nothing.
  */
 export async function configureHud(io: ConfigIo): Promise<string> {
   try {
@@ -54,16 +56,23 @@ export async function configureHud(io: ConfigIo): Promise<string> {
     if (colorAnswer === CANCEL) return NOTHING
     const fillColor = colorAnswer === COLOR_DEFAULT ? FILL_DEFAULT : parseFillColor(colorAnswer)
     if (!fillColor) return 'ccxp-hud config: fill colour must be gray, blue, green, yellow, purple or a #rrggbb hex. Nothing written.'
+    const versionAnswer = await io.ask('Show the ccxp-skills version in the band (`ccxp 5.0.0`, plus `→ 5.1.0` when a newer release exists)?', {
+      header: 'Plugin version',
+      options: [VERSION_SHOW, VERSION_HIDE, CANCEL],
+    })
+    if (versionAnswer === CANCEL) return NOTHING
+    if (versionAnswer !== VERSION_SHOW && versionAnswer !== VERSION_HIDE) return 'ccxp-hud config: the plugin version answer must be show or hide. Nothing written.'
+    const version = versionAnswer === VERSION_SHOW
     const scope = await io.ask('Where should it be saved?', { header: 'Scope', options: [SCOPE_USER, SCOPE_PROJECT, CANCEL] })
     if (scope === CANCEL) return NOTHING
     const file = scope === SCOPE_USER ? io.paths.user : scope === SCOPE_PROJECT ? io.paths.project : undefined
     if (!file) return 'ccxp-hud config: no such place to save to. Nothing written.'
     const existing = await io.read(file)
     if (!isRewritable(existing)) return `ccxp-hud config: ${file} is not a valid JSON object, so it was left alone. Fix or remove it, then run /hud config again. Nothing written.`
-    const ok = await io.ask(`Write "ci": ${JSON.stringify(ci)} and "fillColor": "${fillColor}" to ${file}?`, { header: 'Confirm', options: [WRITE, CANCEL] })
+    const ok = await io.ask(`Write "ci": ${JSON.stringify(ci)}, "fillColor": "${fillColor}" and "version": ${version} to ${file}?`, { header: 'Confirm', options: [WRITE, CANCEL] })
     if (ok !== WRITE) return NOTHING
-    await io.write(file, withConfig(existing, { ci, fillColor }))
-    return `ccxp-hud: ci ${ci ? 'set' : 'hidden'}, fill colour ${fillColor}, in ${file}. The first CI result can take a couple of minutes (results are cached).`
+    await io.write(file, withConfig(existing, { ci, fillColor, version }))
+    return `ccxp-hud: ci ${ci ? 'set' : 'hidden'}, fill colour ${fillColor}, version segment ${version ? 'shown' : 'hidden'}, in ${file}. The first CI result can take a couple of minutes (results are cached).`
   } catch {
     // A dismissed dialog rejects; nothing has been written at that point.
     return NOTHING
