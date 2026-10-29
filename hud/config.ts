@@ -22,7 +22,6 @@ export const DEFAULTS: HudConfig = {
   ctxWarn: 75,
   ctxCrit: 50,
   fillColor: FILL_DEFAULT,
-  version: true,
 }
 
 type Raw = Record<string, unknown>
@@ -69,7 +68,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band', 'version'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
@@ -132,17 +131,67 @@ export function heartbeatPath(env: { configDir?: string; home?: string }, sessio
   return `${base}/state/hud-active/${sessionId}`
 }
 
-/** Answers of `/hud config` to a `ci` block (a blank means "default"); `null` hides the segment. Never throws. */
-export function ciFromAnswers(a: { workflow: string; branch: string; repo: string }): { ok: true; ci: CiConfig } | { ok: false; error: string } {
-  const workflow = a.workflow.trim()
-  if (!WORKFLOW_RE.test(workflow)) return { ok: false, error: 'workflow must be a plain file name or id (letters, digits, . _ -; no spaces or slashes)' }
-  const branch = a.branch.trim()
-  if (branch && !BRANCH_RE.test(branch)) return { ok: false, error: 'branch must look like a git ref (letters, digits, . _ - /)' }
-  const repo = a.repo.trim()
-  if (repo && !REPO_RE.test(repo)) return { ok: false, error: 'repo must be owner/name' }
-  const ci: CiConfig = { workflow }
-  if (branch) ci.branch = branch
-  if (repo) ci.repo = repo
+/** Example shown when a CI answer is rejected. */
+export const CI_URL_EXAMPLE = 'https://github.com/acme/widgets/actions/workflows/nightly.yml'
+
+const HIDE_CI = new Set(['', 'none', 'no', '-', 'none (hide ci)'])
+
+function bad(error: string): { ok: false; error: string } {
+  return { ok: false, error }
+}
+
+/**
+ * The one answer of the `/hud config` CI question, to a `ci` block: a GitHub Actions workflow URL
+ * (`.../actions/workflows/<file>`, optionally `?query=branch%3A<b>`; or `.../blob|tree/<branch>/.github/workflows/<file>`),
+ * or a bare workflow file name (repo = the current one). blank / none / no / - hide CI (`ci: null`).
+ * The branch is only set when the URL carries one. Never throws.
+ */
+export function ciFromAnswer(answer: string): { ok: true; ci: CiConfig | null } | { ok: false; error: string } {
+  const text = answer.trim()
+  if (HIDE_CI.has(text.toLowerCase())) return { ok: true, ci: null }
+  if (!/^https?:\/\//i.test(text)) {
+    if (WORKFLOW_RE.test(text)) return { ok: true, ci: { workflow: text } }
+    return bad(`"${text.slice(0, 80)}" is neither a GitHub Actions workflow URL nor a plain workflow file name`)
+  }
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    return bad(`"${text.slice(0, 80)}" is not a valid URL`)
+  }
+  if (!/^(www\.)?github\.com$/i.test(url.hostname)) return bad(`"${url.hostname}" is not github.com`)
+  let seg: string[]
+  try {
+    seg = url.pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  } catch {
+    return bad('the URL path is not valid')
+  }
+  if (seg.length < 2) return bad('the URL has no owner/repo')
+  const repo = `${seg[0]}/${seg[1].replace(/\.git$/, '')}`
+  if (!REPO_RE.test(repo)) return bad(`"${repo}" is not a valid owner/name`)
+  let workflow: string | undefined
+  let branch: string | undefined
+  if (seg[2] === 'actions' && seg[3] === 'workflows' && seg[4]) {
+    workflow = seg[4]
+    const q = url.searchParams.get('query') ?? ''
+    const m = /(?:^|\s)branch:(\S+)/.exec(q)
+    if (m) branch = m[1]
+  } else if ((seg[2] === 'blob' || seg[2] === 'tree') && seg.length > 6) {
+    const i = seg.indexOf('.github', 4)
+    if (i > 3 && seg[i + 1] === 'workflows' && seg[i + 2]) {
+      workflow = seg[i + 2]
+      branch = seg.slice(3, i).join('/')
+    }
+  } else if (seg[2] === 'actions' && seg[3] === 'runs') {
+    return bad('a run URL does not name the workflow; open the workflow page (Actions, then the workflow on the left) and paste that URL')
+  }
+  if (!workflow) return bad('the URL does not point at a workflow file')
+  if (!WORKFLOW_RE.test(workflow)) return bad(`"${workflow.slice(0, 80)}" is not a plain workflow file name`)
+  const ci: CiConfig = { workflow, repo }
+  if (branch) {
+    if (!BRANCH_RE.test(branch)) return bad(`the branch "${branch.slice(0, 80)}" in the URL is not a plain git ref`)
+    ci.branch = branch
+  }
   return { ok: true, ci }
 }
 
@@ -156,8 +205,8 @@ export function isRewritable(text: string | undefined | null): boolean {
   }
 }
 
-/** Text of a config file after `/hud config`: only `ci` (null hides CI), `fillColor` and `version` are set; other keys are kept. */
-export function withConfig(text: string | undefined | null, patch: { ci: CiConfig | null; fillColor: string; version: boolean }): string {
+/** Text of a config file after `/hud config`: `ci` (null hides CI), `fillColor` and `version` are set unless undefined (then left as they are); other keys are kept. */
+export function withConfig(text: string | undefined | null, patch: { ci?: CiConfig | null; fillColor?: string; version?: boolean }): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -165,5 +214,9 @@ export function withConfig(text: string | undefined | null, patch: { ci: CiConfi
   } catch {
     raw = {}
   }
-  return JSON.stringify({ ...raw, ci: patch.ci, fillColor: patch.fillColor, version: patch.version }, null, 2) + '\n'
+  const next: Raw = { ...raw }
+  if (patch.ci !== undefined) next.ci = patch.ci
+  if (patch.fillColor !== undefined) next.fillColor = patch.fillColor
+  if (patch.version !== undefined) next.version = patch.version
+  return JSON.stringify(next, null, 2) + '\n'
 }

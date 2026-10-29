@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
+import { DEFAULTS, borderOf, ciFromAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
@@ -112,17 +112,52 @@ test('config: project ci overrides user ci; a project ci of null switches it off
   expect(mergeConfig(user, parseConfigText('{"band": true}')).ci).toEqual({ workflow: 'user.yml' })
 })
 
-test('config: answers are validated; blanks mean defaults', async () => {
-  expect(ciFromAnswers({ workflow: ' nightly.yml ', branch: '', repo: '' })).toEqual({ ok: true, ci: { workflow: 'nightly.yml' } })
-  expect(ciFromAnswers({ workflow: 'w.yml', branch: 'main', repo: 'acme/widgets' })).toEqual({ ok: true, ci: { workflow: 'w.yml', branch: 'main', repo: 'acme/widgets' } })
+test('config: a workflow URL gives repo + workflow (+ branch only when the URL carries one)', async () => {
+  const base = 'https://github.com/acme/widgets'
+  const ok = (a: string, ci: unknown) => expect(ciFromAnswer(a)).toEqual({ ok: true, ci })
+  ok(`${base}/actions/workflows/nightly.yml`, { workflow: 'nightly.yml', repo: 'acme/widgets' })
+  ok(`  ${base}/actions/workflows/nightly.yml  `, { workflow: 'nightly.yml', repo: 'acme/widgets' })
+  ok(`${base}/actions/workflows/nightly.yml?query=branch%3Arelease%2F4.8`, { workflow: 'nightly.yml', repo: 'acme/widgets', branch: 'release/4.8' })
+  ok(`${base}/actions/workflows/nightly.yml?query=is%3Asuccess+branch%3Amain`, { workflow: 'nightly.yml', repo: 'acme/widgets', branch: 'main' })
+  ok(`${base}/actions/workflows/nightly.yml?query=event%3Apush`, { workflow: 'nightly.yml', repo: 'acme/widgets' })
+  ok(`${base}/blob/release/4.8/.github/workflows/w.yml`, { workflow: 'w.yml', repo: 'acme/widgets', branch: 'release/4.8' })
+  ok(`${base}/blob/main/.github/workflows/w.yml#L3`, { workflow: 'w.yml', repo: 'acme/widgets', branch: 'main' })
+  ok(`https://www.github.com/acme/widgets/actions/workflows/12345`, { workflow: '12345', repo: 'acme/widgets' })
+})
+
+test('config: a bare workflow name keeps the current repo; blank, none, no and - hide CI', async () => {
+  expect(ciFromAnswer(' nightly.yml ')).toEqual({ ok: true, ci: { workflow: 'nightly.yml' } })
+  for (const a of ['', '  ', 'none', 'NONE', 'No', '-', 'none (hide CI)']) expect(ciFromAnswer(a)).toEqual({ ok: true, ci: null })
+})
+
+test('config: invalid CI answers are rejected with a reason naming the value', async () => {
   for (const bad of [
-    { workflow: 'a b.yml', branch: '', repo: '' },
-    { workflow: 'w.yml; ls', branch: '', repo: '' },
-    { workflow: '', branch: '', repo: '' },
-    { workflow: 'w.yml', branch: 'x y', repo: '' },
-    { workflow: 'w.yml', branch: '', repo: 'justname' },
-    { workflow: 'w.yml', branch: '', repo: 'a/b/c' },
-  ]) expect(ciFromAnswers(bad).ok).toBe(false)
+    'a b.yml',
+    'w.yml; ls',
+    '$(id)',
+    'https://evil.example/acme/widgets/actions/workflows/w.yml',
+    'https://github.com/acme',
+    'https://github.com/acme/widgets',
+    'https://github.com/acme/widgets/actions',
+    'https://github.com/acme/widgets/actions/runs/123456',
+    'https://github.com/-x/widgets/actions/workflows/w.yml',
+    'https://github.com/acme/widgets/actions/workflows/a%20b.yml',
+    'http://',
+  ]) {
+    const r = ciFromAnswer(bad)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error.length > 0).toBe(true)
+  }
+  const r = ciFromAnswer('w.yml; ls')
+  if (!r.ok) expect(r.error).toContain('w.yml; ls')
+  // an invalid branch in the query is rejected, never silently dropped
+  expect(ciFromAnswer('https://github.com/acme/widgets/actions/workflows/w.yml?query=branch%3A-x').ok).toBe(false)
+})
+
+test('config: withConfig leaves ci / fillColor alone when the patch omits them', async () => {
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}, "fillColor": "blue"}', {}))).toEqual({ ci: { workflow: 'old.yml' }, fillColor: 'blue' })
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}}', { fillColor: 'green' }))).toEqual({ ci: { workflow: 'old.yml' }, fillColor: 'green' })
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}}', { ci: null }))).toEqual({ ci: null })
 })
 
 test('config: withConfig writes only ci, fillColor and version, keeps every other key, stays valid JSON (even from garbage)', async () => {

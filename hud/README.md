@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | config`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for the CI source, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **`/hud`**: `on | off | status | details | config`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -24,7 +24,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
 | `fields` | `repo,branch,task,ap,ctx,jobs,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
-| `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud config` writes it for you |
+| `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud config` writes it for you from one workflow URL (repo and workflow derived; `branch` only when the URL carries one) |
 | `fillColor` | `gray` | colour of the always-on fill bar (see "Fill" below): `gray`, `blue`, `green`, `yellow`, `purple` or a `#rrggbb` hex; `/hud config` writes it. An old `fill` key is ignored |
 | `version` | `true` | shows the ccxp-skills version cell (see "Version cell" below); `false` hides it and stops the lookup. It is its own key, not a `fields` entry, so an old explicit `fields` list still shows it. `/hud config` writes it |
 | `pollSeconds` | `15` | minimum 5 |
@@ -96,11 +96,12 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 - Renamed from `/hud setup` (breaking: `/hud setup` no longer exists and there is no alias). `/hud fill on|off` was removed too: the fill is always on.
 - Asks (through the engine's question dialog; type values under "Other"):
-  - workflow file or `none`, branch (default = repo default branch), repo (default = current)
+  - one CI answer: "Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI." Accepted: `https://github.com/<org>/<repo>/actions/workflows/<file>.yml` (optionally `?query=branch%3A<b>`, which then pins that branch), `https://github.com/<org>/<repo>/blob/<branch>/.github/workflows/<file>.yml`, or a bare workflow file name (repo = the session's repo). `none`, `no`, `-` or blank hides CI. A run URL (`.../actions/runs/<id>`) is refused because it does not name the workflow. No branch or repo question: the branch is the repo's default unless the URL names one
   - fill colour: gray (default), blue, green, yellow, purple, or a `#rrggbb` hex under Other
   - ccxp-skills version cell: show (default) or hide
   - scope: user file or this project's `.claude/ccxp-hud.json`
-- Validates every answer, shows the resulting `"ci"`, `"fillColor"` and `"version"` values and the file, and writes only after you pick `write`. Only those three keys are merged in; other keys are kept. Cancelling or dismissing any question writes nothing.
+- An invalid CI or colour answer never aborts the dialog: it is asked again once (naming the rejected value, with an example URL for CI); after a second invalid answer that setting is left unchanged and the dialog carries on, so the colour and scope questions are always reached.
+- Shows the resulting `"ci"`, `"fillColor"` and `"version"` values and the file, and writes only after you pick `write`. Only those three keys are merged in (a skipped one is not touched); other keys are kept. Only an explicit cancel or a dismissed dialog writes nothing.
 
 ## Fill
 
