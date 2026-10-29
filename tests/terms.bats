@@ -16,7 +16,7 @@ t() { bash "$TERMS" "$@"; }
   run t add RCA "root cause analysis"
   [ "$status" -eq 0 ]
   [ "$output" = "noted: RCA = root cause analysis" ]
-  [ "$(stat -f %Lp "$CCXP_TERMS_FILE" 2>/dev/null || stat -c %a "$CCXP_TERMS_FILE")" = "600" ]
+  [ "$(stat -c %a "$CCXP_TERMS_FILE" 2>/dev/null || stat -f %Lp "$CCXP_TERMS_FILE")" = "600" ]
   d=$(jq -c '.terms.RCA.defs[0]' "$CCXP_TERMS_FILE")
   [ "$(jq -r .text <<<"$d")" = "root cause analysis" ]
   [ "$(jq -r .scope <<<"$d")" = "global" ]
