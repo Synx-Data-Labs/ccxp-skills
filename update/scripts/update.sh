@@ -77,12 +77,13 @@ function newest_cache_dir() {
 }
 
 function main() {
-  local check=0
+  local check=0 explicit=0
+  [ -n "${CLAUDE_CONFIG_DIR:-}" ] && explicit=1
   CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --check|--dry-run|-n) check=1; shift ;;
-      --claude-dir) CLAUDE_DIR="${2:?--claude-dir requires a value}"; shift 2 ;;
+      --claude-dir) CLAUDE_DIR="${2:?--claude-dir requires a value}"; explicit=1; shift 2 ;;
       -h|--help) usage; exit 0 ;;
       *) usage; exit 2 ;;
     esac
@@ -90,7 +91,8 @@ function main() {
   command -v jq >/dev/null 2>&1 || die "jq is required"
   command -v claude >/dev/null 2>&1 || die "'claude' CLI not found on PATH; run 'claude plugin update $PLUGIN_ID' from a terminal, then '/agent-pairing update'"
   [ -d "$CLAUDE_DIR" ] || die "$CLAUDE_DIR is not a directory"
-  export CLAUDE_CONFIG_DIR="$CLAUDE_DIR"
+  # Only point claude at a profile when one was asked for; the default profile keeps claude's own resolution.
+  if [ "$explicit" = 1 ]; then export CLAUDE_CONFIG_DIR="$CLAUDE_DIR"; fi
 
   local before latest
   before="$(installed_version)"
