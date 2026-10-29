@@ -164,5 +164,6 @@ running session keeps the definition it booted with.
 - `assets/ccxp-agent.md` — the bundled agent definition this installs
 - `bg-jobs.md` — runbook for detached `claude --bg` jobs (`scripts/job-launch.sh`, `job-status.sh`, `job-resume.sh`); `/agent-pairing update` refreshes an older installed `ccxp-agent.md` to pick up its **Detached jobs** section
 - `scripts/trash.sh` — the delete-by-trash helper behind the ccxp-agent "Deleting things" rule (`/usr/bin/trash`, else `mv` into `~/.Trash/<stamp>-<label>/` with a `MANIFEST.tsv`); tests: `bats tests/trash.bats`
+- `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `terms.json`, the UserPromptSubmit `hooks/terms-hook.sh`); `/agent-pairing update` refreshes an older installed `ccxp-agent.md` to pick up its **Terms** section
 - `superpowers:dispatching-parallel-agents` — the general pattern this
   profile-level toggle is built on

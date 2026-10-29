@@ -178,6 +178,10 @@ The plugin's `hooks/rm-guard.sh` PreToolUse hook (matcher `Bash`) backs the "not
 - **Override:** set `CCXP_ALLOW_RM=1` in the environment of the Claude Code process (for example the `env` block of `settings.json`, or the shell that starts `claude`). An inline `CCXP_ALLOW_RM=1 rm ...` in the command does not count.
 - **Scope:** a backstop for the common paths, not a sandbox. `bash script.sh`, `python -c 'shutil.rmtree(...)'`, `git clean` and similar still delete. Hooks load at session start: after `/plugin update`, start a new session.
 
+### Terms hook (ccxp-agent acronym memory)
+
+The plugin's `hooks/terms-hook.sh` (UserPromptSubmit, read-only) tells the model which of your acronyms from `terms.json` or the repo's `.claude/rules/glossary.md` a prompt uses, and how to record one you just defined ("root cause analysis (RCA)"). It is silent unless a term matches. Details: `agent-pairing/terms.md`.
+
 ## Reference docs
 
 Canonical cross-repo docs at this repo's root (peers, not skills) —
