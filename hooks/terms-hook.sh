@@ -14,6 +14,8 @@ function terms-hook() {
   json=$(cat)
   prompt=$(jq -r '.prompt // empty' <<<"$json" 2>/dev/null) || return 0
   [[ -n "$prompt" ]] || return 0
+  # Only the head of a long prompt is scanned (pasted logs/diffs make `expand` slow; the hook has a 5 s timeout).
+  prompt="${prompt:0:8000}"
   cwd=$(jq -r '.cwd // empty' <<<"$json" 2>/dev/null)
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   terms="$here/../agent-pairing/scripts/terms.sh"
