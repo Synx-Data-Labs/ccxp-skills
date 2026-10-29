@@ -75,7 +75,7 @@ A dirty or mid-rebase leftover: remove the directory and re-run the block. Full 
 
 **Dispatch** `/drive T<id> --auto-selected` via the `Agent` tool (`subagent_type: general-purpose`, no `isolation`) after `autopilot-state.sh busy on`; note the `agentId`. One `/drive` at a time (16 GB machine): never start a second while one is busy. The prompt is self-contained: name the id and `$CLONE_PATH`, require `/drive` to run to completion, give Phase 4's classification rules, and add the guardrail below. **Every bash command for the whole `/drive` run begins `cd "$CLONE_PATH" &&`** (a sub-agent's Bash does not keep `cd` between calls).
 
-**Eligibility guardrail (in the prompt).** Before claiming anything, `/drive` reads the design. If it calls for a real build, a publish/promote/tag, a customer-visible post, or HashData's action, it must stop without claiming and answer `NEEDS-ATTENTION: <reason>`. Existing merge gates stay: green CI, independent review posted on the PR, `gh pr merge --rebase`.
+**Eligibility guardrail (in the prompt).** Before claiming anything, `/drive` reads the design. Ordinary build and implementation work (code, apps, skills, docs) is eligible and runs end to end through the normal `/drive` gates. If the design calls for a publish/promote/tag/release/app-store submission, a customer-visible post or a message sent to a third party, HashData's action, spending money or signing up for a paid service, installing software that changes the owner's machine state outside the repo/clone, access to an owner account or credentials the sub-agent does not have, or an open owner decision the task text itself leaves unresolved, it must stop without claiming and answer `NEEDS-ATTENTION: <reason>`. Existing merge gates stay: green CI, independent review posted on the PR, `gh pr merge --rebase`.
 
 End the sub-agent's final message in exactly this format:
 
@@ -124,7 +124,7 @@ Every `T<id>`/`PR #<n>` carries a short slug (bare id if it cannot be recovered)
 
 ## Important Notes
 
-- **Needs-your-attention filter**: only items no skill can resolve unattended. Exclude `Blocked by T{id}` (a dependency `/drive` recurses into) and an open PR with routine CI/review/rebase work (the next cycle's `/drive` Phase 0 drains it). Include `needs_attention` entries, `last_outcome == "stuck"`, and tasks whose `status:` names a human-only condition.
+- **Needs-your-attention filter**: only items no skill can resolve unattended. Exclude `Blocked by T{id}` (a dependency `/drive` recurses into) and an open PR with routine CI/review/rebase work (the next cycle's `/drive` Phase 0 drains it). Include `needs_attention` entries (the Phase 3 guardrail's stop list; a plain build task is not one), `last_outcome == "stuck"`, and tasks whose `status:` names a human-only condition.
 - **Never loop inside one turn.** One cycle is exactly one `ScheduleWakeup` boundary.
 - **One run per repo, best-effort.** No lock beyond `busy_since`/`next_wake_at`; the dispatch clone path is deterministic per repo.
 - **Idle is not a stop.** Going idle notifies once; retries are silent; new work (`/stage`, `/todo sweep`) is picked up on the next retry.
