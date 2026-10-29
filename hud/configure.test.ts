@@ -33,7 +33,7 @@ test('config: one workflow URL gives repo + workflow; asks CI, colour, scope, co
   expect(r.asked[0]).toContain('Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI.')
   expect(r.writes.length).toBe(1)
   expect(r.writes[0].path).toBe('/h/.claude/ccxp-hud.json')
-  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'nightly.yml', repo: 'acme/widgets' }, fillColor: 'gray' })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'nightly.yml', repo: 'acme/widgets' }, fillColor: 'gray' , version: true })
   expect(r.asked[4]).toContain('"fillColor": "gray"')
   expect(r.asked[4]).toContain('"version": true')
 })
@@ -42,7 +42,7 @@ test('config: a branch in the URL is kept; project scope; other keys in the file
   const files = { '/p/.claude/ccxp-hud.json': '{"band": true, "fields": "ci"}' }
   const r = await run([`${URL1}?query=branch%3Arelease%2F4.8`, COLOR_DEFAULT, VERSION_SHOW, SCOPE_PROJECT, WRITE], files)
   expect(r.writes[0].path).toBe('/p/.claude/ccxp-hud.json')
-  expect(JSON.parse(r.writes[0].text)).toEqual({ band: true, fields: 'ci', fillColor: 'gray', ci: { workflow: 'nightly.yml', repo: 'acme/widgets', branch: 'release/4.8' } })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ band: true, fields: 'ci', fillColor: 'gray', ci: { workflow: 'nightly.yml', repo: 'acme/widgets', branch: 'release/4.8' } , version: true })
 })
 
 test('config: a bare workflow file name keeps the current repo', async () => {
@@ -53,7 +53,7 @@ test('config: a bare workflow file name keeps the current repo', async () => {
 test('config: none, no, - and blank hide CI (ci: null)', async () => {
   for (const a of [NONE, 'none', 'No', '-', '']) {
     const r = await run([a, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE], { '/h/.claude/ccxp-hud.json': '{"enabled": true}' })
-    expect(JSON.parse(r.writes[0].text)).toEqual({ enabled: true, ci: null, fillColor: 'gray' })
+    expect(JSON.parse(r.writes[0].text)).toEqual({ enabled: true, ci: null, fillColor: 'gray' , version: true })
   }
 })
 
@@ -61,7 +61,7 @@ test('config: an invalid CI answer is re-asked, naming the value and an example 
   const r = await run(['not a workflow', URL1, 'blue', VERSION_SHOW, SCOPE_USER, WRITE])
   expect(r.asked[1]).toContain('not a workflow')
   expect(r.asked[1]).toContain('https://github.com/acme/widgets/actions/workflows/nightly.yml')
-  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'nightly.yml', repo: 'acme/widgets' }, fillColor: 'blue' })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'nightly.yml', repo: 'acme/widgets' }, fillColor: 'blue' , version: true })
 })
 
 test('config: two invalid CI answers skip CI (left unchanged) and the fill colour and scope are still asked and written', async () => {
@@ -69,7 +69,7 @@ test('config: two invalid CI answers skip CI (left unchanged) and the fill colou
   const r = await run(['x;y', 'https://github.com/acme/widgets/actions/runs/9', 'purple', VERSION_SHOW, SCOPE_USER, WRITE], files)
   expect(r.asked.some(q => q.includes('Which colour'))).toBe(true)
   expect(r.writes.length).toBe(1)
-  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'old.yml' }, enabled: true, fillColor: 'purple' })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: { workflow: 'old.yml' }, enabled: true, fillColor: 'purple' , version: true })
   expect(r.asked[r.asked.length - 1]).toContain('"ci" unchanged')
   expect(r.out).toContain('Skipped')
   expect(r.out).not.toMatch(/Nothing written/)
@@ -77,19 +77,19 @@ test('config: two invalid CI answers skip CI (left unchanged) and the fill colou
 
 test('config: a bad CI answer never aborts: colour is reachable (the reported bug)', async () => {
   const r = await run(['nightly orchestrator', 'still bad', '#A1B2C3', VERSION_SHOW, SCOPE_USER, WRITE])
-  expect(JSON.parse(r.writes[0].text)).toEqual({ fillColor: '#a1b2c3' })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ fillColor: '#a1b2c3' , version: true })
 })
 
 test('config: an invalid colour is re-asked once, then skipped (unchanged) while the flow continues', async () => {
   const r = await run([URL1, 'chartreuse', '#12345', VERSION_SHOW, SCOPE_USER, WRITE], { '/h/.claude/ccxp-hud.json': '{"fillColor": "green"}' })
   expect(r.asked[2]).toContain('chartreuse')
-  expect(JSON.parse(r.writes[0].text)).toEqual({ fillColor: 'green', ci: { workflow: 'nightly.yml', repo: 'acme/widgets' } })
+  expect(JSON.parse(r.writes[0].text)).toEqual({ fillColor: 'green', ci: { workflow: 'nightly.yml', repo: 'acme/widgets' } , version: true })
   const ok = await run([URL1, 'red; ls', 'blue', VERSION_SHOW, SCOPE_USER, WRITE])
   expect(JSON.parse(ok.writes[0].text).fillColor).toBe('blue')
 })
 
-test('config: both CI and colour skipped writes nothing and says so', async () => {
-  const r = await run(['x;y', 'x;y', 'bad', 'bad'])
+test('config: CI, colour and version all skipped writes nothing and says so', async () => {
+  const r = await run(['x;y', 'x;y', 'bad', 'bad', 'maybe'])
   expect(r.writes).toEqual([])
   expect(r.out).toMatch(/Nothing written/)
   expect(r.asked.length).toBe(5)
