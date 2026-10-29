@@ -99,6 +99,12 @@ EOF"
   assert_blocked 'ls | xargs -0 -n1 rm -f'
   assert_blocked 'ls | xargs -I {} rm {}'
   assert_blocked 'find /tmp/x -name y | xargs rm'   # stdin targets cannot be proven temp
+  assert_blocked 'ls | xargs -I{} rm {}'            # attached option, no space
+  assert_blocked 'ls | xargs -0 -I{} /bin/rm {}'
+  assert_blocked "git commit -m \"\$(cat <<'EOF'
+fix: don't touch x
+EOF
+)\" && rm -rf ~/x"                                  # apostrophe in a heredoc body inside \$( )
 }
 
 @test "blocked: targets that are not provably temp" {
