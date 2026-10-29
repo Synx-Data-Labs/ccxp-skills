@@ -33,7 +33,7 @@ export function parseFillColor(x: unknown): string | undefined {
   const v = x.trim()
   if (HEX_RE.test(v)) return v.toLowerCase()
   const name = v.toLowerCase()
-  return name in FILL_COLORS ? name : undefined
+  return Object.hasOwn(FILL_COLORS, name) ? name : undefined
 }
 
 export type FillStyle = { bg: string; inverse?: false } | { bg?: undefined; inverse: true }
