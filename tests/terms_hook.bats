@@ -101,3 +101,13 @@ ctx() { jq -r '.hookSpecificOutput.additionalContext' <<<"$output"; }
   # the existing PreToolUse hook is untouched
   [ "$(jq -r '.hooks.PreToolUse[0].matcher' "$REPO_ROOT/hooks/hooks.json")" = "Skill" ]
 }
+
+@test "only the head of a long prompt is scanned" {
+  bash "$TERMS" add RCA "root cause analysis" >/dev/null
+  filler=$(head -c 9000 /dev/zero | tr '\0' 'x')
+  run run_hook "RCA $filler"
+  [ "$status" -eq 0 ]
+  [[ "$(ctx)" == *"RCA = root cause analysis"* ]]
+  run run_hook "$filler RCA"
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+}

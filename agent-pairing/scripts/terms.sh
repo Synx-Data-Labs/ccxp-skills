@@ -214,7 +214,15 @@ terms-transform() {
 # Same, then write atomically, keeping the previous file as terms.json.bak.
 terms-update() {
   local f dir tmp err
-  f=$(terms-file); dir=$(dirname "$f")
+  f=$(terms-file)
+  # A symlinked store (shared between profiles) is written through the link, not replaced by it.
+  local hops=0 target
+  while [[ -L "$f" && $hops -lt 10 ]]; do
+    target=$(readlink "$f") || break
+    if [[ "$target" == /* ]]; then f="$target"; else f="$(dirname "$f")/$target"; fi
+    hops=$((hops + 1))
+  done
+  dir=$(dirname "$f")
   mkdir -p "$dir" 2>/dev/null || { echo "terms: cannot create $dir" >&2; return 1; }
   if [[ -e "$f" ]] && ! jq -e . "$f" >/dev/null 2>&1; then
     mv "$f" "$f.corrupt-$(date -u +%Y%m%d-%H%M%S)" || return 1

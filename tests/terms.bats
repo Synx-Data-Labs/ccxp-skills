@@ -449,3 +449,13 @@ EOF
   run bash -c "$line; bash \"\$T\" add CC 'Claude Code'"
   [ "$output" = "noted: CC = Claude Code" ]
 }
+
+@test "add writes through a symlinked store instead of replacing the link" {
+  mkdir -p "$BATS_TEST_TMPDIR/shared" "$BATS_TEST_TMPDIR/profile"
+  printf '{"version":1,"terms":{}}\n' > "$BATS_TEST_TMPDIR/shared/terms.json"
+  ln -s ../shared/terms.json "$CCXP_TERMS_FILE"
+  run t add RCA "root cause analysis"
+  [ "$status" -eq 0 ]
+  [ -L "$CCXP_TERMS_FILE" ]
+  [ "$(jq -r '.terms.RCA.defs[0].text' "$BATS_TEST_TMPDIR/shared/terms.json")" = "root cause analysis" ]
+}
