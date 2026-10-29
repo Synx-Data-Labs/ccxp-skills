@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | config`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **`/hud`**: `on | off | status | details | config`. A bare `/hud` (no argument) or an unknown one only prints the status line and usage; it never opens a dialog or writes. Run `/hud config` (optionally `/hud config <url>`, quoted or not) to configure. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -96,12 +96,12 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 - Renamed from `/hud setup` (breaking: `/hud setup` no longer exists and there is no alias). `/hud fill on|off` was removed too: the fill is always on.
 - Asks (through the engine's question dialog; type values under "Other"):
-  - one CI answer: "Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI." Accepted: `https://github.com/<org>/<repo>/actions/workflows/<file>.yml` (optionally `?query=branch%3A<b>`, which then pins that branch), `https://github.com/<org>/<repo>/blob/<branch>/.github/workflows/<file>.yml`, or a bare workflow file name (repo = the session's repo). `none`, `no`, `-` or blank hides CI. A run URL (`.../actions/runs/<id>`) is refused because it does not name the workflow. No branch or repo question: the branch is the repo's default unless the URL names one
+  - one CI answer: "Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI." Accepted: `https://github.com/<org>/<repo>/actions/workflows/<file>.yml` (optionally `?query=branch%3A<b>`, which then pins that branch), `https://github.com/<org>/<repo>/blob/<branch>/.github/workflows/<file>.yml`, or a bare workflow file name (repo = the session's repo). Also accepted: `tree/` and `raw/` forms of the file URL, a scheme-less `github.com/...`, and the answer wrapped in quotes, backticks or angle brackets or padded with spaces/newlines. `/hud config <url>` supplies this answer up front and skips the question (the dialog headers stay within the engine's 12-character limit). `none`, `no`, `-` or blank hides CI. A run URL (`.../actions/runs/<id>`) is refused because it does not name the workflow. No branch or repo question: the branch is the repo's default unless the URL names one
   - fill colour: gray (default), blue, green, yellow, purple, or a `#rrggbb` hex under Other
   - ccxp-skills version cell: show (default) or hide
   - scope: user file or this project's `.claude/ccxp-hud.json`
 - An invalid CI or colour answer never aborts the dialog: it is asked again once (naming the rejected value, with an example URL for CI); after a second invalid answer that setting is left unchanged and the dialog carries on, so the colour and scope questions are always reached.
-- Shows the resulting `"ci"`, `"fillColor"` and `"version"` values and the file, and writes only after you pick `write`. Only those three keys are merged in (a skipped one is not touched); other keys are kept. Only an explicit cancel or a dismissed dialog writes nothing.
+- Shows the resulting `"ci"`, `"fillColor"` and `"version"` values and the file, and writes only after you pick `write`. Only those three keys are merged in (a skipped one is not touched); other keys are kept. Nothing is written on an explicit cancel or a dismissed dialog ("ccxp-hud config cancelled; nothing written.", with the dialog's reason when it gave one); any other exception reports "ccxp-hud config failed: <reason>; nothing written."
 
 ## Fill
 

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULTS, borderOf, ciFromAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
+import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
@@ -769,4 +769,50 @@ test('version: /hud details shows it on the last line, with `you` when present',
   expect(lines[lines.length - 1]).toContain('you ')
   const off = detailRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 120).map(r => r.map(s => s.text).join(''))
   expect(off.join('\n')).not.toContain('ccxp')
+})
+
+const BLOB = 'https://github.com/Synx-Data-Labs/synxdb-build-pipeline/blob/main/.github/workflows/nightly-orchestrator.yml'
+const ACTIONS = 'https://github.com/Synx-Data-Labs/synxdb-build-pipeline/actions/workflows/nightly-orchestrator.yml'
+const REPO = 'Synx-Data-Labs/synxdb-build-pipeline'
+
+test('ciFromAnswer: blob, tree, raw and actions URLs name the workflow; query branch is kept', () => {
+  const wf = 'nightly-orchestrator.yml'
+  expect(ciFromAnswer(BLOB)).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'main' } })
+  expect(ciFromAnswer(BLOB.replace('/blob/', '/tree/'))).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'main' } })
+  expect(ciFromAnswer(BLOB.replace('/blob/', '/raw/'))).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'main' } })
+  expect(ciFromAnswer(BLOB.replace('/main/', '/release/4.8/') + '#L10')).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'release/4.8' } })
+  expect(ciFromAnswer(ACTIONS)).toEqual({ ok: true, ci: { workflow: wf, repo: REPO } })
+  expect(ciFromAnswer(ACTIONS + '?query=branch%3Amain')).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'main' } })
+  expect(ciFromAnswer(ACTIONS + '?query=event%3Aschedule+branch%3Adev')).toEqual({ ok: true, ci: { workflow: wf, repo: REPO, branch: 'dev' } })
+  expect(ciFromAnswer(ACTIONS.replace('https://', ''))).toEqual({ ok: true, ci: { workflow: wf, repo: REPO } })
+})
+
+test('ciFromAnswer: surrounding quotes, backticks, angle brackets, whitespace and newlines are tolerated', () => {
+  for (const u of [BLOB, ACTIONS]) {
+    const want = ciFromAnswer(u)
+    expect(want.ok).toBe(true)
+    for (const w of [`"${u}"`, `'${u}'`, `\`${u}\``, `<${u}>`, `  ${u}\n`, `\n"${u}"\n`, `\u201c${u}\u201d`, `"'${u}'"`, `${u} `, `${u}\nsomething else`, `(${u})`]) {
+      expect(ciFromAnswer(w)).toEqual(want)
+    }
+  }
+  expect(ciFromAnswer('"nightly.yml"')).toEqual({ ok: true, ci: { workflow: 'nightly.yml' } })
+  expect(ciFromAnswer('"none"')).toEqual({ ok: true, ci: null })
+})
+
+test('ciFromAnswer / cleanAnswer: non-string answers are coerced, never thrown', () => {
+  expect(ciFromAnswer(undefined)).toEqual({ ok: true, ci: null })
+  expect(ciFromAnswer(null)).toEqual({ ok: true, ci: null })
+  expect(ciFromAnswer({ answer: ACTIONS })).toEqual(ciFromAnswer(ACTIONS))
+  expect(ciFromAnswer({ text: ` "${BLOB}" ` })).toEqual(ciFromAnswer(BLOB))
+  expect(ciFromAnswer([ACTIONS])).toEqual(ciFromAnswer(ACTIONS))
+  expect(ciFromAnswer({ weird: 1 })).toEqual({ ok: true, ci: null })
+  expect(ciFromAnswer(42)).toEqual({ ok: true, ci: { workflow: '42' } })
+  expect(cleanAnswer(`  "x"\n`)).toBe('x')
+  expect(cleanAnswer(7)).toBe('7')
+})
+
+test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
+  expect(ciFromAnswer('https://github.com/a/b/actions/runs/9').ok).toBe(false)
+  expect(ciFromAnswer('https://example.com/a/b/actions/workflows/x.yml').ok).toBe(false)
+  expect(ciFromAnswer('https://github.com/a/b/blob/main/README.md').ok).toBe(false)
 })

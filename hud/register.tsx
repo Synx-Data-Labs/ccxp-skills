@@ -306,7 +306,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'hud' }, async ($, e) => {
-    const arg = String((e as any).args ?? '').trim().toLowerCase()
+    const rawArgs = String((e as any).args ?? '').trim()
+    // `/hud config <url>`: the text after `config` (quotes or not) is the CI answer; everything else is matched on the first word only.
+    const configRest = /^config(?:\s+([\s\S]*))?$/i.exec(rawArgs)
+    const arg = configRest ? 'config' : rawArgs.toLowerCase()
     try {
       const env = await envPaths($)
       const file = configPaths(env).user
@@ -348,7 +351,7 @@ export const register: Register = on => {
           paths: configPaths(env, root),
           read: path => readText($, path),
           write: (path, body) => $.fs.write(path, body),
-        })
+        }, { ci: configRest?.[1] })
         await loadConfig($)
         return { text }
       }

@@ -2,7 +2,7 @@
 // few primitives in as `io`, so the unit tests can drive every branch with fakes.
 
 import type { CiConfig } from '../types'
-import { CI_URL_EXAMPLE, ciFromAnswer, isRewritable, withConfig } from './config'
+import { CI_URL_EXAMPLE, cleanAnswer, ciFromAnswer, isRewritable, withConfig } from './config'
 import { FILL_COLOR_NAMES, FILL_DEFAULT, parseFillColor } from './fill'
 
 export const CANCEL = 'cancel'
@@ -26,6 +26,17 @@ export type ConfigIo = {
 }
 
 const NOTHING = 'ccxp-hud config cancelled; nothing written.'
+/** The engine's dialog rejects a header over 12 characters, so keep each one short. */
+export const MAX_HEADER = 12
+
+/** Marks a rejection of the question dialog itself (dismissed or refused), as opposed to a bug in this module. */
+class AskRejected extends Error {}
+
+/** A short, single-line reason out of any thrown value. */
+function reason(e: unknown): string {
+  const m = e instanceof Error ? e.message : typeof e === 'string' ? e : ''
+  return m.replace(/\s+/g, ' ').trim().slice(0, 120)
+}
 /** Asks per question before it is skipped (left unchanged) and the dialog moves on. */
 const TRIES = 2
 
@@ -34,13 +45,28 @@ const TRIES = 2
  * Writes only the `ci`, `fillColor` and `version` keys, only after "write". An explicit cancel or a dismissed dialog writes nothing.
  * An invalid answer is re-asked once; after a second invalid answer that setting is left unchanged and the dialog continues.
  */
-export async function configureHud(io: ConfigIo): Promise<string> {
+export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}): Promise<string> {
+  // Every answer comes back as a clean string (quotes, backticks, whitespace stripped; a non-string coerced).
+  const io: ConfigIo = {
+    ...rawIo,
+    ask: async (q, o) => {
+      let a: unknown
+      try {
+        a = await rawIo.ask(q, o)
+      } catch (e) {
+        throw new AskRejected(reason(e))
+      }
+      return cleanAnswer(a)
+    },
+  }
   try {
     const notes: string[] = []
     let ci: CiConfig | null | undefined
     let ciQuestion = CI_QUESTION
     for (let i = 0; i < TRIES && ci === undefined; i++) {
-      const answer = await io.ask(ciQuestion, { header: 'CI workflow URL', options: [NONE, CANCEL] })
+      // `/hud config <url>` supplies the first CI answer, so the CI question is only asked when it is unusable.
+      const typed = i === 0 && preset.ci ? cleanAnswer(preset.ci) : undefined
+      const answer = typed ?? (await io.ask(ciQuestion, { header: 'CI workflow', options: [NONE, CANCEL] }))
       if (answer === CANCEL) return NOTHING
       const res = ciFromAnswer(answer)
       if (res.ok) ci = res.ci
@@ -65,7 +91,7 @@ export async function configureHud(io: ConfigIo): Promise<string> {
 
     let version: boolean | undefined
     const versionAnswer = await io.ask('Show the ccxp-skills version in the band (`ccxp 5.0.0`, plus `→ 5.1.0` when a newer release exists)?', {
-      header: 'Plugin version',
+      header: 'Version',
       options: [VERSION_SHOW, VERSION_HIDE, CANCEL],
     })
     if (versionAnswer === CANCEL) return NOTHING
@@ -91,8 +117,9 @@ export async function configureHud(io: ConfigIo): Promise<string> {
     await io.write(file, withConfig(existing, { ci, fillColor, version }))
     const what = [ci === undefined ? undefined : `ci ${ci ? 'set' : 'hidden'}`, fillColor === undefined ? undefined : `fill colour ${fillColor}`, version === undefined ? undefined : `version segment ${version ? 'shown' : 'hidden'}`].filter(Boolean).join(', ') || 'nothing changed'
     return `ccxp-hud: ${what}, in ${file}.${notes.length ? ` Skipped: ${notes.join('; ')}.` : ''} The first CI result can take a couple of minutes (results are cached).`
-  } catch {
-    // A dismissed dialog rejects; nothing has been written at that point.
-    return NOTHING
+  } catch (e) {
+    // A dismissed or refused dialog rejects; nothing has been written at that point. Any other exception is a failure: say why.
+    if (e instanceof AskRejected) return e.message ? `ccxp-hud config cancelled (dialog closed: ${e.message}); nothing written.` : NOTHING
+    return `ccxp-hud config failed: ${reason(e) || 'unexpected error'}; nothing written.`
   }
 }

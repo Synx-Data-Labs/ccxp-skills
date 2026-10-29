@@ -141,15 +141,45 @@ function bad(error: string): { ok: false; error: string } {
   return { ok: false, error }
 }
 
+/** Wrapper pairs a pasted answer may sit in: quotes, backticks, angle brackets, smart quotes. */
+const WRAPPERS: Record<string, string> = { '"': '"', "'": "'", '`': '`', '<': '>', '\u201c': '\u201d', '\u2018': '\u2019', '(': ')', '[': ']' }
+
+/**
+ * A dialog answer as one plain string: a non-string is coerced (an array is comma-joined, an object's
+ * `answer`/`text`/`value`), surrounding whitespace/newlines and wrapping quotes, backticks or angle brackets are
+ * removed, and a URL followed by more text keeps only the URL. Never throws.
+ */
+export function cleanAnswer(answer: unknown): string {
+  let t: string
+  if (typeof answer === 'string') t = answer
+  else if (answer == null) t = ''
+  else if (Array.isArray(answer)) t = answer.map(a => cleanAnswer(a)).join(',')
+  else if (typeof answer === 'object') {
+    const o = answer as Record<string, unknown>
+    const v = o.answer ?? o.text ?? o.value
+    t = typeof v === 'string' ? v : ''
+  } else t = String(answer)
+  for (let i = 0; i < 4; i++) {
+    t = t.trim()
+    const close = WRAPPERS[t[0]]
+    if (close && t.length >= 2 && t.endsWith(close)) t = t.slice(1, -1)
+    else break
+  }
+  t = t.trim()
+  if (/^(https?:\/\/|(www\.)?github\.com\/)/i.test(t)) t = t.split(/\s+/)[0].replace(/[)>"'`.,;]+$/, '')
+  return t
+}
+
 /**
  * The one answer of the `/hud config` CI question, to a `ci` block: a GitHub Actions workflow URL
- * (`.../actions/workflows/<file>`, optionally `?query=branch%3A<b>`; or `.../blob|tree/<branch>/.github/workflows/<file>`),
+ * (`.../actions/workflows/<file>`, optionally `?query=branch%3A<b>`; or `.../blob|tree|raw/<branch>/.github/workflows/<file>`; a scheme-less `github.com/...` too),
  * or a bare workflow file name (repo = the current one). blank / none / no / - hide CI (`ci: null`).
  * The branch is only set when the URL carries one. Never throws.
  */
-export function ciFromAnswer(answer: string): { ok: true; ci: CiConfig | null } | { ok: false; error: string } {
-  const text = answer.trim()
+export function ciFromAnswer(answer: unknown): { ok: true; ci: CiConfig | null } | { ok: false; error: string } {
+  let text = cleanAnswer(answer)
   if (HIDE_CI.has(text.toLowerCase())) return { ok: true, ci: null }
+  if (/^(www\.)?github\.com\//i.test(text)) text = `https://${text}`
   if (!/^https?:\/\//i.test(text)) {
     if (WORKFLOW_RE.test(text)) return { ok: true, ci: { workflow: text } }
     return bad(`"${text.slice(0, 80)}" is neither a GitHub Actions workflow URL nor a plain workflow file name`)
@@ -177,7 +207,7 @@ export function ciFromAnswer(answer: string): { ok: true; ci: CiConfig | null } 
     const q = url.searchParams.get('query') ?? ''
     const m = /(?:^|\s)branch:(\S+)/.exec(q)
     if (m) branch = m[1]
-  } else if ((seg[2] === 'blob' || seg[2] === 'tree') && seg.length > 6) {
+  } else if ((seg[2] === 'blob' || seg[2] === 'tree' || seg[2] === 'raw') && seg.length > 6) {
     const i = seg.indexOf('.github', 4)
     if (i > 3 && seg[i + 1] === 'workflows' && seg[i + 2]) {
       workflow = seg[i + 2]

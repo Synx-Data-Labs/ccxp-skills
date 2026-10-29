@@ -2,26 +2,28 @@ import { expect, test } from 'claude-code/testing'
 
 import { CANCEL, COLOR_DEFAULT, CI_QUESTION, NONE, SCOPE_PROJECT, SCOPE_USER, VERSION_HIDE, VERSION_SHOW, WRITE, configureHud } from './configure'
 
-type Run = { out: string; writes: { path: string; text: string }[]; asked: string[] }
+type Run = { out: string; writes: { path: string; text: string }[]; asked: string[]; headers: string[] }
 
-async function run(answers: (string | Error)[], files: Record<string, string> = {}): Promise<Run> {
+async function run(answers: unknown[], files: Record<string, string> = {}, preset?: { ci?: string }, hooks: { read?: () => Promise<string | undefined>; write?: () => Promise<void> } = {}): Promise<Run> {
   const writes: { path: string; text: string }[] = []
   const asked: string[] = []
+  const headers: string[] = []
   const queue = [...answers]
   const out = await configureHud({
-    ask: async q => {
+    ask: async (q, o) => {
       asked.push(q)
+      headers.push(o.header)
       const a = queue.shift()
       if (a === undefined || a instanceof Error) throw a ?? new Error('dismissed')
-      return a
+      return a as string
     },
     paths: { user: '/h/.claude/ccxp-hud.json', project: '/p/.claude/ccxp-hud.json' },
-    read: async p => files[p],
-    write: async (path, text) => {
+    read: hooks.read ?? (async p => files[p]),
+    write: hooks.write ?? (async (path, text) => {
       writes.push({ path, text })
-    },
-  })
-  return { out, writes, asked }
+    }),
+  }, preset)
+  return { out, writes, asked, headers }
 }
 
 const URL1 = 'https://github.com/acme/widgets/actions/workflows/nightly.yml'
@@ -139,4 +141,49 @@ test('config: the plugin version question is reachable after a bad CI answer; hi
   expect(JSON.parse(hidden.writes[0].text)).toEqual({ fillColor: 'gray', version: false })
   const odd = await run([URL1, COLOR_DEFAULT, 'maybe', SCOPE_USER, WRITE], { '/h/.claude/ccxp-hud.json': '{"version": false}' })
   expect(JSON.parse(odd.writes[0].text)).toEqual({ version: false, fillColor: 'gray', ci: { workflow: 'nightly.yml', repo: 'acme/widgets' } })
+})
+
+const BLOB = 'https://github.com/acme/widgets/blob/main/.github/workflows/nightly.yml'
+const CI_BLOB = { workflow: 'nightly.yml', repo: 'acme/widgets', branch: 'main' }
+
+test('config: a long blob URL, quoted or not, with whitespace or newlines, is accepted on the first try', async () => {
+  for (const a of [BLOB, `"${BLOB}"`, `'${BLOB}'`, `\`${BLOB}\``, `<${BLOB}>`, `  ${BLOB}\n`, `\n"${BLOB}"\n`]) {
+    const r = await run([a, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE])
+    expect(r.asked.length).toBe(5)
+    expect(JSON.parse(r.writes[0].text).ci).toEqual(CI_BLOB)
+  }
+})
+
+test('config: non-string dialog answers are coerced instead of throwing', async () => {
+  const r = await run([{ answer: BLOB }, [COLOR_DEFAULT], { text: VERSION_SHOW }, SCOPE_USER, WRITE])
+  expect(r.writes.length).toBe(1)
+  expect(JSON.parse(r.writes[0].text)).toEqual({ ci: CI_BLOB, fillColor: 'gray', version: true })
+})
+
+test('config: every dialog header fits the engine limit of 12 characters (a longer one makes the dialog reject)', async () => {
+  const r = await run([BLOB, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE])
+  expect(r.headers.length).toBe(5)
+  for (const h of r.headers) expect(h.length <= 12).toBe(true)
+})
+
+test('config: /hud config <url> uses the URL as the CI answer and skips that question; an unusable one falls back to asking', async () => {
+  const r = await run([COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE], {}, { ci: `"${BLOB}"` })
+  expect(r.asked.length).toBe(4)
+  expect(JSON.parse(r.writes[0].text).ci).toEqual(CI_BLOB)
+  const bad = await run([BLOB, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE], {}, { ci: 'nonsense here' })
+  expect(bad.asked.length).toBe(5)
+  expect(bad.asked[0]).toContain('nonsense here')
+  expect(JSON.parse(bad.writes[0].text).ci).toEqual(CI_BLOB)
+})
+
+test('config: a dismissed dialog is a cancel with the reason; any other exception reports why and writes nothing', async () => {
+  const dismissed = await run([BLOB, new Error('dialog dismissed')])
+  expect(dismissed.out).toContain('cancelled')
+  expect(dismissed.out).toContain('dialog dismissed')
+  expect(dismissed.writes).toEqual([])
+  const failed = await run([BLOB, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER], {}, undefined, { read: async () => { throw new Error('EACCES: cannot read') } })
+  expect(failed.out).toBe('ccxp-hud config failed: EACCES: cannot read; nothing written.')
+  const wfail = await run([BLOB, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE], {}, undefined, { write: async () => { throw new Error('disk full') } })
+  expect(wfail.out).toContain('ccxp-hud config failed: disk full')
+  expect(wfail.out).not.toContain('cancelled')
 })
