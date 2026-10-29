@@ -94,10 +94,19 @@ mk_pairing() {
   if grep -q "pairing-5.0.0" "$STATE/calls"; then false; fi
 }
 
-@test "claude is pointed at the chosen profile via CLAUDE_CONFIG_DIR" {
-  run bash "$SCRIPT" --claude-dir "$CLAUDE_DIR"
+@test "claude is pointed at --claude-dir via CLAUDE_CONFIG_DIR, overriding the environment" {
+  other="$BATS_TEST_TMPDIR/other"; mkdir -p "$other"
+  run bash "$SCRIPT" --check --claude-dir "$other"
   [ "$status" -eq 0 ]
-  if grep -qv "cfg=$CLAUDE_DIR" "$STATE/env"; then false; fi
+  if grep -qv "cfg=$other" "$STATE/env"; then false; fi
+}
+
+@test "default profile: CLAUDE_CONFIG_DIR is not exported to claude" {
+  unset CLAUDE_CONFIG_DIR
+  mkdir -p "$BATS_TEST_TMPDIR/home"
+  HOME="$BATS_TEST_TMPDIR/home" run bash "$SCRIPT" --check
+  [ "$status" -ne 0 ] || true
+  if grep -qv "^cfg=$" "$STATE/env"; then false; fi
 }
 
 @test "marketplace failure: exit 1, no plugin update, no agent refresh, state described" {
@@ -132,9 +141,9 @@ mk_pairing() {
 
 @test "newest cache dir ignores non-semver siblings like 9.9.9.old" {
   mkdir -p "$CLAUDE_DIR/plugins/cache/ccxp-skills/ccxp-skills/9.9.9.old/agent-pairing/scripts"
-  run bash "$SCRIPT"
+  run bash "$SCRIPT" --check
   [ "$status" -eq 0 ]
-  grep -q "pairing-5.10.0" "$STATE/calls"
+  grep -q "pairing-5.0.0 update --dry-run" "$STATE/calls"
 }
 
 @test "latest lookup falls back to gh when git ls-remote fails" {
