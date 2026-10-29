@@ -2,6 +2,7 @@
 // Missing, empty or malformed input always means the defaults, which are ON.
 
 import type { CiConfig, Field, HudConfig } from '../types'
+import { FILL_DEFAULT, parseFillColor } from './fill'
 
 export type { CiConfig, Field, HudConfig }
 
@@ -20,7 +21,7 @@ export const DEFAULTS: HudConfig = {
   pollSeconds: 15,
   ctxWarn: 75,
   ctxCrit: 50,
-  fill: false,
+  fillColor: FILL_DEFAULT,
 }
 
 type Raw = Record<string, unknown>
@@ -67,11 +68,14 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band', 'fill'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
   if (typeof raw.userColor === 'string' && raw.userColor.trim() !== '') out.userColor = raw.userColor.trim()
+  // An old `fill` key (the retired fill toggle) is ignored: the fill is always on.
+  const fillColor = parseFillColor(raw.fillColor)
+  if (fillColor) out.fillColor = fillColor
   const fields = parseFields(raw.fields)
   if (fields) out.fields = fields
   for (const key of ['pollSeconds', 'ctxWarn', 'ctxCrit'] as const) {
@@ -109,12 +113,7 @@ export function withEnabled(text: string | undefined | null, enabled: boolean): 
   return withFlag(text, 'enabled', enabled)
 }
 
-/** Text of the user file after `/hud fill on|off`: other keys kept, `fill` set. */
-export function withFill(text: string | undefined | null, fill: boolean): string {
-  return withFlag(text, 'fill', fill)
-}
-
-function withFlag(text: string | undefined | null, key: 'enabled' | 'fill', value: boolean): string {
+function withFlag(text: string | undefined | null, key: 'enabled', value: boolean): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -132,7 +131,7 @@ export function heartbeatPath(env: { configDir?: string; home?: string }, sessio
   return `${base}/state/hud-active/${sessionId}`
 }
 
-/** Answers of `/hud setup` to a `ci` block (a blank means "default"); `null` hides the segment. Never throws. */
+/** Answers of `/hud config` to a `ci` block (a blank means "default"); `null` hides the segment. Never throws. */
 export function ciFromAnswers(a: { workflow: string; branch: string; repo: string }): { ok: true; ci: CiConfig } | { ok: false; error: string } {
   const workflow = a.workflow.trim()
   if (!WORKFLOW_RE.test(workflow)) return { ok: false, error: 'workflow must be a plain file name or id (letters, digits, . _ -; no spaces or slashes)' }
@@ -146,7 +145,7 @@ export function ciFromAnswers(a: { workflow: string; branch: string; repo: strin
   return { ok: true, ci }
 }
 
-/** True when `/hud setup` may rewrite this file text: empty, or a JSON object (never clobber an unparsable file). */
+/** True when `/hud config` may rewrite this file text: empty, or a JSON object (never clobber an unparsable file). */
 export function isRewritable(text: string | undefined | null): boolean {
   if (!text || !text.trim()) return true
   try {
@@ -156,8 +155,8 @@ export function isRewritable(text: string | undefined | null): boolean {
   }
 }
 
-/** Text of a config file after `/hud setup`: only the `ci` key is set (null hides CI); other keys are kept. */
-export function withCi(text: string | undefined | null, ci: CiConfig | null): string {
+/** Text of a config file after `/hud config`: only `ci` (null hides CI) and `fillColor` are set; other keys are kept. */
+export function withConfig(text: string | undefined | null, patch: { ci: CiConfig | null; fillColor: string }): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -165,5 +164,5 @@ export function withCi(text: string | undefined | null, ci: CiConfig | null): st
   } catch {
     raw = {}
   }
-  return JSON.stringify({ ...raw, ci }, null, 2) + '\n'
+  return JSON.stringify({ ...raw, ci: patch.ci, fillColor: patch.fillColor }, null, 2) + '\n'
 }

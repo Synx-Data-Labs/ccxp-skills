@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withCi, withEnabled, withFill } from './config'
-import { FILL_BG, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
+import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
+import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
@@ -112,7 +112,7 @@ test('config: project ci overrides user ci; a project ci of null switches it off
   expect(mergeConfig(user, parseConfigText('{"band": true}')).ci).toEqual({ workflow: 'user.yml' })
 })
 
-test('setup: answers are validated; blanks mean defaults', async () => {
+test('config: answers are validated; blanks mean defaults', async () => {
   expect(ciFromAnswers({ workflow: ' nightly.yml ', branch: '', repo: '' })).toEqual({ ok: true, ci: { workflow: 'nightly.yml' } })
   expect(ciFromAnswers({ workflow: 'w.yml', branch: 'main', repo: 'acme/widgets' })).toEqual({ ok: true, ci: { workflow: 'w.yml', branch: 'main', repo: 'acme/widgets' } })
   for (const bad of [
@@ -125,12 +125,12 @@ test('setup: answers are validated; blanks mean defaults', async () => {
   ]) expect(ciFromAnswers(bad).ok).toBe(false)
 })
 
-test('setup: withCi writes only the ci key, keeps every other key, stays valid JSON (even from garbage)', async () => {
-  expect(JSON.parse(withCi('{"band": false, "fields": "ctx", "userColor": "red"}', { workflow: 'w.yml' }))).toEqual({ band: false, fields: 'ctx', userColor: 'red', ci: { workflow: 'w.yml' } })
-  expect(JSON.parse(withCi('{"ci": {"workflow": "old.yml"}, "enabled": false}', { workflow: 'new.yml' }))).toEqual({ ci: { workflow: 'new.yml' }, enabled: false })
-  expect(JSON.parse(withCi('{"enabled": true}', null))).toEqual({ enabled: true, ci: null })
-  expect(JSON.parse(withCi('garbage', { workflow: 'w.yml' }))).toEqual({ ci: { workflow: 'w.yml' } })
-  expect(JSON.parse(withCi(undefined, null))).toEqual({ ci: null })
+test('config: withConfig writes only ci and fillColor, keeps every other key, stays valid JSON (even from garbage)', async () => {
+  expect(JSON.parse(withConfig('{"band": false, "fields": "ctx", "userColor": "red"}', { ci: { workflow: 'w.yml' }, fillColor: 'gray' }))).toEqual({ band: false, fields: 'ctx', userColor: 'red', ci: { workflow: 'w.yml' }, fillColor: 'gray' })
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}, "enabled": false}', { ci: { workflow: 'new.yml' }, fillColor: 'blue' }))).toEqual({ ci: { workflow: 'new.yml' }, enabled: false, fillColor: 'blue' })
+  expect(JSON.parse(withConfig('{"enabled": true}', { ci: null, fillColor: 'gray' }))).toEqual({ enabled: true, ci: null, fillColor: 'gray' })
+  expect(JSON.parse(withConfig('garbage', { ci: { workflow: 'w.yml' }, fillColor: 'gray' }))).toEqual({ ci: { workflow: 'w.yml' }, fillColor: 'gray' })
+  expect(JSON.parse(withConfig(undefined, { ci: null, fillColor: 'gray' }))).toEqual({ ci: null, fillColor: 'gray' })
 })
 
 test('parseHelper: accepts the helper object, rejects garbage and its failure answer', async () => {
@@ -559,13 +559,15 @@ test('details: an empty snapshot has no lines; a stale helper keeps its tag', as
 
 const fillWidth = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
 
-test('fill: config defaults to false, parses booleans only, withFill keeps other keys', async () => {
-  expect(DEFAULTS.fill).toBe(false)
-  expect(mergeConfig(parseConfigText('{"fill": true}'), {}).fill).toBe(true)
-  expect(mergeConfig(parseConfigText('{"fill": "yes"}'), {}).fill).toBe(false)
-  expect(mergeConfig(parseConfigText('{"fill": true}'), parseConfigText('{"fill": false}')).fill).toBe(false)
-  expect(JSON.parse(withFill('{"band": false}', true))).toEqual({ band: false, fill: true })
-  expect(JSON.parse(withFill('garbage', false))).toEqual({ fill: false })
+test('fill: always on; fillColor defaults to gray, parses names and #rrggbb only, and an old fill key is ignored', async () => {
+  expect(DEFAULTS.fillColor).toBe('gray')
+  expect('fill' in DEFAULTS).toBe(false)
+  expect(mergeConfig(parseConfigText('{"fillColor": "Blue"}'), {}).fillColor).toBe('blue')
+  expect(mergeConfig(parseConfigText('{"fillColor": "#ABCDEF"}'), {}).fillColor).toBe('#abcdef')
+  for (const bad of ['{"fillColor": "chartreuse"}', '{"fillColor": 5}', '{"fillColor": "#abc"}', '{"fillColor": ""}']) expect(mergeConfig(parseConfigText(bad), {}).fillColor).toBe('gray')
+  expect(mergeConfig(parseConfigText('{"fillColor": "green"}'), parseConfigText('{"fillColor": "purple"}')).fillColor).toBe('purple')
+  expect(mergeConfig(parseConfigText('{"fill": false}'), {})).toEqual(DEFAULTS)
+  expect(parseConfigText('{"fill": false}')).toEqual({})
 })
 
 test('fill: displayWidth counts ASCII 1, CJK and emoji 2, marks and joiners 0', async () => {
@@ -643,4 +645,16 @@ test('fill: style follows the theme; unknown theme means reverse video', async (
   expect(fillStyleFor('dark-ansi')).toEqual({ bg: FILL_BG.dark })
   expect(fillStyleFor('light-daltonized')).toEqual({ bg: FILL_BG.light })
   for (const t of ['auto', '', undefined, 5, null]) expect(fillStyleFor(t)).toEqual({ inverse: true })
+})
+
+test('fill: colour choice picks the palette; unset or invalid means gray; custom hex ignores the theme', async () => {
+  expect(fillStyleFor('dark', undefined)).toEqual({ bg: FILL_COLORS.gray.dark })
+  expect(fillStyleFor('dark', 'bogus')).toEqual({ bg: FILL_COLORS.gray.dark })
+  for (const name of Object.keys(FILL_COLORS) as Array<keyof typeof FILL_COLORS>) {
+    expect(fillStyleFor('dark', name)).toEqual({ bg: FILL_COLORS[name].dark })
+    expect(fillStyleFor('light', name)).toEqual({ bg: FILL_COLORS[name].light })
+    expect(fillStyleFor('auto', name)).toEqual({ inverse: true })
+  }
+  expect(fillStyleFor('auto', '#112233')).toEqual({ bg: '#112233' })
+  expect(fillStyleFor('light', '#112233')).toEqual({ bg: '#112233' })
 })

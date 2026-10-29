@@ -1,12 +1,40 @@
-// ccxp-hud fill mode: display-width helpers and the full-width row layout. Pure (no `$`).
+// ccxp-hud fill: display-width helpers and the full-width row layout. Pure (no `$`).
 
 import type { Seg } from './model'
 
 /** Below this many columns the band stays the plain, unfilled row. */
 export const FILL_MIN_COLUMNS = 40
 
-/** Dark and light backgrounds; any other theme (auto, unknown, unreadable) falls back to reverse video. */
-export const FILL_BG = { dark: '#2a2f3a', light: '#dfe3ec' } as const
+/** Default fill colour name. */
+export const FILL_DEFAULT = 'gray'
+
+/**
+ * Named fill colours: a muted dark tint and a pale light tint each, so the band's own cell colours
+ * stay readable on either theme. Any other theme (auto, unknown, unreadable) falls back to reverse video.
+ */
+export const FILL_COLORS = {
+  gray: { dark: '#2a2f3a', light: '#dfe3ec' },
+  blue: { dark: '#1f3350', light: '#d6e4f7' },
+  green: { dark: '#1f3a2a', light: '#d8f0df' },
+  yellow: { dark: '#3d3720', light: '#f5ecc8' },
+  purple: { dark: '#33264d', light: '#e6dcf5' },
+} as const
+
+/** Gray backgrounds (the default). */
+export const FILL_BG = FILL_COLORS.gray
+
+export const FILL_COLOR_NAMES = Object.keys(FILL_COLORS) as Array<keyof typeof FILL_COLORS>
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/
+
+/** A valid fill colour setting: a palette name (any case) or a `#rrggbb` hex; undefined for anything else. */
+export function parseFillColor(x: unknown): string | undefined {
+  if (typeof x !== 'string') return undefined
+  const v = x.trim()
+  if (HEX_RE.test(v)) return v.toLowerCase()
+  const name = v.toLowerCase()
+  return name in FILL_COLORS ? name : undefined
+}
 
 export type FillStyle = { bg: string; inverse?: false } | { bg?: undefined; inverse: true }
 
@@ -116,10 +144,17 @@ export function fillRow(segs: Seg[], columns: number | undefined | null, min: nu
   return [{ text: ' ' }, ...body, { text: ' '.repeat(width - 1 - used) }]
 }
 
-/** Background for the person's theme (`/config` theme value); reverse video when it cannot be told. */
-export function fillStyleFor(theme: unknown): FillStyle {
+/**
+ * Background for the person's theme (`/config` theme value) and fill colour (default gray); an invalid
+ * colour means gray. A custom `#rrggbb` is used as is on any theme; a named colour falls back to
+ * reverse video when the theme cannot be told.
+ */
+export function fillStyleFor(theme: unknown, color: unknown = FILL_DEFAULT): FillStyle {
+  const c = parseFillColor(color) ?? FILL_DEFAULT
+  if (c.startsWith('#')) return { bg: c }
+  const palette = FILL_COLORS[c as keyof typeof FILL_COLORS]
   const t = typeof theme === 'string' ? theme.toLowerCase() : ''
-  if (t.startsWith('dark')) return { bg: FILL_BG.dark }
-  if (t.startsWith('light')) return { bg: FILL_BG.light }
+  if (t.startsWith('dark')) return { bg: palette.dark }
+  if (t.startsWith('light')) return { bg: palette.light }
   return { inverse: true }
 }
