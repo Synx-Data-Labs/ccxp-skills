@@ -256,6 +256,20 @@ test('/hud status reports on or off and the file path', async ($: any, on: any) 
   expect(out.text).toMatch(/ccxp-hud\.json/)
 })
 
+test('bare /hud only prints the status line and usage; it never opens the config dialog or writes', async ($: any, on: any) => {
+  const w = fresh()
+  world($, on, w)
+  await $.session.start(START)
+  const before = w.writes.length
+  for (const args of ['', '  ']) {
+    const out = await $.command.run({ command: 'hud', args })
+    expect(out.text).toMatch(/ccxp-hud is on/)
+    expect(out.text).toMatch(/Usage:/)
+    expect(out.text).not.toMatch(/cancelled/)
+  }
+  expect(w.writes.length).toBe(before)
+})
+
 test('an empty band (fields: []) never writes an "on" heartbeat', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"fields": []}'
