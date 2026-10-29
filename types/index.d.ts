@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -26,6 +26,8 @@ export type HudConfig = {
   ctxCrit: number
   /** Fill band colour: a name (gray, blue, green, yellow, purple) or `#rrggbb`; default gray. The fill itself is always on. */
   fillColor: string
+  /** Show the ccxp-skills version segment (`ccxp 5.0.0`, plus `→ 5.1.0` when newer is released); default true. */
+  version: boolean
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
 }
@@ -62,6 +64,12 @@ export type Ci = {
   at: number
 }
 
+/** The ccxp-skills plugin version segment; `latest` is set only when strictly newer than `installed`. */
+export type PluginVersion = {
+  installed: string
+  latest: string | null
+}
+
 export type HelperData = {
   /** Repository name (origin's last path part, else the folder name); always present. */
   repo: string
@@ -86,6 +94,8 @@ export type HelperData = {
   ledger: Ledger | null
   /** Last run of the configured CI workflow (cached by the helper), null when unconfigured or unknown. */
   ci: Ci | null
+  /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */
+  plugin: PluginVersion | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
   last_input_at: number
 }

@@ -22,6 +22,7 @@ export const DEFAULTS: HudConfig = {
   ctxWarn: 75,
   ctxCrit: 50,
   fillColor: FILL_DEFAULT,
+  version: true,
 }
 
 type Raw = Record<string, unknown>
@@ -68,7 +69,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band', 'version'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
@@ -155,8 +156,8 @@ export function isRewritable(text: string | undefined | null): boolean {
   }
 }
 
-/** Text of a config file after `/hud config`: only `ci` (null hides CI) and `fillColor` are set; other keys are kept. */
-export function withConfig(text: string | undefined | null, patch: { ci: CiConfig | null; fillColor: string }): string {
+/** Text of a config file after `/hud config`: only `ci` (null hides CI), `fillColor` and `version` are set; other keys are kept. */
+export function withConfig(text: string | undefined | null, patch: { ci: CiConfig | null; fillColor: string; version: boolean }): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -164,5 +165,5 @@ export function withConfig(text: string | undefined | null, patch: { ci: CiConfi
   } catch {
     raw = {}
   }
-  return JSON.stringify({ ...raw, ci: patch.ci, fillColor: patch.fillColor }, null, 2) + '\n'
+  return JSON.stringify({ ...raw, ci: patch.ci, fillColor: patch.fillColor, version: patch.version }, null, 2) + '\n'
 }

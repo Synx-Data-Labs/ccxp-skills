@@ -10,6 +10,9 @@ setup() {
   isolate_claimant_state
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
+  # Version segment: no real network, no writes under the developer's home.
+  export HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hud-version"
+  export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/no-such-remote"
   # Repo-identity fields: never read the developer's real gh config, direnv or cache.
   export CCXP_HUD_CACHE_DIR="$BATS_TEST_TMPDIR/hud-cache"
   export CCXP_HUD_CACHE_TTL=60

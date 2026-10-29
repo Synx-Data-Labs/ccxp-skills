@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | config`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for the CI source and the fill colour and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **`/hud`**: `on | off | status | details | config`. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for the CI source, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -26,6 +26,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `fields` | `repo,branch,task,ap,ctx,jobs,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
 | `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud config` writes it for you |
 | `fillColor` | `gray` | colour of the always-on fill bar (see "Fill" below): `gray`, `blue`, `green`, `yellow`, `purple` or a `#rrggbb` hex; `/hud config` writes it. An old `fill` key is ignored |
+| `version` | `true` | shows the ccxp-skills version cell (see "Version cell" below); `false` hides it and stops the lookup. It is its own key, not a `fields` entry, so an old explicit `fields` list still shows it. `/hud config` writes it |
 | `pollSeconds` | `15` | minimum 5 |
 | `ctxWarn` / `ctxCrit` | `75` / `50` | context-LEFT colour thresholds, see "Colours" below. Defaults were `40` / `15`; a value you set yourself is kept, but the red boundary is now strict (red AT `ctxCrit` and below, was below) |
 
@@ -62,10 +63,10 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
   - `*` (yellow) = changed tracked files; untracked files are not scanned (slow on big trees). The helper reports the count (capped at 99); the band only shows the mark.
   - `(wt X)` = a linked git worktree; `(account)` = the `gh` account of that directory.
   - `→` leads for about two refreshes after the working tree changed; `(root: X)` (yellow) shows when a shell `cd` left the session root.
-- gh account: from the session cwd, never the helper's inherited environment. `direnv exec <root> printenv GH_CONFIG_DIR`, else the nearest `.envrc` (`export GH_CONFIG_DIR=...` with `~`, `$HOME`, quotes, `source_up`), else the default gh config; then the `user:` line of `hosts.yml`. The token is never read. Cached 60 s per repo in `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache/` (the helper's only write besides the CI cache); no network. It is what direnv says, not necessarily what a Bash tool call will use.
+- gh account: from the session cwd, never the helper's inherited environment. `direnv exec <root> printenv GH_CONFIG_DIR`, else the nearest `.envrc` (`export GH_CONFIG_DIR=...` with `~`, `$HOME`, quotes, `source_up`), else the default gh config; then the `user:` line of `hosts.yml`. The token is never read. Cached 60 s per repo in `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache/` (the helper's only write besides the CI and version caches); no network. It is what direnv says, not necessarily what a Bash tool call will use.
 - Following `/cd`: the mod reads `$.session.cwd()` on every refresh (falling back to the session root), and a 5 s tick refreshes at once when cwd or root changed. A `command.run` hook for `cd` refreshes right after `/cd`; the 15 s poll is the backstop.
 - Unverified in a real session: that `session.cwd()` moves on `/cd`, and that `command.run` fires for the built-in `/cd` (the tick covers latency, but not a `cwd()` that never moves; then use `root()`).
-- Helper JSON (`hud-data.sh --json`): `repo` is unchanged (name only, always present); new `cwd`, `repo_slug`, `repo_root`, `head`, `dirty`, `gh_account` (null outside a repo).
+- Helper JSON (`hud-data.sh --json`): `repo` is unchanged (name only, always present); `cwd`, `repo_slug`, `repo_root`, `head`, `dirty`, `gh_account` (null outside a repo); `plugin` = `{installed, latest}` (null when `version` is off; `latest` null unless newer).
 - AP-on rows have no repo cell, same as before.
 
 ## Colours
@@ -81,14 +82,25 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - Never blocks the band: the helper answers from an on-disk cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-ci/`) and starts one detached refresh when the cache is older than 120 s (or `pollSeconds`, whichever is larger), 5 s timeout per call. The first result can take a couple of minutes.
 - No such workflow, `gh` missing, signed out or offline: the cell is silently dropped (an older cached answer is kept). Tokens and `gh` output are never shown; the JSON is untrusted and only an enumerated state plus a timestamp survive.
 
+## Version cell
+
+- Shows the installed ccxp-skills version, last in the band: `ccxp 5.0.0` (dim). When a newer release exists it shows both: `ccxp 5.0.0 → 5.1.0`, the new number in the `suggestion` theme colour (stands out, not loud). Narrow: `ccxp ↑5.1.0`, then `↑5.1.0`.
+- Installed: the running plugin's own `.claude-plugin/plugin.json` (the helper's install dir), a local read.
+- Latest: the highest plain `ccxp-skills--vX.Y.Z` tag of the public Synx-Data-Labs/ccxp-skills repo, via `git ls-remote --tags` in `hud/scripts/hud-version.sh` (no credentials, no `gh`). Prereleases are ignored. Shown only when strictly newer by numeric semver (5.10.0 > 5.9.0), never by string compare.
+- Same pattern as the CI cell: answers from a cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-version/`), at most one detached refresh per 6 hours (8 s timeout, no credential prompt). Offline or git missing: the cached answer is kept, the next try is about 15 minutes later, and the cell shows the installed version alone. Only strings matching the tag pattern are ever drawn.
+- Squeezing: the plain `ccxp X` goes right after the last-input cell; the update marker is kept almost to the end. `/hud details` shows it on line 5 next to `you`.
+- Turn it off: `"version": false` or `/hud config`.
+- An update is picked up by `/plugin` (reinstall or update); the cell is information only and changes nothing.
+
 ## `/hud config`
 
 - Renamed from `/hud setup` (breaking: `/hud setup` no longer exists and there is no alias). `/hud fill on|off` was removed too: the fill is always on.
 - Asks (through the engine's question dialog; type values under "Other"):
   - workflow file or `none`, branch (default = repo default branch), repo (default = current)
   - fill colour: gray (default), blue, green, yellow, purple, or a `#rrggbb` hex under Other
+  - ccxp-skills version cell: show (default) or hide
   - scope: user file or this project's `.claude/ccxp-hud.json`
-- Validates every answer, shows the resulting `"ci"` and `"fillColor"` values and the file, and writes only after you pick `write`. Only those two keys are merged in; other keys are kept. Cancelling or dismissing any question writes nothing.
+- Validates every answer, shows the resulting `"ci"`, `"fillColor"` and `"version"` values and the file, and writes only after you pick `write`. Only those three keys are merged in; other keys are kept. Cancelling or dismissing any question writes nothing.
 
 ## Fill
 
@@ -117,7 +129,7 @@ Toggles the band between the one-row view and up to five detail lines (this sess
 ## Notes
 
 - Needs Claude Code 2.1.287 or newer (mods on by default); the mod API is early access and may change.
-- Data comes from `hud/scripts/hud-data.sh --json` (bash; keeps the claimant secret out of the mod). The only network use is the cached, detached CI lookup above (and only when `ci` is set); no model or MCP calls.
+- Data comes from `hud/scripts/hud-data.sh --json` (bash; keeps the claimant secret out of the mod). The only network use is the cached, detached CI lookup above (and only when `ci` is set) and the cached, detached version lookup (`git ls-remote`, at most every 6 hours, only while `version` is on); no model or MCP calls.
 - Any error inside a hook falls back to Claude Code's own drawing.
 - Tests: `claude plugin test .` (units and hook behaviour) and the bats files under "Last-input hook" (bash layer).
 
@@ -133,4 +145,4 @@ Plugins cannot register a `UserPromptSubmit` hook for you here, so add it once p
 
 `<plugin>` is the plugin install path (`~/.claude/plugins/cache/ccxp-skills/ccxp-skills/<version>` for a marketplace install, which needs re-pointing after a version bump, or your dev checkout for a `directory` source). This path was `statusline-setup/scripts/last-input-hook.sh` before that skill was retired.
 
-The job ledger writer is `hud/scripts/ledger.sh` (calls in `hud/scripts/ledger.md`). Tests for the bash layer: `bats tests/hud_lib.bats tests/hud_data.bats tests/hud_ci.bats tests/last_input_hook.bats tests/ledger.bats`.
+The job ledger writer is `hud/scripts/ledger.sh` (calls in `hud/scripts/ledger.md`). Tests for the bash layer: `bats tests/hud_lib.bats tests/hud_data.bats tests/hud_ci.bats tests/hud_version.bats tests/last_input_hook.bats tests/ledger.bats`.

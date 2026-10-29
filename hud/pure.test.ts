@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, ciFromAnswers, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
-import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
+import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -125,12 +125,12 @@ test('config: answers are validated; blanks mean defaults', async () => {
   ]) expect(ciFromAnswers(bad).ok).toBe(false)
 })
 
-test('config: withConfig writes only ci and fillColor, keeps every other key, stays valid JSON (even from garbage)', async () => {
-  expect(JSON.parse(withConfig('{"band": false, "fields": "ctx", "userColor": "red"}', { ci: { workflow: 'w.yml' }, fillColor: 'gray' }))).toEqual({ band: false, fields: 'ctx', userColor: 'red', ci: { workflow: 'w.yml' }, fillColor: 'gray' })
-  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}, "enabled": false}', { ci: { workflow: 'new.yml' }, fillColor: 'blue' }))).toEqual({ ci: { workflow: 'new.yml' }, enabled: false, fillColor: 'blue' })
-  expect(JSON.parse(withConfig('{"enabled": true}', { ci: null, fillColor: 'gray' }))).toEqual({ enabled: true, ci: null, fillColor: 'gray' })
-  expect(JSON.parse(withConfig('garbage', { ci: { workflow: 'w.yml' }, fillColor: 'gray' }))).toEqual({ ci: { workflow: 'w.yml' }, fillColor: 'gray' })
-  expect(JSON.parse(withConfig(undefined, { ci: null, fillColor: 'gray' }))).toEqual({ ci: null, fillColor: 'gray' })
+test('config: withConfig writes only ci, fillColor and version, keeps every other key, stays valid JSON (even from garbage)', async () => {
+  expect(JSON.parse(withConfig('{"band": false, "fields": "ctx", "userColor": "red"}', { ci: { workflow: 'w.yml' }, fillColor: 'gray', version: true }))).toEqual({ band: false, fields: 'ctx', userColor: 'red', ci: { workflow: 'w.yml' }, fillColor: 'gray', version: true })
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}, "enabled": false}', { ci: { workflow: 'new.yml' }, fillColor: 'blue', version: true }))).toEqual({ ci: { workflow: 'new.yml' }, enabled: false, fillColor: 'blue', version: true })
+  expect(JSON.parse(withConfig('{"enabled": true}', { ci: null, fillColor: 'gray', version: true }))).toEqual({ enabled: true, ci: null, fillColor: 'gray', version: true })
+  expect(JSON.parse(withConfig('garbage', { ci: { workflow: 'w.yml' }, fillColor: 'gray', version: true }))).toEqual({ ci: { workflow: 'w.yml' }, fillColor: 'gray', version: true })
+  expect(JSON.parse(withConfig(undefined, { ci: null, fillColor: 'gray', version: true }))).toEqual({ ci: null, fillColor: 'gray', version: true })
 })
 
 test('parseHelper: accepts the helper object, rejects garbage and its failure answer', async () => {
@@ -658,4 +658,80 @@ test('fill: colour choice picks the palette; unset or invalid means gray; custom
   }
   expect(fillStyleFor('auto', '#112233')).toEqual({ bg: '#112233' })
   expect(fillStyleFor('light', '#112233')).toEqual({ bg: '#112233' })
+})
+
+const PLUGIN_NEW = { installed: '5.0.0', latest: '5.1.0' }
+const verSnap = (plugin: object | null, over = {}) => ({ ...withHelper({ plugin }), ...over })
+
+test('version: config defaults to on, `version: false` turns it off, other types are ignored', async () => {
+  expect(DEFAULTS.version).toBe(true)
+  expect(mergeConfig(parseConfigText('{"version": false}'), {}).version).toBe(false)
+  expect(mergeConfig(parseConfigText('{"version": "no"}'), {}).version).toBe(true)
+  expect(mergeConfig(parseConfigText('{"version": false}'), parseConfigText('{"version": true}')).version).toBe(true)
+})
+
+test('version: isNewer is numeric semver, strict, and rejects junk', async () => {
+  expect(isNewer('5.10.0', '5.9.0')).toBe(true)
+  expect(isNewer('10.0.0', '9.9.9')).toBe(true)
+  expect(isNewer('5.0.0', '5.0.0')).toBe(false)
+  expect(isNewer('5.9.0', '5.10.0')).toBe(false)
+  expect(isNewer('5.0.0', '5.0.0-rc.1')).toBe(true)
+  expect(isNewer('5.0.0-rc.1', '5.0.0')).toBe(false)
+  expect(isNewer('x', '5.0.0')).toBe(false)
+  expect(isNewer('5.0.0', '')).toBe(false)
+})
+
+test('version: parseHelper keeps only valid versions and only a strictly newer latest', async () => {
+  const h = (plugin: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin }))?.plugin
+  expect(h(PLUGIN_NEW)).toEqual(PLUGIN_NEW)
+  expect(h({ installed: '5.0.0', latest: null })).toEqual({ installed: '5.0.0', latest: null })
+  expect(h({ installed: '5.1.0', latest: '5.0.0' })).toEqual({ installed: '5.1.0', latest: null })
+  expect(h({ installed: '5.0.0', latest: '5.0.0' })).toEqual({ installed: '5.0.0', latest: null })
+  expect(h({ installed: '5.0.0', latest: '9.0.0; ls' })).toEqual({ installed: '5.0.0', latest: null })
+  expect(h({ installed: 'junk', latest: '9.0.0' })).toBeNull()
+  expect(h(null)).toBeNull()
+  expect(h('5.0.0')).toBeNull()
+  expect(parseHelper(HELPER)?.plugin).toBeNull()
+})
+
+test('version: the band shows `ccxp X` alone, and `ccxp X → Y` when newer exists, last in the row', async () => {
+  const cfg = { ...DEFAULTS }
+  const plain = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), cfg, 140))
+  expect(plain.endsWith('ccxp 5.0.0')).toBe(true)
+  expect(plain).not.toContain('→ 5')
+  const rows = bandRows(verSnap(PLUGIN_NEW), cfg, 140)
+  expect(text(rows).endsWith('ccxp 5.0.0 → 5.1.0')).toBe(true)
+  // The new number stands out (colour), the rest is dim.
+  const seg = rows[0].find(s => s.text === '5.1.0')
+  expect(seg?.color).toBe('suggestion')
+  expect(rows[0].find(s => s.text.startsWith('ccxp 5.0.0'))?.dim).toBe(true)
+})
+
+test('version: `version: false`, no plugin data, or no helper draws nothing', async () => {
+  expect(text(bandRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 140))).not.toContain('ccxp')
+  expect(text(bandRows(verSnap(null), DEFAULTS, 140))).not.toContain('ccxp')
+  expect(text(bandRows({ ...EMPTY, helper: null }, DEFAULTS, 140))).not.toContain('ccxp')
+})
+
+test('version: in AP mode it shows too; narrow rows shrink it, the update outlives the plain version, nothing exceeds the width', async () => {
+  expect(text(bandRows({ ...snapAp(), helper: { ...parseHelper(HELPER_AP)!, plugin: PLUGIN_NEW } }, DEFAULTS, 160))).toContain('ccxp 5.0.0 → 5.1.0')
+  for (const cols of [40, 60, 80, 100, 120]) {
+    for (const plugin of [PLUGIN_NEW, { installed: '5.0.0', latest: null }]) {
+      const row = bandRows(verSnap(plugin), CI, cols)
+      expect(text(row).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    }
+  }
+  // Squeezed: the plain version is dropped before CI, the update arrow survives longer.
+  const plainRow = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), CI, 70))
+  expect(plainRow).not.toContain('ccxp')
+  const upd = text(bandRows(verSnap(PLUGIN_NEW), CI, 100))
+  expect(upd).toMatch(/↑|→/)
+})
+
+test('version: /hud details shows it on the last line, with `you` when present', async () => {
+  const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 120).map(r => r.map(s => s.text).join(''))
+  expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 → 5.1.0')
+  expect(lines[lines.length - 1]).toContain('you ')
+  const off = detailRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 120).map(r => r.map(s => s.text).join(''))
+  expect(off.join('\n')).not.toContain('ccxp')
 })
