@@ -58,7 +58,7 @@ hvr-installed() {
 
 # stdin: `git ls-remote --tags` lines -> the highest plain release version ("" when none).
 hvr-highest-tag() {
-  local line ref v best=""
+  local ref v best=""
   while read -r _ ref; do
     ref="${ref%^{\}}"
     v="${ref#refs/tags/ccxp-skills--v}"
@@ -75,7 +75,7 @@ hvr-refresh() {
   now=$(date +%s)
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   if command -v git >/dev/null 2>&1 \
-    && GIT_TERMINAL_PROMPT=0 hci-run-timeout "$HVR_TIMEOUT" git ls-remote --tags "$remote" 'ccxp-skills--v*' >"$tmp" 2>/dev/null; then
+    && GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND='ssh -o BatchMode=yes' hci-run-timeout "$HVR_TIMEOUT" git ls-remote --tags "$remote" 'ccxp-skills--v*' >"$tmp" 2>/dev/null; then
     latest=$(hvr-highest-tag <"$tmp")
   fi
   prev=$(jq -r '.latest // ""' "$file" 2>/dev/null) || prev=""
@@ -104,6 +104,7 @@ hud-version-json() {
     cached=$(jq -c '.' "$file" 2>/dev/null) || cached=""
     fetched=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || fetched=0
     [[ "$fetched" =~ ^[0-9]+$ ]] || fetched=0
+    [ "$fetched" -le "$now" ] || fetched=0 # a future timestamp (clock skew, hand edit) must not stop refreshes
   fi
 
   if [ $((now - fetched)) -ge "$HVR_TTL" ] && mkdir -p "$dir" 2>/dev/null; then
