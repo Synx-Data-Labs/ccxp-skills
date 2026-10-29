@@ -564,6 +564,7 @@ test('fill: always on; fillColor defaults to gray, parses names and #rrggbb only
   expect('fill' in DEFAULTS).toBe(false)
   expect(mergeConfig(parseConfigText('{"fillColor": "Blue"}'), {}).fillColor).toBe('blue')
   expect(mergeConfig(parseConfigText('{"fillColor": "#ABCDEF"}'), {}).fillColor).toBe('#abcdef')
+  expect(mergeConfig(parseConfigText('{"fillColor": "constructor"}'), {}).fillColor).toBe('gray')
   for (const bad of ['{"fillColor": "chartreuse"}', '{"fillColor": 5}', '{"fillColor": "#abc"}', '{"fillColor": ""}']) expect(mergeConfig(parseConfigText(bad), {}).fillColor).toBe('gray')
   expect(mergeConfig(parseConfigText('{"fillColor": "green"}'), parseConfigText('{"fillColor": "purple"}')).fillColor).toBe('purple')
   expect(mergeConfig(parseConfigText('{"fill": false}'), {})).toEqual(DEFAULTS)
