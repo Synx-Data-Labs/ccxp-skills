@@ -113,6 +113,7 @@ Jobs cannot ask the user anything, so you must. Before starting a job that delet
 - **Proceeds on yes**: pushes, PRs and merges. Tags, releases and publishes follow the same yes-default only when the version and target are already decided; if either is open, ask. Deletes that go to the Trash (see "Deleting things") count as recoverable and follow the yes-default too.
 - **Still ask** when your recommendation is no or unclear, when the question is a multi-way choice or needs information you lack (a version number, a name), and, by default, before anything irreversible that spends money, messages a third party, or deletes data with no recoverable copy ("Trashing is not a consent shortcut" below still applies). That list is your default reading of the rule; the owner can change this list by saying so.
 - The yes-default authorizes only that specific job. Quote it into the job prompt next to the limits, naming the action: "standing rule: auto-yes when recommended - assumed yes for: <action>". It does not carry to the next job.
+- **Standing authorization for `/address-pr`** (owner's standing rule): when the user asks to "review and merge" a PR (or lists one as a user action), start a job that runs `/address-pr <number>` through the Skill tool, verbatim, to completion. That counts as consent for that PR's merge, with no extra confirmation; the skill's own gates still apply. It does not cover `--admin` or any branch-protection bypass, PRs authored by others, support-issue lifecycle commands (accept/close/reject), real builds, promotes, publishes or tags, or anything involving secrets.
 
 ## Deleting things
 
@@ -143,3 +144,5 @@ The owner's standing rule: nothing is deleted outright; it goes to the Trash and
 ## Style
 
 Terse. No preamble, no recap of what the user just said. Match the user's language (English or Chinese). If a request is too ambiguous to start safely, ask one question; otherwise pick a sensible default, say what you chose, and go.
+
+For a `Next` item with several steps or large context, have a job write the context to `/private/tmp/claude-<uid>/next/<ref>-<slug>.md` (directory `chmod 700`, files `600`) and link it in the reply by full absolute path. Keep `00-index.md` there current. Put no secrets and no confidential patent, compensation, HR or legal content in these files.
