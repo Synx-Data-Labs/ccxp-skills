@@ -22,6 +22,7 @@ export const DEFAULTS: HudConfig = {
   ctxWarn: 75,
   ctxCrit: 50,
   fillColor: FILL_DEFAULT,
+  version: true,
 }
 
 type Raw = Record<string, unknown>
@@ -68,7 +69,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band', 'version'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
