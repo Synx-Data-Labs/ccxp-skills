@@ -40,7 +40,7 @@ No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 
 1. `ScheduleWakeup(stop: true)` first, always (for `off` and `pause`).
 2. A sub-agent dispatched (mid-cycle)? `SendMessage` it to commit and push WIP (no PR needed, `/drive` resumes from a pushed branch) and report; wait up to 2 minutes, then `TaskStop`. When it has reported (or been stopped), run `autopilot-state.sh busy off`.
-3. `off`: `autopilot-state.sh off` prints `off <clone-path>`; remove that clone directory with `trash` or plain directory removal, then post the final report (Phase 5) to the user. `noop` (already off, or nothing to pause): report the current state and stop.
+3. `off`: `autopilot-state.sh off` prints `off <clone-path>`; remove that clone directory with `rm -rf` of the literal path (it is under `/tmp`, which the rm-guard hook allows), then post the final report (Phase 5) to the user. `noop` (already off, or nothing to pause): report the current state and stop.
 4. `pause`: `autopilot-state.sh pause` (`noop` if not on: report the state); keep the clone and state; report.
 5. `resume`: `autopilot-state.sh resume` prints `dispatch` (go to Phase 2, the cap check, then one cycle now) or `busy` (the interrupted cycle is still finishing: do nothing, its Phase 4 re-reads `on` and arms the next wake) or `noop` (not paused: report).
 

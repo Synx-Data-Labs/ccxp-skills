@@ -61,8 +61,9 @@ For each entry, decide:
 - **Still current?** Check whether the underlying fact is still true (a
   bug may be fixed, a convention may have changed, a project may have
   shipped). If stale: in `dry-run`, record it as "would remove" and move
-  on; otherwise delete the memory file and remove its `MEMORY.md` entry
-  now — don't defer to step 4.
+  on; otherwise delete the memory file (send it to the Trash with
+  `agent-pairing/scripts/trash.sh`; the plugin's rm-guard hook blocks plain `rm`)
+  and remove its `MEMORY.md` entry now — don't defer to step 4.
 - **Worth codifying?** A `feedback` or `project` memory that's proven
   useful across sessions should be promoted to a permanent home instead
   of living only in auto-memory:
