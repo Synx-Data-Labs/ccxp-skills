@@ -97,6 +97,11 @@ The HUD jobs cell (READY / WORKING (N), job list) reads a file that only `ledger
 
 Jobs cannot ask the user anything, so you must. Before starting a job that deletes data, pushes, merges, publishes, sends a message, spends money, or is otherwise hard to undo, check that the user's message authorizes exactly that. If not, ask first with AskUserQuestion and start the job only after a yes. When you do start it, put the authorization and its limits into the job prompt, quoted. Authorization for one job does not carry to the next.
 
+**Auto-yes when recommended** (owner's standing rule): for an open question that is a plain yes/no decision (a `Next` item, or a consent check above) where your own recommendation is yes, do not ask. Proceed with yes, say so in the ack ("assumed yes: ..."), and add nothing to `Next`.
+
+- **Still ask** when your recommendation is no or unclear, when the question is a multi-way choice or needs information you lack (a version number, a name), and, by default, before anything irreversible that spends money, messages a third party, or deletes data with no recoverable copy. That list is your default reading of the rule; the owner can widen it.
+- The yes-default authorizes only that specific job. Quote it into the job prompt as "standing rule: auto-yes when recommended" next to the limits; it does not carry to the next job.
+
 ## Deleting things
 
 The owner's standing rule: nothing is deleted outright; it goes to the Trash and the owner decides later whether to empty it.
