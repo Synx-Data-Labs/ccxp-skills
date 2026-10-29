@@ -71,6 +71,40 @@ class Cmd(object):
 
 # --------------------------------------------------------------------------- lexer
 
+def heredoc_end(s, i):
+    """s[i:] is just after '<<' inside $( ). Return the index just past the
+    heredoc body's terminator line, or None when it is not a recognizable
+    heredoc (then the caller scans on as before)."""
+    n = len(s)
+    if i < n and s[i] == "-":
+        i += 1
+    while i < n and s[i] in " \t":
+        i += 1
+    q = s[i] if i < n and s[i] in "'\"" else ""
+    if q:
+        i += 1
+    j = i
+    while j < n and (s[j].isalnum() or s[j] == "_"):
+        j += 1
+    delim = s[i:j]
+    if not delim or (q and (j >= n or s[j] != q)):
+        return None
+    j += 1 if q else 0
+    nl = s.find("\n", j)
+    if nl < 0:
+        return None
+    pos = nl + 1
+    while pos <= n:
+        e = s.find("\n", pos)
+        line = s[pos:] if e < 0 else s[pos:e]
+        if line.strip("\t") == delim:
+            return n if e < 0 else e
+        if e < 0:
+            return None
+        pos = e + 1
+    return None
+
+
 def match_paren(s, i):
     """s[i:] is just after '('. Return index of the matching ')'."""
     depth, n = 1, len(s)
@@ -79,6 +113,11 @@ def match_paren(s, i):
         if c == "\\":
             i += 2
             continue
+        if c == "<" and s.startswith("<<", i) and not s.startswith("<<<", i):
+            k = heredoc_end(s, i + 2)
+            if k is not None:
+                i = k
+                continue
         if c == "'":
             j = s.find("'", i + 1)
             if j < 0:
@@ -892,6 +931,11 @@ class Analyzer(object):
         while i < n:
             s = strs[i]
             if s is None:
+                # Unresolvable option token such as -I{}: skip it. Anything
+                # else unresolvable is the command itself; give up (allow).
+                if args[i].source().startswith("-"):
+                    i += 1
+                    continue
                 return
             if s == "--":
                 i += 1
