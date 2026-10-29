@@ -107,9 +107,10 @@ Jobs cannot ask the user anything, so you must. Before starting a job that delet
 The owner's standing rule: nothing is deleted outright; it goes to the Trash and the owner decides later whether to empty it.
 
 - **Every job prompt** (Agent-tool and detached) carries this line: "Never run `rm`, `rm -rf`, `unlink`, `rmdir` or `find -delete`. To delete anything, run `bash <plugin-dir>/agent-pairing/scripts/trash.sh [--label <job>] <path>...` (or `mv` the path into `~/.Trash/<YYYYMMDD-HHMMSS>-<label>/` yourself if the script is missing) and list what you moved, and the `TRASH <dir>` line it printed, in your report." Resolve `<plugin-dir>` to an absolute path first (`ls -d ~/.claude*/plugins/cache/ccxp-skills/ccxp-skills/*/`, newest version).
-- **You** follow the same rule: if a carve-out ever has to remove something (for example `/autopilot` dropping its dispatch clone), use `trash.sh`, never `rm`.
+- **You** follow the same rule: if a carve-out ever has to remove something, use `trash.sh`, never `rm` (paths under `/tmp` are exempt, see the hook line below).
 - `trash.sh` uses `/usr/bin/trash` (items keep Finder "Put Back") and falls back to `mv` into the timestamped folder; either way `MANIFEST.tsv` in that folder records each original path. `--dry-run` shows the plan. It refuses `/`, `$HOME` and the Trash itself.
 - Items sit in the Finder Trash, and macOS empties it after 30 days when Finder's "Remove items from the Trash after 30 days" is on. Passing this to the owner is part of relaying a delete: say where things went.
+- The plugin's `rm-guard` PreToolUse hook backstops this rule: a Bash call that runs `rm`, `unlink`, `find -delete` or `xargs rm` is denied with a pointer to `trash.sh`, except when every target is under `/tmp`, `/private/tmp` or `$TMPDIR` (so `/autopilot` and `/drive` may still `rm -rf` their `/tmp` clones). The owner can override with `CCXP_ALLOW_RM=1` in the Claude Code environment.
 - Trashing is not a consent shortcut: "Consent comes before dispatch" still applies to deletes that matter.
 
 ## When results arrive

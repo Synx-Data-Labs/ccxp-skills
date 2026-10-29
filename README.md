@@ -167,6 +167,17 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 
 `autopilot`, `bottom`, `memory-to-skill`, `agent-pairing`, `cleanup-branch`, `epic` and `to-task` are model-visible, but the plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) makes Claude Code prompt you before the model may run them. Typed `/skill` is unaffected. Edit `hooks/ask-skills.txt` to change the list. Headless `-p`, `dontAsk` and dispatched sub-agents cannot answer the prompt, so the call is denied there. Every other skill is model-invocable with no prompt.
 
+### Delete guard (`rm-guard` hook)
+
+The plugin's `hooks/rm-guard.sh` PreToolUse hook (matcher `Bash`) backs the "nothing is deleted outright" rule: it denies a Bash call that deletes files and tells the agent to run `agent-pairing/scripts/trash.sh <paths>` instead (items go to `~/.Trash`, with a `MANIFEST.tsv`) and to list what it moved. The command is tokenized by a small shell lexer (`hooks/rm-guard.py`), not grepped.
+
+- **Blocked:** `rm`, `unlink`, `find ... -delete`, `find ... -exec rm`, `xargs rm`, also as `/bin/rm`, `command rm`, `sudo rm`, `\rm`, and inside `&&`, `;`, `|`, `$( )`, backticks, `( )`, `bash -c '...'`, `eval`, `trap`, and a heredoc or pipe fed to a shell.
+- **Not blocked:** `git rm`, `docker rm`, `npm rm`, `kubectl delete`, `rmdir`, and the word `rm` as data (quoted strings, `echo`, `grep`, commit messages).
+- **Allowed without trashing:** every target resolves strictly under `/tmp`, `/private/tmp` or `$TMPDIR` (simple `VAR=/tmp/x`, `cd`, `~`, `$TMPDIR` and `$(mktemp -d)` are followed; `..` and symlinks are resolved). A target the hook cannot resolve (`$(...)`, unknown `$VAR`, braces, `xargs` stdin) counts as outside temp.
+- **Fails open:** an unparsable command, a missing `python3` or an analyzer error allows the call and prints one `rm-guard:` line on stderr.
+- **Override:** set `CCXP_ALLOW_RM=1` in the environment of the Claude Code process (for example the `env` block of `settings.json`, or the shell that starts `claude`). An inline `CCXP_ALLOW_RM=1 rm ...` in the command does not count.
+- **Scope:** a backstop for the common paths, not a sandbox. `bash script.sh`, `python -c 'shutil.rmtree(...)'`, `git clean` and similar still delete. Hooks load at session start: after `/plugin update`, start a new session.
+
 ## Reference docs
 
 Canonical cross-repo docs at this repo's root (peers, not skills) —

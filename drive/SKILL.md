@@ -171,7 +171,7 @@ git clone --depth=20 --recurse-submodules \
 ```
 
 - **No `trap` and no shell variables across calls.** Each Bash tool call is its own shell: an `EXIT` trap would fire (deleting the clone) when *that call* returns, and `$TARGET`/`$HUB` do not survive into the next call.
-- Use the literal absolute path in every later command (`cd /tmp/T<id>-<slug>-target && …`), and clean up explicitly in Phase 7 (`rm -rf` that path) — plus the orphan sweep below as the backstop for aborted runs.
+- Use the literal absolute path in every later command (`cd /tmp/T<id>-<slug>-target && …`), and clean up explicitly in Phase 7 (`rm -rf` that literal path; the rm-guard hook allows it because it is under `/tmp`, but not a `$VAR` it cannot resolve) — plus the orphan sweep below as the backstop for aborted runs.
 
 That's it. No safety guards, no JIT-refresh logic. A fresh clone is clean, on `main`, with no concurrent ops by construction — the entire class of "respect another process's state" coordination disappears because there is no other process in our clone.
 
