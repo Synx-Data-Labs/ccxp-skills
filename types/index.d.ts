@@ -24,8 +24,8 @@ export type HudConfig = {
   pollSeconds: number
   ctxWarn: number
   ctxCrit: number
-  /** Draw the band as a full-width tinted bar (`/hud fill on`); default false. */
-  fill: boolean
+  /** Fill band colour: a name (gray, blue, green, yellow, purple) or `#rrggbb`; default gray. The fill itself is always on. */
+  fillColor: string
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
 }

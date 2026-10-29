@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { USER_TEXT_COLOR } from './config'
-import { FILL_BG } from './fill'
+import { FILL_BG, FILL_COLORS } from './fill'
 
 const HELPER = JSON.stringify({
   repo: 'proj',
@@ -363,29 +363,30 @@ test('the retired /hud pane is gone: it falls through to the usage line, which d
 
 // --- fill mode ---
 
-test('/hud fill on|off writes only the fill key, keeps the rest, and the usage line offers it', async ($: any, on: any) => {
+test('/hud fill is retired: it is not a subcommand, writes nothing, and the usage line offers config', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"band": true}'
   world($, on, w)
   await $.session.start(START)
-  const onOut = await $.command.run({ command: 'hud', args: 'fill on' })
-  expect(onOut.text).toMatch(/fill on/)
-  expect(JSON.parse(w.writes[w.writes.length - 1].text)).toEqual({ band: true, fill: true })
-  const offOut = await $.command.run({ command: 'hud', args: 'fill off' })
-  expect(offOut.text).toMatch(/fill off/)
-  expect(JSON.parse(w.writes[w.writes.length - 1].text)).toEqual({ band: true, fill: false })
-  expect((await $.command.run({ command: 'hud', args: 'bogus' })).text).toContain('fill on|off')
+  const before = w.writes.length
+  const out = await $.command.run({ command: 'hud', args: 'fill on' })
+  expect(out.text).toMatch(/Usage:/)
+  expect(w.writes.length).toBe(before)
+  const usage = (await $.command.run({ command: 'hud', args: 'bogus' })).text
+  expect(usage).toContain('config')
+  expect(usage).not.toContain('fill')
+  expect(usage).not.toContain('setup')
+  expect((await $.command.run({ command: 'hud', args: 'setup' })).text).toMatch(/Usage:/)
 })
 
-test('fill is off by default: the band carries no background', async ($: any, on: any) => {
+test('fill is always on by default (gray): the band carries the gray background', async ($: any, on: any) => {
   const w = fresh()
   w.theme = 'dark'
   world($, on, w)
   await $.session.start(START)
   const band = await $.ui.mount(BAND(100))
   expect(await band.find({ type: 'Text', text: /proj/ })).toBeDefined()
-  expect(await hasProps(band, { backgroundColor: FILL_BG.dark })).toBe(false)
-  expect(await band.find({ type: 'Text', text: /^ {5,}$/ })).toBeUndefined()
+  expect(await hasProps(band, { backgroundColor: FILL_BG.dark })).toBe(true)
   await band.unmount()
 })
 
@@ -395,9 +396,9 @@ async function hasProps(band: any, want: Record<string, unknown>) {
   return texts.some((t: any) => Object.entries(want).every(([k, v]) => t.props[k] === v))
 }
 
-async function fillBand($: any, on: any, theme: string, props: object) {
+async function fillBand($: any, on: any, theme: string, props: object, cfg = '{}') {
   const w = fresh()
-  w.cfg = '{"fill": true}'
+  w.cfg = cfg
   w.theme = theme
   world($, on, w)
   await $.session.start(START)
@@ -407,21 +408,26 @@ async function fillBand($: any, on: any, theme: string, props: object) {
   return found
 }
 
-test('fill on, dark theme: the dark background', async ($: any, on: any) => {
+test('fill, dark theme: the dark background', async ($: any, on: any) => {
   expect(await fillBand($, on, 'dark', { backgroundColor: FILL_BG.dark })).toBe(true)
 })
 
-test('fill on, light theme: the light background', async ($: any, on: any) => {
+test('fill, light theme: the light background', async ($: any, on: any) => {
   expect(await fillBand($, on, 'light', { backgroundColor: FILL_BG.light })).toBe(true)
 })
 
-test('fill on, unknown theme: reverse video', async ($: any, on: any) => {
+test('fillColor in the config file is used (blue, dark; hex on any theme); an old fill:false is ignored', async ($: any, on: any) => {
+  expect(await fillBand($, on, 'dark', { backgroundColor: FILL_COLORS.blue.dark }, '{"fillColor": "blue"}')).toBe(true)
+  expect(await fillBand($, on, 'auto', { backgroundColor: '#112233' }, '{"fillColor": "#112233"}')).toBe(true)
+  expect(await fillBand($, on, 'dark', { backgroundColor: FILL_BG.dark }, '{"fill": false}')).toBe(true)
+})
+
+test('fill, unknown theme: reverse video', async ($: any, on: any) => {
   expect(await fillBand($, on, 'auto', { inverse: true })).toBe(true)
 })
 
-test('fill on but a too-narrow terminal: the plain row, no background', async ($: any, on: any) => {
+test('fill but a too-narrow terminal: the plain row, no background', async ($: any, on: any) => {
   const w = fresh()
-  w.cfg = '{"fill": true}'
   w.theme = 'dark'
   world($, on, w)
   await $.session.start(START)

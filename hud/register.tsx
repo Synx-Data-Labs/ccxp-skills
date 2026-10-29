@@ -3,7 +3,7 @@
 //  - styles the user's own prompt rows (UserMessage render site)
 //  - draws a status band above the prompt (AbovePrompt) fed by the bash helper
 //    hud/scripts/hud-data.sh --json (claimant secret stays in bash)
-//  - /hud on|off|status|details|setup
+//  - /hud on|off|status|details|config
 //
 // ON by default; `enabled: false` in ~/.claude/ccxp-hud.json (or a project
 // override) makes every hook a pass-through. The file is re-read on every poll
@@ -15,11 +15,11 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { CiConfig, HudConfig, Snapshot } from '../types'
-import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled, withFill } from './config'
+import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { fillStyleFor } from './fill'
 import { EMPTY, compactLine, countJobs, parseHelper } from './model'
 import { bandTree, userMessageTree } from './render'
-import { setupCi } from './setup'
+import { configureHud } from './configure'
 
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
 const configAtom = atom({ plugin: 'ccxp-skills', key: 'config' } as const, DEFAULTS)
@@ -255,7 +255,7 @@ export const register: Register = on => {
       if (!mem.started) {
         mem.started = true
         try {
-          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | fill on|off | setup' })
+          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | config' })
         } catch {
           /* the command is optional */
         }
@@ -323,17 +323,6 @@ export const register: Register = on => {
         await mirrorStatus($, cfg)
         return { text: `ccxp-hud ${cfg.enabled ? 'on' : 'off'} (${file}). Takes effect now.` }
       }
-      if (arg === 'fill on' || arg === 'fill off') {
-        const enable = arg === 'fill on'
-        if (!file) return { text: 'ccxp-hud: cannot find the config dir. Edit ccxp-hud.json by hand: {"fill": ' + enable + '}' }
-        try {
-          await $.fs.write(file, withFill(await readText($, file), enable))
-        } catch {
-          return { text: `ccxp-hud: could not write ${file}. Set "fill": ${enable} in it by hand.` }
-        }
-        await loadConfig($)
-        return { text: `ccxp-hud fill ${enable ? 'on' : 'off'} (${file}). Takes effect now; a project file's "fill" still wins.` }
-      }
       if (arg === 'details') {
         // Toggle: the expanded view is a live part of the band, so the flag lives in an atom the band reads.
         const cfg = await read($, configAtom)
@@ -347,14 +336,14 @@ export const register: Register = on => {
             : 'ccxp-hud details off: back to the one-line band.',
         }
       }
-      if (arg === 'setup') {
+      if (arg === 'config') {
         let root: string | undefined
         try {
           root = await $.session.root()
         } catch {
           root = undefined
         }
-        const text = await setupCi({
+        const text = await configureHud({
           ask: (question, options) => $.ui.ask(question, options),
           paths: configPaths(env, root),
           read: path => readText($, path),
@@ -364,7 +353,7 @@ export const register: Register = on => {
         return { text }
       }
       const cfg = await read($, configAtom)
-      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | fill on|off | setup` }
+      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | config` }
     } catch {
       return { text: 'ccxp-hud: something went wrong; the session is unaffected.' }
     }
@@ -385,7 +374,7 @@ export const register: Register = on => {
     const cfg = await read($, configAtom)
     if (!cfg.enabled || !cfg.band || e.props.hasSurvey) return next(e)
     const expanded = await read($, detailsAtom)
-    const fill = cfg.fill ? fillStyleFor(await themeOf($)) : null
+    const fill = fillStyleFor(await themeOf($), cfg.fillColor)
     const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows, fill)
     mem.bandSurface = tree ? e.surface : null
     return tree ?? next(e)
