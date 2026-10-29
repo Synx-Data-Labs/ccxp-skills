@@ -200,3 +200,11 @@ EOF
   [ "$status" -eq 0 ]
   grep -q '^ARG= --name evil$' "$FAKE_LOG"
 }
+
+@test "launch: default allow-list lets a job run trash.sh (delete-by-trash), not rm" {
+  run bash "$D/job-launch.sh" 8 "Tidy" "$PROMPT" --cwd "$BATS_TEST_TMPDIR/work"
+  [ "$status" -eq 0 ]
+  s="$(settings j8-tidy)"
+  [ "$(jq -r '.permissions.allow | index("Bash(bash */agent-pairing/scripts/trash.sh *)") != null' <<< "$s")" = true ]
+  [ "$(jq -r '[.permissions.allow[] | select(test("rm"))] | length' <<< "$s")" = 0 ]
+}

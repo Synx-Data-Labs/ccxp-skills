@@ -29,7 +29,8 @@ DEFAULT_DENY=('Bash(git push *)' 'Bash(gh pr create *)' 'Bash(gh pr merge *)'
 DEFAULT_ALLOW=(Read Grep Glob Edit Write 'Bash(git status *)' 'Bash(git diff *)'
   'Bash(git log *)' 'Bash(git show *)' 'Bash(git add *)' 'Bash(git commit *)'
   'Bash(gh pr view *)' 'Bash(gh pr checks *)' 'Bash(gh run view *)'
-  'Bash(gh run list *)' 'Bash(ls *)')
+  'Bash(gh run list *)' 'Bash(ls *)'
+  'Bash(bash */agent-pairing/scripts/trash.sh *)')
 
 function die() { echo "job-launch: $*" >&2; exit 2; }
 
