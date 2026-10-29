@@ -42,7 +42,7 @@ setup() {
 }
 
 @test "config wizard asks whether to show the plugin version and persists version" {
-  grep -q "header: 'Plugin version'" "$ROOT/hud/configure.ts"
+  grep -q "header: 'Version'" "$ROOT/hud/configure.ts"
   grep -q "version: boolean" "$ROOT/types/index.d.ts"
   grep -qE "^  version: true," "$ROOT/hud/config.ts"
 }
