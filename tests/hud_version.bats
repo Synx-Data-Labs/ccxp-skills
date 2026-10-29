@@ -57,14 +57,20 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
   [ -z "$(hvr-installed "$(_plugin 'x; echo pwned')")" ]
 }
 
-@test "a newer tag is reported; installed alone otherwise" {
+@test "the highest tag is reported whatever its relation to installed (the HUD decides the wording)" {
   _remote ccxp-skills--v4.1.1 ccxp-skills--v5.0.0 ccxp-skills--v5.1.0
   run _ver "$(_plugin 5.0.0)"
   [ "$output" = '{"installed":"5.0.0","latest":"5.1.0"}' ]
   run _ver "$(_plugin 5.1.0)"
-  [ "$output" = '{"installed":"5.1.0","latest":null}' ]
+  [ "$output" = '{"installed":"5.1.0","latest":"5.1.0"}' ]
   run _ver "$(_plugin 5.2.0)"
-  [ "$output" = '{"installed":"5.2.0","latest":null}' ]
+  [ "$output" = '{"installed":"5.2.0","latest":"5.1.0"}' ]
+}
+
+@test "no tag at all: latest stays null (never claimed)" {
+  _remote other--v1.0.0
+  run _ver "$(_plugin 5.1.0)"
+  [ "$output" = '{"installed":"5.1.0","latest":null}' ]
 }
 
 @test "the highest tag wins by semver (5.10.0 beats 5.9.0); prerelease and foreign tags are ignored" {

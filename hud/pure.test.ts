@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
-import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords } from './model'
+import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -716,12 +716,12 @@ test('version: isNewer is numeric semver, strict, and rejects junk', async () =>
   expect(isNewer('5.0.0', '')).toBe(false)
 })
 
-test('version: parseHelper keeps only valid versions and only a strictly newer latest', async () => {
+test('version: parseHelper keeps only valid versions (latest is kept whatever its relation to installed)', async () => {
   const h = (plugin: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin }))?.plugin
   expect(h(PLUGIN_NEW)).toEqual(PLUGIN_NEW)
   expect(h({ installed: '5.0.0', latest: null })).toEqual({ installed: '5.0.0', latest: null })
-  expect(h({ installed: '5.1.0', latest: '5.0.0' })).toEqual({ installed: '5.1.0', latest: null })
-  expect(h({ installed: '5.0.0', latest: '5.0.0' })).toEqual({ installed: '5.0.0', latest: null })
+  expect(h({ installed: '5.1.0', latest: '5.0.0' })).toEqual({ installed: '5.1.0', latest: '5.0.0' })
+  expect(h({ installed: '5.0.0', latest: '5.0.0' })).toEqual({ installed: '5.0.0', latest: '5.0.0' })
   expect(h({ installed: '5.0.0', latest: '9.0.0; ls' })).toEqual({ installed: '5.0.0', latest: null })
   expect(h({ installed: 'junk', latest: '9.0.0' })).toBeNull()
   expect(h(null)).toBeNull()
@@ -729,17 +729,55 @@ test('version: parseHelper keeps only valid versions and only a strictly newer l
   expect(parseHelper(HELPER)?.plugin).toBeNull()
 })
 
-test('version: the band shows `ccxp X` alone, and `ccxp X → Y` when newer exists, last in the row', async () => {
+test('version: the band shows `ccxp X (latest)`, `ccxp X (Y available)`, or `ccxp X` when latest is unknown, last in the row', async () => {
   const cfg = { ...DEFAULTS }
-  const plain = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), cfg, 140))
+  const plain = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), cfg, 160))
   expect(plain.endsWith('ccxp 5.0.0')).toBe(true)
-  expect(plain).not.toContain('→ 5')
-  const rows = bandRows(verSnap(PLUGIN_NEW), cfg, 140)
-  expect(text(rows).endsWith('ccxp 5.0.0 → 5.1.0')).toBe(true)
+  expect(plain).not.toContain('latest')
+  const rows = bandRows(verSnap(PLUGIN_NEW), cfg, 160)
+  expect(text(rows).endsWith('ccxp 5.0.0 (5.1.0 available)')).toBe(true)
   // The new number stands out (colour), the rest is dim.
   const seg = rows[0].find(s => s.text === '5.1.0')
   expect(seg?.color).toBe('suggestion')
   expect(rows[0].find(s => s.text.startsWith('ccxp 5.0.0'))?.dim).toBe(true)
+  // Same version as the latest release: `(latest)` in the success colour.
+  const cur = bandRows(verSnap({ installed: '5.1.0', latest: '5.1.0' }), cfg, 160)
+  expect(text(cur).endsWith('ccxp 5.1.0 (latest)')).toBe(true)
+  expect(cur[0].find(s => s.text === '(latest)')?.color).toBe('success')
+  // Installed newer than latest (dev/prerelease): plain, never "latest".
+  for (const p of [{ installed: '5.2.0', latest: '5.1.0' }, { installed: '5.1.0-rc.1', latest: '5.0.0' }]) {
+    const t = text(bandRows(verSnap(p), cfg, 160))
+    expect(t.endsWith(`ccxp ${p.installed}`)).toBe(true)
+    expect(t).not.toContain('latest')
+  }
+})
+
+test('version: versionState classifies latest / available / unknown', async () => {
+  expect(versionState({ installed: '5.1.1', latest: '5.1.1' })).toBe('latest')
+  expect(versionState({ installed: '5.1.1', latest: '5.2.0' })).toBe('available')
+  expect(versionState({ installed: '5.1.1-rc.1', latest: '5.1.1' })).toBe('available')
+  expect(versionState({ installed: '5.1.1', latest: null })).toBe('unknown')
+  expect(versionState({ installed: '5.2.0', latest: '5.1.1' })).toBe('unknown')
+})
+
+test('version: narrow forms are `ccxp X ✓` for latest and `ccxp ↑Y`, `↑Y` for an update', async () => {
+  const cur = { installed: '5.1.0', latest: '5.1.0' }
+  const widths = (p: object) => {
+    const out = new Set<string>()
+    for (let c = 20; c <= 140; c++) {
+      const t = text(bandRows(verSnap(p), { ...DEFAULTS, fields: ['jobs'] }, c))
+      const m = t.match(/(ccxp [^ ]+ \(latest\)|ccxp 5\.1\.0 ✓|ccxp 5\.1\.0 \(5\.2\.0 available\)|ccxp ↑5\.2\.0|↑5\.2\.0)$/)
+      if (m) out.add(m[1])
+    }
+    return out
+  }
+  const a = widths(cur)
+  expect(a.has('ccxp 5.1.0 (latest)')).toBe(true)
+  expect(a.has('ccxp 5.1.0 ✓')).toBe(true)
+  const b = widths({ installed: '5.1.0', latest: '5.2.0' })
+  expect(b.has('ccxp 5.1.0 (5.2.0 available)')).toBe(true)
+  expect(b.has('ccxp ↑5.2.0')).toBe(true)
+  expect(b.has('↑5.2.0')).toBe(true)
 })
 
 test('version: `version: false`, no plugin data, or no helper draws nothing', async () => {
@@ -749,9 +787,9 @@ test('version: `version: false`, no plugin data, or no helper draws nothing', as
 })
 
 test('version: in AP mode it shows too; narrow rows shrink it, the update outlives the plain version, nothing exceeds the width', async () => {
-  expect(text(bandRows({ ...snapAp(), helper: { ...parseHelper(HELPER_AP)!, plugin: PLUGIN_NEW } }, DEFAULTS, 160))).toContain('ccxp 5.0.0 → 5.1.0')
+  expect(text(bandRows({ ...snapAp(), helper: { ...parseHelper(HELPER_AP)!, plugin: PLUGIN_NEW } }, DEFAULTS, 160))).toContain('ccxp 5.0.0 (5.1.0 available)')
   for (const cols of [40, 60, 80, 100, 120]) {
-    for (const plugin of [PLUGIN_NEW, { installed: '5.0.0', latest: null }]) {
+    for (const plugin of [PLUGIN_NEW, { installed: '5.0.0', latest: null }, { installed: '5.0.0', latest: '5.0.0' }]) {
       const row = bandRows(verSnap(plugin), CI, cols)
       expect(text(row).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
     }
@@ -760,12 +798,12 @@ test('version: in AP mode it shows too; narrow rows shrink it, the update outliv
   const plainRow = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), CI, 70))
   expect(plainRow).not.toContain('ccxp')
   const upd = text(bandRows(verSnap(PLUGIN_NEW), CI, 100))
-  expect(upd).toMatch(/↑|→/)
+  expect(upd).toMatch(/↑|available/)
 })
 
 test('version: /hud details shows it on the last line, with `you` when present', async () => {
   const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 120).map(r => r.map(s => s.text).join(''))
-  expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 → 5.1.0')
+  expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 (5.1.0 available)')
   expect(lines[lines.length - 1]).toContain('you ')
   const off = detailRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 120).map(r => r.map(s => s.text).join(''))
   expect(off.join('\n')).not.toContain('ccxp')

@@ -7,7 +7,8 @@
 # installed = the running plugin's own .claude-plugin/plugin.json (local read, no network).
 # latest    = the highest plain `ccxp-skills--vX.Y.Z` tag of the public repo, from
 #             `git ls-remote --tags` (needs no credentials and no gh). A prerelease tag is ignored.
-# `latest` is only ever printed when it is STRICTLY newer than installed (numeric semver compare).
+# `latest` is the highest known release whatever its relation to installed (the HUD decides between
+#             "(latest)", "(X available)" and plain); null while unknown (no lookup yet, offline, no tag).
 #
 # Never blocks the caller: it answers from an on-disk cache and, when the cache is older than
 # 6 h, starts ONE detached refresh (8 s timeout, lock dir, no credential prompt). Offline or
@@ -123,6 +124,6 @@ hud-version-json() {
   fi
 
   [ -z "$cached" ] || latest=$(jq -r '.latest // ""' <<<"$cached" 2>/dev/null | head -n1) || latest=""
-  hvr-semver-gt "$latest" "$installed" || latest=""
+  hvr-valid "$latest" || latest=""
   jq -n -c --arg i "$installed" --arg l "$latest" '{installed: $i, latest: (if $l == "" then null else $l end)}'
 }

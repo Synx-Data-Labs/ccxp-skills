@@ -66,7 +66,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - gh account: from the session cwd, never the helper's inherited environment. `direnv exec <root> printenv GH_CONFIG_DIR`, else the nearest `.envrc` (`export GH_CONFIG_DIR=...` with `~`, `$HOME`, quotes, `source_up`), else the default gh config; then the `user:` line of `hosts.yml`. The token is never read. Cached 60 s per repo in `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache/` (the helper's only write besides the CI and version caches); no network. It is what direnv says, not necessarily what a Bash tool call will use.
 - Following `/cd`: the mod reads `$.session.cwd()` on every refresh (falling back to the session root), and a 5 s tick refreshes at once when cwd or root changed. A `command.run` hook for `cd` refreshes right after `/cd`; the 15 s poll is the backstop.
 - Unverified in a real session: that `session.cwd()` moves on `/cd`, and that `command.run` fires for the built-in `/cd` (the tick covers latency, but not a `cwd()` that never moves; then use `root()`).
-- Helper JSON (`hud-data.sh --json`): `repo` is unchanged (name only, always present); `cwd`, `repo_slug`, `repo_root`, `head`, `dirty`, `gh_account` (null outside a repo); `plugin` = `{installed, latest}` (null when `version` is off; `latest` null unless newer).
+- Helper JSON (`hud-data.sh --json`): `repo` is unchanged (name only, always present); `cwd`, `repo_slug`, `repo_root`, `head`, `dirty`, `gh_account` (null outside a repo); `plugin` = `{installed, latest}` (null when `version` is off; `latest` = highest known release or null when unknown; the mod compares).
 - AP-on rows have no repo cell, same as before.
 
 ## Colours
@@ -84,10 +84,14 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## Version cell
 
-- Shows the installed ccxp-skills version, last in the band: `ccxp 5.0.0` (dim). When a newer release exists it shows both: `ccxp 5.0.0 → 5.1.0`, the new number in the `suggestion` theme colour (stands out, not loud). Narrow: `ccxp ↑5.1.0`, then `↑5.1.0`.
+- Shows the installed ccxp-skills version, last in the band, compared with the latest public release:
+  - same version: `ccxp 5.1.1 (latest)`, "(latest)" in the `success` colour; narrow: `ccxp 5.1.1 ✓`, then dropped (like the plain form).
+  - a newer release: `ccxp 5.1.1 (5.2.0 available)`, the new number in the `suggestion` theme colour (stands out, not loud); narrow: `ccxp ↑5.2.0`, then `↑5.2.0`. The update form is kept almost to the end.
+  - latest unknown (lookup not done yet, offline, no tag) or installed newer than latest (dev/prerelease): plain `ccxp 5.1.1` (dim), dropped first when the row is tight. "latest" is never claimed without a successful comparison.
+  - `/hud details` shows the same text (the full form) on its last line, next to the `you` stamp.
 - Installed: the running plugin's own `.claude-plugin/plugin.json` (the helper's install dir), a local read.
-- Latest: the highest plain `ccxp-skills--vX.Y.Z` tag of the public Synx-Data-Labs/ccxp-skills repo, via `git ls-remote --tags` in `hud/scripts/hud-version.sh` (no credentials, no `gh`). Prereleases are ignored. Shown only when strictly newer by numeric semver (5.10.0 > 5.9.0), never by string compare.
-- Same pattern as the CI cell: answers from a cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-version/`), at most one detached refresh per 6 hours (8 s timeout, no credential prompt). Offline or git missing: the cached answer is kept, the next try is about 15 minutes later, and the cell shows the installed version alone. Only strings matching the tag pattern are ever drawn.
+- Latest: the highest plain `ccxp-skills--vX.Y.Z` tag of the public Synx-Data-Labs/ccxp-skills repo, via `git ls-remote --tags` in `hud/scripts/hud-version.sh` (no credentials, no `gh`). Prereleases are ignored. Newer/same/older is decided by numeric semver (5.10.0 > 5.9.0), never by string compare. The helper reports the highest known tag as `latest` whatever its relation to installed; the mod picks the wording.
+- Same pattern as the CI cell: answers from a cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-version/`), at most one detached refresh per 6 hours (8 s timeout, no credential prompt). Offline or git missing: the cached answer is kept, the next try is about 15 minutes later, and the cell shows the last known answer (or the installed version alone when there never was one). Only strings matching the tag pattern are ever drawn.
 - Squeezing: the plain `ccxp X` goes right after the last-input cell; the update marker is kept almost to the end. `/hud details` shows it on line 5 next to `you`.
 - Turn it off: `"version": false` or `/hud config`.
 - An update is picked up by `/plugin` (reinstall or update); the cell is information only and changes nothing.

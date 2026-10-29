@@ -100,7 +100,7 @@ export function parseHelper(stdout: string): HelperData | null {
     // Untrusted: only plain X.Y.Z (optional prerelease) strings get through, nothing else is ever drawn.
     const installed = str((pl as Record<string, unknown>).installed)
     const latest = str((pl as Record<string, unknown>).latest)
-    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) && isNewer(latest, installed) ? latest : null }
+    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null }
   }
   return {
     repo: str(r.repo),
@@ -236,12 +236,29 @@ function ciVariants(ci: Ci): Variants {
   return [mk(`${look.glyph} ${look.word}${date}`), mk(`${look.glyph}${date}`), mk(look.glyph)]
 }
 
-/** `ccxp 5.0.0` (dim); with a newer release `ccxp 5.0.0 → 5.1.0` with the new number in the suggestion colour. */
+/**
+ * Latest unknown (or older than installed): `ccxp 5.1.1` (dim). Same as latest: `ccxp 5.1.1 (latest)`, "(latest)" in
+ * success, narrowing to `ccxp 5.1.1 ✓`. A newer release: `ccxp 5.1.1 (5.2.0 available)`, the new number in the
+ * suggestion colour, narrowing to `ccxp ↑5.2.0` then `↑5.2.0`. "latest" is only said after a successful comparison.
+ */
+export function versionState(p: PluginVersion): 'available' | 'latest' | 'unknown' {
+  if (!p.latest) return 'unknown'
+  if (isNewer(p.latest, p.installed)) return 'available'
+  return p.latest === p.installed ? 'latest' : 'unknown'
+}
+
 function versionVariants(p: PluginVersion): Variants {
-  if (!p.latest) return [[{ text: `ccxp ${p.installed}`, dim: true }]]
-  const up = { text: p.latest, color: 'suggestion' }
+  const state = versionState(p)
+  if (state === 'unknown') return [[{ text: `ccxp ${p.installed}`, dim: true }]]
+  if (state === 'latest') {
+    return [
+      [{ text: `ccxp ${p.installed} `, dim: true }, { text: '(latest)', color: 'success' }],
+      [{ text: `ccxp ${p.installed} `, dim: true }, { text: '✓', color: 'success' }],
+    ]
+  }
+  const up = { text: p.latest as string, color: 'suggestion' }
   return [
-    [{ text: `ccxp ${p.installed} → `, dim: true }, up],
+    [{ text: `ccxp ${p.installed} (`, dim: true }, up, { text: ' available)', dim: true }],
     [{ text: 'ccxp ↑', dim: true }, up],
     [{ text: '↑', dim: true }, up],
   ]
@@ -355,8 +372,8 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
       return at ? one([{ text: `you ${formatStamp(at)}`, dim: true }], [{ text: formatStamp(at), dim: true }]) : null
     }
     case 'ver':
-      // `ver0` (installed only) is dropped early; `ver` (an update is available) is kept almost to the end.
-      return cfg.version && h?.plugin ? { field: h.plugin.latest ? 'ver' : 'ver0', variants: versionVariants(h.plugin), at: 0 } : null
+      // `ver0` (installed only, or `(latest)`) shrinks to `✓` then is dropped early; `ver` (an update is available) is kept almost to the end.
+      return cfg.version && h?.plugin ? { field: versionState(h.plugin) === 'available' ? 'ver' : 'ver0', variants: versionVariants(h.plugin), at: 0 } : null
   }
 }
 
@@ -368,8 +385,8 @@ const ORDER = {
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ver0', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ver0', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -468,7 +485,7 @@ const DETAIL_STEPS = {
   usage: ['drop:cost', 'drop:rate', 'step:ctx', 'drop:ctx'],
   jobs: ['drop:tot', 'step:run', 'step:run', 'step:parked', 'step:run', 'drop:parked', 'drop:state'],
   ap: ['step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap'],
-  you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'drop:ver0', 'drop:ver'],
+  you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'step:ver0', 'drop:ver0', 'drop:ver'],
 } as const
 
 /**
