@@ -26,92 +26,35 @@ Execute these steps in order. Stop and report if any step fails.
 
 ### 1. Assess changes
 
-```bash
-git status --short
-git diff --stat
-git diff --staged --stat
-```
-
-If there are no changes (no untracked, no modified, no staged), don't stop yet — a clean
-tree doesn't mean there's nothing left to do. Check whether the current branch is already
-ahead of `main` with committed work that hasn't made it into a PR:
+The mechanical prep lives in `<skills-root>/gcpr/scripts/gcpr-prep.sh` (verbs below; the script never commits, pushes or opens a PR, those stay in this workflow). Run:
 
 ```bash
-git rev-parse --abbrev-ref HEAD                  # skip this check entirely if this is "main"
-git log --oneline main..HEAD                     # any commits ahead?
-bash <skills-root>/_gh/gh.sh pr list --head <branch> --state all   # does a PR already exist?
+bash <skills-root>/gcpr/scripts/gcpr-prep.sh assess      # prints STATE=, BRANCH=, AHEAD=, PR=; exit 0 = work to do, 3 = nothing to do, 2/4 = problem
 ```
 
-- **On `main`, no ahead-commits**: genuinely nothing to do — stop and tell the user "nothing
-  to commit".
-- **Not on `main`, no commits ahead of `main`**: same — stop and report "nothing to commit".
-- **Not on `main`, commits ahead of `main`, no PR found**: skip steps 2-4 (nothing to
-  group/commit) and jump straight to step 5 (push) → step 6 (create PR) → step 7 (hand off
-  to `/address-pr`).
-- **Not on `main`, commits ahead of `main`, a PR already exists**: don't create a duplicate —
-  report that PR's URL and hand off directly to `/address-pr <number>`.
+A clean tree doesn't mean there's nothing left to do: `assess` also checks whether the branch is ahead of `main` with committed work that has no PR yet. Act on `STATE`:
+
+- **`clean-main`** (on `main`, nothing ahead) or **`clean-no-commits`** (feature branch, nothing ahead): genuinely nothing to do. Stop and tell the user "nothing to commit".
+- **`dirty`**: continue with steps 1.5-4.
+- **`ahead-no-pr`**: skip steps 2-4 (nothing to group/commit); run `secrets-check --base main` (step 2) over the committed work, then step 5 (push), step 6 (create PR), step 7 (hand off to `/address-pr`).
+- **`ahead-pr:<n>`**: don't create a duplicate. Report that PR's URL and hand off directly to `/address-pr <n>`.
+- **`unknown`** / exit 4 (the PR lookup failed) or exit 2: stop and report; never guess "no PR".
 
 ### 1.5 Doc-lint guard (pre-commit) — catch MD032 before docs reach `main`
 
-The `Markdown Lint` CI gates only *post*-push, so a malformed standup / journal / IPM / retro doc
-reds `main` until a fix-PR lands. Before staging, run the shared doc-lint guard so the
-recurring formatting class (chiefly MD032, blanks-around-lists) is auto-fixed locally and folded
-into the commit — only when the change touches markdown:
+The `Markdown Lint` CI gates only *post*-push, so a malformed standup / journal / IPM / retro doc reds `main` until a fix-PR lands. Before staging, run the lint bundle over the changed files:
 
 ```bash
-CHANGED_MD=$(git status --porcelain | awk '
-  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
-  { line=substr($0,4); sub(/.* -> /, "", line); print line }
-' | grep -E '\.md$' || true)
-if [ -n "$CHANGED_MD" ]; then
-  # shellcheck disable=SC2086  # word-splitting is intended: one path per changed file
-  bash <skills-root>/_docs/lint-docs.sh $CHANGED_MD \
-    || echo "::warning::lint-docs: markdown issues remain — CI Markdown Lint will gate"
-fi
+bash <skills-root>/gcpr/scripts/gcpr-prep.sh lint
 ```
 
-`../_docs/lint-docs.sh` (moved here from build-pipeline's own scripts/ and generalized) ships with
-the skill, so it's available in every repo gcpr runs in (ccxp-skills / example-website.com /
-hub-repo / build-pipeline-repo) — no more per-repo `[ -f ]` no-op. Policy is
-**check-then-continue** (check-only, no `--fix` — see the script's own header for why): a
-violation surfaces loudly but does not block the commit. The PR's own `Markdown Lint` check is
-the authoritative gate. This is the canonical recipe; the ad-hoc doc-push sites in `/ccxp` and
-`/drive` call the one-line form of it.
+It runs, only over the changed non-deleted paths (the script resolves renames and untracked files; `gcpr-prep.sh changed md|tasks|refs` lists them):
 
-Also run the paragraph-length nudge over any changed `dev/TODO/`/`dev/PARKING/` files — same
-non-blocking, print-and-continue policy, surfaced right before the commit so the agent sees it
-about its own writing:
+- `_docs/lint-docs.sh` on changed `.md` (check-only; auto-fixing MD032 is out, see that script's header);
+- `repo-conventions/scripts/lint_paragraphs.py --changed` on changed `dev/TODO`/`dev/PARKING` files: a "bullets, not paragraphs" nudge (`templates/guidelines.md`), never a gate; Root cause and Closed stay prose;
+- `repo-conventions/scripts/lint_refs.py --fix --changed` on changed `dev/TODO`/`dev/JOURNAL` files: makes `T<id>` and typed `PR #N`/`issue #N` refs clickable; a ref it can't resolve (e.g. a cross-repo T-id) stays bare, which is expected.
 
-```bash
-CHANGED_TASKS=$(git status --porcelain | awk '
-  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
-  { line=substr($0,4); sub(/.* -> /, "", line); print line }
-' | grep -E '^dev/(TODO|PARKING)/.*\.md$' || true)
-if [ -n "$CHANGED_TASKS" ]; then
-  python3 <skills-root>/repo-conventions/scripts/lint_paragraphs.py --changed $CHANGED_TASKS
-fi
-```
-
-`lint_paragraphs.py` (`repo-conventions/scripts/`) never fails the commit — it's a nudge toward the
-"bullets, not paragraphs" house style (`templates/guidelines.md`), not a gate. Revise where the
-flagged content genuinely decomposes into bullets; leave narrative sections (Root cause, Closed) as
-prose — the script already exempts those two headings.
-
-Also auto-link task/issue/PR references in any changed `dev/TODO/`/`dev/JOURNAL/` files — makes
-`T<id>` refs and typed `PR #N`/`issue #N` refs clickable:
-
-```bash
-CHANGED_REFS=$(git status --porcelain | awk '
-  substr($0,1,2) ~ /D/ { next }               # deleted — nothing to lint
-  { line=substr($0,4); sub(/.* -> /, "", line); print line }
-' | grep -E '^dev/(TODO|JOURNAL)/.*\.md$' || true)
-if [ -n "$CHANGED_REFS" ]; then
-  python3 <skills-root>/repo-conventions/scripts/lint_refs.py --fix --changed $CHANGED_REFS
-fi
-```
-
-`lint_refs.py --fix` also never fails the commit — a reference it can't resolve (e.g. a cross-repo
-T-id) is left bare rather than guessed at, and that's expected, not an error.
+Policy is **check-then-continue**: `lint` always exits 0 and a violation surfaces loudly without blocking the commit. The PR's own `Markdown Lint` check is the authoritative gate. This is the canonical recipe; the ad-hoc doc-push sites in `/ccxp` and `/drive` call the one-line form of `_docs/lint-docs.sh`.
 
 ### 2. Group into logical commits
 
@@ -121,7 +64,7 @@ This is the critical step. Analyze ALL uncommitted changes and split them into l
 
 1. **By category**: separate docs, config, functional code, tests, infrastructure
 2. **By scope**: changes to the same feature/component belong together
-3. **Secrets check**: never stage `.env`, credentials, tokens — warn the user
+3. **Secrets check** (fail closed): before staging anything, run `bash <skills-root>/gcpr/scripts/gcpr-prep.sh secrets-check`. It lists `BLOCK <path>:<line> <rule>` (never the matched text) and exits 1 on any hit, 2 if it could not run; unscannable files (non-media binaries, symlinks) count as hits. On a block do not stage those paths: report them to the user and leave them out. Never print or paste a matched value.
 
 **How to group:**
 
@@ -137,8 +80,8 @@ This is the critical step. Analyze ALL uncommitted changes and split them into l
 
 - If already on a feature branch (not `main`), stay on it
 - If on `main`, create a branch:
-  - If `$ARGUMENTS` contains `--branch <name>`, use that
-  - Otherwise generate from the changes: `fix/short-slug` or `feat/short-slug` or `docs/short-slug`
+  - If `$ARGUMENTS` contains `--branch <name>`, use that after `gcpr-prep.sh branch-name --check <name>` passes (exit 0)
+  - Otherwise pick the type and wording yourself and let the script format it: `gcpr-prep.sh branch-name <feat|fix|docs|chore|refactor|test|ci> <text...>` prints `<type>/<slug>`
 - `git checkout -b <branch>`
 
 ### 3.5 Splitting unrelated work onto a separate branch/PR
@@ -192,7 +135,13 @@ bash <skills-root>/_gh/git.sh push -u origin <branch>
 ### 6. Create PR
 
 - Generate a PR title (short, under 70 chars) that covers all commits
-- Body format:
+- Write the Summary bullets and the Pre-merge / Post-merge checklists (your judgment) to temp files, then assemble the body mechanically:
+
+  ```bash
+  bash <skills-root>/gcpr/scripts/gcpr-prep.sh body --summary-file S --pre P --post Q [--task-url URL] > body.md
+  ```
+
+  It always emits both sections (an empty or absent file becomes `N/A`), puts `--task-url` first in the Summary and ends with the "Generated with" footer (`--footer TEXT` replaces it when the session specifies one, e.g. a leading robot emoji). Resulting format:
 
   ```
   ## Summary
@@ -218,7 +167,7 @@ bash <skills-root>/_gh/git.sh push -u origin <branch>
 
 #### Cross-repo tasks
 
-If this PR is opened in a target repo on behalf of a task that lives in a different hub repo (e.g., implementation in `example-website.com`, task tracker in `hub-repo`), prepend this line to the `## Summary` section:
+If this PR is opened in a target repo on behalf of a task that lives in a different hub repo (e.g., implementation in `example-website.com`, task tracker in `hub-repo`), pass the task URL as `--task-url` to `body` so this line leads the `## Summary` section:
 
 ```
 Task: https://github.com/<hub-owner>/<hub-repo>/blob/main/dev/TODO/T<id>-<slug>.md
@@ -226,11 +175,11 @@ Task: https://github.com/<hub-owner>/<hub-repo>/blob/main/dev/TODO/T<id>-<slug>.
 
 Do not move the task file to JOURNAL in this PR — the task file lives in the hub repo, not this one. The `/drive` skill's Phase 7 opens a separate hub-repo PR for the journal move after this target PR merges.
 
-- Use: `bash <skills-root>/_gh/gh.sh pr create --title "..." --body "$(cat <<'EOF' ... EOF)"`
+- Use: `bash <skills-root>/_gh/gh.sh pr create --title "..." --body-file body.md`
 
 ### 6.5 Task-file Status `Review` — do this before Step 4, not here
 
-If the PR implements a tracked task whose `status:` is `In Progress`, flip it to `Review` in `dev/TODO/T<id>-*.md` **before Step 4's commit**, so the change ships in this very PR (lifecycle in `dev/guidelines.md`: `Open → Design → In Progress → Review → Done`). Do **not** edit the task file after `gh pr create`: nothing would commit it, leaving an orphaned dirty edit that the next branch swallows or loses. Skip when the PR closes the task (Phase 4 of `/drive` sets `Done` instead) or for untracked work.
+If the PR implements a tracked task whose `status:` is `In Progress`, flip it to `Review` in `dev/TODO/T<id>-*.md` **before Step 4's commit**, so the change ships in this very PR (lifecycle in `dev/guidelines.md`: `Open → Design → In Progress → Review → Done`). Do **not** edit the task file after `gh pr create`: nothing would commit it, leaving an orphaned dirty edit that the next branch swallows or loses. Run `bash <skills-root>/gcpr/scripts/gcpr-prep.sh review-flip T<id>` (exit 0 flipped, 3 nothing to flip; `--dry-run` previews). Skip when the PR closes the task (Phase 4 of `/drive` sets `Done` instead) or for untracked work.
 
 ### 6.6 Annotate the Project item title with the PR ref (best-effort)
 
