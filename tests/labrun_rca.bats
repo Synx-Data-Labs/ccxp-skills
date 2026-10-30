@@ -90,6 +90,27 @@ render() {
   [ "$(grep -c run_url <<<"$output")" -eq 1 ]
 }
 
+@test "extract-run: two bare ids separated by one space are ambiguous; run <ts> is not an id" {
+  run bash -c 'echo "55555555555 66666666666" | bash "$1" extract-run 2>/dev/null' _ "$LAB"
+  [ "$status" -eq 4 ]
+  run bash -c 'echo "run 1600000000.000000 failed" | bash "$1" extract-run 2>/dev/null' _ "$LAB"
+  [ "$status" -eq 3 ]
+  run bash -c 'echo "Run 12345678901." | bash "$1" extract-run' _ "$LAB"
+  [ "$output" = "run_id=12345678901" ]
+}
+
+@test "parse: trailing punctuation and an earlier non-matching link are tolerated" {
+  lab parse "see (${URL})."
+  [ "$status" -eq 0 ]
+  lab parse "https://x.slack.com/archives/C000EXAMPLE and then $URL"
+  [ "$status" -eq 0 ]
+}
+
+@test "render: --run-id must match the id in --run-url (exit 2)" {
+  run bash "$LAB" render-reply --workflow w --run-id 999 --run-url "$RUN" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
+  [ "$status" -eq 2 ]
+}
+
 @test "extract-run: an unreadable file exits 2" {
   lab extract-run "$BATS_TEST_TMPDIR/nope.txt"
   [ "$status" -eq 2 ]
@@ -121,7 +142,7 @@ render() {
 
 @test "render: an enum failure exits 5 with nothing on stdout" {
   for c in "flaky" "" "Our codes"; do
-    run bash -c 'CLS="$1" . /dev/null; bash "$2" render-reply --workflow w --run-id 1 --run-url "$3" --error e --root-cause r --classification "$1" --confidence Confirmed --impact i --action a 2>/dev/null' _ "$c" "$LAB" "$RUN"
+    run bash -c 'CLS="$1" . /dev/null; bash "$2" render-reply --workflow w --run-id 12345678901 --run-url "$3" --error e --root-cause r --classification "$1" --confidence Confirmed --impact i --action a 2>/dev/null' _ "$c" "$LAB" "$RUN"
     [ "$status" -eq 5 ]
     [ -z "$output" ]
   done
@@ -138,7 +159,7 @@ render() {
   T_ERR="  " render; [ "$status" -eq 2 ]
   run bash "$LAB" render-reply --workflow w --run-id abc --run-url "$RUN" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
   [ "$status" -eq 2 ]
-  run bash "$LAB" render-reply --workflow w --run-id 1 --run-url "https://evil.example/x" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
+  run bash "$LAB" render-reply --workflow w --run-id 12345678901 --run-url "https://evil.example/x" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
   [ "$status" -eq 2 ]
 }
 
@@ -153,15 +174,15 @@ render() {
   local pfx tok
   for pfx in "gh""p_" "github_pat""_" "xox""b-" "sk""-"; do
     tok="${pfx}$(printf 'A1b2C3d4E5%.0s' 1 2 3)"
-    run bash -c 'bash "$1" render-reply --workflow w --run-id 1 --run-url "$2" --error "login failed with $3" --root-cause r --classification Transient --confidence Confirmed --impact i --action a 2>/dev/null' _ "$LAB" "$RUN" "$tok"
+    run bash -c 'bash "$1" render-reply --workflow w --run-id 12345678901 --run-url "$2" --error "login failed with $3" --root-cause r --classification Transient --confidence Confirmed --impact i --action a 2>/dev/null' _ "$LAB" "$RUN" "$tok"
     [ "$status" -eq 6 ]
     [ -z "$output" ]
-    run bash "$LAB" render-reply --workflow w --run-id 1 --run-url "$RUN" --error e --root-cause "leaked $tok" --classification Transient --confidence Confirmed --impact i --action a
+    run bash "$LAB" render-reply --workflow w --run-id 12345678901 --run-url "$RUN" --error e --root-cause "leaked $tok" --classification Transient --confidence Confirmed --impact i --action a
     [ "$status" -eq 6 ]
   done
   # stderr must not repeat the secret
   tok="gh""p_$(printf 'Zz9Yy8Xx7W%.0s' 1 2 3)"
-  run bash -c 'bash "$1" render-reply --workflow w --run-id 1 --run-url "$2" --error "$3" --root-cause r --classification Transient --confidence Confirmed --impact i --action a 2>&1 >/dev/null' _ "$LAB" "$RUN" "$tok"
+  run bash -c 'bash "$1" render-reply --workflow w --run-id 12345678901 --run-url "$2" --error "$3" --root-cause r --classification Transient --confidence Confirmed --impact i --action a 2>&1 >/dev/null' _ "$LAB" "$RUN" "$tok"
   [ "$status" -eq 6 ]
   [[ "$output" != *"$tok"* ]]
   [[ "$output" == *"token-like"* ]]
@@ -171,7 +192,7 @@ render() {
   local aws="AK""IA$(printf 'ABCDEFGHIJKLMNOP')" jwt="ey""J$(printf 'abcdefghij').$(printf 'abcdefghij').$(printf 'abcdefghij')"
   local hook="hooks.slack.""com/services/T0/B0/$(printf 'abcdefghij')"
   for v in "GITHUB_""TOKEN=$(printf 'abcdefgh1234')" "Token: $(printf 'abcdefgh1234')" "PASSWORD=$(printf 'abcdefghij')" \
-           "AWS_SECRET_ACCESS_""KEY=$(printf 'abcdefgh1234')" "npm""_$(printf 'a1B2c3D4e5%.0s' 1 2 3)" \
+           "sk_li""ve_$(printf 'abcdefgh12345678')" "token $(printf 'abcdefghijklmnopqrst')" "AWS_SECRET_ACCESS_""KEY=$(printf 'abcdefgh1234')" "npm""_$(printf 'a1B2c3D4e5%.0s' 1 2 3)" \
            "glp""at-$(printf 'a1B2c3D4e5%.0s' 1 2)" "https://user:$(printf 'pw123456')@example.com/x" \
            "Authorization: Bas""ic $(printf 'dXNlcjpwYXNzd29yZDEyMw==')" "$aws" "-----BEGIN RSA PRIVATE"" KEY-----" "$jwt" "https://$hook" "api_key=$(printf 'abcdef0123456789')" "password: $(printf 'hunter2hunter2hunter2')"; do
     T_ERR="$v" render
@@ -194,7 +215,7 @@ render() {
   local root; root="$(space_skills_root)"
   run bash "$root/labrun-rca/scripts/labrun.sh" parse "$URL"
   [ "$status" -eq 0 ]
-  run bash "$root/labrun-rca/scripts/labrun.sh" render-reply --workflow w --run-id 1 --run-url "$RUN" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
+  run bash "$root/labrun-rca/scripts/labrun.sh" render-reply --workflow w --run-id 12345678901 --run-url "$RUN" --error e --root-cause r --classification Transient --confidence Confirmed --impact i --action a
   [ "$status" -eq 0 ]
 }
 
