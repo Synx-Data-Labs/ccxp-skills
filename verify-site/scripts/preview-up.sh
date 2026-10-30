@@ -7,9 +7,11 @@
 #
 # Auto-detects Astro / Next / Vite projects, or reads .verify-site.json if present.
 set -euo pipefail
+# Scratch dir for the env file, results and logs; override for hermetic runs.
+VS_TMP="${VERIFY_SITE_TMP:-/tmp}"
 
-ENV_FILE="/tmp/verify-site.env"
-LOG_FILE="/tmp/verify-site-preview.log"
+ENV_FILE="${VS_TMP}/verify-site.env"
+LOG_FILE="${VS_TMP}/verify-site-preview.log"
 
 if [ -f "$ENV_FILE" ]; then
   # prior run didn't tear down; try to stop it

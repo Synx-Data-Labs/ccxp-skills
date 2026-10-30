@@ -24,12 +24,3 @@ turnstile-spin	untested-script:auth-probe.sh
 turnstile-spin	untested-script:fetch-secret.sh
 turnstile-spin	untested-script:persist-skill.sh
 turnstile-spin	untested-script:widget-create.sh
-verify-site	untested-script:check-a11y.sh
-verify-site	untested-script:check-lighthouse.sh
-verify-site	untested-script:check-responsive.sh
-verify-site	untested-script:check-routes.sh
-verify-site	untested-script:ensure-deps.sh
-verify-site	untested-script:match-testplan.sh
-verify-site	untested-script:preview-down.sh
-verify-site	untested-script:preview-up.sh
-verify-site	untested-script:report.sh

@@ -69,13 +69,12 @@ If no sitemap, fall back to the list in `.verify-site.json` routes field, or cra
 
 ### 5. Run checks
 
-Each script is independent and writes results to `/tmp/verify-site-results.json` (an array of `{check, route, status, detail}` objects). The orchestrator merges them.
+Each script is independent and prints one `{check, route, status, detail}` JSON object per line (NDJSON); the orchestrator (`verify.sh`) appends them to `/tmp/verify-site-results.ndjson`. Set `VERIFY_SITE_TMP` to use another scratch directory than `/tmp`.
 
 | Check | Script | What it verifies |
 |------|--------|------------------|
 | Build | (already done in step 3) | `npm run build` exits 0 |
-| Routes | `check-routes.sh` | Every discovered route returns HTTP 200, no JS errors in the response HTML |
-| Links | `check-links.sh` | No broken internal links, all images have `alt`, heading order not skipped |
+| Routes | `check-routes.sh` | Every discovered route returns HTTP 200 |
 | Lighthouse | `check-lighthouse.sh` | Runs Lighthouse mobile profile on each route; parses Performance, Accessibility, Best Practices, SEO scores |
 | A11y | `check-a11y.sh` | Playwright + `@axe-core/playwright` against each route; reports violations |
 | Responsive | `check-responsive.sh` | Playwright at 375 / 768 / 1280 — no horizontal overflow (`scrollWidth > clientWidth`); optional screenshots to `/tmp/verify-site-screens/` |
@@ -84,18 +83,17 @@ Each script accepts a space-separated list of routes via `ROUTES` env var and th
 
 ### 6. Match results to test-plan items
 
-Run `scripts/match-testplan.sh /tmp/pr-body.md /tmp/verify-site-results.json`. It applies a heuristic keyword match:
+Run `scripts/match-testplan.sh /tmp/pr-body.md /tmp/verify-site-results.ndjson /tmp/pr-body-updated.md`. It applies a heuristic keyword match:
 
 | Test plan phrase contains… | Match against |
 |---|---|
 | `npm run build`, "build green", "compiles" | Build result |
 | "renders", "loads", "200", "no 500", "route" | Route check |
-| "no broken links", "alt text", "heading order" | Links check |
 | "Lighthouse", "Performance", "Perf ≥", "A11y ≥" | Lighthouse scores |
 | "accessibility", "axe", "a11y", "aria", "focus" | A11y audit |
 | "mobile", "375px", "responsive", "no horizontal overflow", "stacks" | Responsive check |
 
-An item ticks green only if the associated check passed with zero failures across all routes. If any route fails, the item stays unchecked and the failure is listed in the report.
+An item ticks green only if the associated check ran, passed on at least one route, and failed on none (skipped checks, unknown statuses and unparseable records never tick). If any route fails, the item stays unchecked and the failure is listed in the report. There is no link, image-`alt` or heading-order check: items about those stay human-only.
 
 ### 7. Update PR body
 
@@ -120,7 +118,7 @@ Report to the user:
 - **Checks run**: routes, lighthouse, a11y, responsive — with per-route pass/fail counts and any standout numbers (lowest Lighthouse score, a11y violation count)
 - **Test plan items auto-ticked**: N of M
 - **Test plan items still human-only**: list them — these are typically "copy review", "does X feel right", "click through each page"
-- **New findings** (checks that aren't in the test plan but uncovered regressions): broken links, a11y violations, Lighthouse regression vs last run (if available)
+- **New findings** (checks that aren't in the test plan but uncovered regressions): failing routes, a11y violations, Lighthouse regression vs last run (if available)
 
 ## Config
 
