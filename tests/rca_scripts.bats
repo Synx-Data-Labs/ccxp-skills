@@ -120,7 +120,8 @@ fixture() {   # fixture [rows...]: an IPM file whose mid-week table holds the ro
   [ "$status" -eq 0 ]
   [ "$output" = "ADDED #1 T20000101-000001" ]
   grep -qxF '| 1 | T20000101-000001 | 2 | 2026-10-30 | RCA auto-promote - Our code failure |' "$IPM"
-  ! grep -q 'none yet' "$IPM"
+  run grep -c 'none yet' "$IPM"
+  [ "$output" = 0 ]
 }
 
 @test "midweek: appends after the last data row with the next number" {
@@ -220,7 +221,39 @@ fixture() {   # fixture [rows...]: an IPM file whose mid-week table holds the ro
 }
 
 @test "rca scripts never call gh, git push or any network tool" {
-  run grep -nE '\b(gh|curl|wget|ssh|git push|slack)\b' "$PLAN" "$ADD"
   # only comment lines may mention them
-  [ -z "$(printf '%s\n' "$output" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')" ]
+  run grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' <<<"$(grep -nE '\b(gh|curl|wget|ssh|git push|slack)\b' "$PLAN" "$ADD")"
+  [ -z "$(tr -d '[:space:]' <<<"$output")" ]
+}
+
+@test "midweek: an id in another row's Why text does not block the add (Task cell only)" {
+  fixture '| 1 | T20000101-000010 | 1 | 2026-10-27 | follow-up to T20000101-000001 |'
+  run bash "$ADD" --file "$IPM" --task T20000101-000001 --est 2 --why w
+  [ "$status" -eq 0 ]
+  [ "$output" = "ADDED #2 T20000101-000001" ]
+}
+
+@test "midweek: a CRLF file keeps CRLF on the new row and elsewhere" {
+  fixture
+  sed -i.bak 's/$/\r/' "$IPM"
+  run bash "$ADD" --file "$IPM" --task T20000101-000001 --est 2 --why w
+  [ "$status" -eq 0 ]
+  # every line ends in CR (none were left bare)
+  [ "$(grep -c $'\r$' "$IPM")" -eq "$(wc -l < "$IPM" | tr -d ' ')" ]
+  grep -qF $'| 1 | T20000101-000001 | 2 | 2026-10-30 | w |\r' "$IPM"
+}
+
+@test "midweek: file mode is kept and no temp file is left behind" {
+  fixture
+  chmod 640 "$IPM"
+  run bash "$ADD" --file "$IPM" --task T20000101-000001 --est 2 --why w
+  [ "$status" -eq 0 ]
+  [ -n "$(find "$IPM" -perm 640)" ]
+  [ -z "$(find "$BATS_TEST_TMPDIR" -maxdepth 1 -name '.midweek-add.*' -o -maxdepth 1 -name 'midweek-add.*')" ]
+}
+
+@test "plan: transient with an open KB task needs no --recent" {
+  plan --class transient --confidence confirmed --kb-task-open T20000101-000001
+  [ "$status" -eq 0 ]
+  [ "$out" = "TOP id=T20000101-000001" ]
 }

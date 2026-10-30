@@ -129,7 +129,7 @@ bash <skills-root>/rca/scripts/action-plan.sh --class <our-code|upstream|configu
   --confidence <confirmed|unconfirmed> [--kb-task-open [T<id>]] [--recent <n>] [--retry-result pass|fail|pending]
 ```
 
-`--recent` (transient, required) = occurrences in the last 7 days; `--retry-result` is infrastructure only. One action per line, in order: `RETRY`, `TOP`, `TASK kind=fix|instrument`, `PROMOTE`, `NOTE`; `IF_RETRY_FAILS ` = only after the retry failed. Exit 2 = bad inputs: fix them, never guess a plan.
+`--recent` (transient; optional with `--kb-task-open`) = occurrences in the last 7 days; `--retry-result` is infrastructure only. One action per line, in order: `RETRY`, `TOP`, `TASK kind=fix|instrument`, `PROMOTE`, `NOTE`; `IF_RETRY_FAILS ` = only after the retry failed. Exit 2 = bad inputs: fix them, never guess a plan.
 
 If 3.5 flagged an open task: invoke `/top <id>` here instead of any task-creation gate below (Infrastructure's retry still always runs; Transient's 3+ check no longer applies).
 
@@ -160,6 +160,8 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
    ```
 
    Exit 10 = already listed (fine); 4 = no well-formed `## Mid-week additions` table (nothing written: report it); 2/3 = usage / unreadable file. `--added` defaults to today.
+
+   If `$IPM_FILE` is empty, no committed IPM exists this week — note "no current IPM; mid-week auto-promote skipped" in the RCA report and continue (the `scheduled:` stamp in the next step still runs, defaulting the task to the next iteration).
 
 4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this it's mapped to no board iteration). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
 

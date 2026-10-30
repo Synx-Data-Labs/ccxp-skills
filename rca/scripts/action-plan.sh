@@ -9,7 +9,7 @@
 #   --confidence CONF    confirmed | unconfirmed
 #   --kb-task-open [ID]  step 3.5 found an open task for this failure (only
 #                        valid with confirmed); ID (T<id>) is echoed on TOP
-#   --recent N           transient only, required: how many times this failure
+#   --recent N           transient only (required unless --kb-task-open): how many times this failure
 #                        happened in the last 7 days, this run included
 #   --retry-result R     infrastructure only: pass | fail | pending (default
 #                        pending = the retry has not finished yet)
@@ -50,7 +50,9 @@ case "$conf" in confirmed|unconfirmed) ;; *) die "--confidence must be confirmed
 case "$retry" in pass|fail|pending) ;; *) die "--retry-result must be pass|fail|pending, got '$retry'" ;; esac
 [ "$kb_open" = 0 ] || [ "$conf" = confirmed ] || die "--kb-task-open needs --confidence confirmed (step 3.5 runs only on a confirmed KB match)"
 if [ "$cls" = transient ]; then
-  [[ "$recent" =~ ^[0-9]+$ ]] || die "--recent N (a count) is required for a transient failure"
+  # an open KB task re-tops without the 3+ check, so the count is then optional
+  if [ "$kb_open" = 1 ] && [ -z "$recent" ]; then recent=0
+  else [[ "$recent" =~ ^[0-9]+$ ]] || die "--recent N (a count) is required for a transient failure"; fi
 elif [ -n "$recent" ]; then
   die "--recent applies to transient failures only"
 fi
