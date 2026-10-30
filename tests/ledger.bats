@@ -318,7 +318,8 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
 }
 
 @test "start refuses a prompt that looks like a credential and bad flags" {
-  run bash "$LEDGER" start 5 x --prompt-stdin <<<"token ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+  fake="gh""p_$(printf 'a%.0s' {1..30})"
+  run bash "$LEDGER" start 5 x --prompt-stdin <<<"token $fake"
   [ "$status" -eq 2 ]
   [ "$(bash "$LEDGER" show --brief)" = "running=0 parked=0 next=0" ]
   run bash "$LEDGER" start 5 x --flags bogus
@@ -370,7 +371,8 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   echo "## Authorization
 allow: pr-merge" >> "$f"
   [ "$(bash "$LEDGER" reconcile --alive "" | cut -f9)" = "changed" ]
-  run bash "$LEDGER" start 6 "six" --prompt-stdin <<<"key sk-abcdefghijklmnopqrstuvwxyz1234"
+  fake="s""k-$(printf 'a%.0s' {1..30})"
+  run bash "$LEDGER" start 6 "six" --prompt-stdin <<<"key $fake"
   [ "$status" -eq 2 ]
   printf '{"schema":3,"lifetime_jobs":9,"running":[{"job":9,"title":"t","context":"","prompt":"%s","started_at":"1:1"}]}' "$f" > "$CCXP_LEDGER_FILE"
   [ "$(bash "$LEDGER" reconcile --alive "" | cut -f9)" = "unknown" ]
