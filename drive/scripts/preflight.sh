@@ -17,10 +17,10 @@
 #
 # stdout, one line:  verdict=<v> phase0=<run|skip> detail=<free text to end of line>
 #   phase0=skip when a human gave an explicit id (no --auto-selected): skip the PR drain.
-# Exit codes: 0 go | 10 held | 11 frozen | 12 cross-repo | 13 closed | 2 usage.
-# Judgment stays with the caller: what to do on cross-repo (clone fresh, or refuse
-# when DRIVE_STRICT_CLONE=1, which the detail names), whether to re-pick on
-# held/frozen, whether a task is Blocked (Phase 6).
+# Exit codes: 0 go | 10 held | 11 frozen | 12 cross-repo | 13 closed | 14 refused
+# (cross-repo while DRIVE_STRICT_CLONE=1: abort) | 2 usage.
+# Judgment stays with the caller: what to do on cross-repo (clone the hub fresh),
+# whether to re-pick on held/frozen, whether a task is Blocked (Phase 6).
 #
 # Env (tests): IN_THIS_REPO_SH, TASK_CLAIM_SH, LINT_FROZEN_SH override the helpers;
 # TASK_CLAIM_DIR (default dev/TODO) is where the task file is looked up.
@@ -66,16 +66,16 @@ case "$rc" in
   3) verdict closed 13 "closed here (task file is in dev/JOURNAL); do not re-work, file a new task" ;;
   1|2)
     slug="$(printf '%s\n' "$err" | sed -n 's/^  Clone: //p' | head -n1)"
-    note="not in this clone; clone ${slug:-the hub repo (slug unknown)} fresh"
-    [ "$rc" = 1 ] && note="$note; DRIVE_STRICT_CLONE=1 refuses"
-    verdict cross-repo 12 "$note" ;;
+    note="not in this clone; hub is ${slug:-unknown (slug could not be detected)}"
+    [ "$rc" = 1 ] && verdict refused 14 "$note; DRIVE_STRICT_CLONE=1 forbids working it from this clone"
+    verdict cross-repo 12 "$note; clone it fresh" ;;
   *) echo "preflight.sh: in-this-repo.sh failed ($rc)" >&2; exit 2 ;;
 esac
 
 # 2 claim
 note=free
 file=""
-for m in "${TASK_CLAIM_DIR:-dev/TODO}/$id"*.md; do [ -e "$m" ] && { file="$m"; break; }; done
+for m in "${TASK_CLAIM_DIR:-dev/TODO}/$id"-*.md "${TASK_CLAIM_DIR:-dev/TODO}/$id".md; do [ -e "$m" ] && { file="$m"; break; }; done
 if [ -z "$file" ]; then
   note="no task file in ${TASK_CLAIM_DIR:-dev/TODO} (parked?); claim and freeze checks skipped"
 else

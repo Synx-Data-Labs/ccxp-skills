@@ -343,6 +343,6 @@ rm -rf "$TARGET"          # idempotent: kill any leftover from a prior crashed r
 }
 
 @test "audit: autopilot's dispatch clone lives under /tmp, so removing it passes" {
-  grep -q 'CLONE_PATH="/tmp/autopilot-clone-' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q "/tmp/autopilot-clone-" "$REPO_ROOT/autopilot/scripts/autopilot-state.sh"
   assert_allowed 'rm -rf /tmp/autopilot-clone-myrepo-abc123'
 }

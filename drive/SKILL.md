@@ -42,7 +42,7 @@ Before picking new work, make one forward move on the PR backlog by handing off 
 - **PRs owned by another session, or blocked on CI / external review / approval / pipeline** → `/address-pr` defers, fixes, or exits without an unsafe merge as appropriate. The §1.6 ownership guard (the anti-steal protection against a concurrent-session-drives-the-same-PR failure mode — a PR lives on GitHub, reachable from every clone, so nothing local stops two sessions from driving it at once without an explicit lock) and the hard merge gate live inside `/address-pr`, so no separate per-PR pre-classification is needed here.
 - **PR's task is unclaimed (`free`)** → `/address-pr` §1.6 now claims the task itself (same mechanism as this skill's Phase 1 Claim PR) before driving the PR further — don't just proceed against an unclaimed task (an unclaimed task's PR can sit open, unnoticed, for weeks before this gets caught).
 
-- **Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** with `--auto-selected` (e.g. `/autopilot`'s per-cycle dispatch) or bare `/drive`. `preflight.sh` (Phase 1) prints this as `phase0=run|skip`; run it first and obey it.
+- **Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** with `--auto-selected` (e.g. `/autopilot`'s per-cycle dispatch) or bare `/drive`. `preflight.sh <id|-> [--auto-selected]` (verdict table under Phase 1) prints this as `phase0=run|skip`: run it before this phase and obey `phase0=`; a non-`go` verdict is acted on after Phase 0 (an `--auto-selected` run still drains first), except that `closed`/`refused` may stop at once.
 
 ### Phase 0.5: Check escalation replies
 
@@ -87,12 +87,13 @@ bash <skills-root>/drive/scripts/preflight.sh <task-id|-> [--auto-selected]
 | 11 | `frozen` | the claim PR could not merge (whole-file frontmatter lint) | report the reason; re-pick or exit. Never open the un-mergeable claim PR |
 | 12 | `cross-repo` | no task file here | below |
 | 13 | `closed` | file only in `dev/JOURNAL` | do not re-work; file a new task for follow-up |
+| 14 | `refused` | cross-repo while `DRIVE_STRICT_CLONE=1` | abort with the reason |
 | 2 | (usage) | bad arguments | fix the call |
 
 `go` with `CCXP_PEER_MODE=0` skips the claim gate (no registry). Bare `/drive` (`-`) is always `go`: `/todo next` only surfaces free, unfrozen tasks of this clone. Deciding what to do about a verdict stays with you.
 
 - **`cross-repo`** — the task's real hub is a *different* repo (its `owner/repo` slug is in `detail`). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out. If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
-- **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone); `detail` says so.
+- **`DRIVE_STRICT_CLONE=1`** — cross-repo becomes `refused` (14): abort (for unattended ccxp loops that must never pick a task they can't fully own from their own clone).
 
 **Status mirror** (best-effort, never blocks):
 
