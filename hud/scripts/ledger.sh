@@ -6,7 +6,7 @@
 #       (flags: autopilot, needs-confirmation, detached); --prompt-stdin saves stdin as <ledger dir>/ccxp-prompts/<n>.md (mode 600)
 #   ledger.sh finish <n>                                 job r<n> no longer running (drops its saved prompt copy)
 #   ledger.sh reconcile --alive <n,n,...|->              print running rows NOT in the alive list, one TSV line each:
-#                                 job title context prompt started_at agent flags resumed   ("-" = empty / no prompt file)
+#                                 job title context prompt started_at agent flags resumed prompt_check started_on   ("-" = empty / no prompt file)
 #   ledger.sh set-started <n> HH:MM   set a running row's start time (24h, validated)
 #   ledger.sh resumed <n>         count a restart of running row r<n> (keeps its number)
 #   ledger.sh park <k> [--context <abs-path>] [--title <t>]   park id k<k> (k5, K5 or 5 all mean k5); re-park updates
@@ -63,7 +63,7 @@ ledger-read() {
        lifetime_jobs: (.lifetime_jobs | numbers // 0),
        running: [(.running // [])[] | select(type == "object")
                  | {job: (.job | numbers // 0), title: (.title | strings // ""), context: (.context | strings // ""),
-                  prompt: (.prompt | strings // ""), agent: (.agent | strings // ""), flags: (.flags | strings // ""),
+                  prompt: (.prompt | strings // ""), sha: (.sha | strings // ""), started_on: (.started_on | strings // ""), agent: (.agent | strings // ""), flags: (.flags | strings // ""),
                   resumed: (.resumed | numbers // 0), started_at: (.started_at | strings // "")}],
        next: [((.next // []) + (.inputs // []) + (.actions // []))[]
               | select(type == "object" and (.ref | strings))
@@ -249,6 +249,8 @@ ledger-render-text() {
 
 ledger-hm() { [[ "${1:-}" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { echo "ledger: time must be HH:MM (24h): ${1:-}" >&2; return 2; }; }
 
+ledger-sha() { { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1" 2>/dev/null; } | cut -d' ' -f1; }
+
 ledger-prompt-dir() { printf '%s/ccxp-prompts' "$(dirname "$(ledger-file)")"; }
 
 # Save stdin as the job prompt for job $1; prints the path. Refuses text that looks like a credential.
@@ -256,7 +258,7 @@ ledger-save-prompt() {
   local d f text; d=$(ledger-prompt-dir); f="$d/$1.md"
   text=$(head -c 200000)
   [[ -n "$text" ]] || { echo "ledger: empty prompt on stdin" >&2; return 2; }
-  if printf '%s' "$text" | grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'; then
+  if printf '%s' "$text" | grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'; then
     echo "ledger: prompt looks like it holds a credential; not saved" >&2; return 2
   fi
   mkdir -p "$d" && chmod 700 "$d" 2>/dev/null
@@ -275,16 +277,19 @@ ledger() {
       if [[ "$PSTDIN" == true ]]; then
         PF=$(ledger-save-prompt "$((10#${POS[0]}))") || return 2; HAVE_PF=true
       fi
+      local SHA=""; [[ "$HAVE_PF" == true && -f "$PF" ]] && SHA=$(ledger-sha "$PF")
       ledger-update '(.running | map(select(.job == $n)) | .[0]) as $old
         | .running = ([.running[] | select(.job != $n)]
                       + [{job: $n, title: $t, context: (if $hc then $c else ($old.context // "") end),
                           prompt: (if $hp then $p else ($old.prompt // "") end),
+                          sha: (if $hp then $sha else ($old.sha // "") end),
+                          started_on: (if ($old.started_on // "") != "" then $old.started_on else $day end),
                           agent: (if $ha then $a else ($old.agent // "") end),
                           flags: (if $hf then $f else ($old.flags // "") end),
                           resumed: ($old.resumed // 0),
                           started_at: (if $hs then $s elif ($old.started_at // "") != "" then $old.started_at else $hm end)}] | sort_by(.job))
         | .lifetime_jobs = ([.lifetime_jobs, $n] | max)' \
-        --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" --arg s "$SAT" --argjson hs "$HAVE_SAT" \
+        --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" --arg s "$SAT" --argjson hs "$HAVE_SAT" --arg day "$(date +%F)" --arg sha "$SHA" \
         --arg p "$PF" --argjson hp "$HAVE_PF" --arg a "$AGT" --argjson ha "$HAVE_AGT" --arg f "$FLG" --argjson hf "$HAVE_FLG" ;;
     finish)
       ledger-int "${1:-}" || return 2
@@ -310,14 +315,19 @@ ledger() {
         [[ "$a" =~ ^[0-9]{1,9}$ ]] || { echo "ledger: bad alive job number: $a" >&2; return 2; }
         ids+="$((10#$a)),"
       done
-      local job title ctx prompt started agent flags resumed
-      while IFS=$'\t' read -r job title ctx prompt started agent flags resumed; do
+      local job title ctx prompt started agent flags resumed sha on check
+      while IFS=$'\t' read -r job title ctx prompt started agent flags resumed sha on; do
         [[ -n "$job" ]] || continue
+        check="-"
         [[ "$prompt" != "-" && ! -f "$prompt" ]] && prompt="-"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$job" "$title" "$ctx" "$prompt" "$started" "$agent" "$flags" "$resumed"
+        if [[ "$prompt" != "-" ]]; then
+          if [[ "$sha" == "-" ]]; then check="unknown"
+          elif [[ "$(ledger-sha "$prompt")" == "$sha" ]]; then check="ok"; else check="changed"; fi
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$job" "$title" "$ctx" "$prompt" "$started" "$agent" "$flags" "$resumed" "$check" "$on"
       done < <(ledger-read | jq -r --argjson alive "[${ids%,}]" '
         .running[] | select(.job as $j | ($alive | index($j)) == null)
-        | [.job, .title, .context, .prompt, .started_at, .agent, .flags, .resumed]
+        | [.job, .title, .context, .prompt, .started_at, .agent, .flags, .resumed, .sha, .started_on]
         | map(if . == "" then "-" else tostring end) | join("\t")') ;;
     set-started)
       ledger-int "${1:-}" || return 2
