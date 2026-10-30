@@ -885,7 +885,7 @@ test('version: narrow details drop the link first and keep the version label', a
     expect(last).not.toContain('github.com')
     expect(last).toContain('ccxp 5.2.0')
   }
-  // with every line present the version line is still the last of five
+  // with every line present the version line is still the last line
   const full = detailRows(fullSnap({ helper: { ...fullSnap().helper, plugin: PLUGIN_LATEST } }) as any, CI, 120, DETAIL_NOW)
   expect(full.length).toBe(5)
   expect(text(full.slice(-1))).toContain('(latest)')
