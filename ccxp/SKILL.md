@@ -86,7 +86,7 @@ One cheap, idempotent prune keeps session-coordination state lean.
 bash <skills-root>/ccxp/scripts/prune-drive-threads.sh
 ```
 
-Idempotent — a no-op on a clean file, and the `&& mv` guard leaves the original untouched if `jq` errors (e.g. a malformed file). Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#acme-dev-notifications`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
+Idempotent — a no-op on a clean file; a malformed file is left untouched (non-zero exit). Age is measured from `resolved_at`, falling back to `sent_at`; the work is done by `_threads/threads.sh prune`. Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#acme-dev-notifications`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
 
 - **3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released.
 - The task stays `status: In Progress`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations).

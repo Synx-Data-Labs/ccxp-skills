@@ -37,14 +37,21 @@ TH_DRY=0
 
 function th_die() { echo "threads.sh: $*" >&2; return "${2:-2}"; }
 
+# th_arg <flag> <value...> -> the flag's value; a missing value is a usage
+# error (exit 2 from the calling shell), not bash's ${x:?} exit 1.
+function th_arg() {
+  [[ $# -ge 2 ]] || { echo "threads.sh: $1 needs a value" >&2; exit 2; }
+  printf '%s' "$2"
+}
+
 function th_now_iso() { d_fmt "$(d_now_epoch)" %Y-%m-%dT%H:%M:%SZ; }
 
 # th_load -> prints the state JSON ("{}" when the file does not exist);
 # returns 4 when the file is not a JSON object.
 function th_load() {
   if [[ ! -f "$TH_FILE" ]]; then echo '{}'; return 0; fi
-  if ! jq -e 'type == "object"' "$TH_FILE" >/dev/null 2>&1; then
-    echo "threads.sh: $TH_FILE is not a JSON object; refusing to modify it" >&2
+  if ! jq -e 'type == "object" and ([.[] | type == "object"] | all)' "$TH_FILE" >/dev/null 2>&1; then
+    echo "threads.sh: $TH_FILE is not a JSON object of objects; refusing to modify it" >&2
     return 4
   fi
   cat "$TH_FILE"
@@ -67,11 +74,11 @@ function th_add() {
   shift
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --channel) channel="${2:?}"; shift 2 ;;
-      --ts) ts="${2:?}"; shift 2 ;;
-      --type) type="${2:?}"; shift 2 ;;
-      --summary) summary="${2:?}"; shift 2 ;;
-      --sent-at) sent="${2:?}"; shift 2 ;;
+      --channel) channel="$(th_arg "$@")"; shift 2 ;;
+      --ts) ts="$(th_arg "$@")"; shift 2 ;;
+      --type) type="$(th_arg "$@")"; shift 2 ;;
+      --summary) summary="$(th_arg "$@")"; shift 2 ;;
+      --sent-at) sent="$(th_arg "$@")"; shift 2 ;;
       *) th_die "add: unknown argument: $1"; return 2 ;;
     esac
   done
@@ -91,8 +98,8 @@ function th_resolve() {
   shift
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --at) at="${2:?}"; shift 2 ;;
-      --resolution) resolution="${2:?}"; shift 2 ;;
+      --at) at="$(th_arg "$@")"; shift 2 ;;
+      --resolution) resolution="$(th_arg "$@")"; shift 2 ;;
       *) th_die "resolve: unknown argument: $1"; return 2 ;;
     esac
   done
@@ -120,7 +127,7 @@ function th_prune() {
   local days=7 state cutoff out
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --days) days="${2:?}"; shift 2 ;;
+      --days) days="$(th_arg "$@")"; shift 2 ;;
       *) th_die "prune: unknown argument: $1"; return 2 ;;
     esac
   done
@@ -138,7 +145,7 @@ function th_prune() {
 function th_main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --file) TH_FILE="${2:?}"; shift 2 ;;
+      --file) TH_FILE="$(th_arg "$@")"; shift 2 ;;
       --dry-run) TH_DRY=1; shift ;;
       *) break ;;
     esac
