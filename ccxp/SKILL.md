@@ -155,9 +155,17 @@ Generate a daily progress summary by reviewing yesterday's work.
 - **No clean autonomous leg** — `/todo next` yields nothing workable: its top candidates are all peer-owned / supervised / external-blocked. This is the **genuine-gate** determination from Phase 3 ("VPN and the Workflow tool are tools, not walls"), **not** the reflexive "all gated" bail — each candidate maps to a concrete gate.
 - **Not a Friday tick** — retro (2b) always runs the full ritual regardless of gating. Monday carries no special exemption anymore — the IPM (2a) is opt-in and no longer auto-invoked (see Phase 2a), so a cheap hold can fire on a Monday tick the same as any other weekday.
 
+**Decide with the script, not by eye.** Feed it the four counts from the checks above (an input you did not obtain: omit the flag — a check that did not run never justifies a hold); it prints `DECISION=hold|full` + `REASONS=` (the Friday test is built in, in the cron's `America/Chicago` frame):
+
+```bash
+bash <skills-root>/ccxp/scripts/cheap-hold.sh --replies <N> --nightly-failures <N> --drainable <N> --clean-leg <N> --note --why "<1-line why each top candidate is gated>"
+```
+
+`DECISION=full` (or exit 2) means fall through to 1.2. On `hold` the `--note` output after the blank line is the Slack note below; the script sends nothing — posting it stays with `slack_send_message`. Which counts are non-zero (is a candidate genuinely gated?) remains your judgment.
+
 **When the gate holds — cheap-hold action:**
 
-1. Post a **compact, bulleted** hold note to `#acme-dev-notifications`, **threaded under the day's
+1. Post the **compact, bulleted** hold note (the script's `--note` text) to `#acme-dev-notifications`, **threaded under the day's
    standup parent** (discover it live, exactly as `/slack-check-reply` does —
    `slack_search_public_and_private` for the latest `"Daily Standup"`, reply with `thread_ts`).
    Same scannability principle as the full standup's Weekly focus/Attribution/Blockers sections
