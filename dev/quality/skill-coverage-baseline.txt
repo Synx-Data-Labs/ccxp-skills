@@ -6,7 +6,6 @@ address-pr	skills-root-note
 autopilot	skills-root-note
 bottom	no-scripts
 ccxp	skills-root-note
-ccxp	untested-script:prune-drive-threads.sh
 claim	no-scripts
 claim	skills-root-note
 drive	no-scripts
