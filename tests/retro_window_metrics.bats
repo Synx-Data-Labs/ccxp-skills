@@ -90,6 +90,37 @@ val() { printf '%s\n' "$output" | sed -n "s/^$1=//p"; }
   [ "$status" -eq 1 ]
 }
 
+@test "window: a non-UTC TZ changes neither the window nor SINCE_ISO (pinned clock)" {
+  run bash "$WINDOW" --repo-root "$R"; base="$output"
+  for tz in Pacific/Auckland America/Los_Angeles Asia/Kolkata Pacific/Kiritimati; do
+    TZ="$tz" run bash "$WINDOW" --repo-root "$R"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$base" ]
+  done
+}
+
+@test "window: unpinned TODAY follows the LOCAL calendar day, START is still END-7" {
+  unset TODAY
+  for tz in Pacific/Kiritimati Etc/GMT+12; do
+    before="$(TZ=$tz date +%Y-%m-%d)"
+    TZ="$tz" NOW=2026-10-30T12:00:00Z run bash "$WINDOW" --repo-root "$R"
+    after="$(TZ=$tz date +%Y-%m-%d)"
+    [ "$status" -eq 0 ]
+    end="$(val END)"
+    { [ "$end" = "$before" ] || [ "$end" = "$after" ]; }
+    [ "$(val START)" = "$(bash "$REPO_ROOT/_date/date.sh" add "$end" -7)" ]
+    [ "$(val SINCE_ISO)" = 2026-10-23T12:00:00Z ]
+  done
+}
+
+@test "window: works from a skills root whose path contains a space" {
+  S="$(space_skills_root)"
+  run bash "$S/retro/scripts/window.sh" 2 --repo-root "$R"
+  [ "$status" -eq 0 ]
+  [ "$(val START)" = 2026-10-16 ]
+  [ "$(val THIS_MONDAY)" = 2026-10-26 ]
+}
+
 # ---- metrics.sh -----------------------------------------------------------
 
 seed() {
@@ -229,4 +260,57 @@ J
   jq -n '[range(0;500) | {number:., title:"x", createdAt:"2026-10-29T00:00:00Z", mergedAt:"2026-10-29T01:00:00Z", additions:1, deletions:0}]' > "$FX/pr_list_state_merged.json"
   run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
   echo "$output" | jq -e '.ci.failed == 2 and .prs.truncated == true'
+}
+
+@test "metrics: skipped and cancelled runs count in the total but are neither green nor failed" {
+  seed
+  cat > "$FX/run_list.json" <<'J'
+[{"conclusion":"success","name":"CI","createdAt":"2026-10-29T00:00:00Z"},
+ {"conclusion":"skipped","name":"CI","createdAt":"2026-10-29T00:00:00Z"},
+ {"conclusion":"skipped","name":"Docs","createdAt":"2026-10-28T00:00:00Z"},
+ {"conclusion":"cancelled","name":"CI","createdAt":"2026-10-28T00:00:00Z"},
+ {"conclusion":"neutral","name":"Docs","createdAt":"2026-10-28T00:00:00Z"},
+ {"conclusion":"failure","name":"Lint","createdAt":"2026-10-27T00:00:00Z"},
+ {"conclusion":null,"name":"CI","createdAt":"2026-10-30T00:00:00Z"}]
+J
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.total == 6 and .ci.green == 1 and .ci.failed == 1
+    and .ci.pass_rate_pct == 16.7 and .ci.top_failing == [{name:"Lint",failures:1}]'
+}
+
+@test "metrics: only skipped/cancelled runs -> 0% pass rate, no failures (not null, not 100)" {
+  seed
+  echo '[{"conclusion":"skipped","name":"CI","createdAt":"2026-10-29T00:00:00Z"},{"conclusion":"cancelled","name":"CI","createdAt":"2026-10-29T00:00:00Z"}]' > "$FX/run_list.json"
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  echo "$output" | jq -e '.ci.total == 2 and .ci.green == 0 and .ci.failed == 0 and .ci.pass_rate_pct == 0 and .ci.top_failing == []'
+}
+
+@test "metrics: a non-UTC TZ gives byte-identical JSON on a pinned clock" {
+  seed
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"; base="$output"
+  [ "$status" -eq 0 ]
+  for tz in Pacific/Auckland America/Los_Angeles Pacific/Kiritimati; do
+    TZ="$tz" run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$base" ]
+  done
+}
+
+@test "metrics: works from a skills root whose path contains a space (default gh command)" {
+  seed
+  S="$(space_skills_root)"
+  unset METRICS_GH
+  run bash "$S/retro/scripts/metrics.sh" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.prs.merged == 2 and .ci.total == 6 and .escalations.sent == 2'
+  assert_calls "$FAKE_GH_LOG" '^pr list --state merged'
+}
+
+@test "metrics: METRICS_GH may carry arguments (split on whitespace)" {
+  seed
+  printf '#!/usr/bin/env bash\n[ "$1" = --tag ] && shift 2\nexec gh "$@"\n' > "$BATS_TEST_TMPDIR/wrapgh.sh"
+  METRICS_GH="bash $BATS_TEST_TMPDIR/wrapgh.sh --tag x" run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.prs.merged == 2'
 }

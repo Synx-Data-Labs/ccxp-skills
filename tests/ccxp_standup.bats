@@ -314,3 +314,26 @@ mut() { jq "$2" "$FX_DIR/$1" > "$BATS_TEST_TMPDIR/m-$1"; printf '%s' "$BATS_TEST
   data --date 2026-10-30
   [ "$(jq -r '.errors | keys | join(",")' <<<"$output")" = "attention" ]
 }
+
+@test "standup-data: works from a skills root whose path contains a space (default gh command, no section errors)" {
+  seed_gh
+  S="$(space_skills_root)"
+  unset STANDUP_GH STANDUP_PR_TASK_ID
+  mkdir -p "$R/.claude/state"
+  echo '{"T20000101-000011-pr11":{"channel_id":"C","message_ts":"1","type":"x","summary":"s","sent_at":"2026-10-29T00:00:00Z","resolved":false}}' > "$THREADS_FILE"
+  SPACE_PR_TASK_ID=T20000101-000011 run bash "$S/ccxp/scripts/standup-data.sh" --dir "$R" --date 2026-10-30
+  [ "$status" -eq 0 ]
+  jq -e '.errors == {}' <<<"$output"
+  [ "$(jq -r '.merged_prs | map(.number) | join(",")' <<<"$output")" = "20,21" ]
+  [ "$(jq -r '.nightly.total' <<<"$output")" = "3" ]
+  # the PR-task-id command ran too (default command, spaced path)
+  [ "$(jq -r '.attention | map(.number) | join(",")' <<<"$output")" = "11,12" ]
+}
+
+@test "standup-data: STANDUP_GH / STANDUP_PR_TASK_ID may carry arguments" {
+  seed_gh
+  printf '#!/usr/bin/env bash\n[ "$1" = --tag ] && shift 2\nexec gh "$@"\n' > "$BATS_TEST_TMPDIR/wrapgh.sh"
+  STANDUP_GH="bash $BATS_TEST_TMPDIR/wrapgh.sh --tag x" data --date 2026-10-30
+  [ "$status" -eq 0 ]
+  jq -e '.errors == {}' <<<"$output"
+}

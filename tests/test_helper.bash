@@ -239,3 +239,18 @@ refute_calls() {
     return 1
   fi
 }
+
+# space_skills_root
+# Copies the skills tree (minus .git) to "$BATS_TEST_TMPDIR/skills root" (a path
+# with a SPACE) and prints that path, so a test can run a script from there and
+# prove it quotes its own location. `_gh/gh.sh` and `_session/pr_task_id.sh` in
+# the copy are offline stubs (the first execs the PATH `gh`, the second prints
+# $SPACE_PR_TASK_ID or nothing): they probe accounts / the network for real.
+space_skills_root() {
+  local dest="$BATS_TEST_TMPDIR/skills root"
+  mkdir -p "$dest"
+  tar -C "$REPO_ROOT" --exclude=.git -cf - . | tar -C "$dest" -xf -
+  printf '#!/usr/bin/env bash\nexec gh "$@"\n' > "$dest/_gh/gh.sh"
+  printf '#!/usr/bin/env bash\n[ -n "${SPACE_PR_TASK_ID:-}" ] && echo "$SPACE_PR_TASK_ID"\nexit 0\n' > "$dest/_session/pr_task_id.sh"
+  printf '%s\n' "$dest"
+}
