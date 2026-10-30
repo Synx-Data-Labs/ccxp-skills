@@ -67,3 +67,164 @@ use_fake_bin() {
 isolate_claimant_state() {
   export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/${1:-claimant-state}"
 }
+
+# ---------------------------------------------------------------------------
+# Shared fakes for skill-script tests (Phase 0 of the scripts-backed-skills
+# plan). Everything below is offline: no network, no real clock, no ssh/gpg.
+# Reuses $FAKEBIN / use_fake_bin's PATH-prepend convention.
+# ---------------------------------------------------------------------------
+
+# _fakebin_dir — ensure the shared PATH-prepended fake-binary directory exists.
+_fakebin_dir() {
+  FAKEBIN="${FAKEBIN:-$BATS_TEST_TMPDIR/fakebin}"
+  mkdir -p "$FAKEBIN"
+  export FAKEBIN
+  case ":$PATH:" in
+    *":$FAKEBIN:"*) ;;
+    *) export PATH="$FAKEBIN:$PATH" ;;
+  esac
+}
+
+# make_fixture_repo [dir] [-- queue-entry...]
+# Throwaway git repo on branch `main` with a deterministic identity, the
+# dev/TODO layout and an empty-but-valid dev/TODO/queue.md, one initial
+# commit. Prints the repo path (default $BATS_TEST_TMPDIR/repo) and leaves the
+# caller's cwd alone. Extra args after `--` are appended verbatim as queue
+# lines, e.g. make_fixture_repo "$d" -- '- [T20250101-000001](a.md): A'.
+make_fixture_repo() {
+  local dir="${1:-$BATS_TEST_TMPDIR/repo}"
+  [ "${1:-}" = "--" ] && dir="$BATS_TEST_TMPDIR/repo"
+  mkdir -p "$dir/dev/TODO" "$dir/dev/JOURNAL"
+  git -C "$dir" init -q -b main
+  git_identity "$dir"
+  printf '# TODO Queue\n\nOrdered priority queue. Top = highest priority. One line per task.\n\n' \
+    > "$dir/dev/TODO/queue.md"
+  local seen=0 arg
+  for arg in "$@"; do
+    if [ "$seen" = 1 ]; then printf '%s\n' "$arg" >> "$dir/dev/TODO/queue.md"; fi
+    [ "$arg" = "--" ] && seen=1
+  done
+  git -C "$dir" add -A
+  git -C "$dir" commit -q -m "init"
+  printf '%s\n' "$dir"
+}
+
+# fake_gh <fixtures-dir>
+# Installs a `gh` shim on PATH. Every invocation:
+#   1. appends its argv (one line, space-joined) to $FAKE_GH_LOG;
+#   2. exits 1 when the argv line matches the extended regex in
+#      $FAKE_GH_FAIL (simulates a gh/API failure for that call);
+#   3. otherwise prints <fixtures-dir>/<key>.json (or .txt) to stdout, where
+#      <key> is the argv with every run of non-[A-Za-z0-9] characters collapsed
+#      to `_` (so `gh pr list --state open` -> `pr_list_state_open`), and
+#      exits with the contents of <key>.rc if present (default 0);
+#   4. an unmapped argv exits 97 and logs "UNMAPPED" so a test can never pass
+#      by silently hitting nothing.
+# A fixture may also be a prefix match: <fixtures-dir>/<key-prefix>.json is
+# used when no exact key exists and the prefix is the longest that matches.
+fake_gh() {
+  local fixtures="$1"
+  _fakebin_dir
+  export FAKE_GH_FIXTURES="$fixtures"
+  export FAKE_GH_LOG="${FAKE_GH_LOG:-$BATS_TEST_TMPDIR/gh-calls.log}"
+  : > "$FAKE_GH_LOG"
+  cat > "$FAKEBIN/gh" <<'SHIM'
+#!/usr/bin/env bash
+line="$*"
+printf '%s\n' "$line" >> "$FAKE_GH_LOG"
+if [ -n "${FAKE_GH_FAIL:-}" ] && printf '%s' "$line" | grep -Eq -- "$FAKE_GH_FAIL"; then
+  echo "fake gh: forced failure for: $line" >&2
+  exit 1
+fi
+key="$(printf '%s' "$line" | sed -E 's/[^A-Za-z0-9]+/_/g; s/^_+//; s/_+$//')"
+best=""
+for f in "$FAKE_GH_FIXTURES"/*.json "$FAKE_GH_FIXTURES"/*.txt; do
+  [ -f "$f" ] || continue
+  base="$(basename "$f")"; base="${base%.*}"
+  case "$key" in
+    "$base"|"$base"_*) [ "${#base}" -gt "${#best}" ] && best="$base" && bestfile="$f" ;;
+  esac
+done
+if [ -z "$best" ]; then
+  echo "fake gh: UNMAPPED invocation: $line (key: $key)" >&2
+  echo "UNMAPPED $line" >> "$FAKE_GH_LOG"
+  exit 97
+fi
+cat "$bestfile"
+if [ -f "$FAKE_GH_FIXTURES/$best.rc" ]; then exit "$(cat "$FAKE_GH_FIXTURES/$best.rc")"; fi
+exit 0
+SHIM
+  chmod +x "$FAKEBIN/gh"
+}
+
+# fake_claude [stdout-text]
+# Installs a `claude` shim that logs its argv to $FAKE_CLAUDE_LOG (stdin is
+# captured to "$FAKE_CLAUDE_LOG.stdin" only when FAKE_CLAUDE_STDIN=1, because
+# reading an inherited, never-closed stdin would hang the test) and prints $FAKE_CLAUDE_OUTPUT
+# (default: the optional argument, else "ok"). Exit status: $FAKE_CLAUDE_RC.
+fake_claude() {
+  _fakebin_dir
+  export FAKE_CLAUDE_OUTPUT="${1:-${FAKE_CLAUDE_OUTPUT:-ok}}"
+  export FAKE_CLAUDE_LOG="${FAKE_CLAUDE_LOG:-$BATS_TEST_TMPDIR/claude-calls.log}"
+  : > "$FAKE_CLAUDE_LOG"
+  cat > "$FAKEBIN/claude" <<'SHIM'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$FAKE_CLAUDE_LOG"
+if [ "${FAKE_CLAUDE_STDIN:-0}" = 1 ]; then cat >> "$FAKE_CLAUDE_LOG.stdin"; fi
+printf '%s\n' "$FAKE_CLAUDE_OUTPUT"
+exit "${FAKE_CLAUDE_RC:-0}"
+SHIM
+  chmod +x "$FAKEBIN/claude"
+}
+
+# pin_now <ISO-8601-UTC>   e.g. pin_now 2026-10-30T12:00:00Z
+# Exports NOW (and NOW_EPOCH) and installs a `date` shim so `date`,
+# `date -u`, `date +FMT` and `date -u +FMT` report the pinned instant.
+# Any other form (date -d ..., date -v ..., date -r ...) passes straight
+# through to the real date, so both GNU and BSD arithmetic keep working.
+# Scripts that take their own clock should honor $NOW; the shim covers the
+# ones that do not.
+pin_now() {
+  local iso="$1" real epoch
+  real="$(command -v date)"
+  epoch="$("$real" -u -d "$iso" +%s 2>/dev/null \
+    || "$real" -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s)"
+  _fakebin_dir
+  export NOW="$iso" NOW_EPOCH="$epoch" REAL_DATE="$real"
+  cat > "$FAKEBIN/date" <<'SHIM'
+#!/usr/bin/env bash
+utc=""; fmt=""; extra=0
+for a in "$@"; do
+  case "$a" in
+    -u) utc=-u ;;
+    +*) fmt="$a" ;;
+    *) extra=1 ;;
+  esac
+done
+if [ "$extra" = 1 ]; then exec "$REAL_DATE" "$@"; fi
+if "$REAL_DATE" -u -d "@$NOW_EPOCH" +%s >/dev/null 2>&1; then
+  exec "$REAL_DATE" $utc -d "@$NOW_EPOCH" ${fmt:+"$fmt"}
+fi
+exec "$REAL_DATE" $utc -r "$NOW_EPOCH" ${fmt:+"$fmt"}
+SHIM
+  chmod +x "$FAKEBIN/date"
+}
+
+# assert_calls <log> <extended-regex>
+# Passes when some line of <log> matches; otherwise prints the log and fails.
+assert_calls() {
+  if ! grep -Eq -- "$2" "$1" 2>/dev/null; then
+    echo "expected a call matching /$2/ in $1; got:" >&2
+    cat "$1" >&2 2>/dev/null || echo "(no log)" >&2
+    return 1
+  fi
+}
+
+# refute_calls <log> <extended-regex> — the negation (also passes on no log).
+refute_calls() {
+  if grep -Eq -- "$2" "$1" 2>/dev/null; then
+    echo "unexpected call matching /$2/ in $1:" >&2
+    cat "$1" >&2
+    return 1
+  fi
+}
