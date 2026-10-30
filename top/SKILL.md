@@ -4,6 +4,8 @@ description: Use when the user explicitly asks to move a task (or several) to th
 argument-hint: "T<id> [T<id> ...] | T<id> [T<id> ...] --before T<id>"
 ---
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 Move one or more tasks to the front of `dev/TODO/queue.md` — the explicit
 "work on this next, ahead of everything else" override. This is the manual
 lever for cases the queue's plain top-to-bottom order can't express on its
@@ -28,55 +30,9 @@ leapfrog everything else in the queue. Plain `/top` (no `--before`) is for
 
 ## Behavior
 
-### 1. Resolve each task
+### 1. Branch off `origin/main`
 
-Same resolution and hard-stop rules as `/stage` step 1 — glob
-`dev/TODO/T<id>-*.md`, delegate zero-match diagnosis to
-`bash <skills-root>/_taskid/in-this-repo.sh "T<id>"`, hard-fail on any ID
-that doesn't resolve to a file in this repo's `dev/TODO/`. Do not partially
-apply — resolve every ID before touching `queue.md`. **In `--before` mode**,
-the target `T<targetId>` must resolve the same way, **and** must already
-have a line in `queue.md` — there's no position to insert "before" if it
-isn't queued yet (`/stage` it first, or drop `--before`).
-
-### 2. Transitive blocker resolution
-
-Topping a task that can't actually be worked yet just buries the real
-next-step — the blocker — one level deeper. Applies in **both** modes —
-before reordering, expand each given ID into its blocker chain:
-
-For each resolved task, read its frontmatter `status:` field. If it matches
-`Blocked by T<id>` (the canonical lifecycle status, case-insensitive):
-
-1. Resolve `T<id>` the same way as step 1 (glob `dev/TODO/T<id>-*.md`).
-   - **Not found** (already closed/Done, or lives in another repo) — nothing
-     open to reorder; stop walking this chain, use the original ID as-is.
-   - **Found** — recurse: check *that* task's own `status:` for another
-     `Blocked by`, and keep walking. Cap the walk at **10 hops** and hard-stop
-     with a report (don't silently truncate) if it's still chasing blockers —
-     that's almost certainly a cycle or a data error, not a real dependency
-     depth.
-2. Replace the given ID with `[deepest-blocker, ..., immediate-blocker,
-   original-id]` — the chain in dependency order, blocker-of-blocker first.
-
-Only follow the structured `status: Blocked by T<id>` field — never the
-free-text `related:` list. `related` links siblings, prior context, and soft
-references (e.g. a closed task, a design doc); treating every `related:`
-mention as a hard blocker would drag unrelated tasks to the top on every
-`/top` call. `Blocked by` is the one field the lifecycle convention reserves
-for "cannot proceed until this closes."
-
-Worked example — `T-task`'s frontmatter reads `status: Blocked by
-T-blocker`, and `T-blocker` resolves to an open task with no
-further blocker. Running `/top T-task` expands the argument list
-to `[T-blocker, T-task]` before step 3 runs. In `--before`
-mode the same expansion happens first, so `/top T-task --before Y`
-inserts both the blocker and the originally-requested task immediately above
-`Y`, blocker first.
-
-### 3. Reorder `queue.md`
-
-Branch off `origin/main`, not whatever's checked out — a `/drive` call fires mid-feature-branch and would drag its commits in otherwise:
+Not whatever's checked out — a `/drive` call fires mid-feature-branch and would drag its commits in otherwise:
 
 ```bash
 ORIG_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -85,66 +41,24 @@ BRANCH="docs/top-$(date +%Y%m%d-%H%M%S)"
 git checkout -b "$BRANCH" origin/main  # fails on conflicting local changes — commit first, retry
 ```
 
-**Default mode.** Read `dev/TODO/queue.md`. Process the **expanded** ID list
-from step 2 **in reverse order** — this is what makes first-listed end up
-truly first:
-
-```
-for id in reversed(expanded_id_list):
-    bash <skills-root>/_queue/queue.sh top dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
-```
-
-`queue.sh top` removes the line if present and inserts it as the first entry (adds if new).
-
-`{slug}.md` is the actual `dev/TODO/T{id}-*.md` filename — same relative-link format `/stage` uses.
-
-Worked example — queue starts as `[X, Y, Z]`, running `/top A B` where
-neither `A` nor `B` is blocked:
-
-1. Process `B` (last-listed) first: remove if present, insert at top → `[B, X, Y, Z]`
-2. Process `A`: remove if present, insert at top → `[A, B, X, Y, Z]`
-
-Final order has `A` at #1, `B` at #2, exactly matching the order given on
-the command line. If an ID wasn't already queued, this both adds and
-promotes it in one step — no need to `/stage` first.
-
-Continuing the blocker example from step 2 — `/top T-task` expands
-to `[T-blocker, T-task]`, so the *blocker* lands at the very
-top and the originally-requested task sits directly behind it: the queue now
-tells whoever reads it next to work the blocker first, not the task that's
-still stuck.
-
-**`--before` mode.** Process the **expanded** ID list in **forward** order
-(the opposite of default mode — each insert lands immediately above
-`T<targetId>`, i.e. *below* everything inserted earlier in the batch, so
-forward processing keeps the list's own order and the blocker stays ahead
-of the task it blocks). Re-read `T<targetId>`'s position fresh each
-iteration — an earlier insert in the same batch shifts it down by one:
-
-```
-for id in expanded_id_list:        # forward — NOT reversed
-    bash <skills-root>/_queue/queue.sh insert-before dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}" T<targetId>
-```
-
-`queue.sh insert-before` removes the line if present and re-finds the target's position each call.
-
-Worked example — queue starts as `[W, X, Y, Z]`, running `/top A B --before Y`:
-
-1. Process `A`: `Y` is at position 3 → insert above it → `[W, X, A, Y, Z]`
-2. Process `B`: `Y` is now at position 4 → insert above it → `[W, X, A, B, Y, Z]`
-
-Final order is `A, B, Y` — the given order, with the whole batch directly
-ahead of `Y`. For a blocker chain `/top T --before Y` (expanded to
-`[blocker, T]`) this yields `[..., blocker, T, Y, ...]`: blocker first.
-`W` and `X` are untouched — this is the difference from plain `/top`,
-which would have pushed them down too.
-
-### 4. Commit, push, and merge
+### 2. Run the script
 
 ```bash
-# Also pass any newly-untracked T<id> file (same fix as /stage) as an extra path.
+bash <skills-root>/top/scripts/top.sh [--dry-run] T<id> [T<id> ...] [--before T<targetId>]
+```
 
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+`top.sh` is `<skills-root>/_queue/queue-op.sh top` (unit-tested in `tests/queue_op.bats`); do not re-derive its logic. In order, it:
+
+1. **Resolves** every id (and the `--before` target) to exactly one `dev/TODO/T<id>-*.md` **before touching `queue.md`**; zero matches runs `_taskid/in-this-repo.sh` for the diagnosis. In `--before` mode the target must already be queued (`/stage` it first, or drop `--before`).
+2. **Expands blockers** (both modes): each id becomes `[deepest-blocker, ..., immediate-blocker, id]` by following only the structured `status: Blocked by T<id>` field (case-insensitive, first id named) — never `related:`. A blocker with no file in `dev/TODO/` (closed, or another repo) ends the walk. More than 10 hops, a cycle, or the `--before` target appearing in the expanded list is a hard stop (exit 4), not a silent truncation.
+3. **Reorders** through `_queue/queue.sh`, writing `queue.md` only on success. Default: the expanded list goes to the front, first-listed at #1 (queue `[X, Y, Z]`, `/top A B` gives `[A, B, X, Y, Z]`; an unqueued id is added and promoted in one step). `--before`: the list lands in order immediately above the target, which is why `/top T --before Y` with `T` blocked by `K` yields `[..., K, T, Y, ...]`; everything else keeps its place. A repeated id keeps its first occurrence.
+
+Stdout is the confirmation (new head of the queue, or the neighborhood of the target, with `[blocker of T<id>, pulled up]` on pulled-up blockers) followed by `CHANGED=0|1` and `UNTRACKED=<paths>`. Exit: 0 ok (even if already in place, `CHANGED=0`), 1 unresolvable id or unqueued `--before` target, 2 usage, 4 cycle / over 10 hops / target in chain. Judgment stays here: whether `--before` is the right mode, and whether a pulled-up blocker is really wanted.
+
+### 3. Commit, push, and merge
+
+```bash
+# Also pass every path in the script's UNTRACKED= line (newly-untracked task files) as extra paths.
 bash <skills-root>/_gh/land.sh --branch "$BRANCH" --message "docs(queue): move T<id> [T<id> ...] to the top" \
   --title "docs(queue): move T<id> to the top" --body "Queue reorder." -- dev/TODO/queue.md [dev/TODO/T<id>-*.md ...]
 # --before mode message: "...to immediately before T<targetId>"
@@ -159,32 +73,9 @@ After merge: `git checkout "$ORIG_BRANCH"` (`git pull` too if that's
 `main`), delete the local `$BRANCH` — back to the caller's actual branch,
 not a hardcoded `main`.
 
-### 5. Echo confirmation
+### 4. Echo confirmation
 
-**Default mode** — print the new head of the queue so the effect is
-visible, not just claimed, including any blockers step 2 pulled up, so it's
-clear *why* something besides the requested ID moved:
-
-```
-New queue order:
-1. T<id1>: <title>  [blocker of T<id2>, pulled up]
-2. T<id2>: <title>
-3. T<id3>: <title>
-4. <previous #1>: <title>
-5. <previous #2>: <title>
-Landed: PR #<n> merged
-```
-
-**`--before` mode** — print the local neighborhood around the target instead (the head of the queue didn't change, so showing it would be misleading); same blocker annotation applies if step 2 pulled anything up:
-
-```
-New order around T<targetId>:
-N-1. <task now just above the inserted ones>: <title>
-N.   T<id1>: <title>  [blocker of T<id2>, pulled up]
-N+1. T<id2>: <title>
-N+2. T<targetId>: <title>
-Landed: PR #<n> merged
-```
+Show the script's confirmation block (new head of the queue, or the neighborhood around the target) and add `Landed: PR #<n> merged`.
 
 ## What this skill does NOT do
 

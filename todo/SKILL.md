@@ -190,8 +190,7 @@ bash <skills-root>/todo/scripts/todo-sweep.sh apply --phase 1|2|3a [--root DIR] 
 
 3. **Ask the user for approval** before acting; the user may override individual recommendations. This is the one step in `sweep` that always waits for a human.
 
-4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md` (`bash <skills-root>/_queue/queue.sh remove dev/TODO/queue.md T{id}`), plus `bash <skills-root>/_taskid/epic-links.sh sync` + `git add dev/EPICS` — all in one commit.
-
+4. Apply the approved list: `bash <skills-root>/todo/scripts/todo-sweep.sh park [--dry-run] T{id}:"{reason}" ...` sets `status: Parked`, adds `## Parked (YYYY-MM-DD)` with the reason, `git mv`s the file to `dev/PARKING/` and removes its `queue.md` line (exit 3 = nothing to do, 4 = unknown id / target exists, nothing parked). It only applies what you pass it; then run `bash <skills-root>/_taskid/epic-links.sh sync` + `git add dev/EPICS` — all in one commit.
 5. Show final summary: queue sync (Phase 1) + blockers fixed (Phase 2) + tasks auto-closed (Step A) + tasks parked (Step B) + remaining open count + parking lot count.
 
 ### Parking Lot (`dev/PARKING/`)

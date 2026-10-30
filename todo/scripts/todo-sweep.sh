@@ -7,6 +7,7 @@
 #
 #   todo-sweep.sh plan  [--root DIR]
 #   todo-sweep.sh apply --phase 1|2|3a [--root DIR] [--dry-run] [--supersede ID:COVERING]...
+#   todo-sweep.sh park  [--root DIR] [--dry-run] ID:REASON...
 #
 # --root DIR (default $TODO_QUEUE_DIR or .) holds dev/TODO/, dev/JOURNAL/ and
 # dev/TODO/queue.md. plan prints TSV, one finding per line, in queue order:
@@ -23,10 +24,15 @@
 #   phase 3a  CLOSE_DONE and each --supersede ID:COVERING that plan listed as a
 #             candidate: `## Closed (date)`, move to dev/JOURNAL/<date>-<file>
 #             (git mv when tracked), drop the queue line
+# park applies an owner-APPROVED list and never decides what to park: per ID:REASON
+# set `status: Parked`, add `## Parked (date)` + the reason, move the file to
+# dev/PARKING/ (git mv when tracked) and drop its queue line. An ID already in
+# dev/PARKING/ is skipped; epic-links sync and the commit stay with the caller.
 # --dry-run prints `DRY-RUN <action>` lines and changes nothing. apply never
 # commits. Exit: 0 ok, 2 usage, 3 nothing to do, 4 unexpected input (missing
 # queue, malformed queue entry, duplicate id, journal target exists, a
-# --supersede that is not a candidate, an ordering that does not converge);
+# --supersede that is not a candidate, an ordering that does not converge, a
+# park ID with no file in dev/TODO/ or whose dev/PARKING/ target exists);
 # on 4 the queue and journal are left as they were.
 set -euo pipefail
 
@@ -41,7 +47,7 @@ SW_TAB=$'\t'
 
 function sw_die() { local code="$1"; shift; printf 'todo-sweep.sh: %s\n' "$*" >&2; exit "$code"; }
 function sw_usage() {
-  printf 'usage: todo-sweep.sh plan [--root DIR]\n       todo-sweep.sh apply --phase 1|2|3a [--root DIR] [--dry-run] [--supersede ID:COVERING]...\n' >&2
+  printf 'usage: todo-sweep.sh plan [--root DIR]\n       todo-sweep.sh apply --phase 1|2|3a [--root DIR] [--dry-run] [--supersede ID:COVERING]...\n       todo-sweep.sh park [--root DIR] [--dry-run] ID:REASON...\n' >&2
   exit 2
 }
 
@@ -312,19 +318,56 @@ function sw_apply_phase3a() {
   return $((n == 0 ? 3 : 0))
 }
 
+function sw_park() {
+  local date item id reason src file n=0 skipped=0 todo_ids=""
+  date="$(bash "$TODO_LIB_REPO_ROOT/_date/date.sh" today)"
+  # Validate everything first (fail closed before writing anything).
+  for item in "${PARK[@]}"; do
+    id="${item%%:*}"
+    if sw_has_file "$id"; then
+      file="$(sw_path "$id")"; file="${file##*/}"
+      [ ! -e "$ROOT/dev/PARKING/$file" ] || sw_die 4 "dev/PARKING/$file already exists"
+      [ -n "$(todo-fm-get "$(sw_path "$id")" status)" ] || sw_die 4 "$id has no status: line to set"
+      todo_ids="$todo_ids $id"
+    elif [ -n "$(compgen -G "$ROOT/dev/PARKING/$id-*.md" || true)" ]; then
+      :
+    else
+      sw_die 4 "$id has no file in dev/TODO/ or dev/PARKING/"
+    fi
+  done
+  for item in "${PARK[@]}"; do
+    id="${item%%:*}"; reason="${item#*:}"
+    case " $todo_ids " in *" $id "*) ;; *) printf 'SKIPPED %s (already in dev/PARKING)\n' "$id"; skipped=$((skipped+1)); continue ;; esac
+    src="$(sw_path "$id")"; file="${src##*/}"
+    n=$((n+1))
+    if sw_do "PARKED $id -> dev/PARKING/$file"; then
+      sw_set_status "$src" Parked
+      grep -q '^## Parked (' "$src" || printf '\n## Parked (%s)\n\n%s\n' "$date" "$reason" >> "$src"
+      mkdir -p "$ROOT/dev/PARKING"
+      if git -C "$ROOT" ls-files --error-unmatch "dev/TODO/$file" >/dev/null 2>&1; then
+        git -C "$ROOT" mv "dev/TODO/$file" "dev/PARKING/$file"
+      else
+        mv "$src" "$ROOT/dev/PARKING/$file"
+      fi
+      q_remove "$QUEUE" "$id"
+    fi
+  done
+  return $((n == 0 ? 3 : 0))
+}
+
 # ---- main ------------------------------------------------------------------
 function todo-sweep-main() {
   local cmd="${1:-}" phase=""
   [ $# -gt 0 ] || sw_usage
   shift
-  ROOT="${TODO_QUEUE_DIR:-.}"; SUPERSEDE=()
+  ROOT="${TODO_QUEUE_DIR:-.}"; SUPERSEDE=(); PARK=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --root) [ $# -ge 2 ] || sw_usage; ROOT="$2"; shift 2 ;;
       --phase) [ $# -ge 2 ] || sw_usage; phase="$2"; shift 2 ;;
       --dry-run) DRY=1; shift ;;
       --supersede) [ $# -ge 2 ] || sw_usage; [[ "$2" =~ ^$SW_ID_RE:$SW_ID_RE$ ]] || sw_usage; SUPERSEDE+=("$2"); shift 2 ;;
-      *) sw_usage ;;
+      *) [ "$cmd" = park ] && [[ "$1" =~ ^$SW_ID_RE:.+ ]] || sw_usage; PARK+=("$1"); shift ;;
     esac
   done
   [ -d "$ROOT" ] || sw_die 2 "no such directory: $ROOT"
@@ -341,6 +384,10 @@ function todo-sweep-main() {
       case "$phase" in 1|2|3a) ;; *) sw_usage ;; esac
       sw_load
       "sw_apply_phase${phase}" ;;
+    park)
+      [ -z "$phase" ] && [ ${#SUPERSEDE[@]} -eq 0 ] && [ ${#PARK[@]} -gt 0 ] || sw_usage
+      sw_load
+      sw_park ;;
     *) sw_usage ;;
   esac
 }

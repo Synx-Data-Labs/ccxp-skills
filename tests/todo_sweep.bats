@@ -297,3 +297,57 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   [ "$status" -eq 3 ]
   [ "$(_ids)" = "$A $C" ]
 }
+
+# ---- park (apply an owner-approved list) ----------------------------------
+
+@test "park: sets Parked, adds the section, moves to PARKING, drops the queue line" {
+  _task $A t Open; _task $B t Open; _queue $A $B
+  _sw park "$A:stale: nobody wants this"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"PARKED $A -> dev/PARKING/$A-t.md"* ]]
+  [ ! -e "$R/dev/TODO/$A-t.md" ]
+  grep -qx 'status: Parked' "$R/dev/PARKING/$A-t.md"
+  grep -qx '## Parked (2000-02-03)' "$R/dev/PARKING/$A-t.md"
+  grep -qx 'stale: nobody wants this' "$R/dev/PARKING/$A-t.md"
+  [ "$(_ids)" = "$B" ]
+  [ -e "$R/dev/TODO/$B-t.md" ]
+}
+
+@test "park: second run skips the already parked id and exits 3" {
+  _task $A t Open; _queue $A
+  _sw park "$A:why"; [ "$status" -eq 0 ]
+  _sw park "$A:why"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"SKIPPED $A"* ]]
+  [ "$(grep -c '^## Parked' "$R/dev/PARKING/$A-t.md")" -eq 1 ]
+}
+
+@test "park: --dry-run changes nothing" {
+  _task $A t Open; _queue $A
+  _sw park "$A:why" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DRY-RUN PARKED $A"* ]]
+  [ -e "$R/dev/TODO/$A-t.md" ]
+  [ "$(_ids)" = "$A" ]
+}
+
+@test "park: unknown id or existing target fails closed (exit 4), parking nothing" {
+  _task $A t Open; _task $B t Open; _queue $A $B
+  _sw park "$A:why" "$C:why"; [ "$status" -eq 4 ]
+  [ -e "$R/dev/TODO/$A-t.md" ]
+  : > "$R/dev/PARKING/$B-t.md"
+  _sw park "$A:why" "$B:why"; [ "$status" -eq 4 ]
+  [ -e "$R/dev/TODO/$A-t.md" ]
+  [ "$(_ids)" = "$A $B" ]
+}
+
+@test "park: uses git mv for a tracked task and bad args exit 2" {
+  git init -q "$R"; git_identity "$R"
+  _task $A t Open; _queue $A
+  git -C "$R" add -A; git -C "$R" commit -q -m init
+  _sw park "$A:why"; [ "$status" -eq 0 ]
+  git -C "$R" status --porcelain | grep -q "^R.*$A-t.md"
+  run bash "$SWEEP" park --root "$R"; [ "$status" -eq 2 ]
+  run bash "$SWEEP" park --root "$R" "$A"; [ "$status" -eq 2 ]
+  run bash "$SWEEP" plan --root "$R" "$A:why"; [ "$status" -eq 2 ]
+}
