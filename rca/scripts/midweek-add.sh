@@ -14,6 +14,7 @@
 # The row number is the table's highest number + 1. A `| (none yet) |`
 # placeholder row is replaced; otherwise the row goes after the last data row.
 # Stdout on success: `ADDED #<n> <ID>` (or `DRY-RUN <row>`); `ALREADY <ID>` on exit 10.
+# A CRLF table keeps CRLF; a table at end of file without a final newline gains one.
 # Exit: 0 added, 2 usage, 3 file missing/unwritable, 4 no Mid-week additions
 #       table (heading, header or separator missing; nothing written),
 #       10 the task is already in the table (nothing written).
@@ -66,22 +67,22 @@ awk '
 function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
 function emit(   n) {
   n = maxn + 1
-  printf "| %d | %s | %s | %s | %s |\n", n, ENVIRON["ROW_CELL"], ENVIRON["ROW_EST"], ENVIRON["ROW_DATE"], ENVIRON["ROW_WHY"]
+  printf "| %d | %s | %s | %s | %s |%s\n", n, ENVIRON["ROW_CELL"], ENVIRON["ROW_EST"], ENVIRON["ROW_DATE"], ENVIRON["ROW_WHY"], (crlf ? "\r" : "")
   newn = n; emitted = 1
 }
-BEGIN { state = 0; maxn = 0; dup = 0; emitted = 0 }
+BEGIN { state = 0; maxn = 0; dup = 0; emitted = 0; crlf = 0 }
 state == 0 { print; if ($0 ~ /^##[ \t]+Mid-week additions/) state = 1; next }
 state == 1 {                      # between the heading and the table header
   if ($0 ~ /^##[ \t]/) { bad = 1; exit }
   print
-  if ($0 ~ /^\|/) { if ($0 ~ /^\|[ \t]*#[ \t]*\|/) state = 2; else { bad = 1; exit } }
+  if ($0 ~ /^\|/) { crlf = ($0 ~ /\r$/); if ($0 ~ /^\|[ \t]*#[ \t]*\|/) state = 2; else { bad = 1; exit } }
   next
 }
 state == 2 { print; if ($0 ~ /^\|[ \t]*:?-+/) state = 3; else { bad = 1; exit }; next }
 state == 3 {
   if ($0 ~ /^\|/) {
     split($0, c, "|"); first = trim(c[2])
-    if (index($0, ENVIRON["ROW_TASK"]) > 0) dup = 1
+    if (index(c[3], ENVIRON["ROW_TASK"]) > 0) dup = 1      # the Task cell only, not the Why text
     if (first ~ /^\(none yet\)/) { next }          # placeholder: replaced by the new row
     if (first ~ /^[0-9]+$/ && first + 0 > maxn) maxn = first + 0
     print; next
@@ -111,5 +112,10 @@ if [ "$dry" = 1 ]; then
   printf 'DRY-RUN | %s | %s | %s | %s | %s |\n' "$newn" "$cell" "$est" "$added" "$why"
   exit 0
 fi
-cat "$tmp" > "$file" || die "could not write $file" 3
+# replace atomically (same directory, mode kept): a failed write never leaves a truncated IPM file
+new="$(mktemp "$(dirname "$file")/.midweek-add.XXXXXX")" || die "cannot create a temp file next to $file" 3
+trap 'rm -f "$tmp" "$new"' EXIT
+if ! { cp -p "$file" "$new" && cat "$tmp" > "$new" && mv -f "$new" "$file"; }; then
+  die "could not write $file" 3
+fi
 echo "ADDED #$newn $task"
