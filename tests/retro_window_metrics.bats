@@ -213,3 +213,20 @@ J
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.since == "2026-10-23T12:00:00Z"'
 }
+
+@test "metrics: tasks_completed uses window.sh's END as today, not UTC" {
+  seed
+  : > "$R/dev/JOURNAL/2026-10-31-T20000101-000004-future.md"
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  echo "$output" | jq -e '.tasks_completed == 2'
+  TODAY=2026-10-31 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  echo "$output" | jq -e '.tasks_completed == 3'
+}
+
+@test "metrics: timed_out and startup_failure count as failures; PR cap flagged" {
+  seed
+  echo '[{"conclusion":"timed_out","name":"T","createdAt":"2026-10-29T00:00:00Z"},{"conclusion":"startup_failure","name":"S","createdAt":"2026-10-29T00:00:00Z"},{"conclusion":"success","name":"CI","createdAt":"2026-10-29T00:00:00Z"}]' > "$FX/run_list.json"
+  jq -n '[range(0;500) | {number:., title:"x", createdAt:"2026-10-29T00:00:00Z", mergedAt:"2026-10-29T01:00:00Z", additions:1, deletions:0}]' > "$FX/pr_list_state_merged.json"
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  echo "$output" | jq -e '.ci.failed == 2 and .prs.truncated == true'
+}

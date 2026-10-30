@@ -37,8 +37,8 @@ First fix the window — never hand-compute dates (GNU `date -d` breaks on macOS
 bash <skills-root>/retro/scripts/window.sh [weeks-back]
 ```
 
-- Prints `WEEKS`, `START`, `END`, `SINCE_ISO`, `THIS_MONDAY`, `IPM_FILE` (empty when absent), `PRIOR_RETRO` (empty when none) as `KEY=value` lines (substitute the printed values wherever `$START` etc. appear below). Exit 2 = bad argument; stop and report it.
-- Then run `bash <skills-root>/retro/scripts/metrics.sh --since "$SINCE_ISO"` once: JSON with the commit, PR, CI, backlog, task-count and escalation numbers below (steps 3, 4, 5, 6, 7). Any gh failure exits 3 with nothing printed: report the failure, never estimate. It is read-only. Use its numbers verbatim in Phase 3; judging them stays here.
+- Prints `WEEKS`, `START`, `END`, `SINCE_ISO`, `THIS_MONDAY`, `IPM_FILE` (empty when absent), `PRIOR_RETRO` (empty when none) as `KEY=value` lines (substitute the printed values wherever `$START` etc. appear below). Exit 2 = bad argument or date, 3 = missing repo root; stop and report it.
+- Then run `bash <skills-root>/retro/scripts/metrics.sh --since "$SINCE_ISO"` once: JSON with the commit, PR, CI, backlog, task-count and escalation numbers below (steps 3, 4, 5, 6, 7). Exit 2 = usage, 3 = any gh/git failure (nothing printed), 4 = malformed `drive-threads.json` (left untouched): report it, never estimate. `.prs.truncated` true means a PR list hit its 500 cap (counts are a floor). It is read-only. Use its numbers verbatim in Phase 3; judging them stays here.
 
 Collect the rest over `START`..`END`. Do all reads in parallel:
 
@@ -46,7 +46,7 @@ Collect the rest over `START`..`END`. Do all reads in parallel:
 2. **Journal entries**: Read all `dev/JOURNAL/*.md` files with dates in the window — completed tasks
 3. **Merged PRs**: `metrics.sh` `.prs.merged`, `.avg_cycle_hours`, `.additions`/`.deletions` (explicit `--limit 500`; gh's default page of 30 undercounts a real week).
 4. **Open PRs**: `.prs.open` and `.prs.stale_open` (created more than 3 days ago) — the Stale PRs row in Phase 3.
-5. **Current TODO backlog**: `.backlog.todo` and `.backlog.parking` — backlog health; `.tasks_completed` is the JOURNAL-entries-in-window count.
+5. **Current TODO backlog**: `.backlog.todo` and `.backlog.parking` — backlog health; `.tasks_completed` counts task-ID `dev/JOURNAL/` files dated in the window.
 6. **CI failures**: `.ci` — `total`, `green`, `pass_rate_pct`, `top_failing` (top 3 by failure count, for the Top failing workflows row). The fetch uses an explicit `--created` filter and a 1000-run cap (gh's API cap). If `.ci.truncated` is `true`, the cap was hit and older runs in the window were dropped: state that gap explicitly in the retro, never report the rate as complete (no silent caps; the undercount recurred 3 retros before this).
 7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention (counts: `.escalations`)
 8. **Previous retro**: Read `PRIOR_RETRO` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
