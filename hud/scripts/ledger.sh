@@ -2,7 +2,13 @@
 # Job ledger writer for the HUD "jobs" section (schema v3).
 #
 #   ledger.sh start <n> <title> [--context <abs-path>]   job r<n> started (lifetime_jobs = highest n ever)
-#   ledger.sh finish <n>                                 job r<n> no longer running
+#       start also takes [--started-at HH:MM] [--prompt-file <abs-path> | --prompt-stdin] [--agent <type[/model]>] [--flags a,b]
+#       (flags: autopilot, needs-confirmation, detached); --prompt-stdin saves stdin as <ledger dir>/ccxp-prompts/<n>.md (mode 600)
+#   ledger.sh finish <n>                                 job r<n> no longer running (drops its saved prompt copy)
+#   ledger.sh reconcile --alive <n,n,...|->              print running rows NOT in the alive list, one TSV line each:
+#                                 job title context prompt started_at agent flags resumed   ("-" = empty / no prompt file)
+#   ledger.sh set-started <n> HH:MM   set a running row's start time (24h, validated)
+#   ledger.sh resumed <n>         count a restart of running row r<n> (keeps its number)
 #   ledger.sh park <k> [--context <abs-path>] [--title <t>]   park id k<k> (k5, K5 or 5 all mean k5); re-park updates
 #   ledger.sh unpark <k>
 #   ledger.sh set-parked <n>      DEPRECATED no-op (the parked count is the array length)
@@ -19,7 +25,8 @@
 #
 # File: ${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}
 # {"schema":3,"updated_at","next_job","lifetime_jobs",
-#  "running":[{"job","title","context","started_at"}],     (started_at = HH:MM local)
+#  "running":[{"job","title","context","prompt","agent","flags","resumed","started_at"}],  (started_at = HH:MM local;
+#                prompt = abs path of the saved job prompt, "" = not resumable; resumed = restart count)
 #  "next":[{"ref","text","context","added_at"}],
 #  "done":[{"ref","text","context","closed_at"}],           (closed Next items, newest last, max 20)
 #  "parked":[{"id","context","title"?}],
@@ -27,7 +34,7 @@
 # The JSON is the source of truth: compose replies from `render`/`show`, change it only via this script.
 # context = absolute path of a context file ("" when none); this script only stores it.
 # After every write, ccxp-ledger.md (same dir, same base name) is re-rendered: running, Next and
-# parked items, each context path on its own line so a terminal makes it cmd-clickable.
+# parked items, each with a file:// link and the plain absolute context path (cmd-clickable in a terminal).
 # Migration (first write onto an older file): the old file is copied to
 # <file>.bak-<UTC timestamp>-<pid>, parked_ids become parked items with empty context, inputs/actions
 # merge into next (legacy refs kept), the parked count and i/a counters are dropped. A legacy
@@ -56,7 +63,8 @@ ledger-read() {
        lifetime_jobs: (.lifetime_jobs | numbers // 0),
        running: [(.running // [])[] | select(type == "object")
                  | {job: (.job | numbers // 0), title: (.title | strings // ""), context: (.context | strings // ""),
-                  started_at: (.started_at | strings // "")}],
+                  prompt: (.prompt | strings // ""), agent: (.agent | strings // ""), flags: (.flags | strings // ""),
+                  resumed: (.resumed | numbers // 0), started_at: (.started_at | strings // "")}],
        next: [((.next // []) + (.inputs // []) + (.actions // []))[]
               | select(type == "object" and (.ref | strings))
               | {ref, text: (.text | strings // ""), context: (.context | strings // ""), added_at: (.added_at | strings // "")}],
@@ -76,11 +84,13 @@ ledger-read() {
 ledger-render() {
   local md tmp; md=$(ledger-md-file)
   tmp=$(mktemp "$md.XXXXXX") || return 0
-  if printf '%s' "$1" | jq -r '
-      def item($head): "- " + $head + (if .context != "" then "\n  " + .context else "" end);
+  if printf '%s' "$1" | jq -r --arg md "$md" '
+      def enc: split("/") | map(@uri) | join("/");
+      def item($head): "- " + $head + "\n  context: "
+        + (if .context != "" then "[context](file://" + (.context | enc) + ")\n  " + .context else "(none)" end);
       def sect($name; $items): "## " + $name + " (" + ($items | length | tostring) + ")\n"
         + (if ($items | length) == 0 then "- none" else ($items | join("\n")) end) + "\n";
-      "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\n"
+      "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\nLedger: [ledger](file://" + ($md | enc) + ") " + $md + "\n\n"
       + sect("Running"; [.running[] | item("r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)")]) + "\n"
       + sect("Next"; [.next[] | item("\(.ref) \(.text)")]) + "\n"
       + sect("Parked"; [.parked[] | item(.id + (if .title then " " + .title else "" end))])' > "$tmp" 2>/dev/null; then
@@ -151,6 +161,7 @@ ledger-ctx() {
 # Split args into POS (positional), CTX/HAVE_CTX (--context) and TTL/HAVE_TTL (--title).
 ledger-args() {
   POS=(); CTX=""; TTL=""; TXT=""; REF=""; HAVE_CTX=false; HAVE_TTL=false; HAVE_TXT=false
+  PF=""; AGT=""; FLG=""; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --context) [[ $# -ge 2 ]] || { echo "ledger: --context needs a path" >&2; return 2; }
@@ -160,6 +171,17 @@ ledger-args() {
       --ref) [[ $# -ge 2 ]] || { echo "ledger: --ref needs a value" >&2; return 2; }
         [[ "$2" =~ ^[nN][0-9]{1,9}$ ]] || { echo "ledger: --ref must look like n12: $2" >&2; return 2; }
         REF="n$((10#${2:1}))"; shift 2 ;;
+      --prompt-file) [[ $# -ge 2 ]] || { echo "ledger: --prompt-file needs a path" >&2; return 2; }
+        PF=$(ledger-ctx "$2") || return 2; HAVE_PF=true; shift 2 ;;
+      --prompt-stdin) PSTDIN=true; shift ;;
+      --started-at) [[ $# -ge 2 ]] || { echo "ledger: --started-at needs HH:MM" >&2; return 2; }
+        ledger-hm "$2" || return 2; SAT="$2"; HAVE_SAT=true; shift 2 ;;
+      --agent) [[ $# -ge 2 ]] || { echo "ledger: --agent needs a value" >&2; return 2; }
+        AGT=$(ledger-clip "$2" 80); HAVE_AGT=true; shift 2 ;;
+      --flags) [[ $# -ge 2 ]] || { echo "ledger: --flags needs a value" >&2; return 2; }
+        [[ -z "$2" || "$2" =~ ^(autopilot|needs-confirmation|detached)(,(autopilot|needs-confirmation|detached))*$ ]] \
+          || { echo "ledger: --flags takes autopilot, needs-confirmation, detached (comma list): $2" >&2; return 2; }
+        FLG="$2"; HAVE_FLG=true; shift 2 ;;
       --title) [[ $# -ge 2 ]] || { echo "ledger: --title needs a value" >&2; return 2; }
         TTL=$(ledger-clip "$2" 120); HAVE_TTL=true; shift 2 ;;
       *) POS+=("$1"); shift ;;
@@ -225,6 +247,24 @@ ledger-render-text() {
     "Ledger: " + $md'
 }
 
+ledger-hm() { [[ "${1:-}" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { echo "ledger: time must be HH:MM (24h): ${1:-}" >&2; return 2; }; }
+
+ledger-prompt-dir() { printf '%s/ccxp-prompts' "$(dirname "$(ledger-file)")"; }
+
+# Save stdin as the job prompt for job $1; prints the path. Refuses text that looks like a credential.
+ledger-save-prompt() {
+  local d f text; d=$(ledger-prompt-dir); f="$d/$1.md"
+  text=$(head -c 200000)
+  [[ -n "$text" ]] || { echo "ledger: empty prompt on stdin" >&2; return 2; }
+  if printf '%s' "$text" | grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'; then
+    echo "ledger: prompt looks like it holds a credential; not saved" >&2; return 2
+  fi
+  mkdir -p "$d" && chmod 700 "$d" 2>/dev/null
+  ( umask 077; printf '%s\n' "$text" > "$f" ) || return 1
+  chmod 600 "$f" 2>/dev/null
+  printf '%s' "$f"
+}
+
 ledger() {
   local cmd="${1:-show}"; shift || true
   case "$cmd" in
@@ -232,15 +272,64 @@ ledger() {
       ledger-args "$@" || return 2
       ledger-int "${POS[0]:-}" || return 2
       local title; title=$(printf '%s' "${POS[1]:-}" | tr -d '\000-\037\177' | cut -c1-120)
+      if [[ "$PSTDIN" == true ]]; then
+        PF=$(ledger-save-prompt "$((10#${POS[0]}))") || return 2; HAVE_PF=true
+      fi
       ledger-update '(.running | map(select(.job == $n)) | .[0]) as $old
         | .running = ([.running[] | select(.job != $n)]
                       + [{job: $n, title: $t, context: (if $hc then $c else ($old.context // "") end),
-                          started_at: (if ($old.started_at // "") != "" then $old.started_at else $hm end)}] | sort_by(.job))
+                          prompt: (if $hp then $p else ($old.prompt // "") end),
+                          agent: (if $ha then $a else ($old.agent // "") end),
+                          flags: (if $hf then $f else ($old.flags // "") end),
+                          resumed: ($old.resumed // 0),
+                          started_at: (if $hs then $s elif ($old.started_at // "") != "" then $old.started_at else $hm end)}] | sort_by(.job))
         | .lifetime_jobs = ([.lifetime_jobs, $n] | max)' \
-        --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" ;;
+        --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" --arg s "$SAT" --argjson hs "$HAVE_SAT" \
+        --arg p "$PF" --argjson hp "$HAVE_PF" --arg a "$AGT" --argjson ha "$HAVE_AGT" --arg f "$FLG" --argjson hf "$HAVE_FLG" ;;
     finish)
       ledger-int "${1:-}" || return 2
-      ledger-update '.running |= map(select(.job != $n))' --argjson n "$((10#$1))" ;;
+      local pf; pf="$(ledger-prompt-dir)/$((10#$1)).md"
+      ledger-update '.running |= map(select(.job != $n))' --argjson n "$((10#$1))" || return 1
+      [[ -f "$pf" ]] && unlink "$pf" 2>/dev/null
+      return 0 ;;
+    reconcile)
+      local alive="" have=false
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --alive) [[ $# -ge 2 ]] || { echo "ledger: --alive needs a list (or -)" >&2; return 2; }
+            alive="$2"; have=true; shift 2 ;;
+          *) echo "usage: ledger.sh reconcile --alive <n,n,...|->" >&2; return 2 ;;
+        esac
+      done
+      [[ "$have" == true ]] || { echo "usage: ledger.sh reconcile --alive <n,n,...|->  (the alive list is required, may be empty)" >&2; return 2; }
+      [[ "$alive" == "-" ]] && alive=$(cat)
+      alive=$(printf '%s' "$alive" | tr ',\n\t' '   ')
+      local a ids=""
+      for a in $alive; do
+        a="${a#[#r]}"
+        [[ "$a" =~ ^[0-9]{1,9}$ ]] || { echo "ledger: bad alive job number: $a" >&2; return 2; }
+        ids+="$((10#$a)),"
+      done
+      local job title ctx prompt started agent flags resumed
+      while IFS=$'\t' read -r job title ctx prompt started agent flags resumed; do
+        [[ -n "$job" ]] || continue
+        [[ "$prompt" != "-" && ! -f "$prompt" ]] && prompt="-"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$job" "$title" "$ctx" "$prompt" "$started" "$agent" "$flags" "$resumed"
+      done < <(ledger-read | jq -r --argjson alive "[${ids%,}]" '
+        .running[] | select(.job as $j | ($alive | index($j)) == null)
+        | [.job, .title, .context, .prompt, .started_at, .agent, .flags, .resumed]
+        | map(if . == "" then "-" else tostring end) | join("\t")') ;;
+    set-started)
+      ledger-int "${1:-}" || return 2
+      ledger-hm "${2:-}" || return 2
+      ledger-update 'if (.running | map(.job) | index($n)) then .running |= map(if .job == $n then .started_at = $s else . end)
+                     else error("no such running job") end' --argjson n "$((10#$1))" --arg s "$2" \
+        || { echo "ledger: no running job r$1" >&2; return 1; } ;;
+    resumed)
+      ledger-int "${1:-}" || return 2
+      ledger-update 'if (.running | map(.job) | index($n)) then .running |= map(if .job == $n then .resumed += 1 else . end)
+                     else error("no such running job") end' --argjson n "$((10#$1))" \
+        || { echo "ledger: no running job r$1" >&2; return 1; } ;;
     park)
       ledger-args "$@" || return 2
       local k extra; k=$(ledger-kid "${POS[0]:-}") || return 2
@@ -286,7 +375,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k> <v> | ref next|bump | render | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k> <v> | ref next|bump | render | show [--brief]" >&2; return 2 ;;
   esac
 }
 
