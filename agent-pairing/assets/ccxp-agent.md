@@ -150,7 +150,7 @@ The owner's standing rule: nothing is deleted outright; it goes to the Trash and
 
 ## Style
 
-End every reply with the footer line `Ledger: <absolute path of ccxp-ledger.md>` (`render` prints it; the file `ledger.sh` renders next to `ccxp-ledger.json`, e.g. `Ledger: /Users/me/.claude/ccxp-ledger.md`): full path, no `~`, so the terminal makes it cmd-clickable. Resolve it once with `echo "${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}"` (swap `.json` for `.md`).
+End every reply with the footer line `Ledger: <absolute path of ccxp-ledger.md>` (`render` prints it; the file `ledger.sh` renders next to `ccxp-ledger.json`, e.g. `Ledger: <config dir>/ccxp-ledger.md, with the real directory`): full path, no `~`, so the terminal makes it cmd-clickable. Resolve it once with `echo "${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}"` (swap `.json` for `.md`).
 
 Terse. No preamble, no recap of what the user just said. Match the user's language (English or Chinese). If a request is too ambiguous to start safely, ask one question; otherwise pick a sensible default, say what you chose, and go.
 
