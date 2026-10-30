@@ -195,6 +195,19 @@ _task() { printf -- '---\nestimation: 1\nstatus: %s\n---\n\n# T20000101-000001: 
   [ "$status" -eq 3 ]
 }
 
+@test "review-flip: CRLF and quoted status values are handled" {
+  printf -- '---
+status: "In Progress"
+---
+
+# x
+' > dev/TODO/T20000101-000001-x.md
+  _prep review-flip T20000101-000001
+  [ "$status" -eq 0 ]
+  [ "$(sed -n 2p dev/TODO/T20000101-000001-x.md | tr -d '\r')" = "status: Review" ]
+  [ "$(wc -l < dev/TODO/T20000101-000001-x.md)" -eq 5 ] && [ "$(grep -c $'\r' dev/TODO/T20000101-000001-x.md)" -eq 5 ]
+}
+
 @test "review-flip: second run is a no-op; bad id and ambiguous match exit 2" {
   _task "In Progress"
   _prep review-flip T20000101-000001; [ "$status" -eq 0 ]
@@ -309,6 +322,72 @@ _task() { printf -- '---\nestimation: 1\nstatus: %s\n---\n\n# T20000101-000001: 
   cd "$BATS_TEST_TMPDIR" && mkdir plain && cd plain && _prep secrets-check
   [ "$status" -eq 2 ]
   [[ "$output" == *"SECRETS=blocked"* ]]
+}
+
+@test "secrets-check: runs from the repo root even when invoked from a subdirectory" {
+  mkdir sub; printf 'T=%s\n' "$(_ghp)" > sub/a.sh
+  cd sub
+  _prep secrets-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BLOCK sub/a.sh:1 github-token"* ]]
+  _prep changed md; [ "$status" -eq 0 ]
+}
+
+@test "secrets-check: a staged secret deleted from the worktree is still seen" {
+  printf 'T=%s\n' "$(_ghp)" > a.sh; git add a.sh; rm a.sh
+  _prep secrets-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BLOCK a.sh (index):1 github-token"* ]]
+}
+
+@test "secrets-check --base: a secret added in one commit and removed in a later one is flagged" {
+  git checkout -q -b feat-x
+  printf 'T=%s\n' "$(_ghp)" > a.sh; _commit leak
+  echo clean > a.sh; _commit fix
+  _prep secrets-check --base main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"BLOCK a.sh ("* ]]
+  [[ "$output" == *"github-token"* ]]
+}
+
+@test "secrets-check: pgp key blocks, bearer tokens, short passwords with a symbol or digit, config credential files" {
+  printf -- '-----BEGIN PGP PRIVATE KEY %s-----\n' BLOCK > p.txt
+  printf 'Authorization: Bearer %s\n' "$(printf 'Zz9%.0s' $(seq 10))" > h.txt
+  printf 'password = hunter2!\n' > pw.conf
+  : > .npmrc; mkdir .docker; : > .docker/config.json
+  _prep secrets-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"p.txt:1 private-key"* ]]
+  [[ "$output" == *"h.txt:1 bearer-token"* ]]
+  [[ "$output" == *"pw.conf:1 assigned-password"* ]]
+  [[ "$output" == *"BLOCK .npmrc credential-file"* ]]
+  [[ "$output" == *"BLOCK .docker/config.json credential-file"* ]]
+}
+
+@test "secrets-check: hyphenated words ending in sk- (disk-, task-) and password placeholders do not block" {
+  printf 'see disk-usage-monitoring-script-name and task-queue-operations-staging\npassword = get_password_from_env\npassword: $PASSWORD_VAR\npwd = <changeme>\nBearer <token>\n' > ok.txt
+  _prep secrets-check
+  [ "$status" -eq 0 ]
+}
+
+@test "secrets-check: a grep failure is a block, not a pass" {
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  printf '#!/bin/sh\nexit 2\n' > "$BATS_TEST_TMPDIR/bin/grep"; chmod +x "$BATS_TEST_TMPDIR/bin/grep"
+  echo hello > a.txt
+  # the stub only shadows grep for the scan; the file looks like text, so every rule errors
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" run bash "$PREP" secrets-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unscannable"* ]]
+}
+
+@test "no verb moves HEAD, refs or the index (nothing is committed or pushed)" {
+  git checkout -q -b feat-x; echo a > a.txt
+  before="$(git rev-parse HEAD; git for-each-ref; git diff --cached --name-only)"
+  echo "- s" > s.md
+  for v in "assess" "lint" "secrets-check --base main" "body --summary-file s.md" "changed md"; do
+    _prep $v
+  done
+  [ "$before" = "$(git rev-parse HEAD; git for-each-ref; git diff --cached --name-only)" ]
 }
 
 # ---- body -----------------------------------------------------------------------------

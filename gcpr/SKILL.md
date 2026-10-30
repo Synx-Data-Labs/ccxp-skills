@@ -36,7 +36,7 @@ A clean tree doesn't mean there's nothing left to do: `assess` also checks wheth
 
 - **`clean-main`** (on `main`, nothing ahead) or **`clean-no-commits`** (feature branch, nothing ahead): genuinely nothing to do. Stop and tell the user "nothing to commit".
 - **`dirty`**: continue with steps 1.5-4.
-- **`ahead-no-pr`**: skip steps 2-4 (nothing to group/commit); run `secrets-check --base main` (step 2) over the committed work, then step 5 (push), step 6 (create PR), step 7 (hand off to `/address-pr`).
+- **`ahead-no-pr`**: skip steps 2-4 (nothing to group/commit); run `secrets-check --base main` (step 2) over the committed work (it must come back clean), then step 5 (push), step 6 (create PR), step 7 (hand off to `/address-pr`).
 - **`ahead-pr:<n>`**: don't create a duplicate. Report that PR's URL and hand off directly to `/address-pr <n>`.
 - **`unknown`** / exit 4 (the PR lookup failed) or exit 2: stop and report; never guess "no PR".
 
@@ -64,7 +64,7 @@ This is the critical step. Analyze ALL uncommitted changes and split them into l
 
 1. **By category**: separate docs, config, functional code, tests, infrastructure
 2. **By scope**: changes to the same feature/component belong together
-3. **Secrets check** (fail closed): before staging anything, run `bash <skills-root>/gcpr/scripts/gcpr-prep.sh secrets-check`. It lists `BLOCK <path>:<line> <rule>` (never the matched text) and exits 1 on any hit, 2 if it could not run; unscannable files (non-media binaries, symlinks) count as hits. On a block do not stage those paths: report them to the user and leave them out. Never print or paste a matched value.
+3. **Secrets check** (fail closed): before staging anything, run `bash <skills-root>/gcpr/scripts/gcpr-prep.sh secrets-check --base main` (also covers commits already on the branch). It lists `BLOCK <path>:<line> <rule>` (never the matched text) and exits 1 on any hit, 2 if it could not run; unscannable files (non-media binaries, symlinks) count as hits. On a block do not stage those paths: report them to the user and leave them out. Never print or paste a matched value.
 
 **How to group:**
 
