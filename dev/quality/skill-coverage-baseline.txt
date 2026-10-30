@@ -1,0 +1,53 @@
+# Skill coverage baseline: today's gaps against the scripts+tests contract.
+# Format: <skill><TAB><finding>. Entries may only be REMOVED, never added;
+# `skill_score.py --coverage --coverage-check` fails on new findings and on
+# stale entries. Regenerate after fixing: --coverage --coverage-write FILE.
+address-pr	skills-root-note
+autopilot	skills-root-note
+bottom	no-scripts
+ccxp	skills-root-note
+ccxp	untested-script:prune-drive-threads.sh
+claim	no-scripts
+claim	skills-root-note
+drive	no-scripts
+drive	skills-root-note
+email-triage	no-scripts
+gcpr	no-scripts
+incept	no-scripts
+ipm	no-scripts
+ipm	skills-root-note
+journal-compact	no-scripts
+labrun-rca	no-scripts
+md-to-pdf	desc-use-when
+md-to-pdf	no-scripts
+memory-to-skill	repo-relative-script:../_taskid/new.sh
+migrate-task	broken-ref:../../dev/TODO/T<id>-migrate-task-skill.md
+new-task	no-scripts
+new-task	skills-root-note
+proof-read	no-scripts
+quality-probe	desc-use-when
+rca	no-scripts
+rca	skills-root-note
+retro	skills-root-note
+slack-check-reply	no-scripts
+stage	desc-use-when
+stage	no-scripts
+stage	skills-root-note
+to-task	no-scripts
+todo	skills-root-note
+top	no-scripts
+top	skills-root-note
+turnstile-spin	desc-use-when
+turnstile-spin	untested-script:auth-probe.sh
+turnstile-spin	untested-script:fetch-secret.sh
+turnstile-spin	untested-script:persist-skill.sh
+turnstile-spin	untested-script:widget-create.sh
+verify-site	untested-script:check-a11y.sh
+verify-site	untested-script:check-lighthouse.sh
+verify-site	untested-script:check-responsive.sh
+verify-site	untested-script:check-routes.sh
+verify-site	untested-script:ensure-deps.sh
+verify-site	untested-script:match-testplan.sh
+verify-site	untested-script:preview-down.sh
+verify-site	untested-script:preview-up.sh
+verify-site	untested-script:report.sh
