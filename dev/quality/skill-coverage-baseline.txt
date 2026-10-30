@@ -6,7 +6,6 @@ ccxp	skills-root-note
 claim	no-scripts
 claim	skills-root-note
 email-triage	no-scripts
-gcpr	no-scripts
 incept	no-scripts
 ipm	no-scripts
 ipm	skills-root-note
