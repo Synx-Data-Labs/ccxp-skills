@@ -76,7 +76,13 @@ bash <skills-root>/labrun-rca/scripts/labrun.sh render-reply --workflow "<workfl
   --action "<task-id if created, otherwise 'None — <reason>'>"
 ```
 
-It prints the `mrkdwn` reply (`*RCA — <workflow> run <run-id>*` header, Error / Root cause / Classification / Confidence / Impact / Action, then `Logs: <run-url|run>`). Exit 5 = classification/confidence not in the enum (fix the input); exit 6 = the reply contains a token-like string — redact the offending text and re-render, never post around it (the scrub is best-effort pattern matching, not a guarantee — still spot-check); the reply escapes `&`, `<`, `>` as Slack requires and swaps backticks in the error for `'`; exit 2 = usage (every value is one line).
+It prints the `mrkdwn` reply (`*RCA — <workflow> run <run-id>*` header, Error / Root cause / Classification / Confidence / Impact / Action, then `Logs: <run-url|run>`). Exit codes:
+
+- `5` — classification/confidence not in the enum; fix the input.
+- `6` — the reply contains a token-like string; redact the offending text and re-render, never post around it. The scrub is best-effort pattern matching, not a guarantee, so still spot-check.
+- `2` — usage (every value is one line).
+
+The reply escapes `&`, `<`, `>` as Slack requires and swaps backticks in the error for `'`.
 
 Keep it compact. A Slack thread reply is for a quick read, not the full transcript — the run URL is the escape hatch for anyone who wants the raw logs.
 
