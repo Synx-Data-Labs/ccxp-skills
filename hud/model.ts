@@ -15,6 +15,10 @@ export const EMPTY: Snapshot = {
   sessionRoot: null,
 }
 
+/** The plugin's public GitHub location, drawn in details when the manifest has none (a bare URL: terminals make it clickable). */
+export const PLUGIN_URL_DEFAULT = 'https://github.com/Synx-Data-Labs/ccxp-skills'
+// Untrusted: only a plain github.com/<owner>/<repo> URL is ever drawn (no escape bytes, spaces or paths).
+const PLUGIN_URL_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]{1,60}\/[A-Za-z0-9_.-]{1,100}$/
 const VERSION_RE = /^\d{1,9}\.\d{1,9}\.\d{1,9}(-[0-9A-Za-z.-]{1,40})?$/
 
 /** Strictly newer by numeric semver (10 > 9, not a string compare); a prerelease sorts below its release. */
@@ -112,7 +116,8 @@ export function parseHelper(stdout: string): HelperData | null {
     // Untrusted: only plain X.Y.Z (optional prerelease) strings get through, nothing else is ever drawn.
     const installed = str((pl as Record<string, unknown>).installed)
     const latest = str((pl as Record<string, unknown>).latest)
-    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null }
+    const url = str((pl as Record<string, unknown>).url)
+    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}) }
   }
   return {
     repo: str(r.repo),
@@ -517,7 +522,8 @@ const DETAIL_STEPS = {
   jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
   queue: ['step:queue', 'step:queue'],
   ap: ['step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
-  you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'step:ver0', 'drop:ver0', 'drop:ver'],
+  // The version label is never dropped here (the link goes first, then the stamp shrinks, then the label narrows to ✓/↑).
+  you: ['drop:url', 'step:lastat', 'step:lastat', 'step:ver', 'step:ver', 'step:ver0'],
 } as const
 
 /**
@@ -526,7 +532,7 @@ const DETAIL_STEPS = {
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
  *   4 queue breakdown (dev/TODO/queue.md; no queue, no line)
- *   5 autopilot, next loop time, and CI   6 last prompt (stamp and age) and the ccxp version
+ *   5 autopilot, next loop time, and CI   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
  * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
  * It ignores `fields`: the lines are the view. [] when there is no data at all.
  */
@@ -622,9 +628,12 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
   const verItem = pick('ver')
+  // The plugin's GitHub location, as a bare URL (terminals make it cmd-clickable; no OSC 8, the renderer draws plain text).
+  // From the manifest via the helper, the public URL otherwise. Shown with the version label, so only when that is.
+  const urlItem = verItem && h?.plugin ? one('url', [{ text: h.plugin.url ?? PLUGIN_URL_DEFAULT, dim: true }]) : null
   if (at || verItem) {
     add(
-      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }]) : null, verItem],
+      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }]) : null, verItem, urlItem],
       DETAIL_STEPS.you,
     )
   }

@@ -853,11 +853,54 @@ test('version: in AP mode it shows too; narrow rows shrink it, the update outliv
 })
 
 test('version: /hud details shows it on the last line, with `you` when present', async () => {
-  const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 120).map(r => r.map(s => s.text).join(''))
+  const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 160).map(r => r.map(s => s.text).join(''))
   expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 (5.1.0 available)')
   expect(lines[lines.length - 1]).toContain('you ')
   const off = detailRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 120).map(r => r.map(s => s.text).join(''))
   expect(off.join('\n')).not.toContain('ccxp')
+})
+
+const PLUGIN_LATEST = { installed: '5.2.0', latest: '5.2.0' }
+const lastLine = (snap: object, cfg = DEFAULTS, cols = 160) => text(detailRows(snap as any, cfg, cols, DETAIL_NOW).slice(-1))
+
+test('version: details show (latest) or (X available) and the GitHub URL, the manifest URL winning over the fallback', async () => {
+  expect(lastLine(verSnap(PLUGIN_LATEST))).toMatch(/ccxp 5\.2\.0 \(latest\) │ https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills$/)
+  expect(lastLine(verSnap({ installed: '5.2.0', latest: '5.2.1' }))).toContain('ccxp 5.2.0 (5.2.1 available) │ https://github.com/Synx-Data-Labs/ccxp-skills')
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, url: 'https://github.com/Acme/fork' }))).toMatch(/\(latest\) │ https:\/\/github\.com\/Acme\/fork$/)
+  // latest unknown: still the installed version and the link
+  expect(lastLine(verSnap({ installed: '5.2.0', latest: null }))).toContain('ccxp 5.2.0 │ https://github.com/Synx-Data-Labs/ccxp-skills')
+})
+
+test('version: the link is plain text (no escape bytes) and the band stays compact (no URL)', async () => {
+  const lines = text(detailRows(verSnap(PLUGIN_LATEST) as any, DEFAULTS, 160, DETAIL_NOW))
+  expect(lines).not.toContain('\u001b')
+  expect(text(bandRows(verSnap(PLUGIN_LATEST), DEFAULTS, 160))).not.toContain('github.com')
+  expect(text(bandRows(verSnap(PLUGIN_LATEST), DEFAULTS, 160))).toContain('ccxp 5.2.0 (latest)')
+})
+
+test('version: narrow details drop the link first and keep the version label', async () => {
+  for (const cols of [90, 70, 50, 40, 30]) {
+    const last = lastLine(verSnap(PLUGIN_LATEST), DEFAULTS, cols)
+    expect(last).not.toContain('github.com')
+    expect(last).toContain('ccxp 5.2.0')
+  }
+  // with every line present the version line is still the last of five
+  const full = detailRows(fullSnap({ helper: { ...fullSnap().helper, plugin: PLUGIN_LATEST } }) as any, CI, 120, DETAIL_NOW)
+  expect(full.length).toBe(5)
+  expect(text(full.slice(-1))).toContain('(latest)')
+})
+
+test('version: details with `version: false` or no plugin data show neither label nor link', async () => {
+  expect(text(detailRows(verSnap(PLUGIN_LATEST) as any, { ...DEFAULTS, version: false }, 160, DETAIL_NOW))).not.toContain('github.com')
+  expect(text(detailRows(verSnap(null) as any, DEFAULTS, 160, DETAIL_NOW))).not.toContain('github.com')
+})
+
+test('version: parseHelper keeps only a plain github.com/<owner>/<repo> url', async () => {
+  const h = (url: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin: { installed: '5.2.0', latest: '5.2.0', url } }))?.plugin
+  expect(h('https://github.com/Acme/w')?.url).toBe('https://github.com/Acme/w')
+  for (const bad of ['http://github.com/a/b', 'https://evil.example/a/b', 'https://github.com/a/b/c', 'https://github.com/a/b\u001b]8;;x', 'javascript:alert(1)', 42, null]) {
+    expect(h(bad)).toEqual({ installed: '5.2.0', latest: '5.2.0' })
+  }
 })
 
 const BLOB = 'https://github.com/Synx-Data-Labs/synxdb-build-pipeline/blob/main/.github/workflows/nightly-orchestrator.yml'

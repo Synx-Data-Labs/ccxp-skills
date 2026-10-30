@@ -117,6 +117,42 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
   [ "$output" = '{"installed":"5.0.0","latest":null}' ]
 }
 
+# $1 = repository value (raw JSON), $2 = homepage value (raw JSON or empty) -> a fake plugin root
+_plugin_urls() {
+  local d="$BATS_TEST_TMPDIR/plugin"; mkdir -p "$d/.claude-plugin"
+  jq -n -c --argjson r "$1" --argjson h "${2:-null}" '{name:"ccxp-skills",version:"5.0.0"} + (if $r == null then {} else {repository:$r} end) + (if $h == null then {} else {homepage:$h} end)' > "$d/.claude-plugin/plugin.json"
+  printf '%s' "$d"
+}
+
+@test "url: the plugin's GitHub location comes from plugin.json repository, else homepage" {
+  _remote ccxp-skills--v5.0.0
+  run _ver "$(_plugin_urls '"https://github.com/Acme/widgets"')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/widgets" ]
+  run _ver "$(_plugin_urls '"git+https://github.com/Acme/w.git"' '"https://github.com/Acme/home#readme"')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/home" ]
+  run _ver "$(_plugin_urls '{"type":"git","url":"https://github.com/Acme/obj.git"}')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/obj" ]
+  run _ver "$(_plugin_urls 'null' '"https://github.com/Acme/home#readme"')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/home" ]
+}
+
+@test "url: anything but a plain github.com/<owner>/<repo> is left out (the mod falls back)" {
+  _remote ccxp-skills--v5.0.0
+  local bad
+  for bad in '"http://github.com/a/b"' '"https://evil.example/a/b"' '"https://github.com/a/b/c"' '"https://github.com/a/b c"' '"https://github.com/a/b\u001b]8;;x"' '42'; do
+    run _ver "$(_plugin_urls "$bad")"
+    [ "$(jq -r 'has("url")' <<<"$output")" = "false" ]
+  done
+  run _ver "$(_plugin 5.0.0)"
+  [ "$output" = '{"installed":"5.0.0","latest":"5.0.0"}' ]
+}
+
+@test "the real manifest yields the public ccxp-skills URL" {
+  _remote ccxp-skills--v5.0.0
+  run _ver "$REPO_ROOT"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Synx-Data-Labs/ccxp-skills" ]
+}
+
 @test "hud-data --json carries plugin; show_version false turns it to null" {
   _remote ccxp-skills--v99.0.0
   local repo="$BATS_TEST_TMPDIR/r"; mkdir -p "$repo"; git -C "$repo" init -q -b main

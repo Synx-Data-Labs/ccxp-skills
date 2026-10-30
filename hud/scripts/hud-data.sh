@@ -22,7 +22,7 @@
 #    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
-#    "plugin": null | {"installed","latest"},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
+#    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
