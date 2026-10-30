@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$file" ] || die "--file is required"
-[[ "$task" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || die "--task must look like T20260101-000001, got '$task'"
+[[ "$task" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || die "--task must look like T20000101-000001, got '$task'"
 [ "$have_est" = 1 ] && [ -n "${est// /}" ] || die "--est is required"
 [ "$have_why" = 1 ] && [ -n "${why// /}" ] || die "--why is required"
 for v in "$est" "$why"; do
