@@ -141,7 +141,7 @@ Toggles the band between the one-row view and up to six detail lines (this sessi
 | 5 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due` when the time has passed, which also holds while a long cycle runs, nothing when absent), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
 | 6 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
 
-- Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
+- Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than six. The height is capped at the engine's `maxRows`.
 - The VS Code compact status line stays one line.
 - The retired `/hud pane` is not an alias: it prints the usage line.
 

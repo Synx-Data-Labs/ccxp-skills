@@ -360,12 +360,12 @@ sl-queue-json() {
   todo="$repo_root/dev/TODO"; q="$todo/queue.md"
   [ -f "$q" ] || return 0
   local rows="" files=() id file base
-  while IFS=$'\t' read -r id file; do
+  while IFS='|' read -r id file; do
     [ -n "$id" ] || continue
     base="${file##*/}"
     rows+="$id"$'\n'
     [ -f "$todo/$base" ] && files+=("$todo/$base")
-  done < <(grep -E '^- \[T[0-9]+-[0-9]+\]\(' "$q" 2>/dev/null | sed -E 's/^- \[(T[0-9]+-[0-9]+)\]\(([^)]*)\).*/\1\t\2/')
+  done < <(grep -E '^- \[T[0-9]+-[0-9]+\]\(' "$q" 2>/dev/null | sed -E 's/^- \[(T[0-9]+-[0-9]+)\]\(([^)]*)\).*/\1|\2/')
   local info=""
   if [ "${#files[@]}" -gt 0 ]; then
     info=$(awk '
@@ -375,7 +375,7 @@ sl-queue-json() {
       /\r$/ { sub(/\r$/, "") }
       $0 == "---" && n < 2 { n++; next }
       n == 1 && /^status:/ { v = $0; sub(/^status:[ \t]*/, "", v); gsub(/\t/, " ", v); status = v; next }
-      n == 1 && /^claimed_by:/ { v = $0; sub(/^claimed_by:[ \t]*/, "", v); gsub(/[ \t]+$/, "", v); claimed = v; next }
+      n == 1 && /^claimed_by:/ { v = $0; sub(/^claimed_by:[ \t]*/, "", v); gsub(/[ \t]+$/, "", v); if (v ~ /^(null|~|"")$/) v = ""; claimed = v; next }
       n == 1 && /^children:/ { kids = 1; next }
       n >= 2 && title == "" && /^# / { title = $0; gsub(/\t/, " ", title) }
       END { flush() }' "${files[@]}" 2>/dev/null) || info=""
@@ -401,7 +401,7 @@ sl-queue-json() {
         | ($st.att[$id] // "") as $kind
         | ($m.status) as $s
         | (if $kind == "epic" or $m.kids or ($m.title + " " + $s | test("umbrella|\\bepic\\b|tracking (task|issue)"; "i")) then "epic"
-           elif $kind == "blocked" or ($s | test("BLOCKED|SUPERVISED")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
+           elif $kind == "blocked" or ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
            elif $kind == "external" or ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
            elif $kind == "decision" or ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
