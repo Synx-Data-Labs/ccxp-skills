@@ -7,9 +7,11 @@
 # Stdout: one JSON object per route, one per line (ndjson):
 #   {"check":"routes","route":"/","status":"pass","detail":"200"}
 set -euo pipefail
+# Scratch dir for the env file, results and logs; override for hermetic runs.
+VS_TMP="${VERIFY_SITE_TMP:-/tmp}"
 
 # shellcheck disable=SC1091
-source /tmp/verify-site.env
+source "${VS_TMP}/verify-site.env"
 
 FAIL=0
 while IFS= read -r route; do

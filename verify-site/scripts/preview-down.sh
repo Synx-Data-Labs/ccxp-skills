@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Stop the preview server started by preview-up.sh
 set -euo pipefail
+# Scratch dir for the env file, results and logs; override for hermetic runs.
+VS_TMP="${VERIFY_SITE_TMP:-/tmp}"
 
-ENV_FILE="/tmp/verify-site.env"
+ENV_FILE="${VS_TMP}/verify-site.env"
 
 if [ ! -f "$ENV_FILE" ]; then
   echo "No preview env file at $ENV_FILE; nothing to stop."
