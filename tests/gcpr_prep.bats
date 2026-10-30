@@ -205,7 +205,7 @@ status: "In Progress"
   _prep review-flip T20000101-000001
   [ "$status" -eq 0 ]
   [ "$(sed -n 2p dev/TODO/T20000101-000001-x.md | tr -d '\r')" = "status: Review" ]
-  [ "$(wc -l < dev/TODO/T20000101-000001-x.md)" -eq 5 ] && [ "$(grep -c $'\r' dev/TODO/T20000101-000001-x.md)" -eq 5 ]
+  [ "$(tr -cd '\r' < dev/TODO/T20000101-000001-x.md | wc -c | tr -d ' ')" -eq 5 ]
 }
 
 @test "review-flip: second run is a no-op; bad id and ambiguous match exit 2" {
