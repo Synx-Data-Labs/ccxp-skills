@@ -77,29 +77,32 @@ s_git_log() {
 }
 s_merged() {
   # shellcheck disable=SC2086
-  $gh_cmd pr list --state merged --search "merged:>=$since merged:<$today" --json number,title,mergedAt \
+  $gh_cmd pr list --state merged --search "merged:>=$since merged:<$today" --limit 100 --json number,title,mergedAt \
     | jq -c 'map({number,title,mergedAt}) | sort_by(.number)'
 }
 OPEN_RAW='[]'
 s_open_raw() {
   # shellcheck disable=SC2086
-  $gh_cmd pr list --state open --json number,title,body,mergeable,updatedAt | jq -c 'sort_by(.number)'
+  $gh_cmd pr list --state open --limit 100 --json number,title,body,mergeable,updatedAt | jq -c 'sort_by(.number)'
 }
 s_attention() {
-  local n title body mergeable id reasons unresolved
-  unresolved="$(bash "$ROOT/_threads/threads.sh" list --unresolved 2>/dev/null | cut -f1)" || unresolved=""
+  local n title body mergeable id reasons unresolved open_items
+  # a failed read must fail the section (never "nothing needs attention")
+  unresolved="$(bash "$ROOT/_threads/threads.sh" list --unresolved 2>/dev/null)" || return 1
+  unresolved="$(cut -f1 <<<"$unresolved")"
   jq -c '.[]' <<<"$OPEN_RAW" | while IFS= read -r pr; do
     n="$(jq -r .number <<<"$pr")"; title="$(jq -r .title <<<"$pr")"
     body="$(jq -r '.body // ""' <<<"$pr")"; mergeable="$(jq -r '.mergeable // ""' <<<"$pr")"
     reasons=()
-    if printf '%s\n' "$body" | grep -E '^[[:space:]]*[-*][[:space:]]+\[ \]' \
-        | grep -qiE 'maintainer|your call|decision|approve|escalation'; then
+    open_items="$(grep -E '^[[:space:]]*[-*][[:space:]]+\[ \]' <<<"$body" || true)"
+    if grep -qiE 'maintainer|your call|decision|approve|escalation' <<<"$open_items"; then
       reasons+=("unchecked pre-merge item needs a human decision")
     fi
     [ "$mergeable" = CONFLICTING ] && reasons+=("merge conflicts")
     # shellcheck disable=SC2086
-    id="$($prid_cmd "$n" 2>/dev/null | head -1)" || id=""
-    if [ -n "$id" ] && printf '%s\n' "$unresolved" | grep -qxE "$id|$id-pr$n"; then
+    id="$($prid_cmd "$n" 2>/dev/null)" || return 1
+    id="${id%%$'\n'*}"
+    if [ -n "$id" ] && grep -qxE "$id|$id-pr$n" <<<"$unresolved"; then
       reasons+=("unresolved escalation on $id")
     fi
     [ "${#reasons[@]}" -gt 0 ] || continue
@@ -140,8 +143,8 @@ s_attribution() {
 }
 s_epics() {
   local t sl
-  t="$(bash "$ROOT/ccxp/scripts/epic-status.sh" render 2>/dev/null)" || t=""
-  sl="$(bash "$ROOT/ccxp/scripts/epic-status.sh" render --slack 2>/dev/null)" || sl=""
+  t="$(bash "$ROOT/ccxp/scripts/epic-status.sh" render 2>/dev/null)" || return 1
+  sl="$(bash "$ROOT/ccxp/scripts/epic-status.sh" render --slack 2>/dev/null)" || return 1
   jq -n -c --arg t "$t" --arg s "$sl" '{text:$t, slack:($s | split("\n") | map(select(length>0)))}'
 }
 

@@ -271,3 +271,46 @@ mut() { jq "$2" "$FX_DIR/$1" > "$BATS_TEST_TMPDIR/m-$1"; printf '%s' "$BATS_TEST
   # nothing was posted anywhere: only read-only gh calls were made
   ! grep -Eq '^(pr (merge|comment|create)|api .*POST)' "$FAKE_GH_LOG"
 }
+
+@test "render-standup: failed threads/epics/attribution reads render unavailable (slack and journal)" {
+  d="$(mut data.json '.errors={threads:"x",epics:"x",attribution:"x",attention:"x"} | .threads=[]')"
+  j="$(mut judgment.json 'del(.attention)')"
+  render "$d" "$j"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"• unavailable (escalation read failed)"* ]]
+  [[ "$output" == *"unavailable (epic read failed)"* ]]
+  [[ "$output" == *"unavailable (attribution read failed)"* ]]
+  [[ "$output" == *"*🔀 Needs your attention*: unavailable"* ]]
+  [[ "$output" != *"• None"* ]]
+  render "$d" "$j" --format journal
+  [[ "$output" == *"Unavailable — escalation read failed."* ]]
+  [[ "$output" == *"Unavailable — epic read failed."* ]]
+  [[ "$output" == *"Unavailable — attribution read failed."* ]]
+}
+
+@test "render-standup: data-derived text is Slack-escaped (no <!channel> injection)" {
+  d="$(mut data.json '.merged_prs=[{number:30,title:"<!channel> & more",mergedAt:"x"}] | .attention=[{number:31,title:"<@U1> hi",reasons:["merge conflicts"]}] | .threads[0].summary="<!here>"')"
+  j="$(mut judgment.json 'del(.resolved) | del(.attention)')"
+  render "$d" "$j"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"&lt;!channel&gt; &amp; more (PR #30)"* ]]
+  [[ "$output" == *"PR #31 — &lt;@U1&gt; hi"* ]]
+  [[ "$output" == *"&lt;!here&gt;"* ]]
+  [[ "$output" != *"<!channel>"* && "$output" != *"<!here>"* && "$output" != *"<@U1>"* ]]
+}
+
+@test "standup-data: an unreadable threads file fails threads and attention, never 'none'" {
+  seed_gh
+  mkdir -p "$R/.claude/state"
+  printf '{not json' > "$THREADS_FILE"
+  data --date 2026-10-30
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.errors | keys | join(",")' <<<"$output")" = "attention,threads" ]
+}
+
+@test "standup-data: a failing PR-to-task lookup fails the attention section" {
+  seed_gh
+  export STANDUP_PR_TASK_ID="false"
+  data --date 2026-10-30
+  [ "$(jq -r '.errors | keys | join(",")' <<<"$output")" = "attention" ]
+}

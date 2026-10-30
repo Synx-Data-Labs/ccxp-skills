@@ -69,12 +69,14 @@ missing="$(jq -r -n --slurpfile d "$data" --slurpfile j "$judg" '
 
 # Shared jq definitions.
 read -r -d '' DEFS <<'JQ' || true
+def esc: gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;");
+def unavail($k): ($d.errors[$k] // null) != null;
 def one(l): if l >= 1 then split("\n")[0] else . end;
 def firstreason(l): if l >= 1 then split("; ")[0] else . end;
 def attn: ($j.attention // ($d.attention | map({pr: .number, title: .title, why: (.reasons | join("; "))})));
 def resolved(l): [ $d.merged_prs[]? | . as $p
     | (($j.resolved // []) | map(select(.pr == $p.number)) | first // null) as $r
-    | "\(($r.text // $p.title) | one(l)) (PR #\($p.number))" ];
+    | "\(($r.text // ($p.title | esc)) | one(l)) (PR #\($p.number))" ];
 def fails: $d.nightly.failures;
 def jf($id): (($j.nightly_failures // []) | map(select(.run == $id)) | first);
 def cls: ([ $d.attribution[]? | select(.class=="ccxp" or .class=="interactive") ]);
@@ -93,26 +95,29 @@ render_slack() { # $1 = trim level 0|1|2
   ( if (\$d.errors.nightly // null) then [\"*🌙 Nightly*: unavailable (run query failed)\"]
     elif (fails|length)==0 then [\"*🌙 Nightly*: all green (\(\$d.nightly.total) runs)\"]
     else [\"*🌙 Nightly*: \(fails|length) failure(s) / \(\$d.nightly.total) runs\"] +
-      ( fails | map( jf(.id) as \$f | \"• \(\$f.workflow // .name) (run \(.id)) — \(\$f.classification) — \(\$f.task_link // \$f.task_id // \"no task filed (transient/infra)\")\" ) ) end ) +
+      ( fails | map( jf(.id) as \$f | \"• \(\$f.workflow // (.name | esc)) (run \(.id)) — \(\$f.classification) — \(\$f.task_link // \$f.task_id // \"no task filed (transient/infra)\")\" ) ) end ) +
   [ \"\" ] +
   ( attn as \$a |
-    if (\$d.errors.open_prs // null) and (\$j.attention|not) then [\"*🔀 Needs your attention*: unavailable (PR query failed)\"]
+    if (unavail(\"open_prs\") or unavail(\"attention\")) and (\$j.attention|not) then [\"*🔀 Needs your attention*: unavailable (PR query failed)\"]
     else [\"*🔀 Needs your attention* (\(\$a|length))\"] +
       (if (\$a|length)==0 then [\"None — every open PR is actionable or already in flight\"]
-       else (\$a | map(\"• PR #\(.pr) — \(.title) — \(.why | firstreason(\$l1))\")) end) end ) +
+       else (\$a | map(\"• PR #\(.pr) — \(.title | esc) — \(.why | firstreason(\$l1))\")) end) end ) +
   [ \"\", \"*📋 Top 5 next*\" ] +
   ( if (\$j.top5|length)==0 then [\"None — nothing workable in the queue\"]
     else (\$j.top5[:5] | to_entries | map(\"\(.key+1). \(.value)\")) end ) +
-  ( if ((\$d.epics.slack // [])|length) > 0 then [\"\", \"*🎯 Epic progress*\"] + \$d.epics.slack else [] end ) +
+  ( if unavail(\"epics\") then [\"\", \"*🎯 Epic progress*\", \"unavailable (epic read failed)\"]
+    elif ((\$d.epics.slack // [])|length) > 0 then [\"\", \"*🎯 Epic progress*\"] + \$d.epics.slack else [] end ) +
   ( if \$j.weekly_focus then [\"\", \"*📌 Weekly focus*\",
       \"• \(\$j.weekly_focus.shipped)/\(\$j.weekly_focus.total) shipped, \(\$j.weekly_focus.in_flight) in flight, \(\$j.weekly_focus.not_started) not started\",
       \"• Trend: \(\$j.weekly_focus.trend)\"] else [] end ) +
-  ( if (cls|length) > 0 and \$lvl < 2 then [\"\", \"*📊 Attribution*\",
+  ( if unavail(\"attribution\") and \$lvl < 2 then [\"\", \"*📊 Attribution*\", \"• unavailable (attribution read failed)\"]
+    elif (cls|length) > 0 and \$lvl < 2 then [\"\", \"*📊 Attribution*\",
       \"• ccxp: \(clsum(\"ccxp\"; \"shipped\")) shipped / \(clsum(\"ccxp\"; \"in_flight\")) in-flight\",
       \"• interactive: \(clsum(\"interactive\"; \"shipped\")) shipped / \(clsum(\"interactive\"; \"in_flight\")) in-flight\"] else [] end ) +
   [ \"\", \"*🚧 Blockers*\" ] +
-  ( if (\$d.threads|length)==0 then [\"• None\"]
-    else (\$d.threads | map(\"• \((\$j.links[.key]) // .key) — \(.summary)\")) end )
+  ( if unavail(\"threads\") then [\"• unavailable (escalation read failed)\"]
+    elif (\$d.threads|length)==0 then [\"• None\"]
+    else (\$d.threads | map(\"• \((\$j.links[.key]) // .key) — \(.summary | esc)\")) end )
   | join(\"\n\")"
 }
 
@@ -137,23 +142,25 @@ render_journal() {
     end ) +
   [ \"\", \"## PRs needing attention\", \"\" ] +
   ( attn as \$a |
-    if (\$d.errors.open_prs // null) and (\$j.attention|not) then [\"Unavailable — PR query failed.\"]
+    if (unavail(\"open_prs\") or unavail(\"attention\")) and (\$j.attention|not) then [\"Unavailable — PR query failed.\"]
     elif (\$a|length)==0 then [\"None — every open PR is actionable or already in flight\"]
     else [\"| PR | Title | Why it needs you |\", \"|----|-------|-------------------|\"] +
       (\$a | map(\"| #\(.pr) | \(.title | gsub(\"\\\\|\"; \"/\")) | \(.why | gsub(\"\\\\|\"; \"/\")) |\")) end ) +
   [ \"\", \"## Top 5 next\", \"\" ] +
   ( if (\$j.top5|length)==0 then [\"None — nothing workable in the queue\"]
     else (\$j.top5[:5] | to_entries | map(\"\(.key+1). \(.value)\")) end ) +
-  [ \"\", \"## Epic progress\", \"\", (\$d.epics.text // \"\") ] +
+  [ \"\", \"## Epic progress\", \"\", (if unavail(\"epics\") then \"Unavailable — epic read failed.\" else (\$d.epics.text // \"\") end) ] +
   ( if \$j.weekly_focus then [\"\", \"## Weekly focus progress\", \"\",
       \"References: \(\$d.ipm_file)\", \"\"] +
       (if \$j.weekly_focus.table then [\$j.weekly_focus.table, \"\"] else [] end) +
       [\"**Summary**: \(\$j.weekly_focus.shipped)/\(\$j.weekly_focus.total) shipped, \(\$j.weekly_focus.in_flight) in flight, \(\$j.weekly_focus.not_started) not started. **Trend**: \(\$j.weekly_focus.trend).\"] else [] end ) +
-  ( if (\$d.attribution|length) > 0 then [\"\", \"## Task attribution by location\", \"\",
+  ( if unavail(\"attribution\") then [\"\", \"## Task attribution by location\", \"\", \"Unavailable — attribution read failed.\"]
+    elif (\$d.attribution|length) > 0 then [\"\", \"## Task attribution by location\", \"\",
       \"| Location | Class | Shipped | In-flight | Total |\", \"|----------|-------|---------|-----------|-------|\"] +
       (\$d.attribution | map(\"| \(.location) | \(.class) | \(.shipped) | \(.in_flight) | \(.total) |\")) else [] end ) +
   [ \"\", \"## Open escalations\" ] +
-  ( if (\$d.threads|length)==0 then [\"- None\"] else (\$d.threads | map(\"- \(.key) — \(.summary)\")) end ) +
+  ( if unavail(\"threads\") then [\"- Unavailable — escalation read failed.\"]
+    elif (\$d.threads|length)==0 then [\"- None\"] else (\$d.threads | map(\"- \(.key) — \(.summary)\")) end ) +
   [ \"\", \"## Housekeeping\", \"- No claim housekeeping needed (one session per clone)\" ]
   | join(\"\n\")"
 }
