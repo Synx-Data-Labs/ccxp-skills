@@ -260,6 +260,12 @@ _branch_with() { # <path>... — commit each path on a feature branch off main
   run bash "$CLASSIFY" main; [ "$output" = code ]
 }
 
+@test "classify: a code file renamed into docs/ is still code" {
+  git checkout -q -b feat; echo x > a.sh; git add a.sh; git commit -q -m a
+  git checkout -q -b feat2; mkdir -p docs; git mv a.sh docs/a.sh; git commit -q -m mv
+  run bash "$CLASSIFY" feat; [ "$status" -eq 0 ]; [ "$output" = code ]
+}
+
 @test "classify: a base that does not resolve fails with exit 4 and never prints empty" {
   git checkout -q -b feat; echo x > a.sh; git add a.sh; git commit -q -m a
   run --separate-stderr bash "$CLASSIFY" no-such-ref

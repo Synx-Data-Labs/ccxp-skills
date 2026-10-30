@@ -93,9 +93,19 @@ field() { printf '%s' "$output" | jq -r ".$1"; }
 }
 
 @test "a PR URL is reduced to its number; query, fragment and trailing slash are tolerated" {
+  echo 'acme/repo' > "$FX/repo_view_json_nameWithOwner_jq_nameWithOwner.txt"
   STUB_OWNER=mine gate https://github.com/acme/repo/pull/12; [ "$status" -eq 0 ]; [ "$(field number)" = 12 ]
   STUB_OWNER=mine gate 'https://github.com/acme/repo/pull/12/files?x=1#y'; [ "$status" -eq 0 ]; [ "$(field number)" = 12 ]
   grep -q '^pr-owner 12$' "$STUB_LOG"
+}
+
+@test "a PR URL for another repo, or when this repo is unreadable, is refused (2) before any gate" {
+  echo 'acme/repo' > "$FX/repo_view_json_nameWithOwner_jq_nameWithOwner.txt"
+  STUB_OWNER=mine gate https://github.com/acme/other/pull/12
+  [ "$status" -eq 2 ]; [ -z "$output" ]; [[ "$stderr" == *"acme/other"*"acme/repo"* ]]
+  FAKE_GH_FAIL='^repo view' STUB_OWNER=mine gate https://github.com/acme/repo/pull/12; [ "$status" -eq 2 ]
+  STUB_OWNER=mine gate https://github.com/ACME/Repo/pull/12; [ "$status" -eq 0 ]   # case-insensitive
+  [ ! -s "$STUB_LOG" ] || [ "$(wc -l < "$STUB_LOG" | tr -d ' ')" = 1 ]
 }
 
 @test "- auto-picks: the picked number is gated, nothing picked is exit 1" {

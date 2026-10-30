@@ -3,7 +3,8 @@
 # (authorship gate) + §1.6 (ownership verdict) as one read-only decision.
 # Writes nothing: no claim, no Project-board update, no comment.
 #
-#   <n> | <url>   the PR to address (a .../pull/<n> URL is reduced to <n>)
+#   <n> | <url>   the PR to address (a .../pull/<n> URL is reduced to <n>, and must
+#                 name the repo of the current clone: otherwise exit 2)
 #   -             auto-pick (auto-pick.sh) the next pickable PR, then gate it
 #
 # stdout: one JSON line {number, task_id, author, verdict, head_ref}.
@@ -19,7 +20,7 @@
 #   22  ownership unresolvable (verdict unknown, or an unrecognised/empty answer
 #       from pr-owner): defer, fail-safe, never a silent merge
 #    1  auto-pick found nothing pickable (nothing printed on stdout)
-#    2  usage / not a PR number
+#    2  usage / not a PR number / URL of a different repo than this clone
 # Fail-closed: a missing value (empty author, empty login, gh error, empty
 # pr-owner answer) never yields a proceed code; the authorship check runs first and
 # a foreign PR is never asked for its ownership.
@@ -45,8 +46,15 @@ if [ "$arg" = "-" ]; then
   [ -n "$num" ] || { echo "entry-gate.sh: no open PR to address" >&2; exit 1; }
 elif [[ "$arg" =~ ^[0-9]+$ ]]; then
   num="$arg"
-elif [[ "$arg" =~ ^https?://[^/]+/[^/]+/[^/]+/pull/([0-9]+)([/?#].*)?$ ]]; then
-  num="${BASH_REMATCH[1]}"
+elif [[ "$arg" =~ ^https?://[^/]+/([^/]+/[^/]+)/pull/([0-9]+)([/?#].*)?$ ]]; then
+  # The gate reads the PR of the CURRENT clone's repo, so a URL for another repo
+  # must not be reduced to its number: refuse unless it is this repo.
+  num="${BASH_REMATCH[2]}"; url_repo="${BASH_REMATCH[1]}"
+  here="$(bash "$GH_SH" repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null)" || here=""
+  if [ -z "$here" ] || [ "$(printf '%s' "$here" | tr '[:upper:]' '[:lower:]')" != "$(printf '%s' "$url_repo" | tr '[:upper:]' '[:lower:]')" ]; then
+    echo "entry-gate.sh: PR URL is for $url_repo but this clone's repo is '${here:-unreadable}'; cd into the right clone (or pass the number)" >&2
+    exit 2
+  fi
 else
   echo "entry-gate.sh: not a PR number or URL: $arg" >&2; usage
 fi
