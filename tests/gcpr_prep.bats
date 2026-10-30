@@ -196,12 +196,7 @@ _task() { printf -- '---\nestimation: 1\nstatus: %s\n---\n\n# T20000101-000001: 
 }
 
 @test "review-flip: CRLF and quoted status values are handled" {
-  printf -- '---
-status: "In Progress"
----
-
-# x
-' > dev/TODO/T20000101-000001-x.md
+  printf -- '---\r\nstatus: "In Progress"\r\n---\r\n\r\n# x\r\n' > dev/TODO/T20000101-000001-x.md
   _prep review-flip T20000101-000001
   [ "$status" -eq 0 ]
   [ "$(sed -n 2p dev/TODO/T20000101-000001-x.md | tr -d '\r')" = "status: Review" ]
