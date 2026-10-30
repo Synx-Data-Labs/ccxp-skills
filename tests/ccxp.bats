@@ -55,10 +55,12 @@ hold() { run bash "$HOLD" "$@"; }
 }
 
 @test "cheap-hold: Friday in the reference timezone blocks a hold when --dow is omitted" {
-  # 2026-10-30 is a Friday; pin both the clock and the zone.
-  pin_now 2026-10-30T18:00:00Z
-  CCXP_REF_TZ=UTC hold --replies 0 --nightly-failures 0 --drainable 0 --clean-leg 0
+  # 2026-10-31T03:00Z is Saturday in UTC but still Friday evening in Chicago.
+  pin_now 2026-10-31T03:00:00Z
+  CCXP_REF_TZ=America/Chicago hold --replies 0 --nightly-failures 0 --drainable 0 --clean-leg 0
   [ "${lines[1]}" = "REASONS=friday" ]
+  CCXP_REF_TZ=UTC hold --replies 0 --nightly-failures 0 --drainable 0 --clean-leg 0
+  [ "${lines[0]}" = "DECISION=hold" ]
 }
 
 @test "cheap-hold: invalid input fails closed (exit 2, DECISION=full on stdout)" {
@@ -68,6 +70,9 @@ hold() { run bash "$HOLD" "$@"; }
   [[ "$output" == *"REASONS=invalid-input"* ]]
   hold --replies -1
   [ "$status" -eq 2 ]
+  hold --replies 99999999999999999999 --nightly-failures 0 --drainable 0 --clean-leg 0 --dow 2
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"DECISION=full"* ]]
   hold --dow 9
   [ "$status" -eq 2 ]
   hold --time 25:99 --note

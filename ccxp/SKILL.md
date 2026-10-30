@@ -161,7 +161,7 @@ Generate a daily progress summary by reviewing yesterday's work.
 bash <skills-root>/ccxp/scripts/cheap-hold.sh --replies <N> --nightly-failures <N> --drainable <N> --clean-leg <N> --note --why "<1-line why each top candidate is gated>"
 ```
 
-`DECISION=full` (or exit 2) means fall through to 1.2. On `hold` the `--note` output after the blank line is the Slack note below; the script sends nothing — posting it stays with `slack_send_message`. Which counts are non-zero (is a candidate genuinely gated?) remains your judgment.
+Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) means fall through to 1.2. On `hold` the `--note` output after the blank line is the Slack note below; the script sends nothing — posting it stays with `slack_send_message`. Which counts are non-zero (is a candidate genuinely gated?) remains your judgment.
 
 **When the gate holds — cheap-hold action:**
 

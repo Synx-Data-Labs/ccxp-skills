@@ -49,7 +49,7 @@ done
 
 for pair in "replies:$replies" "nightly-failures:$failures" "drainable:$drain" "clean-leg:$leg"; do
   v="${pair#*:}"
-  [ -z "$v" ] || [[ "$v" =~ ^[0-9]+$ ]] || bad "${pair%%:*} must be a non-negative integer, got '$v'"
+  [ -z "$v" ] || [[ "$v" =~ ^[0-9]{1,9}$ ]] || bad "${pair%%:*} must be a non-negative integer (max 9 digits), got '$v'"
 done
 if [ -z "$dow" ]; then dow="$(TZ="${CCXP_REF_TZ:-America/Chicago}" date +%u)"; fi
 [[ "$dow" =~ ^[1-7]$ ]] || bad "--dow must be 1..7, got '$dow'"
