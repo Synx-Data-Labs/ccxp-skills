@@ -54,7 +54,8 @@ function th_now_iso() { d_fmt "$(d_now_epoch)" %Y-%m-%dT%H:%M:%SZ; }
 # th_load -> prints the state JSON ("{}" when the file does not exist);
 # returns 4 when the file is not a JSON object.
 function th_load() {
-  if [[ ! -f "$TH_FILE" ]]; then echo '{}'; return 0; fi
+  # A missing or zero-byte file is an empty state, not a malformed one.
+  if [[ ! -s "$TH_FILE" ]]; then echo '{}'; return 0; fi
   if ! jq -e 'type == "object" and ([.[] | type == "object"] | all)' "$TH_FILE" >/dev/null 2>&1; then
     echo "threads.sh: $TH_FILE is not a JSON object of objects; refusing to modify it" >&2
     return 4
@@ -145,7 +146,7 @@ function th_list() {
       *) th_die "list: unknown argument: $1"; return 2 ;;
     esac
   done
-  [[ -f "$TH_FILE" ]] || return 0
+  [[ -s "$TH_FILE" ]] || return 0
   state="$(th_load)" || return $?
   jq -r --argjson only "$only" --argjson full "$full" 'to_entries[]
     | select($only == 0 or .value.resolved != true)

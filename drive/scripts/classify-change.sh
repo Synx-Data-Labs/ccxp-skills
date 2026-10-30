@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # classify-change.sh [base] — /drive Phase 3.0: classify the change as docs or code.
 #
+#   (renames are listed as delete + add, so a code file moved into docs/ still
+#   counts as code: both the old and the new path are classified.)
 #   base   ref to diff against (default: main); the changed set is
 #          `git diff --name-only <base>...HEAD`. A base that does not resolve
 #          (e.g. a clone with only origin/main) or a diff that cannot run is an
@@ -34,7 +36,7 @@ git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1 || {
   echo "classify-change.sh: base ref '$base' does not resolve; fetch it or pass an existing ref (e.g. origin/main)" >&2
   exit 4
 }
-changed="$(git diff --name-only "$base...HEAD" 2>/dev/null)" || {
+changed="$(git diff --no-renames --name-only "$base...HEAD" 2>/dev/null)" || {
   echo "classify-change.sh: git diff $base...HEAD failed (no merge base?); pass a different base" >&2
   exit 4
 }

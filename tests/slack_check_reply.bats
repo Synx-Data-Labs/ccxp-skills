@@ -56,6 +56,14 @@ JSON
   run bash "$PENDING" T304536; [ "$status" -eq 3 ]
 }
 
+@test "pending: a zero-byte state file is empty, not malformed, and add still works on it" {
+  : > "$THREADS_FILE"
+  run bash "$PENDING"; [ "$status" -eq 0 ]; [ -z "$output" ]
+  run bash "$PENDING" T304536; [ "$status" -eq 3 ]
+  run bash "$THREADS" add T5 --channel C --ts 1 --type t --summary s; [ "$status" -eq 0 ]
+  [ "$(jq -r 'keys | join(",")' "$THREADS_FILE")" = T5 ]
+}
+
 @test "pending: a malformed state file exits 4 and is left untouched" {
   echo '{"T1": 5}' > "$THREADS_FILE"
   run bash "$PENDING"; [ "$status" -eq 4 ]
