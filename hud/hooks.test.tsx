@@ -346,7 +346,7 @@ test('/hud details: the five lines carry repo, ctx, jobs, autopilot with CI, and
   expect(await band.find({ type: 'Text', text: /context 64% left/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /^WORKING \(1\)$/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /Redo HUD repo field/ })).toBeUndefined() // running jobs are not listed in details
-  expect(await band.find({ type: 'Text', text: /parked 1 \(k2\)/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /^parked 1$/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /running/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /failing/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /\(3m ago\)/ })).toBeDefined()
