@@ -46,10 +46,8 @@ When 2+ skills need the same helper, extract it into a `_<prefix>/` directory in
 ### 5. Testing
 
 - Scripts under `_<prefix>/` get **BATS** tests (`tests/*.bats`).
-- Every non-exempt skill ships `<skill>/scripts/*` and each script is named by a test (`tests/<skill>.bats`; `<skill>/scripts/verify.sh` only for tool-heavy skills, wrapped by a bats file that skips when tools are absent). Judgment-only behavior is covered by §10 evals (`<skill>/evals/evals.json`).
-- CI enforces this with `skill_score.py --coverage --coverage-check dev/quality/skill-coverage-baseline.txt`: new gaps fail, and a baselined gap that is fixed must be removed from the file (`--coverage --coverage-write` regenerates it), so debt only shrinks.
-- Exempt classes (`reference`, `vendored`, `alias`, `mod`, `nonskill`) are listed with a reason in `dev/quality/script-exemptions.txt`; exempt skills still get the structural checks.
-- Offline fakes for these tests (`fake_gh`, `fake_claude`, `pin_now`, `make_fixture_repo`) live in `tests/test_helper.bash`.
+- Every non-exempt skill ships `<skill>/scripts/*`, each named by a test (`tests/<skill>.bats`). CI runs `skill_score.py --coverage --coverage-check dev/quality/skill-coverage-baseline.txt`: gaps may only shrink (`--coverage-write` regenerates). Exemptions, with a reason, live in `dev/quality/script-exemptions.txt`; offline fakes in `tests/test_helper.bash`.
+- Judgment-only behavior is covered by §10 evals (`<skill>/evals/evals.json`).
 
 This is this suite's counterpart to superpowers' subagent pressure-testing; we do not require that for prose skills.
 
