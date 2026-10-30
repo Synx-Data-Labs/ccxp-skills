@@ -13,7 +13,7 @@
 # assignment, a Python dict literal (either quote style), a subscript
 # assignment (`os.environ[...] = ...`), or `os.putenv(...)` — a check
 # that only caught one spelling would give false confidence (caught by
-# independent review of PR #175, 2026-09-29). Two sites are documented,
+# independent review of PR #175, 2026-09-29). Three sites are documented,
 # deliberate exceptions, not violations (a third, `ccxp/scripts/epic-status.sh`'s
 # 5 cross-repo-hub sites, was retired by T20261005-639913 — that script is
 # local-only now, no hub repo, no manual `GH_TOKEN=` anywhere in it):
@@ -22,6 +22,11 @@
 #     ambiguity.
 #   - `actions/sync-tasks/sync.py`'s `env = {**os.environ, "GH_TOKEN": TOKEN}`
 #     — a GHA-runner-only, keyring-less exception.
+#   - `address-pr/scripts/approve-dispatch.sh`'s local-mint fallback POST: the
+#     token is a minted GitHub App installation token (the bot identity), not a
+#     local account, so the wrapper's account-picking would defeat it (the
+#     wrapper replaces GH_TOKEN). Taken only when the App credentials are
+#     already in the environment; tests/address_pr_approve_merge.bats pins it.
 #
 # Scope: this checks the caller-side-`GH_TOKEN=`-assignment half of the
 # Problem statement only (see the task's Alternatives rejected for why a
@@ -71,7 +76,7 @@ _scan_gh_token_sites() {
   done < <(find "$root" -type f \( -name '*.sh' -o -name '*.py' \) | sort)
 }
 
-@test "the repo's only caller-side GH_TOKEN= sites are the two allowlisted ones" {
+@test "the repo's only caller-side GH_TOKEN= sites are the three allowlisted ones" {
   run _scan_gh_token_sites "$REPO_ROOT"
   [ "$status" -eq 0 ]
 
@@ -81,6 +86,7 @@ _scan_gh_token_sites() {
     case "$hit" in
       _session/_lib.sh:*) ;;
       actions/sync-tasks/sync.py:*) ;;
+      address-pr/scripts/approve-dispatch.sh:*) ;;
       *) bad="$bad
 $hit" ;;
     esac
@@ -97,6 +103,8 @@ $hit" ;;
   n="$(printf '%s\n' "$output" | grep -c '^_session/_lib\.sh:')"
   [ "$n" -eq 1 ]
   n="$(printf '%s\n' "$output" | grep -c '^actions/sync-tasks/sync\.py:')"
+  [ "$n" -eq 1 ]
+  n="$(printf '%s\n' "$output" | grep -c '^address-pr/scripts/approve-dispatch\.sh:')"
   [ "$n" -eq 1 ]
 }
 
