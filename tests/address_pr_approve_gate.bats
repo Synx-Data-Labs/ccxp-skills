@@ -5,8 +5,10 @@
 REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 SKILL="$REPO_ROOT/address-pr/SKILL.md"
 
-@test "address-pr step d dispatches with commit_sha then arms --auto merge" {
-  grep -q 'workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"' "$SKILL"
+@test "address-pr step d dispatches with commit_sha (via approve-dispatch.sh) then arms --auto merge" {
+  grep -q 'workflow run pr-approve.yml -f pr_number=' "$REPO_ROOT/address-pr/scripts/approve-dispatch.sh"
+  grep -q 'commit_sha=' "$REPO_ROOT/address-pr/scripts/approve-dispatch.sh"
+  grep -q 'address-pr/scripts/approve-dispatch.sh' "$SKILL"
   grep -q 'pr merge --auto --rebase --delete-branch' "$SKILL"
 }
 

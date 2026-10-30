@@ -254,49 +254,26 @@ It reads our own latest `**Claude Code review:**` comment, takes the `(sha: …)
 - No `pr-approve.yml` in the repo: nothing is triggered; notify/wait as usual, and note "LGTM seen, no approval workflow" in the §3 report.
 
 ```bash
-# The existence check below can't distinguish "no pr-approve.yml" from a
-# transient/auth failure on `gh workflow view` — deliberately fail-safe, not
-# fail-unsafe: worst case this silently skips a repo that should get
-# auto-approval (merge stalls, gets investigated), never approves something
-# it shouldn't.
 LGTM_BY="$(bash <skills-root>/address-pr/scripts/has-lgtm.sh <NUMBER> ${PUSHBACK_AT:+--after "$PUSHBACK_AT"} 2>/dev/null || true)"
-if { [ "${CLEAN_BILL:-0}" = 1 ] || { [ -n "$LGTM_BY" ] && [ "${FINDINGS_OPEN:-0}" = 0 ]; }; } && bash <skills-root>/_gh/gh.sh workflow view pr-approve.yml >/dev/null 2>&1; then
-  [ -n "$LGTM_BY" ] && echo "approval triggered via LGTM by ${LGTM_BY}"
-  bash <skills-root>/_gh/gh.sh workflow run pr-approve.yml -f pr_number=<NUMBER> -f commit_sha="${HEAD_SHA}"
-  # Poll the PR's own reviews, not the workflow run — this is what we actually
-  # care about (a genuine APPROVED review pinned to HEAD_SHA), and sidesteps
-  # matching a dispatched workflow_dispatch run back to its triggering call
-  # (the API doesn't hand back a run id from `gh workflow run` directly).
-  # Bounded, not indefinite: a slow/failed dispatch must never hang this loop
-  # — the eventual mergeability check in step a (§2.a) is the real backstop.
-  APPROVED=""
-  for i in $(seq 1 12); do
-    APPROVED="$(bash <skills-root>/_gh/gh.sh pr view <NUMBER> --json reviews --jq \
-      ".reviews[] | select(.state==\"APPROVED\" and .commit.oid==\"${HEAD_SHA}\")" 2>/dev/null)"
-    [ -n "$APPROVED" ] && break
-    sleep 10
-  done
-  if [ -n "$APPROVED" ]; then
-    echo "pr-approve.yml approval landed for PR #<NUMBER> at ${HEAD_SHA}."
-  elif [ -n "${GH_APP_ID:-}" ] && { [ -n "${GH_APP_PRIVATE_KEY_FILE:-}" ] || [ -n "${GH_APP_PRIVATE_KEY:-}" ]; }; then
-    # FALLBACK ONLY (never required): the dispatch landed no approval (e.g. the
-    # repo cannot read the App secrets) — mint a short-lived token locally and
-    # submit the same pinned APPROVE as the bot.
-    BOT_TOKEN="$(bash <skills-root>/_gh/gh-app-token.sh --repo "$OWNER/$NAME" 2>/dev/null || true)"
-    if [ -n "$BOT_TOKEN" ]; then
-      GH_TOKEN="$BOT_TOKEN" bash <skills-root>/_gh/gh.sh api --method POST \
-        "repos/$OWNER/$NAME/pulls/<NUMBER>/reviews" -f event=APPROVE -f commit_id="${HEAD_SHA}" \
-        -f body="Approved by synx-merge-bot (local-mint fallback) after a clean independent review at ${HEAD_SHA}." >/dev/null \
-        && APPROVED=1
-    fi
-  fi
-  if [ -z "$APPROVED" ]; then
-    echo "::warning::no landed approval at ${HEAD_SHA} (dispatch within the poll window, then the local-mint fallback) — the mergeability check in step a will surface whether this blocks merge."
-  fi
-fi
+if [ "${CLEAN_BILL:-0}" = 1 ]; then TRIGGER=(--clean-bill)                 # review of HEAD_SHA was a clean bill
+elif [ -n "$LGTM_BY" ]; then TRIGGER=(--lgtm-by "$LGTM_BY"); [ "${FINDINGS_OPEN:-0}" = 1 ] && TRIGGER+=(--findings-open)
+else TRIGGER=(); fi                                                          # no trigger: skip the gate
+[ "${#TRIGGER[@]}" -gt 0 ] && bash <skills-root>/address-pr/scripts/approve-dispatch.sh <NUMBER> "$HEAD_SHA" "${TRIGGER[@]}"   # add --dry-run to preview
 ```
 
-- Standard route: the dispatched `pr-approve.yml` (App secrets stay in GitHub). Local minting via `_gh/gh-app-token.sh` is a fallback only, taken solely when `GH_APP_ID` and a private key are already in the environment; no bypass list is ever used.
+`approve-dispatch.sh <NUMBER> <HEAD_SHA> (--clean-bill | --lgtm-by <login> [--findings-open]) [--dry-run]` encodes the dispatch: it runs `gh workflow run pr-approve.yml -f pr_number=… -f commit_sha=<HEAD_SHA>`, then polls the PR's own reviews (not the workflow run) for a genuine `APPROVED` review pinned to that exact commit.
+
+The poll is bounded (`APPROVE_POLL_TRIES` x `APPROVE_POLL_INTERVAL`, default 12 x 10s) so a slow or failed dispatch never hangs the loop. One line on stdout, and the exit is the verdict; an exit not listed here, or empty output, is a stop:
+
+- `0` `approved via workflow|fallback <sha>`: a real approval landed
+- `10` `no-workflow`: no `pr-approve.yml` (the check cannot tell "absent" from a transient/auth failure: deliberately fail-safe, worst case a repo that should auto-approve is skipped and the merge stalls, never an approval that should not exist); nothing dispatched. Note "LGTM seen, no approval workflow" in the §3 report when it was an LGTM
+- `11` `timeout`: dispatched but no approval landed and the fallback was unavailable or failed: warn and continue; the §2.a mergeability check is the backstop
+- `12` `not-eligible`: `--lgtm-by` with `--findings-open` (an LGTM never silences an open finding); nothing dispatched
+- `2` usage: no trigger flag, both flags, or a bad sha (fail closed)
+
+The fallback (local-mint `_gh/gh-app-token.sh` + the same pinned `APPROVE`) runs only when `GH_APP_ID` and a private key are already in the environment; the token is never printed. Contract and tests: `tests/address_pr_approve_merge.bats`.
+
+- Standard route: the dispatched `pr-approve.yml` (App secrets stay in GitHub). Local minting via `_gh/gh-app-token.sh` is a fallback only; no bypass list is ever used.
 - Trust model: anyone who can dispatch workflows on the repo can obtain a bot approval for any PR and SHA; the approval means something only because this step dispatches after a clean independent review.
 - Auto-merge is armed in §3.3 (`gh pr merge --auto`), only after the hard gate and step e pass, so GitHub cannot merge ahead of the test plan; it then fires once branch protection's required approval and checks pass. Where `--auto` is refused (no protection on the repo), §3.3 merges as before.
 
@@ -336,14 +313,13 @@ Then check the PR body for unchecked pre-merge items (`- [ ]`):
 
 When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
 
-1. Send Slack notification (adjust wording based on test plan status):
+1. Send Slack notification. `slack-text.sh` renders the text (it sends nothing); pass the number of test-plan items needing manual verification, if any, then hand the line to `/slack`:
 
+   ```bash
+   bash <skills-root>/address-pr/scripts/slack-text.sh <number> <url> [--unverified <N>]
    ```
-   # All test plan items verified:
-   /slack PR #<number> is ready to merge — CI green, Claude Code review addressed, test plan verified. <url>
-   # Some items need manual verification:
-   /slack PR #<number> is ready to merge — CI green, Claude Code review addressed. N test plan items need manual verification. <url>
-   ```
+
+   Verified: `PR #<number> is ready to merge — CI green, Claude Code review addressed, test plan verified. <url>`; with `--unverified N`: `… Claude Code review addressed. N test plan items need manual verification. <url>`.
 
 2. Report to the user:
    - PR number and URL
@@ -353,7 +329,7 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
    - Test plan status (all checked / N items need manual verification)
    - Current branch
 
-3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused); `--auto` returns before the merge happens, so poll `pr view --json state` until `MERGED` before step 4 and any branch cleanup, or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
+3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused); `--auto` returns before the merge happens, so run `bash <skills-root>/address-pr/scripts/wait-merged.sh <number>` (read-only poll, `WAIT_MERGED_TRIES` x `WAIT_MERGED_INTERVAL`, default 30 x 10s) and continue to step 4 and any branch cleanup only on exit `0` (`merged`); `11` still open, `12` closed unmerged, `4` state unreadable: stop and report, never assume merged. Or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
 
 4. **Status=Done** (after merge succeeds):
 
