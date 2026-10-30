@@ -12,7 +12,7 @@
 #
 #   labrun.sh extract-run [FILE]        (text from FILE, or stdin)
 #       Find the announced GitHub Actions run: /actions/runs/<id> links first,
-#       else "run <id>" / "run #<id>", else a lone bare 9-13 digit number.
+#       else "run <id>" / "run #<id>", else a lone bare 11-13 digit number.
 #       One distinct id prints  run_id=<id>  and, when it came from a link,
 #       run_url=<https url>. Exit 3 = no run id, 4 = more than one distinct id
 #       (the ids are listed on stdout as candidate=<id>); never guesses.
@@ -47,14 +47,14 @@ cmd_extract_run() {
   [ $# -le 1 ] || die "usage: labrun.sh extract-run [FILE]"
   local text ids urls n
   if [ $# -eq 1 ]; then [ -r "$1" ] || die "cannot read $1"; text="$(cat "$1")"; else text="$(cat)"; fi
-  urls="$(printf '%s\n' "$text" | grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+' | awk '!s[$0]++')"
+  urls="$(printf '%s\n' "$text" | grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+' | awk -F/runs/ '!s[$2]++')"
   if [ -n "$urls" ]; then
     ids="$(printf '%s\n' "$urls" | sed -E 's#.*/runs/##' | awk '!s[$0]++')"
   else
     ids="$(printf '%s\n' "$text" | grep -oiE '\brun[ :#]+[0-9]{6,}' | grep -oE '[0-9]+$' | awk '!s[$0]++')"
     if [ -z "$ids" ]; then
       # a lone bare number, not part of a decimal (Slack ts) or a longer token
-      ids="$(printf '%s\n' "$text" | grep -oE '(^|[^0-9.A-Za-z_])[0-9]{9,13}([^0-9.A-Za-z_]|$)' | grep -oE '[0-9]+' | awk '!s[$0]++')"
+      ids="$(printf '%s\n' "$text" | grep -oE '(^|[^0-9.A-Za-z_])[0-9]{11,13}([^0-9.A-Za-z_]|$)' | grep -oE '[0-9]+' | awk '!s[$0]++')"
     fi
   fi
   n="$(printf '%s' "$ids" | grep -c .)"
@@ -77,13 +77,17 @@ has_token() {
   printf '%s' "$1" | grep -qE \
     -e '(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})' \
     -e 'xox[abeprs]-[A-Za-z0-9-]{8,}|xapp-[0-9]-[A-Za-z0-9-]{8,}' \
-    -e '(AKIA|ASIA)[0-9A-Z]{16}' \
-    -e 'sk-[A-Za-z0-9_-]{20,}' \
+    -e '(AKIA|ASIA)[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}' \
+    -e '(^|[^A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}' \
+    -e 'npm_[A-Za-z0-9]{30,}|glpat-[A-Za-z0-9_-]{20,}' \
     -e '-----BEGIN [A-Z ]*PRIVATE KEY' \
     -e 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' \
     -e 'hooks\.slack\.com/services/[A-Za-z0-9/]+' \
-    -e '[Bb]earer +[A-Za-z0-9._~+/-]{20,}' \
-    -e '(token|secret|passw(or)?d|api[_-]?key)["'\'']? *[=:] *["'\'']?[A-Za-z0-9._~+/-]{12,}'
+    -e '://[^/[:space:]:@]+:[^/[:space:]@]+@' && return 0
+  # case-insensitive: credential assignments and Authorization headers
+  printf '%s' "$1" | grep -qiE \
+    -e '(bearer|basic) +[A-Za-z0-9._~+/=-]{16,}' \
+    -e '(token|secret|passw(or)?d|api[_-]?key|access[_-]?key|authorization)[A-Za-z0-9_]*["'\'']? *[=:] *["'\'']?[^[:space:]"'\'']{8,}'
 }
 
 cmd_render_reply() {
