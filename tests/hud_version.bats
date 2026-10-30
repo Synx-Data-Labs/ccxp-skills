@@ -132,6 +132,10 @@ _plugin_urls() {
   [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/home" ]
   run _ver "$(_plugin_urls '{"type":"git","url":"https://github.com/Acme/obj.git"}')"
   [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/obj" ]
+  run _ver "$(_plugin_urls '"https://github.com/Acme/w.git/"')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/w" ]
+  run _ver "$(_plugin_urls '"https://github.com/Acme/w/"')"
+  [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/w" ]
   run _ver "$(_plugin_urls 'null' '"https://github.com/Acme/home#readme"')"
   [ "$(jq -r .url <<<"$output")" = "https://github.com/Acme/home" ]
 }
@@ -159,6 +163,7 @@ _plugin_urls() {
   run bash -c "printf '{\"cwd\":\"$repo\"}' | bash '$HUD' --json"
   [ "$(jq -r .plugin.installed <<<"$output")" = "$(jq -r .version "$REPO_ROOT/.claude-plugin/plugin.json")" ]
   [ "$(jq -r .plugin.latest <<<"$output")" = "99.0.0" ]
+  [ "$(jq -r .plugin.url <<<"$output")" = "https://github.com/Synx-Data-Labs/ccxp-skills" ]
   run bash -c "printf '{\"cwd\":\"$repo\",\"show_version\":false}' | bash '$HUD' --json"
   [ "$(jq -r .plugin <<<"$output")" = "null" ]
 }

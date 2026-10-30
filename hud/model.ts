@@ -17,8 +17,8 @@ export const EMPTY: Snapshot = {
 
 /** The plugin's public GitHub location, drawn in details when the manifest has none (a bare URL: terminals make it clickable). */
 export const PLUGIN_URL_DEFAULT = 'https://github.com/Synx-Data-Labs/ccxp-skills'
-// Untrusted: only a plain github.com/<owner>/<repo> URL is ever drawn (no escape bytes, spaces or paths).
-const PLUGIN_URL_RE = /^https:\/\/github\.com\/[A-Za-z0-9_.-]{1,60}\/[A-Za-z0-9_.-]{1,100}$/
+// Keep in sync with hvr-url in hud/scripts/hud-version.sh. Untrusted: only a plain github.com/<owner>/<repo> URL is ever drawn (no escape bytes, spaces or paths).
+const PLUGIN_URL_RE = /^https:\/\/github\.com\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,59}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/
 const VERSION_RE = /^\d{1,9}\.\d{1,9}\.\d{1,9}(-[0-9A-Za-z.-]{1,40})?$/
 
 /** Strictly newer by numeric semver (10 > 9, not a string compare); a prerelease sorts below its release. */

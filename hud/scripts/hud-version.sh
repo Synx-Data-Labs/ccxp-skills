@@ -60,13 +60,14 @@ hvr-installed() {
   return 0
 }
 
+# Keep the URL pattern in sync with PLUGIN_URL_RE in hud/model.ts.
 # $1 plugin root -> the plugin's GitHub repo URL from plugin.json ("" when missing or not a plain github.com/<owner>/<repo>).
 hvr-url() {
   local u f
   for f in repository homepage; do
     u=$(jq -r --arg f "$f" '(.[$f] | if type == "object" then .url else . end) | if type == "string" then . else "" end' "$1/.claude-plugin/plugin.json" 2>/dev/null | head -n1) || u=""
-    u="${u%%#*}"; u="${u%.git}"; u="${u%/}"
-    if [[ "$u" =~ ^https://github\.com/[A-Za-z0-9_.-]{1,60}/[A-Za-z0-9_.-]{1,100}$ ]]; then printf '%s' "$u"; return 0; fi
+    u="${u%%#*}"; u="${u%/}"; u="${u%.git}"; u="${u%/}"
+    if [[ "$u" =~ ^https://github\.com/[A-Za-z0-9_][A-Za-z0-9_.-]{0,59}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$ ]]; then printf '%s' "$u"; return 0; fi
   done
   return 0
 }
