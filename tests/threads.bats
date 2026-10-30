@@ -166,3 +166,17 @@ t() { bash "$THREADS" --file "$F" "$@"; }
   run bash "$PRUNE" --nope
   [ "$status" -eq 2 ]
 }
+
+@test "a flag without its value is a usage error (exit 2), not an abort" {
+  run t add T9 --channel
+  [ "$status" -eq 2 ]
+  run t prune --days
+  [ "$status" -eq 2 ]
+}
+
+@test "an object whose values are not objects is malformed (exit 4), left untouched" {
+  mkdir -p "$(dirname "$F")"; echo '{"a":"str"}' > "$F"
+  run t prune;  [ "$status" -eq 4 ]
+  run t resolve a; [ "$status" -eq 4 ]
+  [ "$(cat "$F")" = '{"a":"str"}' ]
+}
