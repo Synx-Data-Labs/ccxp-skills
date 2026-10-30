@@ -15,11 +15,15 @@
 #   since, until(now), commits, tasks_completed (dev/JOURNAL task files dated in
 #   the window), backlog{todo,parking},
 #   prs{merged, open, stale_open (older than 3 days), avg_cycle_hours (null when
-#       nothing merged), additions, deletions},
-#   ci{total (completed runs), green (conclusion success), failed,
+#       nothing merged), additions, deletions, truncated (a PR list hit its
+#       500 cap: counts are a floor)},
+#   ci{total (completed runs, incl. skipped/cancelled), green (conclusion
+#      success), failed (failure, timed_out or startup_failure),
 #      pass_rate_pct (null when total is 0), top_failing[{name,failures}] top 3,
 #      oldest_created, run_limit, truncated},
 #   escalations{sent (sent_at in the window), resolved (of those sent)}
+# PRs are windowed by mergedAt >= since (to the second); commits likewise; JOURNAL
+# entries and the merged search by whole calendar days from since's date.
 # truncated=true means the run list hit the fetch cap, so older runs in the
 # window were dropped: report the gap, never the rate as complete.
 # Exit: 0 ok, 2 usage, 3 any gh/git/jq failure (nothing partial is printed),
@@ -49,10 +53,10 @@ fail() { echo "metrics.sh: $1 failed; no metrics printed" >&2; exit 3; }
 
 now_iso="$(bash "$ROOT/_date/date.sh" ago 0)" || exit 3
 stale_cut="$(bash "$ROOT/_date/date.sh" ago 3)" || exit 3
-today="${now_iso%%T*}"
+today="$(bash "$ROOT/_date/date.sh" today)" || exit 3   # same "today" as window.sh END
 
-commits="$(git log --since="$since" --oneline 2>/dev/null | wc -l | tr -d ' ')" || fail "git log"
 git rev-parse --git-dir >/dev/null 2>&1 || fail "git log (not a git repo)"
+commits="$(git log --since="$since" --oneline | wc -l | tr -d ' ')"
 
 # tasks completed: dev/JOURNAL/YYYY-MM-DD-T<id>-*.md dated within [since_date, today]
 tasks=0
@@ -93,7 +97,7 @@ jq -n -c --arg since "$since" --arg until "$now_iso" --arg stale "$stale_cut" \
   | ($r | map(select((.conclusion // "") != ""))) as $done
   | ($done | length) as $total
   | ($done | map(select(.conclusion == "success")) | length) as $green
-  | ($done | map(select(.conclusion == "failure"))) as $fails
+  | ($done | map(select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure"))) as $fails
   | ($esc | split("\n") | map(select(length > 0) | split("\t")) | map(select(.[3] >= $since))) as $e
   | {since: $since, until: $until, commits: $commits, tasks_completed: $tasks,
      backlog: {todo: $todo, parking: $parking},
@@ -103,7 +107,8 @@ jq -n -c --arg since "$since" --arg until "$now_iso" --arg stale "$stale_cut" \
              else (($m | map((.mergedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)) | add)
                    / ($m | length) / 3600 * 10 | round / 10) end),
            additions: ($m | map(.additions // 0) | add // 0),
-           deletions: ($m | map(.deletions // 0) | add // 0)},
+           deletions: ($m | map(.deletions // 0) | add // 0),
+           truncated: (($merged[0] | length) >= 500 or ($o | length) >= 500)},
      ci: {total: $total, green: $green, failed: ($fails | length),
           pass_rate_pct: (if $total == 0 then null else ($green * 1000 / $total | round / 10) end),
           top_failing: ($fails | group_by(.name) | map({name: .[0].name, failures: length})
