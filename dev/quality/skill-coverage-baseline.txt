@@ -3,13 +3,10 @@
 # `skill_score.py --coverage --coverage-check` fails on new findings and on
 # stale entries. Regenerate after fixing: --coverage --coverage-write FILE.
 address-pr	skills-root-note
-autopilot	skills-root-note
 bottom	no-scripts
 ccxp	skills-root-note
 claim	no-scripts
 claim	skills-root-note
-drive	no-scripts
-drive	skills-root-note
 email-triage	no-scripts
 gcpr	no-scripts
 incept	no-scripts

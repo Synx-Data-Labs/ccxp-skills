@@ -287,3 +287,201 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap skip T4 "x" --kind nonsense; [ "$status" -eq 2 ]
   [ "$(_j '.skip_ids|index("T4")')" = null ]
 }
+
+# --- classify / attention / clone-path / done / final-report -----------------
+
+_report() { printf '%s\n' "$@" > "$BATS_TEST_TMPDIR/report.txt"; }
+
+@test "classify: one merged task is progress with its id" {
+  _report 'MERGED: T9111111 (fix-thing) — PR #12'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$status" -eq 0 ]; [ "$output" = "progress 1 T9111111 -" ]
+}
+
+@test "classify: several merged tasks count, runs suffix is ignored, stdin works" {
+  run bash -c "printf '%s\n' 'MERGED: T9111111 (a) — PR #1; runs: https://x/1' 'MERGED: T9222222 (b) — PR #2' | bash '$SCRIPT' classify -"
+  [ "$status" -eq 0 ]; [ "$output" = "progress 2 T9222222 -" ]
+}
+
+@test "classify: merged plus stuck is stuck, keeping the merged count and the stuck task" {
+  _report 'MERGED: T9111111 (a) — PR #1' \
+    'STUCK: CI red on a flaky test — last task T9222222 (b); runs: https://x/9'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$status" -eq 0 ]; [ "$output" = "stuck 1 T9222222 CI red on a flaky test" ]
+}
+
+@test "classify: stuck without a task id falls back to the last merged id, else dash" {
+  _report 'STUCK: dispatch died'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "stuck 0 - dispatch died" ]
+}
+
+@test "classify: waiting with nothing merged is waiting; merged beats waiting" {
+  _report 'WAITING: PR #44 needs a formal approval'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "waiting 0 - PR #44 needs a formal approval" ]
+  _report 'MERGED: T9111111 (a) — PR #1' 'WAITING: PR #44 needs approval'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "progress 1 T9111111 -" ]
+}
+
+@test "classify: waiting beats stuck when nothing merged (Phase 4 order)" {
+  _report 'STUCK: x — last task T9111111 (a)' 'WAITING: PR #44 approval'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "${output%% *}" = waiting ]
+}
+
+@test "classify: a lone NEEDS-ATTENTION is idle, and attention lists it" {
+  _report 'NEEDS-ATTENTION: T9333333 — needs an owner decision on scope'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$status" -eq 0 ]; [ "${output%% *}" = idle ]
+  run _ap attention "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "$(printf 'T9333333\tneeds an owner decision on scope')" ]
+}
+
+@test "classify: NEEDS-ATTENTION next to a merge is still progress" {
+  _report 'MERGED: T9111111 (a) — PR #1' 'NEEDS-ATTENTION: T9333333 — external party'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "progress 1 T9111111 -" ]
+}
+
+@test "classify: tolerates bullets, bold and CRLF; ignores placeholder template lines" {
+  printf -- '- **MERGED:** T9111111 (a) — PR #1\r\nSTUCK: <short reason>\r\n' > "$BATS_TEST_TMPDIR/report.txt"
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$status" -eq 0 ]; [ "$output" = "progress 1 T9111111 -" ]
+}
+
+@test "classify: garbage, empty and a missing file are unparseable (exit 2, stuck line)" {
+  _report 'I did some things and all went well.'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$status" -eq 2 ]; [ "$output" = "stuck 0 - dispatch failed or report unparseable" ]
+  : > "$BATS_TEST_TMPDIR/report.txt"
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"; [ "$status" -eq 2 ]
+  run _ap classify "$BATS_TEST_TMPDIR/none.txt"; [ "$status" -eq 2 ]
+  run _ap classify; [ "$status" -eq 2 ]
+}
+
+@test "classify: output feeds record directly" {
+  _ap start >/dev/null
+  _report 'MERGED: T9111111 (a) — PR #1'
+  read -r o m id reason < <(_ap classify "$BATS_TEST_TMPDIR/report.txt")
+  run _ap record "$o" "$m" "$id" "$reason"
+  [ "$status" -eq 0 ]; [ "$(_j .merged_count)" = 1 ]; [ "$(_j .last_task)" = T9111111 ]
+}
+
+@test "clone-path: deterministic, repo-named, 8-hex hash that matches the original shasum recipe" {
+  run _ap clone-path /work/some-repo
+  [ "$status" -eq 0 ]
+  want="/tmp/autopilot-clone-some-repo-$(printf '%s' /work/some-repo | shasum -a 256 | cut -c1-8)"
+  [ "$output" = "$want" ]
+  [[ "$output" =~ ^/tmp/autopilot-clone-some-repo-[0-9a-f]{8}$ ]]
+  run _ap clone-path /other/some-repo
+  [ "$output" != "$want" ]
+}
+
+@test "clone-path: defaults to the current git toplevel" {
+  d="$(make_fixture_repo "$BATS_TEST_TMPDIR/cp-repo")"
+  cd "$d"
+  top="$(git rev-parse --show-toplevel)"
+  run _ap clone-path
+  [ "$output" = "$(_ap clone-path "$top")" ]
+}
+
+_final_fixture() {
+  d="$(make_fixture_repo "$BATS_TEST_TMPDIR/fr-repo")"
+  cd "$d"
+  _ap start >/dev/null
+  _ap_set_start
+}
+_ap_set_start() { jq '.started_at = "2026-10-28T08:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
+
+@test "final-report: empty run prints the template with the two empty bullets" {
+  _final_fixture
+  AUTOPILOT_NOW="2026-10-28T09:05:00Z" run _ap final-report
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "Autopilot run: 1h 5m elapsed — stopped: user-requested" ]
+  [[ "$output" == *$'Done:\n- No tasks merged this run\n'* ]]
+  [[ "$output" == *$'Needs your attention:\n- Nothing outstanding'* ]]
+}
+
+@test "final-report: under an hour prints minutes only; --stopped overrides the reason" {
+  _final_fixture
+  AUTOPILOT_NOW="2026-10-28T08:42:00Z" run _ap final-report --stopped capped
+  [ "${lines[0]}" = "Autopilot run: 42m elapsed — stopped: capped" ]
+}
+
+@test "final-report: Done lists journal files added since started_at with slug and the one PR ref" {
+  _final_fixture
+  cat > dev/JOURNAL/2026-10-28-T9111111-fix-widget.md <<'MD'
+---
+status: Done
+---
+
+# T9111111: Fix widget
+
+Shipped in PR #77.
+MD
+  cat > dev/JOURNAL/2026-10-28-T9222222-two-prs.md <<'MD'
+---
+status: Done
+---
+
+Design PR #5, implementation PR #6.
+MD
+  cat > dev/JOURNAL/2026-10-28-T9333333-fm-pr.md <<'MD'
+---
+status: Done
+pr: https://github.com/o/r/pull/91
+---
+
+Mentions PR #3 in passing.
+MD
+  git add -A; GIT_AUTHOR_DATE="2026-10-28T08:30:00Z" GIT_COMMITTER_DATE="2026-10-28T08:30:00Z" git commit -q -m journal
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap done
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"- Merged T9111111 (fix-widget) — PR #77"* ]]
+  [[ "$output" == *"- Merged T9222222 (two-prs)"* ]]
+  [[ "$output" != *"two-prs) — PR"* ]]
+  [[ "$output" == *"- Merged T9333333 (fm-pr) — PR #91"* ]]
+}
+
+@test "final-report: journal files from before started_at are not Done" {
+  _final_fixture
+  echo x > dev/JOURNAL/2026-10-01-T9444444-old.md
+  git add -A; GIT_AUTHOR_DATE="2026-10-01T08:30:00Z" GIT_COMMITTER_DATE="2026-10-01T08:30:00Z" git commit -q -m old
+  run _ap done
+  [ "$output" = "- No tasks merged this run" ]
+}
+
+@test "final-report: needs_attention and a stuck last task are listed once each, with slugs" {
+  _final_fixture
+  cat > dev/TODO/T9555555-big-decision.md <<'MD'
+---
+status: Open
+---
+MD
+  cat > dev/TODO/T9666666-flaky.md <<'MD'
+---
+status: Open
+---
+MD
+  _ap skip T9555555 "needs an owner decision" >/dev/null
+  _ap record stuck 0 T9666666 "CI keeps failing" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [[ "$output" == *"- T9555555 (big-decision) — needs an owner decision"* ]]
+  [[ "$output" == *"- Stuck: T9666666 (flaky) — CI keeps failing"* ]]
+  [[ "$output" != *"Nothing outstanding"* ]]
+  # a stuck task already in needs_attention is not listed twice
+  _ap skip T9666666 "also blocked" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [ "$(grep -c 'T9666666' <<<"$output")" = 1 ]
+}
+
+@test "final-report: an id with no task file stays bare; missing state file is exit 2" {
+  _final_fixture
+  _ap skip T9777777 "gone" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [[ "$output" == *"- T9777777 — gone"* ]]
+  rm "$AUTOPILOT_STATE_FILE"
+  run _ap final-report; [ "$status" -eq 2 ]
+}

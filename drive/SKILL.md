@@ -7,6 +7,8 @@ argument-hint: "[task-id]"
 - Single-task work loop: pick ONE task (or accept one from the user), implement it, create a PR, babysit through CI and Copilot review, merge, done.
 - If the task becomes blocked by **another task** (a dependency), recurse INTO that blocker and drive IT to done, then pop back up and resume. Never switch laterally to an unrelated task — that's `/ccxp`'s job.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 **Invariant**: one invocation of `/drive` owns one goal-task and follows its chain of blockers. It exits when the goal-task is merged (or permanently blocked by an external dependency with no actionable sub-task).
 
 ## Argument
@@ -40,8 +42,7 @@ Before picking new work, make one forward move on the PR backlog by handing off 
 - **PRs owned by another session, or blocked on CI / external review / approval / pipeline** → `/address-pr` defers, fixes, or exits without an unsafe merge as appropriate. The §1.6 ownership guard (the anti-steal protection against a concurrent-session-drives-the-same-PR failure mode — a PR lives on GitHub, reachable from every clone, so nothing local stops two sessions from driving it at once without an explicit lock) and the hard merge gate live inside `/address-pr`, so no separate per-PR pre-classification is needed here.
 - **PR's task is unclaimed (`free`)** → `/address-pr` §1.6 now claims the task itself (same mechanism as this skill's Phase 1 Claim PR) before driving the PR further — don't just proceed against an unclaimed task (an unclaimed task's PR can sit open, unnoticed, for weeks before this gets caught).
 
-- **Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep.
-- **Do NOT skip** when `--auto-selected` is present (e.g. `/autopilot`'s own per-cycle dispatch, `autopilot/SKILL.md` Phase 3) — the flag's only effect is on this skip rule; Phase 0's PR-drain still runs every cycle, the same as bare `/drive`.
+- **Skip Phase 0 when:** a human gave an explicit task ID (`/drive T254701`) **without** `--auto-selected` — they want that specific task worked on, not a PR sweep. **Do NOT skip** with `--auto-selected` (e.g. `/autopilot`'s per-cycle dispatch) or bare `/drive`. `preflight.sh` (Phase 1) prints this as `phase0=run|skip`; run it first and obey it.
 
 ### Phase 0.5: Check escalation replies
 
@@ -70,19 +71,28 @@ If task ID given:
 2. Verify it's not Blocked or Done
 3. Flip the task file's Status to the appropriate next state (Open → Design, Design → In Progress, etc.) in-place
 
-**Clone-locality guard (run right after the id is resolved, before any status/claim write):**
+**Pre-claim gates (run right after the id is resolved, before any status/claim write):**
 
-A task's claim, journal, and file all live in ONE repo. Working a task from a *different* clone takes the claim against the wrong `dev/` tree and leaves the clone-scoped status line blind to it. Before flipping status, assert the task file is actually in this clone:
+A task's claim, journal, and file all live in ONE repo; working it from a *different* clone takes the claim against the wrong `dev/` tree. Run the gate chain and act on its one-line verdict; do not re-derive it by hand:
 
 ```bash
-bash <skills-root>/_taskid/in-this-repo.sh <task-id>   # exit 0 = here; non-zero = closed/cross-repo (prints a clonable slug)
+bash <skills-root>/drive/scripts/preflight.sh <task-id|-> [--auto-selected]
+# verdict=<v> phase0=<run|skip> detail=<text>
 ```
 
-- **Exit 0** — present in this repo's `dev/TODO`/`dev/PARKING`; proceed.
-- **Non-zero, warn-only (default)** — the task's real hub is a *different* repo (its `owner/repo` slug is printed). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out. If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
-- **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone).
+| Exit | `verdict=` | Meaning (gate order: clone-locality, claim, lint-frozen) | Do |
+|---|---|---|---|
+| 0 | `go` | here, free / mine / reclaimable | claim and continue |
+| 10 | `held` | `claimed_by` another live session | do not pick; `/todo next` for another, or exit for an explicit id |
+| 11 | `frozen` | the claim PR could not merge (whole-file frontmatter lint) | report the reason; re-pick or exit. Never open the un-mergeable claim PR |
+| 12 | `cross-repo` | no task file here | below |
+| 13 | `closed` | file only in `dev/JOURNAL` | do not re-work; file a new task for follow-up |
+| 2 | (usage) | bad arguments | fix the call |
 
-(Auto-pick via `/todo next` only surfaces tasks already in this clone, so the guard is a no-op there; it's the explicit-id path that needs it.)
+`go` with `CCXP_PEER_MODE=0` skips the claim gate (no registry). Bare `/drive` (`-`) is always `go`: `/todo next` only surfaces free, unfrozen tasks of this clone. Deciding what to do about a verdict stays with you.
+
+- **`cross-repo`** — the task's real hub is a *different* repo (its `owner/repo` slug is in `detail`). This is the same situation Phase 1.5 handles for a declared `Target repo:` — treat it identically: **clone that repo fresh** into an ephemeral path (`/tmp/T<id>-<slug>-hub`, same literal-path, explicit-`rm -rf`-at-close pattern as Phase 1.5's target clone) and do all remaining work — claim, design, implementation (when it lands in the same repo — the common case), journal-move — from that clone. **Never `cd` into an existing local clone the guard's diagnostic line points at**, yours or anyone else's. A clone already checked out locally may be another live session's (interactive or the `/ccxp` cron's) working tree, mid-operation — that's exactly the collision the maintainer's "we work on our own clones, and if we need to across repo, we create a new clone" decision rules out. If the task *also* declares a separate `Target repo:` different from its own hub, that repo gets its own further Phase 1.5 clone as usual — the guard's ephemeral clone only replaces where the *hub* work happens, not Phase 1.5's target-repo logic.
+- **`DRIVE_STRICT_CLONE=1`** — hard-refuse on a cross-repo id (for unattended ccxp loops that must never pick a task they can't fully own from their own clone); `detail` says so.
 
 **Status mirror** (best-effort, never blocks):
 
@@ -116,11 +126,7 @@ Close that gap by landing a tiny **claim PR as the very first thing**, before an
 - (Default-on means *every* session claims — no env-var-symmetry gap.) The lock lives in a single frontmatter field the merge-to-`main` arbitrates atomically: `claimed_by: cc1-<machine-id>:<path-hash>` (the canonical single-line conflict point — a clone-stable identity that already carries the working-dir, so a new invocation in the same clone is the *same* claimant).
 - Use `_session/task_claim.sh` instead of a bare `status:` flip:
 
-1. **Before picking, confirm the task is free:** `bash <skills-root>/_session/task_claim.sh read <id>` → if `claimed_by` is non-empty and is **not** this session's id (`task_claim.sh claimant-id`), the task is held by another session — **do not pick it**. Check `task_claim.sh reclaimable <id>` (a stale claim — no open PR, no commits in N days — may be reclaimed); otherwise go back to `/todo next` for a different task.
-
-   - **Also confirm it is not lint-frozen:** `bash <skills-root>/_session/lint_frozen.sh is-frozen <task-file>` (exit 0 = frozen). A frozen task's claim PR **cannot merge** — the changed-mode `Lint task frontmatter` check re-validates the *whole* file and fails on a pre-existing non-allowlisted field / non-bucket `estimation`.
-   - If frozen, do **not** open an un-mergeable claim PR (a real observed case wasted a full claim cycle this way): report the freeze reason and re-pick via `/todo next` — or, for an explicit `<id>`, exit with the reason.
-   - `/todo next` already excludes frozen candidates (step 4); this is the **backstop for the explicit-id path** that bypasses it. Fail-safe is inverted vs the IPM drain gate — an unclassifiable probe ⇒ **claimable** (never hide pickable work).
+1. **Before picking, confirm the task is free and not lint-frozen:** `preflight.sh` above already ran `task_claim.sh read`/`claimant-id`/`reclaimable` and `lint_frozen.sh is-frozen` for an explicit id (`held` = another live session, `frozen` = the claim PR cannot merge). `/todo next` excludes both kinds of candidate itself, so auto-pick needs no extra check. An unclassifiable freeze probe counts as claimable (never hide pickable work).
 2. **Release any prior claim, then `acquire`** (release-on-pickup — keeps ≤1 active claim per clone): on the `t<id>-claim` branch, **first** run `bash <skills-root>/_session/task_claim.sh release-others <id>` to free any task this clone still holds from an earlier pickup (it keeps `<id>`, the one you're about to claim). This is what stops a live session's claims from accumulating on `main` until `/todo next` finds nothing pickable. **Then** `bash <skills-root>/_session/task_claim.sh acquire <id>` — it sets `claimed_by` and `status: In Progress`. Commit the result: the claim on `<id>` **plus** any `release-others` edits to *other* task files all land in this same claim PR (still docs-only, auto-merge-eligible). The released tasks return to the pickable pool (`In Progress`/`Design` → `Open`; `Blocked by`/`Review`/terminal statuses are preserved).
 3. **Claim-PR conflict = you lost the race.** If the claim PR cannot merge because of a conflict on the `claimed_by:` line, another session acquired the same task in the same window. Do **not** force it — `git checkout main && git pull && git remote prune origin`, then re-pick via `/todo next`. **The merge conflict IS the lock rejecting your acquire.**
 4. **Release on close.** In Phase 7 (task done/parked), `bash <skills-root>/_session/task_claim.sh release <id> <final-status>` clears `claimed_by` as part of the journal-move/close PR.
@@ -153,13 +159,13 @@ If `Target repo` is unset **and** the change genuinely lands in this hub repo: *
 - Before you clone or write any code, query the **target** repo for existing work:
 
 ```bash
-bash <skills-root>/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "<task-id>" --state all \
-  --json number,state,title,headRefName,url --jq '.[]'
+bash <skills-root>/drive/scripts/cross-repo-guard.sh <task-id> "$TARGET_REPO"
+# open <pr> <headRefName> | merged <pr> | none     (exit 3 = gh failed: retry or escalate, never treat as none)
 ```
 
-- **An OPEN PR matches** → do **not** re-implement. Check out its `headRefName` (clone the target repo at that branch), verify it against the design + test plan, and drive it through Phase 5 (`/address-pr`) instead. This is exactly the move that dodged a 4th duplicate.
-- **A recently-MERGED PR matches** *and the hub task is still in `dev/TODO/`* → the implementation already shipped; the task just never got closed in the hub. Skip Phase 3/4 and go straight to Phase 7 (the hub journal-move / close PR).
-- **No match** → proceed to clone + implement below, and **record the pointer** (Phase 4 cross-repo step 5) so the *next* tick takes the cheap path instead of re-searching.
+- **`open <pr> <branch>`** (an OPEN PR matches; with several, the lowest number is printed) → do **not** re-implement. Check out its `headRefName` (clone the target repo at that branch), verify it against the design + test plan, and drive it through Phase 5 (`/address-pr`) instead. This is exactly the move that dodged a 4th duplicate.
+- **`merged <pr>`** (a MERGED PR matches) *and the hub task is still in `dev/TODO/`* → the implementation already shipped; the task just never got closed in the hub. Skip Phase 3/4 and go straight to Phase 7 (the hub journal-move / close PR).
+- **`none`** → proceed to clone + implement below, and **record the pointer** (Phase 4 cross-repo step 5) so the *next* tick takes the cheap path instead of re-searching.
 
 If set (declared) or recognized (undeclared), enable **cross-repo mode** by cloning the target repo into a fresh ephemeral path:
 

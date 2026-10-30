@@ -6,6 +6,8 @@ argument-hint: "on | off | pause | resume | status"
 
 While `on`, keep running `/drive` one task after another, using `ScheduleWakeup` to survive without one long turn, until `/autopilot off`. Nothing drivable → notify once, wait, try again. No standup/IPM/retro (that is `/ccxp`'s job). This skill owns the on/off/loop/pause bookkeeping, not selection, implementation or merging. Each cycle's `/drive` runs in a dispatched sub-agent, so context grows by one report per cycle.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 Exactly one of these (case-insensitive, nothing else). There is no duration argument and no resume token.
@@ -31,7 +33,7 @@ All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.s
 
 For `status` (and for an unsupported argument): run `autopilot-state.sh report` and relay it. Then add, derived live and never from a cache:
 
-- **Done**: `git log --since=<started_at> --diff-filter=A --name-only -- dev/JOURNAL/`, read each file's frontmatter for its PR ref. Empty: "No tasks merged this run".
+- **Done**: `autopilot-state.sh done` (journal files added since `started_at`, one bullet each; prints "- No tasks merged this run" when empty).
 - **Needs your attention**: the `needs_attention` list, plus a task whose `status:` flags a human-only condition (`SUPERVISED`, "needs a human", a sign-off) and an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
 
 No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
@@ -64,10 +66,11 @@ Run `autopilot-state.sh start`:
 
 ```bash
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-REPO_HASH="$(printf '%s' "$REPO_ROOT" | shasum -a 256 | cut -c1-8)"
-CLONE_PATH="/tmp/autopilot-clone-$(basename "$REPO_ROOT")-${REPO_HASH}"
+CLONE_PATH="$(bash <skills-root>/autopilot/scripts/autopilot-state.sh clone-path "$REPO_ROOT")"
 [ -d "$CLONE_PATH" ] || git clone --recurse-submodules "$(git -C "$REPO_ROOT" remote get-url origin)" "$CLONE_PATH"
 ```
+
+`clone-path` prints `/tmp/autopilot-clone-<repo-name>-<8 hex of sha256(repo root)>`.
 
 A dirty or mid-rebase leftover: remove the directory and re-run the block. Full clone, never a worktree or shallow; the same path every cycle keeps the same `claimant_id` (`_session/claimant-id.sh`).
 
@@ -92,9 +95,9 @@ Wait for the completion notification; don't poll. A failed dispatch or an unpars
 
 First re-read `autopilot-state.sh status`: not `on` means off/pause won while the cycle ran; run `busy off`, record nothing further and schedule nothing.
 
-Classify, in this order, then run `autopilot-state.sh record <outcome> <merged-count> <task-id> "<reason>"`; it prints a notice kind or `none` and sets the next wake time.
+Write the sub-agent's final message to a temp file and run `autopilot-state.sh classify <file>`: it prints `<outcome> <merged-count> <task-id|-> <reason>` (exit 2 = unparseable, printed as a stuck line), then run `autopilot-state.sh record <outcome> <merged-count> <task-id> "<reason>"` with those fields (id `-`: pass `""`); it prints a notice kind or `none` and sets the next wake time. `autopilot-state.sh attention <file>` lists the `NEEDS-ATTENTION` entries as `<task-id><TAB><reason>`. The rules `classify` applies, in this order:
 
-- `NEEDS-ATTENTION` lines: for each, `autopilot-state.sh skip <id> "<reason>"` (prints `attention` when new, which is a notice kind to send). Pass `--kind blocked|decision|external|epic` when the reason is clear (waiting on a decision, an outside party, a blocker, an umbrella task): the HUD's queue breakdown counts it in that bucket. Then run another cycle in 60 s unless it is the only outcome, in which case record `idle`/`progress` per what else happened.
+- `NEEDS-ATTENTION` lines (`attention`): for each, `autopilot-state.sh skip <id> "<reason>"` (prints `attention` when new, which is a notice kind to send). Pass `--kind blocked|decision|external|epic` when the reason is clear (waiting on a decision, an outside party, a blocker, an umbrella task): the HUD's queue breakdown counts it in that bucket. Then run another cycle in 60 s unless it is the only outcome, in which case record `idle`/`progress` per what else happened.
 - **progress** — something merged and nothing Stuck. Wake in 60 s.
 - **waiting** — nothing merged, `WAITING:` reported. Back-off ladder 5, 10, 20, 30 min (capped), using `waiting_count`.
 - **stuck** — `/drive` errored, merged and advanced nothing, hit its own Escalation Rules, or its `/address-pr` stopped without merging. Same ladder, using `stuck_count`.
@@ -106,14 +109,14 @@ Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt:
 
 ### Phase 5: Final report (on `off`)
 
-One bullet-list template, never prose, for the user (and the `off` notice, kind `off`, via `notify`):
+After `autopilot-state.sh off`, run `autopilot-state.sh final-report` and post its output unchanged (it also serves as the `off` notice text for `notify`). Append to "Needs your attention" any open PR stuck beyond what a skill resolves (not derivable from state). The template it prints:
 
 ```
 Autopilot run: <elapsed> elapsed — stopped: user-requested
 
 Done:
 - Merged T<id> (<slug>) — PR #<n>
-(one bullet per merged task this run, from Phase 0's journal scan; "- No tasks merged this run" if none)
+(one bullet per merged task this run, from the `done` journal scan; "- No tasks merged this run" if none)
 
 Needs your attention:
 - <needs_attention entries, stuck tasks, PRs stuck beyond any skill>
