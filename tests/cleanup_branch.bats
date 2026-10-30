@@ -38,6 +38,8 @@ setup() {
 #!/usr/bin/env bash
 # Fake gh.sh: reports a merged PR for every branch name listed in
 # $FAKE_GH_MERGED_BRANCHES (space-separated), nothing for anything else.
+# FAKE_GH_FAIL=1 simulates a gh outage (non-zero exit, no output).
+[[ "${FAKE_GH_FAIL:-}" == "1" ]] && exit 1
 head=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -169,4 +171,161 @@ seed_work_repo() {
 
   run git rev-parse --verify feature
   [ "$status" -ne 0 ]
+}
+
+# --- additional coverage (skills scripting plan, Phase 1) -------------------
+
+# squash_merge_feature: feature has one commit; main gets its content under a
+# different SHA (rebase/squash merge) and the feature branch has no extra work.
+add_branch_commit() { # branch file
+  git checkout -q -b "$1"
+  echo "$1 work" > "$2"
+  git add "$2"
+  git -c commit.gpgsign=false commit -q -m "$1 work"
+}
+
+@test "SKIPS a branch with no merged PR and keeps it (nothing to verify, nothing deleted)" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  add_branch_commit wip wip.txt
+  git checkout -q main
+
+  FAKE_GH_MERGED_BRANCHES="" run bash "$SCRIPT" wip
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$(printf 'wip\tskipped: no merged PR')"* ]]
+  run git rev-parse --verify wip
+  [ "$status" -eq 0 ]
+}
+
+@test "fails closed when gh is unavailable: branch is reported skipped, not deleted" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  add_branch_commit feature feature.txt
+  git checkout -q main
+
+  FAKE_GH_FAIL=1 FAKE_GH_MERGED_BRANCHES="feature" run bash "$SCRIPT" feature
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"skipped: no merged PR"* ]]
+  run git rev-parse --verify feature
+  [ "$status" -eq 0 ]
+}
+
+@test "full sweep deletes only the merged branch, keeps the unmerged one, never touches main" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  add_branch_commit done done.txt
+  git checkout -q main
+  git merge -q --no-ff done -m "Merge branch 'done'"
+  git push -q origin main
+  add_branch_commit open open.txt
+  git checkout -q main
+
+  FAKE_GH_MERGED_BRANCHES="done" run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$(printf 'BRANCH\tSTATUS\tPR')"* ]]
+  [[ "$output" == *"$(printf 'done\tdeleted\t')"* ]]
+  [[ "$output" == *"$(printf 'open\tskipped: no merged PR')"* ]]
+  [[ "$output" != *"$(printf 'main\t')"* ]]
+  run git rev-parse --verify done
+  [ "$status" -ne 0 ]
+  run git rev-parse --verify open
+  [ "$status" -eq 0 ]
+  run git rev-parse --verify main
+  [ "$status" -eq 0 ]
+}
+
+@test "reports and exits 0 when there are no feature branches" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no feature branches to clean up"* ]]
+}
+
+@test "stops without stashing or discarding when checkout main is blocked by local changes" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  git checkout -q -b feature
+  echo "feature readme" > README.md
+  git -c commit.gpgsign=false commit -q -am "feature edits README"
+  echo "uncommitted edit" > README.md
+
+  FAKE_GH_MERGED_BRANCHES="feature" run bash "$SCRIPT" feature
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"git checkout main failed"* ]]
+  [[ "$output" == *"do not stash or discard"* ]]
+  # Work is intact: still on feature, edit still there, nothing stashed.
+  [ "$(git branch --show-current)" = "feature" ]
+  [ "$(cat README.md)" = "uncommitted edit" ]
+  [ -z "$(git stash list)" ]
+  run git rev-parse --verify feature
+  [ "$status" -eq 0 ]
+}
+
+# mk_gone_branch NAME FILE -> branch pushed to origin, then deleted upstream
+# and pruned, so its local upstream tracks as [gone]. Leaves main checked out.
+mk_gone_branch() {
+  add_branch_commit "$1" "$2"
+  git push -q -u origin "$1"
+  git push -q origin --delete "$1"
+  git checkout -q main
+}
+
+@test "prune --dry-run lists the [gone] branch and deletes nothing" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  mk_gone_branch stale stale.txt
+
+  run bash "$SCRIPT" prune --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Would delete (upstream gone):"* ]]
+  [[ "$output" == *"stale"* ]]
+  [[ "$output" == *"Count: 1"* ]]
+  run git rev-parse --verify stale
+  [ "$status" -eq 0 ]
+}
+
+@test "prune deletes [gone] branches but keeps branches whose upstream still exists" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  mk_gone_branch stale stale.txt
+  add_branch_commit live live.txt
+  git push -q -u origin live
+  git checkout -q main
+
+  run bash "$SCRIPT" prune
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Deleted: 1 stale branch(es)"* ]]
+  run git rev-parse --verify stale
+  [ "$status" -ne 0 ]
+  run git rev-parse --verify live
+  [ "$status" -eq 0 ]
+  run git rev-parse --verify main
+  [ "$status" -eq 0 ]
+}
+
+@test "prune never deletes the currently checked-out branch, even when its upstream is gone" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  add_branch_commit here here.txt
+  git push -q -u origin here
+  git push -q origin --delete here
+  # stay on `here`
+
+  run bash "$SCRIPT" prune
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No stale branches to delete."* ]]
+  [ "$(git branch --show-current)" = "here" ]
+}
+
+@test "prune never deletes the default branch even when its upstream tracking is gone" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  add_branch_commit other other.txt   # current = other, so main is a candidate
+  # Point main at a remote-tracking ref that does not exist -> [gone].
+  git config branch.main.merge refs/heads/vanished
+
+  run bash "$SCRIPT" prune
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No stale branches to delete."* ]]
+  run git rev-parse --verify main
+  [ "$status" -eq 0 ]
+}
+
+@test "prune reports nothing to do when no branch is [gone]" {
+  BARE="$(mk_bare origin)"; WORK="$(seed_work_repo "$BARE")"; cd "$WORK"
+  run bash "$SCRIPT" prune --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No stale branches to delete."* ]]
 }
