@@ -268,6 +268,7 @@ The poll is bounded (`APPROVE_POLL_TRIES` x `APPROVE_POLL_INTERVAL`, default 12 
 - `0` `approved via workflow|fallback <sha>`: a real approval landed
 - `10` `no-workflow`: no `pr-approve.yml` (the check cannot tell "absent" from a transient/auth failure: deliberately fail-safe, worst case a repo that should auto-approve is skipped and the merge stalls, never an approval that should not exist); nothing dispatched. Note "LGTM seen, no approval workflow" in the §3 report when it was an LGTM
 - `11` `timeout`: dispatched but no approval landed and the fallback was unavailable or failed: warn and continue; the §2.a mergeability check is the backstop
+- `13` `dry-run`: only with `--dry-run`; nothing was changed, never an approval
 - `12` `not-eligible`: `--lgtm-by` with `--findings-open` (an LGTM never silences an open finding); nothing dispatched
 - `2` usage: no trigger flag, both flags, or a bad sha (fail closed)
 

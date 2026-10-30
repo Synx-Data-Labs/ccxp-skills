@@ -13,21 +13,24 @@
 #                       enough while findings are open
 #   --findings-open     with --lgtm-by: a finding is still unanswered -> not-eligible
 #                       (a usage error together with --clean-bill)
-# --dry-run: runs the read-only checks (workflow present, repo), prints what would be
-#   dispatched/polled/posted, and changes nothing on GitHub.
+# --dry-run: runs the read-only check (workflow present), prints what would be
+#   dispatched/polled/posted, and changes nothing on GitHub. It exits 13, never 0, so a
+#   caller that branches on the exit code alone cannot mistake a preview for an approval.
 #
 # stdout (one line) and exit:
-#    0  approved via workflow <sha> | approved via fallback <sha> | dry-run ... (would act)
+#    0  approved via workflow <sha> | approved via fallback <sha>
 #   10  no-workflow   the repo has no pr-approve.yml on its default branch (or gh could not
 #                     tell: deliberately fail-safe, never approves); nothing was dispatched
 #   11  timeout       dispatched, but no approval landed in the window and the fallback was
 #                     unavailable or failed; the §2.a mergeability check is the backstop
 #   12  not-eligible  --lgtm-by with --findings-open; nothing was dispatched
+#   13  dry-run       (stdout `dry-run: ...`) nothing was changed
 #    2  usage / <head-sha> is not a full 40-hex commit id
-# The token is never printed.
+# The token is never printed. The fallback POST calls plain `gh` (not the wrapper, which
+# replaces GH_TOKEN with a local account's token and would drop the minted bot token).
 #
 # Env: APPROVE_POLL_TRIES (default 12, >=1), APPROVE_POLL_INTERVAL seconds (default 10, >=0).
-# Env (tests): GH_SH, GH_APP_TOKEN_SH override the sibling scripts; GH_APP_ID and
+# Env (tests): GH_SH, GH_APP_TOKEN_SH, GH_BIN (plain gh for the fallback POST) override the sibling scripts; GH_APP_ID and
 #   GH_APP_PRIVATE_KEY_FILE | GH_APP_PRIVATE_KEY enable the fallback.
 
 set -uo pipefail
@@ -35,6 +38,7 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GH_SH="${GH_SH:-$HERE/../../_gh/gh.sh}"
 GH_APP_TOKEN_SH="${GH_APP_TOKEN_SH:-$HERE/../../_gh/gh-app-token.sh}"
+GH_BIN="${GH_BIN:-gh}"
 TRIES="${APPROVE_POLL_TRIES:-12}"
 INTERVAL="${APPROVE_POLL_INTERVAL:-10}"
 
@@ -78,7 +82,7 @@ if [ -n "${GH_APP_ID:-}" ] && { [ -n "${GH_APP_PRIVATE_KEY_FILE:-}" ] || [ -n "$
 
 if [ "$dry" = 1 ]; then
   echo "dry-run: would dispatch pr-approve.yml -f pr_number=$pr -f commit_sha=$sha, poll up to $TRIES x ${INTERVAL}s for an APPROVED review at $sha, then $([ "$fallback" = 1 ] && echo 'fall back to a locally minted bot approval' || echo 'give up (no App credentials: no fallback)')"
-  exit 0
+  exit 13
 fi
 
 bash "$GH_SH" workflow run pr-approve.yml -f pr_number="$pr" -f commit_sha="$sha" >/dev/null 2>&1 \
@@ -102,7 +106,7 @@ if [ "$fallback" = 1 ]; then
   token=""
   [[ "$slug" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] && token="$(bash "$GH_APP_TOKEN_SH" --repo "$slug" 2>/dev/null || true)"
   if [ -n "$token" ] \
-     && GH_TOKEN="$token" bash "$GH_SH" api --method POST "repos/$slug/pulls/$pr/reviews" \
+     && GH_TOKEN="$token" "$GH_BIN" api --method POST "repos/$slug/pulls/$pr/reviews" \
           -f event=APPROVE -f commit_id="$sha" \
           -f body="Approved by synx-merge-bot (local-mint fallback) after a clean independent review at $sha." >/dev/null 2>&1; then
     echo "approved via fallback $sha"; exit 0

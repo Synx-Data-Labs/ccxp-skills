@@ -27,7 +27,7 @@ case "$1 $2" in
   "workflow view") exit "${STUB_WF_RC:-0}" ;;
   "workflow run") exit "${STUB_RUN_RC:-0}" ;;
   "repo view") echo '{"nameWithOwner":"acme/repo"}' ;;
-  "api --method") exit "${STUB_API_RC:-0}" ;;
+  "api --method") echo "stub gh: the wrapper must not be used for the fallback POST" >&2; exit 98 ;;
   "pr view")
     case "$*" in
       *reviews*)
@@ -47,6 +47,10 @@ case "$1 $2" in
 esac
 STUB
   printf '#!/usr/bin/env bash\necho "token-script $*" >> "$STUB_LOG"\n[ -z "${STUB_TOKEN_FAIL:-}" ] || exit 1\necho tok-SECRET-9\n' > "$STUB_DIR/token.sh"
+  # The fallback POST must bypass the wrapper (it would swap GH_TOKEN), so it has its own stub.
+  printf '#!/usr/bin/env bash\necho "plain-gh $*${GH_TOKEN:+ [GH_TOKEN set: $GH_TOKEN]}" >> "$STUB_LOG"\nexit "${STUB_API_RC:-0}"\n' > "$STUB_DIR/plain-gh"
+  chmod +x "$STUB_DIR/plain-gh"
+  export GH_BIN="$STUB_DIR/plain-gh"
   export GH_SH="$STUB_DIR/gh.sh" GH_APP_TOKEN_SH="$STUB_DIR/token.sh"
   export STUB_APPROVED_SHA="$SHA"
   export APPROVE_POLL_TRIES=5 APPROVE_POLL_INTERVAL=0 WAIT_MERGED_TRIES=4 WAIT_MERGED_INTERVAL=0
@@ -62,7 +66,7 @@ creds() { export GH_APP_ID=123 GH_APP_PRIVATE_KEY_FILE=/nonexistent/key.pem; }
   STUB_APPROVE_ON=1 approve 12 "$SHA" --clean-bill
   [ "$status" -eq 0 ]; [ "$output" = "approved via workflow $SHA" ]
   assert_calls "$STUB_LOG" "^workflow run pr-approve.yml -f pr_number=12 -f commit_sha=$SHA\$"
-  refute_calls "$STUB_LOG" '^api --method'
+  refute_calls "$STUB_LOG" '^(plain-gh|api) '
 }
 
 @test "approve-dispatch: success on the third poll" {
@@ -86,7 +90,7 @@ creds() { export GH_APP_ID=123 GH_APP_PRIVATE_KEY_FILE=/nonexistent/key.pem; }
   approve 12 "$SHA" --clean-bill; [ "$status" -eq 11 ]
   GH_APP_ID=1 approve 12 "$SHA" --clean-bill; [ "$status" -eq 11 ]
   GH_APP_PRIVATE_KEY_FILE=/k approve 12 "$SHA" --clean-bill; [ "$status" -eq 11 ]
-  refute_calls "$STUB_LOG" '^api --method'
+  refute_calls "$STUB_LOG" '^(plain-gh|api) '
   refute_calls "$STUB_LOG" '^token-script'
 }
 
@@ -96,7 +100,7 @@ creds() { export GH_APP_ID=123 GH_APP_PRIVATE_KEY_FILE=/nonexistent/key.pem; }
   [ "$status" -eq 0 ]; [ "$output" = "approved via fallback $SHA" ]
   [[ "$output$stderr" != *tok-SECRET-9* ]]
   assert_calls "$STUB_LOG" "^token-script --repo acme/repo\$"
-  assert_calls "$STUB_LOG" "^api --method POST repos/acme/repo/pulls/12/reviews -f event=APPROVE -f commit_id=$SHA -f body=.*local-mint fallback.* \[GH_TOKEN set: tok-SECRET-9\]\$"
+  assert_calls "$STUB_LOG" "^plain-gh api --method POST repos/acme/repo/pulls/12/reviews -f event=APPROVE -f commit_id=$SHA -f body=.*local-mint fallback.* \[GH_TOKEN set: tok-SECRET-9\]\$"
 }
 
 @test "approve-dispatch: a failing token mint or failing POST ends in timeout, not approved" {
@@ -116,7 +120,7 @@ creds() { export GH_APP_ID=123 GH_APP_PRIVATE_KEY_FILE=/nonexistent/key.pem; }
   refute_calls "$STUB_LOG" '^workflow run'
   creds; STUB_WF_RC=1 approve 12 "$SHA" --clean-bill   # credentials never bypass a missing workflow
   [ "$status" -eq 10 ]
-  refute_calls "$STUB_LOG" '^(workflow run|api --method)'
+  refute_calls "$STUB_LOG" '^(workflow run|plain-gh|api)'
 }
 
 @test "approve-dispatch: LGTM triggers the same dispatch and says who" {
@@ -135,9 +139,9 @@ creds() { export GH_APP_ID=123 GH_APP_PRIVATE_KEY_FILE=/nonexistent/key.pem; }
 @test "approve-dispatch: --dry-run reads but never dispatches, polls or posts" {
   creds
   approve 12 "$SHA" --clean-bill --dry-run
-  [ "$status" -eq 0 ]; [[ "$output" == "dry-run: would dispatch pr-approve.yml -f pr_number=12 -f commit_sha=$SHA"* ]]
+  [ "$status" -eq 13 ]; [[ "$output" == "dry-run: would dispatch pr-approve.yml -f pr_number=12 -f commit_sha=$SHA"* ]]
   [[ "$output" == *"locally minted"* ]]
-  refute_calls "$STUB_LOG" '^(workflow run|api --method|pr )'
+  refute_calls "$STUB_LOG" '^(workflow run|plain-gh|api|pr )'
   refute_calls "$STUB_LOG" '^token-script'
   unset GH_APP_ID GH_APP_PRIVATE_KEY_FILE
   approve 12 "$SHA" --clean-bill --dry-run
