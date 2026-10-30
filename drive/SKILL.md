@@ -51,7 +51,7 @@ Before picking new work, check if prior escalations have received replies:
 1. Run `/slack-check-reply all`
 2. For each thread with replies:
    - Parse the most recent reply for a directive (e.g., "go with A", "skip", "merge it")
-   - Mark the thread as `resolved: true` in `.claude/state/drive-threads.json`
+   - Mark it resolved: `bash <skills-root>/_threads/threads.sh resolve <key> --resolution "<directive>"` (exit 3 = absent or already resolved; never hand-edit `.claude/state/drive-threads.json`)
 3. If a reply unblocks a previously stopped task, that task gets priority in Phase 1
 4. If no pending escalations or no replies, proceed normally
 
@@ -243,20 +243,9 @@ If you skip, note `Design approved in-conversation YYYY-MM-DD` in the task file'
 
 #### Phase 3.0: Detect change kind (route TDD + verification)
 
-Classify the change:
+Run `bash <skills-root>/drive/scripts/classify-change.sh [base]` (default base `main`); it prints one word and exits 0 (2 usage, 3 not a git repo). Do not re-derive the rule in prose.
 
-```bash
-CHANGED=$(git diff --name-only main...HEAD 2>/dev/null || git status --porcelain | awk '{print $2}')
-```
-
-| Pattern | Classification |
-|---|---|
-| `dev/**`, `docs/**` (any depth) | docs |
-| `*.md` at any depth (incl. `README.md`, `CLAUDE.md`, `SKILL.md`) | docs |
-| `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md` | docs |
-| Everything else (incl. `.github/workflows/*.yml`, `scripts/**/*.sh`, `**/*.bats`, `Makefile`, build configs) | code |
-
-Aggregate: all docs → **docs**; any code → **code** (mixed treated as code — stricter wins).
+- Docs: all of `dev/**`, `docs/**`, any `*.md` (incl. `README.md`, `CLAUDE.md`, `SKILL.md`), `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`. Everything else (workflows, `scripts/**/*.sh`, `**/*.bats`, `Makefile`, build configs) is code. Any code → **code** (mixed: stricter wins); all docs → **docs**; nothing changed → **empty**.
 
 - **code-class**: invoke `superpowers:test-driven-development` BEFORE step 1 below. The TDD skill owns red → green → refactor.
 - **docs-class**: skip TDD; continue to step 1.
@@ -536,7 +525,7 @@ Then **append a "Skills invoked" block to the task body** before the close (Phas
 
 Fill the bracketed alternatives from what actually happened; the block lands directly in the `dev/JOURNAL/` file at close time — every close journal-moves immediately, no deferred-to-Friday path anymore.
 
-> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This bites **every close now**. Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing**: `git show --stat HEAD` must show real insertions/deletions, not `100% rename` / `0 insertions(+), 0 deletions(-)`.
+> **Order-of-operations guard (else the close content is silently dropped).** `git mv` stages the **HEAD blob** under the new path; any working-tree edits you made *before* the move stay **unstaged**, so a plain `git commit` lands a pure **100% rename, 0 insertions/0 deletions** — the `## Closed` section, `status: Done`, and checked boxes never reach the committed blob (a real observed case — caught only because the post-merge `git checkout main` aborted on a dirty tree). This bites **every close now**. Either **`git mv` FIRST, then edit at the new JOURNAL path**, or after editing run an explicit **`git add <journal-path>`** (or `git commit -a`). Then **verify before pushing** with `bash <skills-root>/drive/scripts/verify-close.sh <id>` (exit 0 = `ok <journal-path>`; exit 1 lists `FAIL <check>` lines for a bare 100% rename, uncommitted edits, status not Done, a surviving `claimed_by`, a missing `## Closed (` section, or a file not moved — fix each and re-run; `--base <ref>` overrides `main` for the rename check).
 
 **Status=Done** (run right after Phase 7.0, before the remaining Phase 7 steps):
 
@@ -552,7 +541,7 @@ This call is best-effort, idempotent, and never blocks subsequent steps. If `/ad
 
 1. `git checkout main && git pull && git remote prune origin` (see **Important Notes → Post-merge branch hygiene**)
 2. Verify the journal move (`dev/TODO/` → `dev/JOURNAL/`) landed in the PR from Phase 4, with `status: Done` set on the moved file — every close journal-moves immediately now, there is no in-place-only path left to check instead.
-3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip. Check: `grep claimed_by dev/TODO/T<id>-*.md`. If still set, open a one-line follow-up PR running `bash <skills-root>/_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
+3. **Verify `claimed_by` was actually cleared, not just `status:` flipped.** If Phase 4's close commit set `status: Done` via a hand-edit rather than `task_claim.sh release <id> Done`, the claim can survive the flip; `bash <skills-root>/drive/scripts/verify-close.sh <id>` reports it as `FAIL claim` (run on `main` after the merge). If still set, open a one-line follow-up PR running `bash <skills-root>/_session/task_claim.sh release <id> Done` — don't hand-edit the field directly; the script is what keeps `status:` and `claimed_by:` atomic.
 4. If the task has `Source: GitHub issue #N`, update and close the issue:
 
    ```bash
@@ -609,13 +598,7 @@ When escalating to the user via Slack, use the MCP `slack_send_message` tool (no
 
 1. Use the `$DRIVE_ESCALATION_CHANNEL_ID` channel
 2. Send via `slack_send_message` with `channel_id: "$DRIVE_ESCALATION_CHANNEL_ID"` and the message text
-3. Save the thread reference to `.claude/state/drive-threads.json` (create dir/file if missing):
-
-   ```json
-   { "T304536": { "channel_id": "C...", "message_ts": "...", "type": "design-decision", "summary": "...", "sent_at": "...", "resolved": false } }
-   ```
-
-4. If a previous unresolved entry exists for the same task, mark it `resolved: true` first
+3. Save the thread reference: `bash <skills-root>/_threads/threads.sh add <key> --channel "$DRIVE_ESCALATION_CHANNEL_ID" --ts <message_ts> --type <type> --summary "<summary>"` (`<key>` = task id, or `<id>-pr<N>` for a PR thread). It creates the state file and directory if missing, writes atomically, and replaces any earlier entry for the same key, so a previous unresolved escalation is superseded by the re-send. A malformed state file exits 4 and is left untouched; never edit `.claude/state/drive-threads.json` by hand.
 
 ### Checking replies
 
