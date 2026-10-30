@@ -615,7 +615,7 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: wake })).toContain('next loop 12:12')
   // a different day carries the date, like the last-prompt stamp
   expect(apLine({ next_wake_at: wake + 86400 })).toMatch(/next loop \w{3} 29 12:12 \(in 1d\)$/)
-  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due now$/)
+  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due$/)
   expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
   expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')

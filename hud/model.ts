@@ -575,7 +575,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     const clock = formatStamp(ap.next_wake_at, nowMs)
     wakeItem =
       wait === 'now'
-        ? one('wake', [{ text: 'next loop due now', color: 'warning' }], [{ text: 'next loop now', color: 'warning' }])
+        ? one('wake', [{ text: 'next loop due', dim: true }]) // also true while a long cycle runs: the stored time is only re-armed when it ends
         : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
   }
   add([apItem, wakeItem, ciItem], DETAIL_STEPS.ap)
