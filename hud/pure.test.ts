@@ -546,7 +546,7 @@ test('details: five lines in order: where, usage, jobs, autopilot with CI, last 
   expect(lines.length).toBe(5)
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 42% used │ API-equivalent cost $1.50')
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 (k1 k2) │ total jobs 82')
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
   expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
@@ -566,6 +566,14 @@ test('details: lines with nothing to say are left out (no ledger, no CI config, 
   expect(lines.length).toBe(2) // where, autopilot (off)
   expect(lines[1]).toBe('AP off')
   expect(lines.join('\n')).not.toMatch(/READY|WORKING|you |CI/)
+})
+
+test('details: parked shows the count only, never the parked ids', async () => {
+  const ids = ['k5', 'k6', 'k7', 'k8', 'k9', 'k10', 'k11', 'k12', 'k13']
+  const ledger = { running: [], lifetime_jobs: 82, parked: 9, parked_ids: ids, next_job: 83, updated_at: '' }
+  const lines = detail(withHelper({ ledger }) as any, 140)
+  expect(lines[2]).toBe('READY │ parked 9 │ total jobs 82')
+  expect(lines.join('\n')).not.toMatch(/k\d/)
 })
 
 test('details: every line fits the terminal at every width and the band row is untouched', async () => {
@@ -594,7 +602,7 @@ test('details: the jobs line never lists the running jobs (the band already show
   expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 4% used │ API-equivalent cost $693.75')
   const all = lines.join('\n')
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 (k1 k2) │ total jobs 82')
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
   // ...but the one-row band keeps its short forms
   expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...CI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
 })

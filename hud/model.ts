@@ -480,7 +480,7 @@ export function formatIn(epochSec: number, nowMs: number = Date.now()): string {
 const DETAIL_STEPS = {
   where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
   usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
-  jobs: ['step:total', 'drop:total', 'step:parked', 'drop:parked', 'drop:state'],
+  jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
   ap: ['step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
   you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'step:ver0', 'drop:ver0', 'drop:ver'],
 } as const
@@ -533,11 +533,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const led = h?.ledger
   if (led) {
     const state = jobState(led.running.length)
-    const ids = led.parked_ids.length ? ` (${led.parked_ids.join(' ')})` : ''
     add(
       [
         one('state', [{ text: state.text, color: state.color }]),
-        one('parked', [{ text: `parked ${led.parked}${ids}`, dim: led.parked === 0 }], [{ text: `parked ${led.parked}`, dim: led.parked === 0 }]),
+        one('parked', [{ text: `parked ${led.parked}`, dim: led.parked === 0 }]),
         one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }], [{ text: `total ${led.lifetime_jobs}`, dim: true }]),
       ],
       DETAIL_STEPS.jobs,
