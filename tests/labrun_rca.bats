@@ -82,6 +82,14 @@ render() {
   [[ "$output" != *run_id=* ]]
 }
 
+@test "extract-run: an epoch timestamp is not a run id; one run linked in two repos yields one url" {
+  run bash -c 'echo "failed at 1700000000 attempt" | bash "$1" extract-run 2>/dev/null' _ "$LAB"
+  [ "$status" -eq 3 ]
+  run bash -c 'printf "%s\n%s\n" https://github.com/a/b/actions/runs/111111111 https://github.com/c/d/actions/runs/111111111 | bash "$1" extract-run' _ "$LAB"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c run_url <<<"$output")" -eq 1 ]
+}
+
 @test "extract-run: an unreadable file exits 2" {
   lab extract-run "$BATS_TEST_TMPDIR/nope.txt"
   [ "$status" -eq 2 ]
@@ -162,7 +170,10 @@ render() {
 @test "render: other credential shapes exit 6 (aws key, private key, jwt, webhook, assignment)" {
   local aws="AK""IA$(printf 'ABCDEFGHIJKLMNOP')" jwt="ey""J$(printf 'abcdefghij').$(printf 'abcdefghij').$(printf 'abcdefghij')"
   local hook="hooks.slack.""com/services/T0/B0/$(printf 'abcdefghij')"
-  for v in "$aws" "-----BEGIN RSA PRIVATE"" KEY-----" "$jwt" "https://$hook" "api_key=$(printf 'abcdef0123456789')" "password: $(printf 'hunter2hunter2hunter2')"; do
+  for v in "GITHUB_""TOKEN=$(printf 'abcdefgh1234')" "Token: $(printf 'abcdefgh1234')" "PASSWORD=$(printf 'abcdefghij')" \
+           "AWS_SECRET_ACCESS_""KEY=$(printf 'abcdefgh1234')" "npm""_$(printf 'a1B2c3D4e5%.0s' 1 2 3)" \
+           "glp""at-$(printf 'a1B2c3D4e5%.0s' 1 2)" "https://user:$(printf 'pw123456')@example.com/x" \
+           "Authorization: Bas""ic $(printf 'dXNlcjpwYXNzd29yZDEyMw==')" "$aws" "-----BEGIN RSA PRIVATE"" KEY-----" "$jwt" "https://$hook" "api_key=$(printf 'abcdef0123456789')" "password: $(printf 'hunter2hunter2hunter2')"; do
     T_ERR="$v" render
     [ "$status" -eq 6 ]
   done
@@ -170,6 +181,8 @@ render() {
 
 @test "render: ordinary logs and 40-hex commit shas are not flagged" {
   T_ERR='make: *** [all] Error 2 at 0123456789abcdef0123456789abcdef01234567' render
+  [ "$status" -eq 0 ]
+  T_ERR='disk-usage-threshold-exceeded-now' render
   [ "$status" -eq 0 ]
   T_ROOT='the token cache was cold; secret rotation is unrelated' render
   [ "$status" -eq 0 ]
