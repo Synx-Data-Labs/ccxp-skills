@@ -318,6 +318,12 @@ function sw_apply_phase3a() {
   return $((n == 0 ? 3 : 0))
 }
 
+function sw_park_add() { # keep the first ID:REASON per id (compares ids only, never reason text)
+  local p
+  for p in ${PARK[@]+"${PARK[@]}"}; do [ "${p%%:*}" = "${1%%:*}" ] && return 0; done
+  PARK+=("$1")
+}
+
 function sw_park() {
   local date item id reason src file n=0 todo_ids=""
   date="$(bash "$TODO_LIB_REPO_ROOT/_date/date.sh" today)"
@@ -367,7 +373,7 @@ function todo-sweep-main() {
       --phase) [ $# -ge 2 ] || sw_usage; phase="$2"; shift 2 ;;
       --dry-run) DRY=1; shift ;;
       --supersede) [ $# -ge 2 ] || sw_usage; [[ "$2" =~ ^$SW_ID_RE:$SW_ID_RE$ ]] || sw_usage; SUPERSEDE+=("$2"); shift 2 ;;
-      *) [ "$cmd" = park ] && [[ "$1" =~ ^$SW_ID_RE:.+ ]] || sw_usage; case " ${PARK[*]:-} " in *" ${1%%:*}:"*) ;; *) PARK+=("$1") ;; esac; shift ;;
+      *) [ "$cmd" = park ] && [[ "$1" =~ ^$SW_ID_RE:.+ ]] || sw_usage; sw_park_add "$1"; shift ;;
     esac
   done
   [ -d "$ROOT" ] || sw_die 2 "no such directory: $ROOT"
