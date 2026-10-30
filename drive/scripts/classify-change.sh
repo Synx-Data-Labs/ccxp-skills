@@ -30,7 +30,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || { echo "classify-change.sh: not a git
 
 if ! changed="$(git diff --name-only "$base...HEAD" 2>/dev/null)"; then
   # porcelain: "XY path" or "XY old -> new"; keep the new path
-  changed="$(git status --porcelain 2>/dev/null | cut -c4- | sed 's/.* -> //; s/^"//; s/"$//')"
+  changed="$(git status --porcelain -uall 2>/dev/null | cut -c4- | sed 's/.* -> //; s/^"//; s/"$//')"
 fi
 
 kind=empty

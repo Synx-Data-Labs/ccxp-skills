@@ -259,6 +259,8 @@ _branch_with() { # <path>... — commit each path on a feature branch off main
   run bash "$CLASSIFY" main; [ "$output" = code ]
   git checkout -q main; echo z > new.sh
   run bash "$CLASSIFY" no-such-ref; [ "$status" -eq 0 ]; [ "$output" = code ]
+  rm -f new.sh; mkdir newdir; echo q > newdir/a.md
+  run bash "$CLASSIFY" no-such-ref; [ "$output" = docs ]
 }
 
 # --- verify-close ------------------------------------------------------------
@@ -349,7 +351,8 @@ _close() { # [status] [claimed_by] [closed:yes|no] [mode:mv-edit|mv-only] — ta
 }
 
 @test "drive skills: SKILL.md files no longer hand-edit drive-threads.json and cite the scripts" {
-  ! grep -n 'jq .*drive-threads' "$REPO_ROOT/drive/SKILL.md" "$REPO_ROOT/retro/SKILL.md" "$REPO_ROOT/ccxp/SKILL.md"
+  run grep -n 'jq .*drive-threads' "$REPO_ROOT/drive/SKILL.md" "$REPO_ROOT/retro/SKILL.md" "$REPO_ROOT/ccxp/SKILL.md"
+  [ "$status" -eq 1 ]
   grep -q 'drive/scripts/classify-change.sh' "$REPO_ROOT/drive/SKILL.md"
   grep -q 'drive/scripts/verify-close.sh' "$REPO_ROOT/drive/SKILL.md"
   grep -q '_threads/threads.sh' "$REPO_ROOT/drive/SKILL.md"
