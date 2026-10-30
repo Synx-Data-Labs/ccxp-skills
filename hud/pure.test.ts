@@ -853,6 +853,7 @@ test('version: in AP mode it shows too; narrow rows shrink it, the update outliv
 })
 
 test('version: /hud details shows it on the last line, with `you` when present', async () => {
+  // 160 columns: at 120 the URL is already dropped for this snapshot (see the squeeze-order test below)
   const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 160).map(r => r.map(s => s.text).join(''))
   expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 (5.1.0 available)')
   expect(lines[lines.length - 1]).toContain('you ')
@@ -890,6 +891,22 @@ test('version: narrow details drop the link first and keep the version label', a
   expect(text(full.slice(-1))).toContain('(latest)')
 })
 
+test('version: squeeze order is URL, then the `you` stamp, then the label; the line always fits', async () => {
+  const at = Math.floor(DETAIL_NOW / 1000) - 300
+  const snapAt = verSnap(PLUGIN_LATEST, { helper: { ...verSnap(PLUGIN_LATEST).helper, last_input_at: at } })
+  const row = (cols: number) => lastLine(snapAt, DEFAULTS, cols)
+  const full = row(200)
+  expect(full).toMatch(/^you .*\(5m ago\) │ ccxp 5\.2\.0 \(latest\) │ https:/)
+  const noUrl = row(full.length - 2) // too narrow for the URL by a little
+  expect(noUrl).not.toContain('github.com')
+  expect(noUrl).toContain('(5m ago)')
+  expect(noUrl).toContain('(latest)')
+  const short = row(36) // the stamp's age goes before the label
+  expect(short).not.toContain('(5m ago)')
+  expect(short).toContain('ccxp 5.2.0')
+  for (const cols of [200, 120, 80, 60, 40, 30, 22]) expect(row(cols).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+})
+
 test('version: details with `version: false` or no plugin data show neither label nor link', async () => {
   expect(text(detailRows(verSnap(PLUGIN_LATEST) as any, { ...DEFAULTS, version: false }, 160, DETAIL_NOW))).not.toContain('github.com')
   expect(text(detailRows(verSnap(null) as any, DEFAULTS, 160, DETAIL_NOW))).not.toContain('github.com')
@@ -898,7 +915,7 @@ test('version: details with `version: false` or no plugin data show neither labe
 test('version: parseHelper keeps only a plain github.com/<owner>/<repo> url', async () => {
   const h = (url: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin: { installed: '5.2.0', latest: '5.2.0', url } }))?.plugin
   expect(h('https://github.com/Acme/w')?.url).toBe('https://github.com/Acme/w')
-  for (const bad of ['http://github.com/a/b', 'https://evil.example/a/b', 'https://github.com/a/b/c', 'https://github.com/a/b\u001b]8;;x', 'javascript:alert(1)', 42, null]) {
+  for (const bad of ['http://github.com/a/b', 'https://evil.example/a/b', 'https://github.com/a/b/c', 'https://github.com/./..', 'https://github.com/a/b\u001b]8;;x', 'javascript:alert(1)', 42, null]) {
     expect(h(bad)).toEqual({ installed: '5.2.0', latest: '5.2.0' })
   }
 })
