@@ -50,15 +50,23 @@ GP_ROOT="$(cd "$GP_DIR/../.." && pwd)"
 
 _gp_die() { echo "gcpr-prep: $*" >&2; exit 2; }
 
-# _gp_changed_all — changed paths from the working tree (NUL-safe parse of
-# porcelain v1 -z), one per line; deleted entries skipped, renames -> new path.
+# _gp_changed_all [--for-scan] — changed paths from the working tree (NUL-safe
+# parse of porcelain v1 -z), one per line; renames -> new path. By default any
+# entry with a delete on either side is skipped (nothing to lint). --for-scan
+# keeps entries whose index side still exists (e.g. staged then deleted in the
+# worktree, "AD"), so a staged secret is not missed.
 _gp_changed_all() {
-  local rec xy path skip_next=0
+  local rec xy path skip_next=0 scan=0
+  [ "${1:-}" = "--for-scan" ] && scan=1
   while IFS= read -r -d '' rec; do
     if [ "$skip_next" = 1 ]; then skip_next=0; continue; fi
     xy="${rec:0:2}"; path="${rec:3}"
     case "$xy" in *R*|*C*) skip_next=1 ;; esac
-    case "$xy" in *D*) continue ;; esac
+    if [ "$scan" = 1 ]; then
+      case "$xy" in "D "|" D") continue ;; esac
+    else
+      case "$xy" in *D*) continue ;; esac
+    fi
     printf '%s\n' "$path"
   done < <(git status --porcelain -z --untracked-files=all)
 }
@@ -82,9 +90,10 @@ gp_assess() {
   local branch dirty ref ahead pr gh_cmd
   branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || _gp_die "cannot read HEAD (no commits yet?)"
   [ "$branch" != HEAD ] || _gp_die "detached HEAD: check out a branch first"
-  dirty="$(git status --porcelain --untracked-files=all | wc -l | tr -d ' ')"
+  dirty="$(git status --porcelain --untracked-files=all)" || _gp_die "git status failed"
+  dirty="$(printf '%s' "$dirty" | grep -c '^' || true)"
   ref="$(_gp_resolve_base "$base")" || _gp_die "base branch '$base' not found (local or origin)"
-  ahead="$(git rev-list --count "$ref..HEAD")"
+  ahead="$(git rev-list --count "$ref..HEAD")" || _gp_die "git rev-list failed"
   printf 'BRANCH=%s\nBASE=%s\nAHEAD=%s\n' "$branch" "$base" "$ahead"
   if [ "$dirty" -gt 0 ]; then
     printf 'DIRTY=%s\nSTATE=dirty\n' "$dirty"; return 0
@@ -97,6 +106,9 @@ gp_assess() {
     echo "STATE=unknown"; echo "gcpr-prep: PR lookup failed; do not guess, stop and report" >&2; return 4
   fi
   pr="$(printf '%s\n' "$pr" | head -n1)"
+  case "$pr" in ''|*[!0-9]*)
+    if [ -n "$pr" ]; then echo "STATE=unknown"; echo "gcpr-prep: unexpected PR lookup output; stop and report" >&2; return 4; fi ;;
+  esac
   if [ -n "$pr" ]; then printf 'PR=%s\nSTATE=ahead-pr:%s\n' "$pr" "$pr"
   else echo "STATE=ahead-no-pr"; fi
   return 0
@@ -174,14 +186,15 @@ gp_review_flip() {
   [ "${#files[@]}" -eq 1 ] || { echo "NOOP no-task-file"; return 3; }
   f="${files[0]}"
   local cur
-  cur="$(awk 'NR==1 && $0!="---"{exit} NR>1 && $0=="---"{exit} /^status:/{sub(/^status:[ \t]*/,""); sub(/[ \t]+$/,""); print; exit}' "$f")"
+  cur="$(awk '{l=$0; sub(/\r$/,"",l)} NR==1 && l!="---"{exit} NR>1 && l=="---"{exit} /^status:/{sub(/^status:[ \t]*/,""); sub(/[ \t\r]+$/,""); gsub(/^["\x27]|["\x27]$/,""); print; exit}' "$f")"
   if [ "$cur" != "In Progress" ]; then echo "NOOP status=${cur:-none}"; return 3; fi
   if [ "$dry" = 1 ]; then echo "WOULD-FLIP $f"; return 0; fi
   local tmp="$f.gcpr-tmp.$$"
   awk 'BEGIN{fm=0;done=0}
-       NR==1 && $0=="---"{fm=1; print; next}
-       fm==1 && $0=="---"{fm=2}
-       fm==1 && !done && /^status:[ \t]*In Progress[ \t]*$/{print "status: Review"; done=1; next}
+       {l=$0; sub(/\r$/,"",l)}
+       NR==1 && l=="---"{fm=1; print; next}
+       fm==1 && l=="---"{fm=2}
+       fm==1 && !done && /^status:[ \t]*["\x27]?In Progress["\x27]?[ \t\r]*$/{cr=($0 ~ /\r$/) ? "\r" : ""; print "status: Review" cr; done=1; next}
        {print}' "$f" > "$tmp" && cat "$tmp" > "$f"
   local rc=$?
   rm -f "$tmp" 2>/dev/null || true
@@ -193,12 +206,13 @@ gp_review_flip() {
 
 _gp_name_rule() {
   local base; base="$(basename "$1" | tr '[:upper:]' '[:lower:]')"
+  case "/$1" in */.docker/config.json) echo "credential-file"; return 0 ;; esac
   case "$base" in
     .env.tpl|.env.example|.env.sample|.env.template|.env.dist) return 1 ;;
     .env|.env.*) echo "env-file" ;;
     *.pem|*.key|*.p12|*.pfx|*.jks|*.keystore|*.kdbx|*.tfstate|*.tfstate.*) echo "key-or-state-file" ;;
     id_rsa|id_dsa|id_ecdsa|id_ed25519) echo "ssh-private-key" ;;
-    .netrc|.pgpass|.htpasswd) echo "credential-file" ;;
+    .netrc|.pgpass|.htpasswd|.npmrc|.pypirc|.git-credentials|.dockercfg) echo "credential-file" ;;
     credentials|credentials.*|secret.*|secrets.*|service-account*.json) echo "credential-file" ;;
     *) return 1 ;;
   esac
@@ -213,20 +227,32 @@ _gp_media_ext() {
 
 # Content rules: "<rule><TAB><ERE>". The assigned-secret rule is post-filtered.
 _GP_RULES=(
-  $'private-key\t-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  $'private-key\t-----BEGIN [A-Z ]*PRIVATE KEY( BLOCK)?-----'
   $'github-token\t(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})'
   $'aws-access-key\t(AKIA|ASIA)[0-9A-Z]{16}'
   $'slack-token\txox[abprs]-[A-Za-z0-9-]{10,}'
   $'slack-webhook\thooks\\.slack\\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]+'
-  $'api-key\tsk-[A-Za-z0-9_-]{20,}'
+  $'api-key\t(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}'
+  $'bearer-token\t[Bb]earer[[:space:]]+[A-Za-z0-9._~+/=-]{20,}'
   $'google-api-key\tAIza[0-9A-Za-z_-]{35}'
   $'jwt\teyJ[A-Za-z0-9_-]{10,}\\.eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}'
   $'url-credentials\t[a-zA-Z][a-zA-Z0-9+.-]*://[^/[:space:]:@]+:[^/[:space:]@$<{]{4,}@'
 )
 _GP_ASSIGNED='(pass(word)?|passwd|secret|token|api[_-]?key|private[_-]?key|auth)[A-Za-z0-9_]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[A-Za-z0-9/+=_.-]{20,}'
+# short passwords: 8+ chars that are not a placeholder/identifier (must hold a digit or symbol)
+_GP_PASSWORD='(pass(word)?|passwd|pwd)[A-Za-z0-9_]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?[^[:space:]"'"'"'$<{(]{8,}'
 
 _GP_HITS=0
+_GP_OUT=""
 _gp_hit() { printf 'BLOCK %s %s\n' "$1" "$2"; _GP_HITS=$((_GP_HITS + 1)); }
+
+# _gp_grep <label> <rule> <grep-flags> <ERE> <file>: sets _GP_OUT to "line:match"
+# rows (no subshell, so hits count); a grep error (exit > 1) is a hit, never silently "no match".
+_gp_grep() {
+  local label="$1" rule="$2" flags="$3" re="$4" file="$5" rc
+  _GP_OUT="$(LC_ALL=C grep "$flags" -- "$re" "$file" 2>/dev/null)"; rc=$?
+  if [ "$rc" -gt 1 ]; then _GP_OUT=""; _gp_hit "$label" "unscannable-grep-error:$rule"; fi
+}
 
 # _gp_scan_file <file-to-read> <label>
 _gp_scan_file() {
@@ -239,16 +265,22 @@ _gp_scan_file() {
   fi
   for entry in "${_GP_RULES[@]}"; do
     rule="${entry%%$'\t'*}"; re="${entry#*$'\t'}"
+    _gp_grep "$label" "$rule" -nE "$re" "$file"
     while IFS= read -r ln; do
-      [ -n "$ln" ] && _gp_hit "$label:$ln" "$rule"
-    done < <(LC_ALL=C grep -nE -- "$re" "$file" 2>/dev/null | cut -d: -f1)
+      [ -n "$ln" ] && _gp_hit "$label:${ln%%:*}" "$rule"
+    done <<<"$_GP_OUT"
   done
-  while IFS=: read -r ln frag; do
-    [ -n "$ln" ] || continue
-    val="$(printf '%s' "$frag" | sed -E 's/^[^:=]*[:=][[:space:]]*["'"'"']?//')"
-    # a real secret mixes digits in; plain identifiers and prose do not
-    case "$val" in *[0-9]*) _gp_hit "$label:$ln" "assigned-secret" ;; esac
-  done < <(LC_ALL=C grep -noiE -- "$_GP_ASSIGNED" "$file" 2>/dev/null)
+  # assigned secrets: the long rule needs a digit in the value; the password rule
+  # needs a digit or a symbol (plain identifiers and prose do not block)
+  for entry in "assigned-secret"$'\t'"$_GP_ASSIGNED"$'\t''[0-9]' "assigned-password"$'\t'"$_GP_PASSWORD"$'\t''[0-9!@#%^&*+=?]'; do
+    rule="${entry%%$'\t'*}"; re="${entry#*$'\t'}"; frag="${re#*$'\t'}"; re="${re%%$'\t'*}"
+    _gp_grep "$label" "$rule" -noiE "$re" "$file"
+    while IFS=: read -r ln val; do
+      [ -n "$ln" ] || continue
+      val="$(printf '%s' "$val" | sed -E 's/^[^:=]*[:=][[:space:]]*["'"'"']?//')"
+      if printf '%s' "$val" | grep -q "$frag"; then _gp_hit "$label:$ln" "$rule"; fi
+    done <<<"$_GP_OUT"
+  done
 }
 
 gp_secrets_check() {
@@ -263,12 +295,17 @@ gp_secrets_check() {
     echo "SECRETS=blocked reason=not-a-git-repo"; return 2
   fi
   local -a paths=()
-  local p rule ref n=0 tmp
-  while IFS= read -r p; do [ -n "$p" ] && paths+=("$p"); done < <(_gp_changed_all)
+  local p rule ref n=0 tmp c blob seenblob=$'\n'
+  while IFS= read -r p; do [ -n "$p" ] && paths+=("$p"); done < <(_gp_changed_all --for-scan)
+  local -a commits=()
   if [ -n "$base" ]; then
     ref="$(_gp_resolve_base "$base")" || { echo "SECRETS=blocked reason=base-not-found"; return 2; }
-    while IFS= read -r -d '' p; do paths+=("$p"); done \
-      < <(git diff --name-only -z --diff-filter=ACMRT "$ref...HEAD")
+    while IFS= read -r c; do [ -n "$c" ] && commits+=("$c"); done < <(git rev-list "$ref..HEAD")
+    # every path any commit on the branch touched, so add-then-remove is still seen
+    for c in ${commits[@]+"${commits[@]}"}; do
+      while IFS= read -r -d '' p; do paths+=("$p"); done \
+        < <(git diff-tree --no-commit-id --name-only -r -m -z --diff-filter=ACMRT "$c")
+    done
   fi
   tmp="$(mktemp 2>/dev/null)" || { echo "SECRETS=blocked reason=no-tempfile"; return 2; }
   local seen=$'\n'
@@ -285,10 +322,13 @@ gp_secrets_check() {
       if git show ":$p" > "$tmp" 2>/dev/null; then _gp_scan_file "$tmp" "$p (index)"
       else _gp_hit "$p (index)" "unscannable-unreadable"; fi
     fi
-    if [ -n "$base" ] && git cat-file -e "HEAD:$p" 2>/dev/null; then
-      if git show "HEAD:$p" > "$tmp" 2>/dev/null; then _gp_scan_file "$tmp" "$p (HEAD)"
-      else _gp_hit "$p (HEAD)" "unscannable-unreadable"; fi
-    fi
+    for c in ${commits[@]+"${commits[@]}"}; do
+      blob="$(git rev-parse -q --verify "$c:$p" 2>/dev/null)" || continue
+      case "$seenblob" in *$'\n'"$blob"$'\n'*) continue ;; esac
+      seenblob+="$blob"$'\n'
+      if git show "$c:$p" > "$tmp" 2>/dev/null; then _gp_scan_file "$tmp" "$p (${c:0:8})"
+      else _gp_hit "$p (${c:0:8})" "unscannable-unreadable"; fi
+    done
   done
   rm -f "$tmp" 2>/dev/null || true
   if [ "$_GP_HITS" -gt 0 ]; then
@@ -343,6 +383,10 @@ gp_body() {
 main() {
   local verb="${1:-}"
   [ $# -gt 0 ] && shift
+  # paths from git are repo-root-relative; run every verb from the root so a
+  # subdirectory cwd cannot make file checks miss (or misplace) anything
+  local top
+  if top="$(git rev-parse --show-toplevel 2>/dev/null)"; then cd "$top" || _gp_die "cannot enter $top"; fi
   case "$verb" in
     assess) gp_assess "$@" ;;
     changed) gp_changed "$@" ;;
