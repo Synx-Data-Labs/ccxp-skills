@@ -500,3 +500,13 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   [ "$(jq -r '.ledger.running | length' <<<"$output")" = "0" ]
   [ "$(jq -r '.ledger.lifetime_jobs' <<<"$output")" = "231" ]
 }
+
+@test "--json: queue is null without queue.md and carries the breakdown with one" {
+  local repo; repo=$(_make_repo r-queue)
+  run _hud "$repo" --json
+  [ "$(jq -r .queue <<<"$output")" = "null" ]
+  printf -- '# Q\n\n- [T20260101-000001](T20260101-000001-a.md): a\n- [T20260101-000002](T20260101-000002-b.md): b\n' > "$repo/dev/TODO/queue.md"
+  printf -- '---\nstatus: Open — needs owner decision\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
+  run _hud "$repo" --json
+  [ "$(jq -c .queue <<<"$output")" = '{"total":2,"ready":1,"blocked":0,"decision":1,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
+}

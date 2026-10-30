@@ -384,3 +384,62 @@ _ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 m
   run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
   [ -z "$(awk -F$'\x1f' '{print $12}' <<<"$output")" ]
 }
+
+# --- sl-queue-json: the queue breakdown (every queued task in exactly one bucket) ---
+
+# _task <repo> <n> <status> [extra frontmatter line] [title]: dev/TODO/T20260101-00000<n>-t.md
+_task() {
+  local f="$1/dev/TODO/T20260101-$(printf %06d "$2")-t.md"
+  { printf -- '---\nstatus: %s\nestimation: 1\n' "$3"; [ -z "${4:-}" ] || printf '%s\n' "$4"; printf -- '---\n\n# T20260101-%s: %s\n' "$(printf %06d "$2")" "${5:-Plain task}"; } > "$f"
+}
+_qline() { printf -- '- [T20260101-%06d](T20260101-%06d-t.md): task %s\n' "$1" "$1" "$1" >> "$2/dev/TODO/queue.md"; }
+
+_queue_fixture() {
+  local repo; repo=$(_make_repo "$1")
+  printf '# TODO Queue\n\nprose line\n\n' > "$repo/dev/TODO/queue.md"
+  _task "$repo" 1 Open                                   # ready
+  _task "$repo" 2 "Blocked by T20260101-000003 — wait"   # blocked (blocker still open)
+  _task "$repo" 3 Open                                   # ready
+  _task "$repo" 4 "Blocked by T20260101-999999"          # blocker gone: ready
+  _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # blocked
+  _task "$repo" 6 "Open — waiting on HashData review"    # external
+  _task "$repo" 7 "Open — needs owner decision"          # decision
+  _task "$repo" 8 Open "" "Umbrella: the big thing"      # epic
+  _task "$repo" 9 Open "claimed_by: other-box:/x"        # claimed
+  _task "$repo" 10 Open "claimed_by: $(_clone_id "$repo")"  # ours: ready
+  _task "$repo" 11 Open                                  # skip kind external
+  _task "$repo" 12 Open                                  # skip, no kind: decision
+  _task "$repo" 14 "BLOCKED on infra" "" "Epic: tracking"  # epic beats blocked
+  _task "$repo" 15 Open "children: [T20260101-000001]"   # epic by structure
+  local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do _qline "$i" "$repo"; done   # 13 has no file
+  printf -- '- ~~[T20260101-000020](T20260101-000020-t.md)~~: closed\n' >> "$repo/dev/TODO/queue.md"
+  printf '%s' "$repo"
+}
+
+@test "sl-queue-json: no queue.md prints nothing" {
+  local repo; repo=$(_make_repo q-none)
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+
+@test "sl-queue-json: frontmatter rules, claim handling, struck lines ignored, buckets sum to total" {
+  local repo; repo=$(_queue_fixture q-fm)
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$status" -eq 0 ]
+  [ "$output" = '{"total":15,"ready":7,"blocked":2,"decision":1,"external":1,"epic":3,"claimed":1}' ] || { echo "$output"; false; }
+  [ "$(jq '.ready + .blocked + .decision + .external + .epic + .claimed - .total' <<<"$output")" = 0 ]
+}
+
+@test "sl-queue-json: autopilot kind wins, a skip with no kind is a decision, off/legacy state is ignored" {
+  local repo; repo=$(_queue_fixture q-ap)
+  local own; own=$(_clone_id "$repo")
+  printf '{"schema":2,"status":"on","skip_ids":["T20260101-000011","T20260101-000012","T20260101-000001"],"needs_attention":[{"id":"T20260101-000011","reason":"r","kind":"external"},{"id":"T20260101-000001","reason":"r","kind":"decision"}],"dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -c '[.total,.ready,.blocked,.decision,.external,.epic,.claimed]' <<<"$output")" = '[15,4,2,3,2,3,1]' ] || { echo "$output"; false; }
+  printf '{"schema":2,"status":"off","skip_ids":["T20260101-000012"],"needs_attention":[]}' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -r .ready <<<"$output")" = 7 ]
+  printf 'not json' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -r .total <<<"$output")" = 15 ]
+}

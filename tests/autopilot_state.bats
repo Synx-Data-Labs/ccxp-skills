@@ -272,3 +272,18 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   AUTOPILOT_NOW="2026-10-28T10:20:00Z" run _ap report
   [[ "$output" != *overdue* ]]
 }
+
+@test "skip --kind: stores the category, validates it, backfills on a repeat, stays backward compatible" {
+  _ap start >/dev/null
+  run _ap skip T1 "waits on HashData" --kind external; [ "$output" = attention ]
+  [ "$(_j '.needs_attention[0].kind')" = external ]
+  [ "$(_j '.needs_attention[0].reason')" = "waits on HashData" ]
+  run _ap skip T2 --kind=decision; [ "$output" = attention ]
+  [ "$(_j '.needs_attention[1].kind')" = decision ]; [ "$(_j '.needs_attention[1].reason')" = "needs attention" ]
+  _ap skip T3 "plain" >/dev/null
+  [ "$(_j '.needs_attention[2]|has("kind")')" = false ]
+  run _ap skip T3 "plain" --kind blocked; [ "$output" = none ]
+  [ "$(_j '.needs_attention[2].kind')" = blocked ]
+  run _ap skip T4 "x" --kind nonsense; [ "$status" -eq 2 ]
+  [ "$(_j '.skip_ids|index("T4")')" = null ]
+}

@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Snapshot } from '../types'
+import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -91,6 +91,14 @@ export function parseHelper(stdout: string): HelperData | null {
       updated_at: str(l.updated_at),
     }
   }
+  const qu = r.queue
+  let queue: Queue | null = null
+  if (typeof qu === 'object' && qu !== null && !Array.isArray(qu)) {
+    const q = qu as Record<string, unknown>
+    // Counts are clamped to whole non-negative numbers; the buckets are the helper's job to keep summing to total.
+    const n = (x: unknown) => Math.max(0, Math.floor(num(x)))
+    queue = { total: n(q.total), ready: n(q.ready), blocked: n(q.blocked), decision: n(q.decision), external: n(q.external), epic: n(q.epic), claimed: n(q.claimed) }
+  }
   const c = r.ci
   let ci: Ci | null = null
   if (typeof c === 'object' && c !== null && !Array.isArray(c)) {
@@ -120,6 +128,7 @@ export function parseHelper(stdout: string): HelperData | null {
     gh_account: strOrNull(r.gh_account),
     autopilot,
     ledger,
+    queue,
     ci,
     plugin,
     last_input_at: num(r.last_input_at),
@@ -365,6 +374,10 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
       const slim = jobState(n, false)
       return one([{ text: full.text, color: full.color }], [{ text: slim.text, color: slim.color }])
     }
+    case 'queue': {
+      const q = h?.queue
+      return q ? one(...queueVariants(q, false)) : null
+    }
     case 'ci':
       return cfg.ci && h?.ci ? one(...ciVariants(h.ci)) : null
     case 'rate':
@@ -381,16 +394,34 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
   }
 }
 
+/**
+ * `queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic` (the labels in full, used by details),
+ * shrinking to `queue 44 = 30r 6b 3d 2e 3x`, then `queue 30/44`. `claimed` (held by another session) shows only above 0.
+ * `full` starts at the spelled-out form; the band starts at the compact one.
+ */
+export function queueVariants(q: Queue, full: boolean): Variants {
+  const parts: Array<[string, string, number]> = [['ready', 'r', q.ready], ['blocked', 'b', q.blocked], ['decision', 'd', q.decision], ['external', 'e', q.external], ['epic', 'x', q.epic]]
+  if (q.claimed > 0) parts.push(['claimed', 'c', q.claimed])
+  const long: Seg[] = [{ text: `queue ${q.total} = ` }]
+  parts.forEach(([word, , n], i) => {
+    if (i > 0) long.push({ text: ' | ', dim: true })
+    long.push({ text: `${n} ${word}`, dim: n === 0 && word !== 'ready', color: word === 'ready' && n > 0 ? 'success' : undefined })
+  })
+  const short: Seg[] = [{ text: `queue ${q.total} = ` }, ...parts.flatMap(([, ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
+  const tiny: Seg[] = [{ text: `queue ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
+  return full ? [long, short, tiny] : [short, tiny]
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'ci', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'ctx', 'jobs', 'ci', 'rate', 'cost', 'lastat', 'ver'],
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'ci', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'ctx', 'jobs', 'queue', 'ci', 'rate', 'cost', 'lastat', 'ver'],
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ver0', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:ver0', 'drop:ver0', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -484,18 +515,20 @@ const DETAIL_STEPS = {
   where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
   usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
   jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
+  queue: ['step:queue', 'step:queue'],
   ap: ['step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
   you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'step:ver0', 'drop:ver0', 'drop:ver'],
 } as const
 
 /**
- * `/hud details`: the one-row band expanded to up to five live lines, each cut to the terminal
+ * `/hud details`: the one-row band expanded to up to six live lines, each cut to the terminal
  * width with the same variant shrinking as the band. Lines with nothing to say are left out.
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
- *   4 autopilot, next loop time, and CI   5 last prompt (stamp and age) and the ccxp version
+ *   4 queue breakdown (dev/TODO/queue.md; no queue, no line)
+ *   5 autopilot, next loop time, and CI   6 last prompt (stamp and age) and the ccxp version
  * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
- * It ignores `fields`: the five lines are the view. [] when there is no data at all.
+ * It ignores `fields`: the lines are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const h = snap.helper
@@ -547,7 +580,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     )
   }
 
-  // 4. autopilot and CI
+  // 4. the queue breakdown, labels in full
+  if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
+
+  // 5. autopilot and CI
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
@@ -583,7 +619,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   }
   add([apItem, wakeItem, ciItem], DETAIL_STEPS.ap)
 
-  // 5. you: the last prompt, stamp and age
+  // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
   const verItem = pick('ver')
   if (at || verItem) {

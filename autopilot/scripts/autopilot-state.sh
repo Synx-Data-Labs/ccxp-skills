@@ -19,7 +19,9 @@
 #   delay <outcome>             seconds until the next wake
 #   remaining                   seconds until next_wake_at (0 when due)
 #   eligible <task-file>        exit 0 when the status line allows auto-driving
-#   skip <task-id> [reason]     needs-attention list; prints "attention" when new
+#   skip <task-id> [reason] [--kind blocked|decision|external|epic]
+#                               needs-attention list (kind: what the HUD queue
+#                               breakdown counts it as); prints "attention" when new
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_NOW,
@@ -228,12 +230,26 @@ ap-eligible() {
 }
 
 ap-skip() {
-  local id="${1:?task id}" reason="${2:-needs attention}" f; f=$(ap-state-file)
+  local id="" reason="" kind="" f; f=$(ap-state-file)
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --kind) kind="${2:-}"; [ $# -ge 2 ] && shift; shift || true ;;
+      --kind=*) kind="${1#--kind=}"; shift ;;
+      *) if [ -z "$id" ]; then id="$1"; elif [ -z "$reason" ]; then reason="$1"; fi; shift ;;
+    esac
+  done
+  [ -n "$id" ] || { echo "skip <task-id> [reason] [--kind blocked|decision|external|epic]" >&2; return 2; }
+  case "$kind" in ''|blocked|decision|external|epic) ;; *) echo "bad kind: $kind (blocked|decision|external|epic)" >&2; return 2 ;; esac
+  [ -n "$reason" ] || reason="needs attention"
   [ "$(ap-status)" = off ] && return 0
-  if jq -e --arg id "$id" '.skip_ids // [] | index($id)' "$f" >/dev/null 2>&1; then echo none; return 0; fi
-  _ap_update --arg id "$id" --arg r "$reason" '
+  if jq -e --arg id "$id" '.skip_ids // [] | index($id)' "$f" >/dev/null 2>&1; then
+    # Already skipped: stay quiet, but a kind given now is stored (the HUD reads it).
+    [ -z "$kind" ] || _ap_update --arg id "$id" --arg k "$kind" '.needs_attention = ((.needs_attention // []) | map(if .id == $id then . + {kind: $k} else . end))'
+    echo none; return 0
+  fi
+  _ap_update --arg id "$id" --arg r "$reason" --arg k "$kind" '
     .skip_ids = ((.skip_ids // []) + [$id])
-    | .needs_attention = ((.needs_attention // []) | map(select(.id != $id)) + [{id: $id, reason: $r}])'
+    | .needs_attention = ((.needs_attention // []) | map(select(.id != $id)) + [{id: $id, reason: $r} + (if $k == "" then {} else {kind: $k} end)])'
   echo attention
 }
 

@@ -4,7 +4,7 @@ A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by defaul
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
 - **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | config`. A bare `/hud` (no argument) or an unknown one only prints the status line and usage; it never opens a dialog or writes. Run `/hud config` (optionally `/hud config <url>`, quoted or not) to configure. `details` is a toggle: it expands the one-row band into up to five live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **`/hud`**: `on | off | status | details | config`. A bare `/hud` (no argument) or an unknown one only prints the status line and usage; it never opens a dialog or writes. Run `/hud config` (optionally `/hud config <url>`, quoted or not) to configure. `details` is a toggle: it expands the one-row band into up to six live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -23,7 +23,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `band` | `true` | status band |
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `fields` | `repo,branch,task,ap,ctx,jobs,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
+| `fields` | `repo,branch,task,ap,ctx,jobs,queue,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. `queue` is the queue cell (below). Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`queue`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
 | `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud config` writes it for you from one workflow URL (repo and workflow derived; `branch` only when the URL carries one) |
 | `fillColor` | `gray` | colour of the always-on fill bar (see "Fill" below): `gray`, `blue`, `green`, `yellow`, `purple` or a `#rrggbb` hex; `/hud config` writes it. An old `fill` key is ignored |
 | `version` | `true` | shows the ccxp-skills version cell (see "Version cell" below); `false` hides it and stops the lookup. It is its own key, not a `fields` entry, so an old explicit `fields` list still shows it. `/hud config` writes it |
@@ -82,6 +82,19 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - Never blocks the band: the helper answers from an on-disk cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-ci/`) and starts one detached refresh when the cache is older than 120 s (or `pollSeconds`, whichever is larger), 5 s timeout per call. The first result can take a couple of minutes.
 - No such workflow, `gh` missing, signed out or offline: the cell is silently dropped (an older cached answer is kept). Tokens and `gh` output are never shown; the JSON is untrusted and only an enumerated state plus a timestamp survive.
 
+## Queue cell
+
+- Shows where `dev/TODO/queue.md` stands, for a repo that has one (none, no cell; nothing is ever an error). Band: `queue 44 = 30r 6b 3d 2e 3x` (ready, blocked, decision, external, epic), squeezed to `queue 30/44` and dropped early when the row is tight. `/hud details` line 4 spells it out: `queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic`. Add or remove it with `fields` (`queue`).
+- Deterministic (no LLM): one `awk` over the queued task files plus one `jq` per poll, in `sl-queue-json` (`hud/scripts/hud-lib.sh`); helper JSON key `queue` = `{total, ready, blocked, decision, external, epic, claimed}`. `total` is the number of task lines (`- [T<id>](file.md)`; struck-through lines are not tasks).
+- Every task is counted in exactly ONE bucket, first match wins, so the buckets always add up to `total`:
+  1. epic: `kind=epic` in the autopilot's needs_attention, or the title/status says `umbrella`, `epic` or `tracking task|issue`, or the frontmatter has a `children:` key. Plain members of a `dev/EPICS` epic are ordinary tasks and stay takeable.
+  2. blocked: `kind=blocked`, or status `Blocked by T<id>` while that task is still in `dev/TODO/`, or status containing `BLOCKED` or `SUPERVISED` (case-sensitive).
+  3. external: `kind=external`, or the status mentions upstream, HashData, Apache, customer or external.
+  4. decision: `kind=decision`, or the status says needs/owner decision, "needs a human", "needs manual" or sign-off; also an id in `skip_ids` that has no kind and no hint.
+  5. claimed: `claimed_by:` is set to a clone other than this one or the autopilot's dispatch clone. It is its own bucket so ready stays honest; it is shown only when above 0.
+  6. ready: the rest, what the autopilot can take. A queue line whose task file is missing counts as ready.
+- The autopilot's `dev/.autopilot-state.json` is read only while it is `on` or `paused`; its `needs_attention[].kind` (set by `autopilot-state.sh skip <id> "<reason>" --kind blocked|decision|external|epic`) wins over the frontmatter hints, and `skip_ids` (today's skips) are never ready.
+
 ## Version cell
 
 - Shows the installed ccxp-skills version, last in the band, compared with the latest public release:
@@ -117,15 +130,16 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## `/hud details`
 
-Toggles the band between the one-row view and up to five detail lines (this session only; a new session starts collapsed). It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
+Toggles the band between the one-row view and up to six detail lines (this session only; a new session starts collapsed). It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
 
 | Line | Shows |
 |---|---|
 | 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
 | 2 usage | spelled out: `context 64% left ▓▓▓▓▓▓░░░░` (same colours as the band; the band's `ctx` is context LEFT), `5-hour limit 4% used` (share of your Claude subscription's rolling 5-hour usage window, from the engine's `rate_limits`; hidden when the engine reports none, e.g. API-key use), `API-equivalent cost $693.75` (the engine's running estimate of this session's token usage at API list prices, `cost.total_cost_usd`; NOT what a subscription bills) |
 | 3 jobs | `READY` / `WORKING (N)`, `parked N`, `total jobs N` (from the ledger; no ledger, no line). The running jobs are not listed: the status already shows them. `parked N` is the length of the ledger's `parked` array (contexts are not shown here) |
-| 4 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due` when the time has passed, which also holds while a long cycle runs, nothing when absent), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
-| 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
+| 4 queue | `queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic` (`\| 2 claimed` appended when above 0); see "Queue cell"; no `dev/TODO/queue.md`, no line |
+| 5 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due` when the time has passed, which also holds while a long cycle runs, nothing when absent), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
+| 6 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
 
 - Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
 - The VS Code compact status line stays one line.
