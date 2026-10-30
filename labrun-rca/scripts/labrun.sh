@@ -31,16 +31,20 @@ die() { echo "labrun.sh: $1" >&2; exit "${2:-2}"; }
 
 cmd_parse() {
   [ $# -eq 1 ] || die "usage: labrun.sh parse <permalink-or-text>"
-  local found url
-  found="$(printf '%s\n' "$1" | grep -oE 'https://[A-Za-z0-9.-]+\.slack\.com/archives/[^][:space:]<>|]+' | head -n1)"
-  [ -n "$found" ] || die "no Slack permalink found; expected https://<workspace>.slack.com/archives/<channel_id>/p<ts_without_dot>"
-  url="${found%%[?#]*}"
-  if [[ "$url" =~ ^https://[A-Za-z0-9.-]+\.slack\.com/archives/([CGD][A-Z0-9]{2,})/p([0-9]{16})$ ]]; then
-    local ch="${BASH_REMATCH[1]}" raw="${BASH_REMATCH[2]}"
-    printf 'channel_id=%s\nmessage_ts=%s.%s\n' "$ch" "${raw:0:10}" "${raw:10}"
-  else
-    die "malformed Slack permalink; expected https://<workspace>.slack.com/archives/<channel_id>/p<16 digits>"
-  fi
+  local cand url any=0
+  while IFS= read -r cand; do
+    [ -n "$cand" ] || continue
+    any=1
+    url="${cand%%[?#]*}"
+    url="$(printf '%s' "$url" | sed -E 's/[).,;:!]+$//')"
+    if [[ "$url" =~ ^https://[A-Za-z0-9.-]+\.slack\.com/archives/([CGD][A-Z0-9]{2,})/p([0-9]{16})$ ]]; then
+      local ch="${BASH_REMATCH[1]}" raw="${BASH_REMATCH[2]}"
+      printf 'channel_id=%s\nmessage_ts=%s.%s\n' "$ch" "${raw:0:10}" "${raw:10}"
+      return 0
+    fi
+  done < <(printf '%s\n' "$1" | grep -oE 'https://[A-Za-z0-9.-]+\.slack\.com/archives/[^][:space:]<>|]+')
+  if [ "$any" = 1 ]; then die "malformed Slack permalink; expected https://<workspace>.slack.com/archives/<channel_id>/p<16 digits>"; fi
+  die "no Slack permalink found; expected https://<workspace>.slack.com/archives/<channel_id>/p<ts_without_dot>"
 }
 
 cmd_extract_run() {
@@ -51,10 +55,10 @@ cmd_extract_run() {
   if [ -n "$urls" ]; then
     ids="$(printf '%s\n' "$urls" | sed -E 's#.*/runs/##' | awk '!s[$0]++')"
   else
-    ids="$(printf '%s\n' "$text" | grep -oiE '\brun[ :#]+[0-9]{6,}' | grep -oE '[0-9]+$' | awk '!s[$0]++')"
+    ids="$(printf '%s\n' "$text" | grep -oiE '\brun[ :#]+[0-9]{6,}(\.[0-9])?' | grep -v '\.' | grep -oE '[0-9]+$' | awk '!s[$0]++')"
     if [ -z "$ids" ]; then
-      # a lone bare number, not part of a decimal (Slack ts) or a longer token
-      ids="$(printf '%s\n' "$text" | grep -oE '(^|[^0-9.A-Za-z_])[0-9]{11,13}([^0-9.A-Za-z_]|$)' | grep -oE '[0-9]+' | awk '!s[$0]++')"
+      # a lone bare number as its own token (not part of a decimal / Slack ts)
+      ids="$(printf '%s\n' "$text" | tr -c '0-9A-Za-z._' '\n' | sed -E 's/\.+$//' | grep -xE '[0-9]{11,13}' | awk '!s[$0]++')"
     fi
   fi
   n="$(printf '%s' "$ids" | grep -c .)"
@@ -82,10 +86,12 @@ has_token() {
     -e 'npm_[A-Za-z0-9]{30,}|glpat-[A-Za-z0-9_-]{20,}' \
     -e '-----BEGIN [A-Z ]*PRIVATE KEY' \
     -e 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' \
+    -e 'sk_(live|test)_[A-Za-z0-9]{16,}|[sr]k_live_[A-Za-z0-9]{16,}' \
     -e 'hooks\.slack\.com/services/[A-Za-z0-9/]+' \
     -e '://[^/[:space:]:@]+:[^/[:space:]@]+@' && return 0
   # case-insensitive: credential assignments and Authorization headers
   printf '%s' "$1" | grep -qiE \
+    -e '(token|secret|passw(or)?d|api[_-]?key) +[A-Za-z0-9._~+/=-]{20,}' \
     -e '(bearer|basic) +[A-Za-z0-9._~+/=-]{16,}' \
     -e '(token|secret|passw(or)?d|api[_-]?key|access[_-]?key|authorization)[A-Za-z0-9_]*["'\'']? *[=:] *["'\'']?[^[:space:]"'\'']{8,}'
 }
@@ -118,6 +124,7 @@ cmd_render_reply() {
   [[ "$rid" =~ ^[0-9]+$ ]] || die "--run-id must be numeric"
   [[ "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$ ]] || die "--run-url must be https://github.com/<owner>/<repo>/actions/runs/<id>"
 
+  [ "${url##*/runs/}" = "$rid" ] || die "--run-id $rid does not match the id in --run-url"
   local c
   c="$(printf '%s' "$cls" | tr '[:upper:] ' '[:lower:]-')"
   case "$c" in
