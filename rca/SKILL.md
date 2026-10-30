@@ -6,6 +6,8 @@ argument-hint: "<run-url or run-id> [workflow-name] [--no-post]"
 
 Perform root cause analysis on a failed GitHub Actions pipeline run.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 `$ARGUMENTS` is a run URL or run ID:
@@ -21,8 +23,6 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 
 ```bash
 # Get run details
-
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 bash <skills-root>/_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
   --jq '{name: .name, branch: .headBranch, conclusion: .conclusion, jobs: [.jobs[] | {name: .name, conclusion: .conclusion}]}'
 ```
@@ -36,7 +36,6 @@ For each failed job:
 
 ```bash
 # Failed job/step names + a bounded error-context window in one shot
-# (replaces a hand-rolled grep repeated across several past RCAs — T20260719-204917)
 bash <skills-root>/_gh/ci-triage.sh <run-id>
 ```
 
@@ -123,6 +122,15 @@ Output a structured report:
 
 ### 6. Create task if needed
 
+Get the plan first (print-only; you still classify and judge Confirmed vs Unconfirmed):
+
+```bash
+bash <skills-root>/rca/scripts/action-plan.sh --class <our-code|upstream|configuration|transient|infrastructure> \
+  --confidence <confirmed|unconfirmed> [--kb-task-open [T<id>]] [--recent <n>] [--retry-result pass|fail|pending]
+```
+
+`--recent` (transient, required) = occurrences in the last 7 days; `--retry-result` is infrastructure only. One action per line, in order: `RETRY`, `TOP`, `TASK kind=fix|instrument`, `PROMOTE`, `NOTE`; `IF_RETRY_FAILS ` = only after the retry failed. Exit 2 = bad inputs: fix them, never guess a plan.
+
 If 3.5 flagged an open task: invoke `/top <id>` here instead of any task-creation gate below (Infrastructure's retry still always runs; Transient's 3+ check no longer applies).
 
 **If classification is Unconfirmed** (step 3): always create a task, regardless of category — this is additive to that category's own action below, not a replacement for it (e.g. an Unconfirmed Infrastructure failure still gets retried first per that path; the instrumentation task is filed either way, retry outcome aside). The task's action item is adding the instrumentation/logging needed to make the next occurrence provable — not "fix the bug," since the bug isn't diagnosed yet. Apply the same mid-week auto-promote + `scheduled:` stamp as below.
@@ -136,23 +144,24 @@ If classification is **Our code**, **Upstream**, or **Configuration**:
    ```
 
 2. Create `dev/TODO/<id>-<slug>.md` with the RCA findings
-3. **Auto-promote to this iteration's mid-week additions** (red-pipeline rule — T20260513-155615). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes; see T20260604-194697):
+3. **Auto-promote to this iteration's mid-week additions** (red-pipeline rule). Find the current committed IPM file (staging-aware — skips the future-dated pre-IPM staging stub `/stage` writes):
 
    ```bash
    IPM_FILE=$(bash <skills-root>/_ipm/current.sh)
    ```
 
-   If `$IPM_FILE` is non-empty, open it, locate the `## Mid-week additions` table, and add a new data row:
-   - `#`: next sequential row number in that table
-   - `Task`: task ID from step 2
-   - `Est`: your best estimate from the RCA findings
-   - `Added`: today's date (`date +%Y-%m-%d`)
-   - `Why this iteration`: `RCA auto-promote — <classification> failure; recurring pipeline failures compound`
+   If `$IPM_FILE` is non-empty, add a row to its `## Mid-week additions` table (`Est` = your best estimate from the RCA findings; `Task` = the step 2 ID):
 
-   If the `| (none yet) |` placeholder row is still present, replace it with this row; otherwise append after the last data row.
+   Add the row with the helper (replaces the placeholder or appends, numbers it, touches only that table):
 
-   If `$IPM_FILE` is empty, no committed IPM exists this week — note "no current IPM; mid-week auto-promote skipped" in the RCA report and continue (the `scheduled:` stamp in the next step still runs, defaulting the task to the next iteration).
-4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this it's mapped to no board iteration — the gap T20260626-190842 fixed). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
+   ```bash
+   bash <skills-root>/rca/scripts/midweek-add.sh --file "$IPM_FILE" --task T<id> --est <est> \
+     --why "RCA auto-promote — <classification> failure; recurring pipeline failures compound"
+   ```
+
+   Exit 10 = already listed (fine); 4 = no well-formed `## Mid-week additions` table (nothing written: report it); 2/3 = usage / unreadable file. `--added` defaults to today.
+
+4. **Stamp `scheduled:` on the new task file** so its iteration mapping matches the mid-week placement (without this it's mapped to no board iteration). The shared helper resolves the Monday token-free (committed IPM → Project API → next Monday) and writes it update-forward-only:
 
    ```bash
    bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current
