@@ -52,8 +52,8 @@ export type Autopilot = {
 export type Ledger = {
   running: { job: number; title: string }[]
   lifetime_jobs: number
-  parked: number
-  parked_ids: string[]
+  /** Parked items; the HUD shows only the count (length). */
+  parked: { id: string }[]
   next_job: number
   updated_at: string
 }

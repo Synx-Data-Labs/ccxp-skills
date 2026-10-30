@@ -218,7 +218,7 @@ EOT
   run _hud "$repo" --json
   [ "$(jq -r .ledger.lifetime_jobs <<<"$output")" = "230" ]
   [ "$(jq -r '.ledger.running[0].title' <<<"$output")" = "do it" ]
-  [ "$(jq -r .ledger.parked <<<"$output")" = "1" ]
+  [ "$(jq -c .ledger.parked <<<"$output")" = '[{"id":"k5"}]' ]
   echo 'garbage' > "$CCXP_LEDGER_FILE"
   run _hud "$repo" --json
   [ "$status" -eq 0 ]

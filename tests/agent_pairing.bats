@@ -255,13 +255,13 @@ EOF
   bash "$L" start 7 "Fix the thing"
   [ "$(jq -r '.running[0].job' "$CCXP_LEDGER_FILE")" = "7" ]
   bash "$L" park 2
-  [ "$(jq -r '.parked' "$CCXP_LEDGER_FILE")" = "1" ]
+  [ "$(jq -r '.parked | length' "$CCXP_LEDGER_FILE")" = "1" ]
   bash "$L" unpark k2
   bash "$L" finish 7
   bash "$L" finish 7
   [ "$(jq -r '.running | length' "$CCXP_LEDGER_FILE")" = "0" ]
   [ "$(jq -r '.lifetime_jobs' "$CCXP_LEDGER_FILE")" = "7" ]
-  [ "$(jq -r '.parked' "$CCXP_LEDGER_FILE")" = "0" ]
+  [ "$(jq -r '.parked | length' "$CCXP_LEDGER_FILE")" = "0" ]
 }
 
 @test "status: calls out a stale pre-rename agent=dispatcher distinctly from an unrelated custom agent" {
@@ -531,4 +531,12 @@ install_outdated_agent() {
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "agent definition: not installed"
+}
+
+@test "asset: replies end with a full-path Ledger footer and ledger calls pass --context" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'End every reply with the footer line `Ledger: <absolute path of ccxp-ledger.md>`' "$f"
+  grep -q 'start <n> "<title>" --context' "$f"
+  grep -q 'park <n> --context <abs path> --title' "$f"
+  grep -q 'next add "<text>" --context <abs path>' "$f"
 }

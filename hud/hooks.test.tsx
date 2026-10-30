@@ -297,7 +297,7 @@ test('a partial session.measure updates context and keeps the other units', asyn
   await band.unmount()
 })
 
-const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, parked: 1, parked_ids: ['k2'], next_job: 83, updated_at: '' }
+const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, parked: [{ id: 'k2' }], next_job: 83, updated_at: '' }
 const HELPER_FULL = JSON.stringify({
   ...JSON.parse(HELPER_AP),
   ledger: LEDGER,
@@ -570,7 +570,7 @@ test('/cd to a folder that is not a repo shows only the folder name', async ($: 
 // --- ctx colours and the jobs indicator, as drawn ---
 
 const WITH_LEDGER = (n: number) =>
-  JSON.stringify({ ...JSON.parse(HELPER_AP), ledger: { running: Array.from({ length: n }, (_, i) => ({ job: i + 1, title: 't' })), lifetime_jobs: n, parked: 0, parked_ids: [], next_job: n + 1, updated_at: '' } })
+  JSON.stringify({ ...JSON.parse(HELPER_AP), ledger: { running: Array.from({ length: n }, (_, i) => ({ job: i + 1, title: 't' })), lifetime_jobs: n, parked: [], next_job: n + 1, updated_at: '' } })
 
 test('band colours: ctx 64% left is yellow, one running job shows yellow WORKING (1), none shows green READY', async ($: any, on: any) => {
   const w = fresh()

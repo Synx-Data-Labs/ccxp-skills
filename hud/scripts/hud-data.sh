@@ -17,8 +17,8 @@
 #                         "stuck","cycle","last_outcome","last_task",
 #                         "stuck_reason","stop_reason","merged",
 #                         "next_wake_at"},   # epoch secs of the next loop, 0 = none/unknown
-#    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked",
-#                      "parked_ids","next_job","updated_at"},   # ledger.sh file
+#    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
+#                      "next_job","updated_at"},   # ledger.sh file
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
 #    "plugin": null | {"installed","latest"},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
