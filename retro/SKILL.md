@@ -6,6 +6,8 @@ argument-hint: "[weeks-back]"
 
 Weekly retrospective: review the last 7 days of engineering work, identify what's working well, what needs improvement, and what's fine as-is. Produce action items as new tasks.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 `$ARGUMENTS` is optional:
@@ -29,25 +31,26 @@ Optional env vars (no adopting-team default baked in — read `~/.claude/.env` b
 
 ### Phase 1: Gather evidence
 
-Collect data from the last 7 days (or N*7 days if argument given). Do all reads in parallel:
+First fix the window — never hand-compute dates (GNU `date -d` breaks on macOS):
 
-1. **Git log**: `git log --since="7 days ago" --oneline --stat` — what shipped
+```bash
+bash <skills-root>/retro/scripts/window.sh [weeks-back]
+```
+
+- Prints `WEEKS`, `START`, `END`, `SINCE_ISO`, `THIS_MONDAY`, `IPM_FILE` (empty when absent), `PRIOR_RETRO` (empty when none) as `KEY=value` lines (substitute the printed values wherever `$START` etc. appear below). Exit 2 = bad argument; stop and report it.
+- Then run `bash <skills-root>/retro/scripts/metrics.sh --since "$SINCE_ISO"` once: JSON with the commit, PR, CI, backlog, task-count and escalation numbers below (steps 3, 4, 5, 6, 7). Any gh failure exits 3 with nothing printed: report the failure, never estimate. It is read-only. Use its numbers verbatim in Phase 3; judging them stays here.
+
+Collect the rest over `START`..`END`. Do all reads in parallel:
+
+1. **Git log**: `git log --since="$START" --oneline --stat` — what shipped
 2. **Journal entries**: Read all `dev/JOURNAL/*.md` files with dates in the window — completed tasks
-3. **Merged PRs**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>YYYY-MM-DD" --json number,title,mergedAt,additions,deletions --limit 500` — PR throughput. `gh`'s default page size is 30, which undercounts on any week with real throughput (confirmed 30 vs a true 83 on 2026-07-10) — always pass an explicit `--limit` well above expected weekly volume, same principle as step 6 below.
-4. **Open PRs**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,createdAt` — WIP that didn't land. Count entries where `createdAt` is older than 3 days from today for the Stale PRs row in Phase 3.
-5. **Current TODO backlog**: count files in `dev/TODO/` and `dev/PARKING/` — backlog health
-6. **CI failures**: `--limit 30` silently undercounts on any repo doing more than 30 runs/week — this recurred 3 retros running (2026-06-26, 2026-07-03, 2026-07-10) before being fixed here. Fetch with an explicit `--created` filter (same technique `/ccxp` Phase 1.2.1's nightly check already uses) so the API does the date filtering instead of a client-side slice of the newest N runs, and raise the fetch cap enough to comfortably cover a week's volume:
-
-   ```bash
-   SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
-   bash <skills-root>/_gh/gh.sh run list --created ">=$SINCE" --limit 1000 --json conclusion,name,createdAt
-   ```
-
-   - `--limit 1000` is `gh`'s API cap — if a single week's run volume ever exceeds it (check: the oldest returned `createdAt` should be ≤ `$SINCE`; if it's later, some of the window was dropped), note the gap explicitly in the retro rather than silently under-reporting, the same "no silent caps" principle as everywhere else.
-   - Group failures by `.name` and keep the top 3 by count for the Top failing workflows row in Phase 3.
-7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention
-8. **Previous retro**: Read the most recent `dev/JOURNAL/*-retro-*.md` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
-9. **This week's IPM commit**: Read `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` — the focus list to grade. If the file is missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
+3. **Merged PRs**: `metrics.sh` `.prs.merged`, `.avg_cycle_hours`, `.additions`/`.deletions` (explicit `--limit 500`; gh's default page of 30 undercounts a real week).
+4. **Open PRs**: `.prs.open` and `.prs.stale_open` (created more than 3 days ago) — the Stale PRs row in Phase 3.
+5. **Current TODO backlog**: `.backlog.todo` and `.backlog.parking` — backlog health; `.tasks_completed` is the JOURNAL-entries-in-window count.
+6. **CI failures**: `.ci` — `total`, `green`, `pass_rate_pct`, `top_failing` (top 3 by failure count, for the Top failing workflows row). The fetch uses an explicit `--created` filter and a 1000-run cap (gh's API cap). If `.ci.truncated` is `true`, the cap was hit and older runs in the window were dropped: state that gap explicitly in the retro, never report the rate as complete (no silent caps; the undercount recurred 3 retros before this).
+7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention (counts: `.escalations`)
+8. **Previous retro**: Read `PRIOR_RETRO` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
+9. **This week's IPM commit**: Read `IPM_FILE` (`dev/JOURNAL/<THIS_MONDAY>-ipm-weekly.md`) — the focus list to grade. If it is empty/missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
 10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
 
     Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by `/ipm` step 5). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
@@ -181,7 +184,7 @@ Each `resolve` call writes atomically; there is no separate write-back step.
 3. **Creation safety-net scan** — flag process-looking `dev/*.md` changes with no matching row:
 
    ```bash
-   bash <skills-root>/retro/scripts/chore-review.sh scan-untracked --repo-root . --since "$(date -u -d '7 days ago' +%F)"
+   bash <skills-root>/retro/scripts/chore-review.sh scan-untracked --repo-root . --since "$START"
    ```
 
    - Prints repo-relative paths of `dev/*.md` files (root-level only — not `dev/TODO/`, `dev/JOURNAL/`, `dev/PARKING/`, or `dev/chore.md` itself) changed in the window whose content doesn't reference any task ID already linked from `dev/chore.md`.
@@ -209,7 +212,7 @@ For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this se
 
 ```bash
 bash <skills-root>/retro/scripts/estimation-revisions.sh \
-  --repo-root . --since "$(date -u -d '7 days ago' +%F)" T<id> T<id> ...
+  --repo-root . --since "$START" T<id> T<id> ...
 ```
 
 - It walks `git log --follow` over each task file (backlog + the post-close JOURNAL copy) and parses both metadata formats (frontmatter `estimation:` and the legacy `- **Estimation**:` bullet), windowed to the retro period.
@@ -489,8 +492,6 @@ Create `dev/JOURNAL/YYYY-MM-DD-retro-weekly.md` with:
 
 ```markdown
 # Weekly Retro: YYYY-MM-DD
-
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 **Period**: YYYY-MM-DD to YYYY-MM-DD
 **IPM commit**: `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` (or "No IPM this week")
