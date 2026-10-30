@@ -20,7 +20,7 @@ const BASE = {
   dirty: 0 as number | null,
   gh_account: null as string | null,
   autopilot: null as any,
-  ledger: { running: [{ job: 230, title: 'fix hud' }], lifetime_jobs: 230, parked: 3, parked_ids: [], next_job: 231, updated_at: '' },
+  ledger: { running: [{ job: 230, title: 'fix hud' }], lifetime_jobs: 230, parked: [{ id: 'k1' }, { id: 'k2' }, { id: 'k3' }], next_job: 231, updated_at: '' },
   ci: { state: 'failing', at: RUN_AT },
   last_input_at: NOW,
 }
@@ -470,7 +470,7 @@ test('branch cell: shown on its own when `repo` is not a field; the repo cell ot
 
 // --- jobs cell: green READY when no job runs, yellow WORKING (N) otherwise; hidden without a ledger ---
 
-const ledgerOf = (n: number) => ({ ledger: { running: Array.from({ length: n }, (_, i) => ({ job: 230 + i, title: `job ${i}` })), lifetime_jobs: 230 + n, parked: 0, parked_ids: [], next_job: 231 + n, updated_at: '' } })
+const ledgerOf = (n: number) => ({ ledger: { running: Array.from({ length: n }, (_, i) => ({ job: 230 + i, title: `job ${i}` })), lifetime_jobs: 230 + n, parked: [], next_job: 231 + n, updated_at: '' } })
 const jobsCell = (n: number, base = HELPER, cols = 200) => bandRows(withHelper(ledgerOf(n), base), { ...CI, fields: ['jobs'] }, cols)[0]
 
 test('jobs cell: READY green at 0, WORKING (N) yellow at 1 and 5', async () => {
@@ -517,7 +517,7 @@ const fullSnap = (over = {}) => ({
     repo_slug: 'acme/widgets',
     dirty: 2,
     autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) + 720 },
-    ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, parked: 2, parked_ids: ['k1', 'k2'], next_job: 83, updated_at: '' },
+    ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, parked: [{ id: 'k1' }, { id: 'k2' }], next_job: 83, updated_at: '' },
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
     last_input_at: Math.floor(DETAIL_NOW / 1000) - 300,
   }),
@@ -557,7 +557,7 @@ test('details: colours match the band (ctx tone, READY/WORKING, CI state) and th
   expect(rows[2][0]).toEqual({ text: 'WORKING (2)', color: 'warning' })
   expect(rows[0].find(s => s.text === '*')?.color).toBe('warning')
   expect(rows[3].find(s => s.text.includes('passing'))?.color).toBe('success')
-  const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: 0, parked_ids: [], next_job: 83, updated_at: '' } }) as any, CI, 140, DETAIL_NOW)
+  const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: [], next_job: 83, updated_at: '' } }) as any, CI, 140, DETAIL_NOW)
   expect(idle[2][0]).toEqual({ text: 'READY', color: 'success' })
 })
 

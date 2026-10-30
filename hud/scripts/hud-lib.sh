@@ -326,8 +326,9 @@ sl-ledger-json() {
       updated_at: (.updated_at | strings // ""),
       next_job: (.next_job | numbers // 0),
       lifetime_jobs: (.lifetime_jobs | numbers // 0),
-      parked: (.parked | numbers // 0),
-      parked_ids: [(.parked_ids // [])[] | strings],
+      parked: [(if (.parked | type) == "array" then .parked else [(.parked_ids // [])[]] end)[]
+               | (if type == "string" then {id: .} elif type == "object" then . else {} end)
+               | select(.id | strings) | {id}],
       running: [(.running // [])[] | select(type == "object")
                 | {job: (.job | numbers // 0), title: (.title | strings // "")}]}' "$f" 2>/dev/null || true
 }

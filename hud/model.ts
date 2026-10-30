@@ -82,8 +82,11 @@ export function parseHelper(stdout: string): HelperData | null {
         .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
         .map(x => ({ job: num(x.job), title: str(x.title) })),
       lifetime_jobs: num(l.lifetime_jobs),
-      parked: num(l.parked),
-      parked_ids: (Array.isArray(l.parked_ids) ? l.parked_ids : []).filter((x): x is string => typeof x === 'string'),
+      // v3: array of {id,...}; old files: a count plus parked_ids
+      parked: (Array.isArray(l.parked)
+        ? l.parked.map(x => (typeof x === 'string' ? x : typeof x === 'object' && x !== null ? (x as Record<string, unknown>).id : null))
+        : Array.isArray(l.parked_ids) ? l.parked_ids : [])
+        .filter((x): x is string => typeof x === 'string').map(id => ({ id })),
       next_job: num(l.next_job),
       updated_at: str(l.updated_at),
     }
@@ -533,10 +536,11 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const led = h?.ledger
   if (led) {
     const state = jobState(led.running.length)
+    const parked = led.parked.length
     add(
       [
         one('state', [{ text: state.text, color: state.color }]),
-        one('parked', [{ text: `parked ${led.parked}`, dim: led.parked === 0 }]),
+        one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]),
         one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }], [{ text: `total ${led.lifetime_jobs}`, dim: true }]),
       ],
       DETAIL_STEPS.jobs,
