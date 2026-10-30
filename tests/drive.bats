@@ -1,10 +1,13 @@
 #!/usr/bin/env bats
-# Tests for drive/scripts/preflight.sh and drive/scripts/cross-repo-guard.sh.
+# Tests for drive/scripts/{preflight,cross-repo-guard,classify-change,verify-close}.sh.
 # Offline: a throwaway repo, an isolated claimant identity, the shared fake gh.
 
 load test_helper
 PREFLIGHT="$REPO_ROOT/drive/scripts/preflight.sh"
 GUARD="$REPO_ROOT/drive/scripts/cross-repo-guard.sh"
+CLASSIFY="$REPO_ROOT/drive/scripts/classify-change.sh"
+VCLOSE="$REPO_ROOT/drive/scripts/verify-close.sh"
+THREADS="$REPO_ROOT/_threads/threads.sh"
 ID="T20000101-000001"
 
 setup() {
@@ -206,4 +209,149 @@ _fx() { # <json>
   _fx 'HTTP 502 bad gateway'
   run bash "$GUARD" "$ID" acme/target
   [ "$status" -eq 3 ]
+}
+
+# --- classify-change ---------------------------------------------------------
+
+_branch_with() { # <path>... — commit each path on a feature branch off main
+  git checkout -q -b feat
+  local p
+  for p in "$@"; do mkdir -p "$(dirname "$p")"; echo x > "$p"; done
+  git add -A; git commit -q -m change
+}
+
+@test "classify: usage errors exit 2; outside a repo exit 3" {
+  run bash "$CLASSIFY" a b; [ "$status" -eq 2 ]
+  run bash "$CLASSIFY" --bogus; [ "$status" -eq 2 ]
+  cd "$BATS_TEST_TMPDIR"; run env GIT_DIR=/nonexistent bash "$CLASSIFY"; [ "$status" -eq 3 ]
+}
+
+@test "classify: no change is empty" {
+  git checkout -q -b feat
+  run bash "$CLASSIFY"; [ "$status" -eq 0 ]; [ "$output" = empty ]
+}
+
+@test "classify: docs-only paths at any depth are docs" {
+  _branch_with dev/TODO/T1-x.md docs/a/b.txt pkg/docs/guide.txt README.md sub/CLAUDE.md x/SKILL.md \
+    .github/ISSUE_TEMPLATE/bug.yml .github/pull_request_template.md
+  run bash "$CLASSIFY"; [ "$status" -eq 0 ]; [ "$output" = docs ]
+}
+
+@test "classify: any code path makes the whole change code (mixed = code)" {
+  _branch_with README.md scripts/run.sh
+  run bash "$CLASSIFY"; [ "$output" = code ]
+}
+
+@test "classify: workflows, bats, Makefile and a dev-named source dir are code" {
+  local f
+  for f in .github/workflows/ci.yml tests/x.bats Makefile src/dev/tool.sh; do
+    git checkout -q main; git branch -q -D feat 2>/dev/null || true
+    _branch_with "$f"
+    run bash "$CLASSIFY"; [ "$output" = code ] || { echo "$f -> $output"; return 1; }
+  done
+}
+
+@test "classify: an explicit base is honoured and a missing base falls back to the working tree" {
+  git checkout -q -b feat
+  echo x > a.sh; git add a.sh; git commit -q -m a
+  git checkout -q -b feat2; echo y > b.md; git add b.md; git commit -q -m b
+  run bash "$CLASSIFY" feat; [ "$output" = docs ]
+  run bash "$CLASSIFY" main; [ "$output" = code ]
+  git checkout -q main; echo z > new.sh
+  run bash "$CLASSIFY" no-such-ref; [ "$status" -eq 0 ]; [ "$output" = code ]
+}
+
+# --- verify-close ------------------------------------------------------------
+
+_close() { # [status] [claimed_by] [closed:yes|no] [mode:mv-edit|mv-only] — task moves TODO -> JOURNAL on a branch
+  local st="${1:-Done}" cb="${2:-}" closed="${3:-yes}" mode="${4:-mv-edit}"
+  _task TODO "x"; git add -A; git commit -q -m "add task"
+  git checkout -q -b close
+  local j="dev/JOURNAL/2026-01-01-$ID-thing.md"
+  git mv "dev/TODO/$ID-thing.md" "$j"
+  if [ "$mode" = mv-edit ]; then
+    {
+      printf -- '---\nstatus: %s\nclaimed_by: %s\n---\n\n# %s\n\nBody text: claimed_by: someone-else\n' "$st" "$cb" "$ID"
+      [ "$closed" = yes ] && printf '\n## Closed (2026-01-01)\n\nShipped.\n'
+    } > "$j"
+    git add "$j"
+  fi
+  git commit -q -m close
+  VC_FILE="$j"
+}
+
+@test "verify-close: usage errors exit 2" {
+  run bash "$VCLOSE"; [ "$status" -eq 2 ]
+  run bash "$VCLOSE" nope; [ "$status" -eq 2 ]
+  run bash "$VCLOSE" "$ID" --base; [ "$status" -eq 2 ]
+  run bash "$VCLOSE" "$ID" extra; [ "$status" -eq 2 ]
+}
+
+@test "verify-close: a proper close passes, and a body mention of claimed_by is ignored" {
+  _close
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 0 ]; [ "$output" = "ok $VC_FILE" ]
+}
+
+@test "verify-close: a pure 100% rename fails on rename, status and closed" {
+  _close Done "" yes mv-only
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL rename"* ]]; [[ "$output" == *"FAIL status"* ]]; [[ "$output" == *"FAIL closed"* ]]
+}
+
+@test "verify-close: unstaged edits after git mv are caught as uncommitted" {
+  _close Done "" yes mv-only
+  printf '\n## Closed (2026-01-01)\n' >> "$VC_FILE"
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL committed"* ]]
+}
+
+@test "verify-close: a surviving claim and a non-Done status are listed together" {
+  _close "In Progress" "host-1234"
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"FAIL status: status is 'In Progress'"* ]]; [[ "$output" == *"FAIL claim: claimed_by is still 'host-1234'"* ]]
+}
+
+@test "verify-close: a missing Closed section fails" {
+  _close Done "" no
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [ "$output" = "FAIL closed: no '## Closed (YYYY-MM-DD)' section" ]
+}
+
+@test "verify-close: a task left in dev/TODO, or never journaled, fails on moved" {
+  _task TODO; git add -A; git commit -q -m t
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL moved"* ]]
+}
+
+@test "verify-close: the rename check is skipped when the base does not resolve (post-merge on main)" {
+  _close Done "" yes mv-only
+  git checkout -q main; git merge -q --ff-only close
+  run bash "$VCLOSE" "$ID" --base no-such-ref
+  [[ "$output" != *"FAIL rename"* ]]; [[ "$output" == *"FAIL closed"* ]]
+}
+
+# --- threads adoption (drive Phase 0.5 / Sending use _threads/threads.sh) ----
+
+@test "drive threads: an escalation is recorded, superseded by a re-send, then resolved" {
+  export THREADS_FILE="$BATS_TEST_TMPDIR/state/drive-threads.json"
+  run bash "$THREADS" add "$ID" --channel C1 --ts 1.1 --type design-decision --summary "pick A or B"
+  [ "$status" -eq 0 ]
+  run bash "$THREADS" add "$ID" --channel C1 --ts 2.2 --type design-decision --summary "pick A or B again"
+  [ "$status" -eq 0 ]
+  [ "$(jq -r --arg k "$ID" '.[$k].message_ts' "$THREADS_FILE")" = 2.2 ]
+  run bash "$THREADS" list --unresolved; [[ "$output" == "$ID"* ]]
+  run bash "$THREADS" resolve "$ID" --resolution "go with A"; [ "$status" -eq 0 ]
+  run bash "$THREADS" list --unresolved; [ -z "$output" ]
+  run bash "$THREADS" resolve "$ID"; [ "$status" -eq 3 ]
+}
+
+@test "drive skills: SKILL.md files no longer hand-edit drive-threads.json and cite the scripts" {
+  ! grep -n 'jq .*drive-threads' "$REPO_ROOT/drive/SKILL.md" "$REPO_ROOT/retro/SKILL.md" "$REPO_ROOT/ccxp/SKILL.md"
+  grep -q 'drive/scripts/classify-change.sh' "$REPO_ROOT/drive/SKILL.md"
+  grep -q 'drive/scripts/verify-close.sh' "$REPO_ROOT/drive/SKILL.md"
+  grep -q '_threads/threads.sh' "$REPO_ROOT/drive/SKILL.md"
+  grep -q '_threads/threads.sh' "$REPO_ROOT/retro/SKILL.md"
 }

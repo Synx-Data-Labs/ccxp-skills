@@ -45,7 +45,7 @@ Collect data from the last 7 days (or N*7 days if argument given). Do all reads 
 
    - `--limit 1000` is `gh`'s API cap — if a single week's run volume ever exceeds it (check: the oldest returned `createdAt` should be ≤ `$SINCE`; if it's later, some of the window was dropped), note the gap explicitly in the retro rather than silently under-reporting, the same "no silent caps" principle as everywhere else.
    - Group failures by `.name` and keep the top 3 by count for the Top failing workflows row in Phase 3.
-7. **Slack escalations**: Read `.claude/state/drive-threads.json` — what needed human intervention
+7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention
 8. **Previous retro**: Read the most recent `dev/JOURNAL/*-retro-*.md` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
 9. **This week's IPM commit**: Read `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md` — the focus list to grade. If the file is missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
 10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
@@ -118,32 +118,29 @@ Include a **Memory Review** section in the retro report (Phase 5) summarizing:
 
 **Procedure** — for each entry in `.claude/state/drive-threads.json` where `resolved` is `false`:
 
+List the candidates with `bash <skills-root>/_threads/threads.sh list --unresolved` (TSV: key, resolved, type, sent_at, summary). Every write below goes through `threads.sh resolve` (exit 3 = absent or already resolved, 4 = malformed file, left untouched); never edit the JSON by hand.
+
 1. **Rule A (PR-suffix auto-resolution).** If the key matches the pattern `T\d+-\d+-pr(\d+)$`, extract the trailing PR number and run `bash <skills-root>/_gh/gh.sh pr view <N> --json state,mergedAt`. If the PR is `MERGED`, mark the entry:
 
-   ```json
-   "resolved": true,
-   "resolved_at": "<mergedAt>",
-   "resolution": "PR #<N> merged <mergedAt> — auto-resolved by retro Phase 1c (stale-by-event)"
+   ```bash
+   bash <skills-root>/_threads/threads.sh resolve "<key>" --at "<mergedAt>" \
+     --resolution "PR #<N> merged <mergedAt> — auto-resolved by retro Phase 1c (stale-by-event)"
    ```
 
 2. **Rule B (task-closure auto-resolution).** If the key starts with `T<id>` (with or without a PR suffix) and a file matching `dev/JOURNAL/*T<id>-*.md` exists, the underlying task has been closed. Mark resolved:
 
-   ```json
-   "resolved": true,
-   "resolved_at": "<today, ISO 8601>",
-   "resolution": "Task closed in dev/JOURNAL/<filename> — auto-resolved by retro Phase 1c (stale-by-event)"
+   ```bash
+   bash <skills-root>/_threads/threads.sh resolve "<key>" \
+     --resolution "Task closed in dev/JOURNAL/<filename> — auto-resolved by retro Phase 1c (stale-by-event)"
    ```
+
+   (`resolved_at` defaults to now.)
 
    If both Rule A and Rule B match, prefer Rule A's `resolved_at` (the merge timestamp is the truer "resolved when" signal).
 
 3. **Surface anything left.** For entries that match neither rule AND are older than 14 days (today − `sent_at` > 14d), collect them for the "Stale escalations" section in the retro report (Phase 5). Do not auto-resolve — these typically need explicit user action (a design pick, an external go/no-go, etc.).
 
-After the sweep, write the updated JSON back atomically:
-
-```bash
-jq '...' .claude/state/drive-threads.json > .claude/state/drive-threads.json.new \
-  && mv .claude/state/drive-threads.json.new .claude/state/drive-threads.json
-```
+Each `resolve` call writes atomically; there is no separate write-back step.
 
 **Track counts for Phase 5 + Phase 6**:
 

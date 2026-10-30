@@ -131,7 +131,7 @@ Generate a daily progress summary by reviewing yesterday's work.
 2. **PRs merged yesterday**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>=YYYY-MM-DD merged:<YYYY-MM-DD" --json number,title,mergedAt` (use yesterday's date then today's date)
 3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
 4. **Journal entries**: Check `dev/JOURNAL/` for files dated yesterday
-5. **Current drive-threads**: Read `.claude/state/drive-threads.json` for unresolved escalations
+5. **Current drive-threads**: `bash <skills-root>/_threads/threads.sh list --unresolved` for unresolved escalations
    5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`.
 
    - This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads.
@@ -305,7 +305,7 @@ Flag a PR as needing attention when **any** of:
 - Its body has an unchecked `- [ ]` pre-merge item whose text names a human decision (grep case-insensitive for `maintainer`, `your call`, `decision`, `approve`, `escalation`) — this is exactly the shape of a real incident: weeks open on a "maintainer release-strategy call ... no reply yet" item.
 - `mergeable` is `CONFLICTING`.
 - CI has been `failure` for 2+ consecutive checks (not a transient one-off that's likely to clear on retry).
-- Its task (resolve via `bash <skills-root>/_session/pr_task_id.sh <number>`) has an unresolved entry in `.claude/state/drive-threads.json`.
+- Its task (resolve via `bash <skills-root>/_session/pr_task_id.sh <number>`) has an unresolved entry (`bash <skills-root>/_threads/threads.sh list --unresolved`, key `<id>` or `<id>-pr<N>`).
 
 For each flagged PR, record: PR number, title, and the one-line reason it's flagged (which condition above matched). Anything not flagged is left to Phase 0's normal drain — don't list it.
 
