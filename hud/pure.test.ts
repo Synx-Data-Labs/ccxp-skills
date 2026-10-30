@@ -2,11 +2,11 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
-import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
+import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
-const AP = { status: 'on', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2 }
+const AP = { status: 'on', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2, next_wake_at: 0 }
 const BASE = {
   repo: 'synxdb-build-pipeline',
   task_id: 'T20261021-354035',
@@ -510,13 +510,13 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
 
 // --- /hud details: the band expanded to five live lines ---
 
-const DETAIL_NOW = Date.now()
+const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
 const detail = (s: object, cols = 140, cfg = CI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
 const fullSnap = (over = {}) => ({
   ...withHelper({
     repo_slug: 'acme/widgets',
     dirty: 2,
-    autopilot: AP,
+    autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) + 720 },
     ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, parked: 2, parked_ids: ['k1', 'k2'], next_job: 83, updated_at: '' },
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
     last_input_at: Math.floor(DETAIL_NOW / 1000) - 300,
@@ -545,15 +545,15 @@ test('details: five lines in order: where, usage, jobs, autopilot with CI, last 
   const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
   expect(lines.length).toBe(5)
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
-  expect(lines[1]).toBe('ctx 64% ▓▓▓▓▓▓░░░░ │ 5h 42% │ $1.50')
-  expect(lines[2]).toBe('WORKING (2) │ r70 Redo HUD repo field  r73 Autopilot cycle 2 │ parked 2 (k1 k2) │ tot 82')
-  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 42% used │ API-equivalent cost $1.50')
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 (k1 k2) │ total jobs 82')
+  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
 
 test('details: colours match the band (ctx tone, READY/WORKING, CI state) and the dirty mark is yellow', async () => {
   const rows = detailRows(fullSnap({ ctxLeft: 40 }) as any, CI, 140, DETAIL_NOW)
-  expect(rows[1].find(s => s.text.startsWith('ctx '))?.color).toBe('error')
+  expect(rows[1].find(s => s.text.startsWith('context '))?.color).toBe('error')
   expect(rows[2][0]).toEqual({ text: 'WORKING (2)', color: 'warning' })
   expect(rows[0].find(s => s.text === '*')?.color).toBe('warning')
   expect(rows[3].find(s => s.text.includes('passing'))?.color).toBe('success')
@@ -577,14 +577,57 @@ test('details: every line fits the terminal at every width and the band row is u
   expect(bandRows(fullSnap() as any, CI, 140).length).toBe(1)
 })
 
-test('details: a narrow terminal shrinks titles and ages before it cuts', async () => {
-  const wide = detail(fullSnap(), 140)
-  const narrow = detail(fullSnap(), 70)
-  expect(narrow[2]).toMatch(/^WORKING \(2\) │ r70/)
-  expect(narrow[2].length).toBeLessThan(wide[2].length)
+test('details: a narrow terminal shortens the labels and ages before it cuts', async () => {
+  const wide = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }), 140)
+  const narrow = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }), 70)
+  expect(narrow[1].length).toBeLessThan(wide[1].length)
+  expect(detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }), 56)[1]).toBe('context 64% left │ 5h limit 42% │ cost $1.50')
+  expect(detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }), 40)[1]).toBe('ctx 64% │ 5h limit 42% │ cost $1.50')
+  expect(detail(fullSnap(), 30)[2]).toBe('WORKING (2) │ parked 2')
   const old = Math.floor(DETAIL_NOW / 1000) - 3 * 86400
   expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 140)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
   expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d$/)
+})
+
+test('details: the jobs line never lists the running jobs (the band already shows them); labels are spelled out', async () => {
+  const lines = detail(fullSnap({ rateUsed: 4, costUsd: 693.75, ctxLeft: 88 }))
+  expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 4% used │ API-equivalent cost $693.75')
+  const all = lines.join('\n')
+  expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 (k1 k2) │ total jobs 82')
+  // ...but the one-row band keeps its short forms
+  expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...CI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
+})
+
+test('formatIn: under a minute, minutes, hours with minutes, days; due or past is now', async () => {
+  const at = 1_000_000
+  const inn = (secs: number) => formatIn(at, (at - secs) * 1000)
+  expect([inn(30), inn(60), inn(720), inn(3599), inn(3600), inn(3900), inn(86400 * 2)]).toEqual(['in <1m', 'in 1m', 'in 12m', 'in 59m', 'in 1h', 'in 1h 5m', 'in 2d'])
+  expect([inn(0), inn(-5)]).toEqual(['now', 'now'])
+})
+
+test('details: AP line shows the next loop (clock and wait), independent of the time of day', async () => {
+  // Local-time construction: the same clock reading in every timezone, never "yesterday".
+  const now = new Date(2026, 9, 28, 12, 0, 0).getTime()
+  const wake = Math.floor(now / 1000) + 12 * 60
+  const apLine = (over: object, cols = 140) => detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP'))!
+  expect(apLine({ next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
+  expect(apLine({ next_wake_at: wake })).toContain('next loop 12:12')
+  // a different day carries the date, like the last-prompt stamp
+  expect(apLine({ next_wake_at: wake + 86400 })).toMatch(/next loop \w{3} 29 12:12 \(in 1d\)$/)
+  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due now$/)
+  expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
+  expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
+  // AP off or no record: no schedule
+  expect(detailRows(withHelper({ autopilot: null }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('next')
+  // narrow: the clock goes first, the wait stays, then the cell
+  expect(apLine({ next_wake_at: wake }, 52)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop in 12m')
+})
+
+test('parseHelper: autopilot next_wake_at is a number, 0 when missing or not a number', async () => {
+  const ap = (v: unknown) => parseHelper(JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: 'on', prefix: '[r]', next_wake_at: v } }))!.autopilot!.next_wake_at
+  expect([ap(1790000000), ap('x'), ap(undefined)]).toEqual([1790000000, 0, 0])
 })
 
 test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {

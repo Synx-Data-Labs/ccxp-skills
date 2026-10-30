@@ -38,10 +38,10 @@ _make_repo() {
 # loops <cycle> ✓<merged>" line, so the happy-path assertions stay readable.
 # Empty record -> empty output.
 _ap_line() {
-  local rec st prefix el req stuck cycle lo lt sr stop merged warn=""
+  local rec st prefix el req stuck cycle lo lt sr stop merged wake warn=""
   rec=$(bash -c "source '$SCRIPT'; sl-autopilot-fields '$1'")
   [ -n "$rec" ] || return 0
-  IFS=$'\x1f' read -r st prefix el req stuck cycle lo lt sr stop merged <<<"$rec"
+  IFS=$'\x1f' read -r st prefix el req stuck cycle lo lt sr stop merged wake <<<"$rec"
   [ "$stuck" -gt 0 ] && warn=" ⚠${stuck}"
   printf 'ap:%s %shr%s loops %s ✓%s' "$prefix" "$el" "$warn" "$cycle" "$merged"
 }
@@ -373,4 +373,14 @@ _ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 m
     [ "$status" -eq 0 ]
     [ -z "$output" ]
   done
+}
+
+@test "sl-autopilot-fields: 12th field is next_wake_at as epoch, empty when absent" {
+  local repo; repo=$(_make_repo repo-ap-wake)
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", \"stuck_count\": 0, \"cycle_count\": 1, \"next_wake_at\": \"2026-10-28T12:12:00Z\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(awk -F$'\x1f' '{print $12}' <<<"$output")" = "1793189520" ] || [ "$(awk -F$'\x1f' '{print $12}' <<<"$output")" = "$(date -u -d 2026-10-28T12:12:00Z +%s 2>/dev/null || date -u -j -f %Y-%m-%dT%H:%M:%SZ 2026-10-28T12:12:00Z +%s)" ]
+  _ap_state "$repo" "{\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 90)\", \"stuck_count\": 0, \"cycle_count\": 1, \"next_wake_at\": null}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$(awk -F$'\x1f' '{print $12}' <<<"$output")" ]
 }

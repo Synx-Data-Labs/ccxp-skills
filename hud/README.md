@@ -101,7 +101,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - Renamed from `/hud setup` (breaking: `/hud setup` no longer exists and there is no alias). `/hud fill on|off` was removed too: the fill is always on.
 - Asks (through the engine's question dialog; type values under "Other"):
   - one CI answer: "Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI." Accepted: `https://github.com/<org>/<repo>/actions/workflows/<file>.yml` (optionally `?query=branch%3A<b>`, which then pins that branch), `https://github.com/<org>/<repo>/blob/<branch>/.github/workflows/<file>.yml`, or a bare workflow file name (repo = the session's repo). Also accepted: `tree/` and `raw/` forms of the file URL, a scheme-less `github.com/...`, and the answer wrapped in quotes, backticks or angle brackets or padded with spaces/newlines. `/hud config <url>` supplies this answer up front and skips the question (the dialog headers stay within the engine's 12-character limit). `none`, `no`, `-` or blank hides CI. A run URL (`.../actions/runs/<id>`) is refused because it does not name the workflow. No branch or repo question: the branch is the repo's default unless the URL names one
-  - fill colour: gray (default), blue, green, yellow, purple, or a `#rrggbb` hex under Other
+  - fill colour: gray (default), blue or green as options; yellow, purple or a `#rrggbb` hex typed under Other (the engine's dialog takes at most 4 options per question)
   - ccxp-skills version cell: show (default) or hide
   - scope: user file or this project's `.claude/ccxp-hud.json`
 - An invalid CI or colour answer never aborts the dialog: it is asked again once (naming the rejected value, with an example URL for CI); after a second invalid answer that setting is left unchanged and the dialog carries on, so the colour and scope questions are always reached.
@@ -122,12 +122,12 @@ Toggles the band between the one-row view and up to five detail lines (this sess
 | Line | Shows |
 |---|---|
 | 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
-| 2 usage | `ctx N% ▓▓▓▓░░░░░░` (same colours as the band), `5h N%` rate limit, `$cost` |
-| 3 jobs | `READY` / `WORKING (N)`, each running job as `r70 title`, `parked N (k1 k2)`, `tot N` (from the ledger; no ledger, no line) |
-| 4 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
+| 2 usage | spelled out: `context 64% left ▓▓▓▓▓▓░░░░` (same colours as the band; the band's `ctx` is context LEFT), `5-hour limit 4% used` (share of your Claude subscription's rolling 5-hour usage window, from the engine's `rate_limits`; hidden when the engine reports none, e.g. API-key use), `API-equivalent cost $693.75` (the engine's running estimate of this session's token usage at API list prices, `cost.total_cost_usd`; NOT what a subscription bills) |
+| 3 jobs | `READY` / `WORKING (N)`, `parked N (k1 k2)`, `total jobs N` (from the ledger; no ledger, no line). The running jobs are not listed: the status already shows them. `parked N` is the ledger's count, the ids in brackets are its `parked_ids` list |
+| 4 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due now` when overdue, nothing when absent), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
 | 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
 
-- Every line is cut to the terminal width with the band's shrinking idea: titles and ages shorten first (job titles to 24, then 12 characters, then bare `r70`), then lower-value cells drop (`tot`, parked ids, `5h`, `$`), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
+- Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked ids, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than five. The height is capped at the engine's `maxRows`.
 - The VS Code compact status line stays one line.
 - The retired `/hud pane` is not an alias: it prints the usage line.
 

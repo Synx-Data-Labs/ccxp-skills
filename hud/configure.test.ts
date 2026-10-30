@@ -1,18 +1,20 @@
 import { expect, test } from 'claude-code/testing'
 
-import { CANCEL, COLOR_DEFAULT, CI_QUESTION, NONE, SCOPE_PROJECT, SCOPE_USER, VERSION_HIDE, VERSION_SHOW, WRITE, configureHud } from './configure'
+import { MAX_OPTIONS, CANCEL, COLOR_DEFAULT, CI_QUESTION, NONE, SCOPE_PROJECT, SCOPE_USER, VERSION_HIDE, VERSION_SHOW, WRITE, configureHud } from './configure'
 
-type Run = { out: string; writes: { path: string; text: string }[]; asked: string[]; headers: string[] }
+type Run = { out: string; writes: { path: string; text: string }[]; asked: string[]; headers: string[]; counts: number[] }
 
 async function run(answers: unknown[], files: Record<string, string> = {}, preset?: { ci?: string }, hooks: { read?: () => Promise<string | undefined>; write?: () => Promise<void> } = {}): Promise<Run> {
   const writes: { path: string; text: string }[] = []
   const asked: string[] = []
   const headers: string[] = []
+  const counts: number[] = []
   const queue = [...answers]
   const out = await configureHud({
     ask: async (q, o) => {
       asked.push(q)
       headers.push(o.header)
+      counts.push(o.options.length)
       const a = queue.shift()
       if (a === undefined || a instanceof Error) throw a ?? new Error('dismissed')
       return a as string
@@ -23,7 +25,7 @@ async function run(answers: unknown[], files: Record<string, string> = {}, prese
       writes.push({ path, text })
     }),
   }, preset)
-  return { out, writes, asked, headers }
+  return { out, writes, asked, headers, counts }
 }
 
 const URL1 = 'https://github.com/acme/widgets/actions/workflows/nightly.yml'
@@ -186,4 +188,29 @@ test('config: a dismissed dialog is a cancel with the reason; any other exceptio
   const wfail = await run([BLOB, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE], {}, undefined, { write: async () => { throw new Error('disk full') } })
   expect(wfail.out).toContain('ccxp-hud config failed: disk full')
   expect(wfail.out).not.toContain('cancelled')
+})
+
+test('config: no question passes more than 4 options to $.ui.ask (the engine rejects more), on every path', async () => {
+  expect(MAX_OPTIONS).toBe(4)
+  const plans: string[][] = [
+    [URL1, COLOR_DEFAULT, VERSION_SHOW, SCOPE_USER, WRITE],
+    [NONE, 'blue', VERSION_HIDE, SCOPE_PROJECT, WRITE],
+    ['bad', 'worse', 'chartreuse', 'nope', 'maybe', 'x'],
+  ]
+  for (const plan of plans) {
+    const r = await run(plan)
+    expect(r.counts.length).toBeGreaterThan(0)
+    for (const n of r.counts) expect(n).toBeLessThanOrEqual(MAX_OPTIONS)
+    expect(r.out).not.toContain('options')
+  }
+  // The colour question in particular, which once had 6.
+  const c = await run([URL1, CANCEL])
+  expect(c.counts).toEqual([2, 4])
+})
+
+test('config: yellow, purple and a hex colour typed under Other are accepted', async () => {
+  for (const [typed, want] of [['yellow', 'yellow'], ['Purple', 'purple'], ['#A1B2C3', '#a1b2c3']]) {
+    const r = await run([URL1, typed, VERSION_SHOW, SCOPE_USER, WRITE])
+    expect(JSON.parse(r.writes[0].text).fillColor).toBe(want)
+  }
 })

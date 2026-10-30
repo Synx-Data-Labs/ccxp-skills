@@ -45,6 +45,8 @@ export type Autopilot = {
   stop_reason: string
   /** Tasks merged this run; 0 for state files written before the field existed. */
   merged: number
+  /** Epoch seconds of the next loop wake (`next_wake_at`); 0 when absent or unparseable. */
+  next_wake_at: number
 }
 
 export type Ledger = {

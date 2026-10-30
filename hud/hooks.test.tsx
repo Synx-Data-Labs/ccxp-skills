@@ -14,7 +14,7 @@ const HELPER = JSON.stringify({
   ci: { state: 'failing', at: 0 },
   last_input_at: 0,
 })
-const HELPER_AP = JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 1, requested_hr: 4, stuck: 0, cycle: 2, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 1 } })
+const HELPER_AP = JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: 'running', prefix: '[r]', elapsed_hr: 1, requested_hr: 4, stuck: 0, cycle: 2, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 1, next_wake_at: 0 } })
 
 type World = {
   cfg?: string
@@ -317,7 +317,7 @@ test('/hud details is a toggle: the first run expands the band to detail lines, 
   // Only the expanded view has the lifetime job count.
   const expanded = async () => {
     const band = await $.ui.mount(BAND(140))
-    const isExpanded = (await band.find({ type: 'Text', text: /^tot 82$/ })) !== undefined
+    const isExpanded = (await band.find({ type: 'Text', text: /^total jobs 82$/ })) !== undefined
     await band.unmount()
     return isExpanded
   }
@@ -343,9 +343,9 @@ test('/hud details: the five lines carry repo, ctx, jobs, autopilot with CI, and
   await $.command.run({ command: 'hud', args: 'details' })
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /acme\/proj/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /ctx 64%/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /context 64% left/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /^WORKING \(1\)$/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /Redo HUD repo field/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /Redo HUD repo field/ })).toBeUndefined() // running jobs are not listed in details
   expect(await band.find({ type: 'Text', text: /parked 1 \(k2\)/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /running/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /failing/ })).toBeDefined()
@@ -354,7 +354,7 @@ test('/hud details: the five lines carry repo, ctx, jobs, autopilot with CI, and
   // A new measurement shows up in the expanded view without toggling again.
   await $.session.measure({ context: { window: 200000, percent: 90 }, changed: ['context'] })
   const again = await $.ui.mount(BAND(140))
-  expect(await again.find({ type: 'Text', text: /ctx 10%/ })).toBeDefined()
+  expect(await again.find({ type: 'Text', text: /context 10% left/ })).toBeDefined()
   await again.unmount()
 })
 
