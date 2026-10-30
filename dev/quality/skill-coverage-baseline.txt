@@ -2,7 +2,6 @@
 # Format: <skill><TAB><finding>. Entries may only be REMOVED, never added;
 # `skill_score.py --coverage --coverage-check` fails on new findings and on
 # stale entries. Regenerate after fixing: --coverage --coverage-write FILE.
-address-pr	skills-root-note
 bottom	no-scripts
 ccxp	skills-root-note
 claim	no-scripts
@@ -25,7 +24,6 @@ quality-probe	desc-use-when
 rca	no-scripts
 rca	skills-root-note
 retro	skills-root-note
-slack-check-reply	no-scripts
 stage	desc-use-when
 stage	no-scripts
 stage	skills-root-note

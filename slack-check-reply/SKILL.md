@@ -6,6 +6,8 @@ argument-hint: "<task-id> | all | standup"
 
 Check for replies on Slack messages sent by `/drive` escalations.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 `$ARGUMENTS` is one of:
@@ -43,7 +45,7 @@ Thread references are stored in `.claude/state/drive-threads.json`:
 }
 ```
 
-Create the directory and file if they don't exist (`mkdir -p .claude/state`).
+The file is owned by `_threads/threads.sh` (`add` creates it; never hand-edit it). A missing file just means nothing is pending.
 
 ## Prerequisites
 
@@ -73,10 +75,10 @@ stale channel_id either — normal escalation-thread reads (using the
 
 ## Workflow
 
-1. **Read state file** `.claude/state/drive-threads.json`
-   - If task ID given: filter to that entry; error if not found — then skip step 1a (a task ID targets one escalation thread, not the standup).
-   - If `all` or empty: filter to entries where `resolved` is `false`. A missing/empty file is **not** a stop condition here — still run step 1a (the standup thread is the common case and lives outside this file).
-   - If `standup`: skip the state file entirely; go straight to step 1a.
+1. **Read state file** with `bash <skills-root>/slack-check-reply/scripts/pending.sh [<task-id>|all|standup]` — TSV rows: key, resolved, type, sent_at, summary, channel_id, message_ts (exit 2 usage, 3 task id not found, 4 malformed file: report it, do not edit it).
+   - If task ID given: that entry; on exit 3 report "not found" — then skip step 1a (a task ID targets one escalation thread, not the standup).
+   - If `all` or empty: the unresolved entries. A missing/empty file is **not** a stop condition here — still run step 1a (the standup thread is the common case and lives outside this file).
+   - If `standup`: the script prints nothing and never reads the file; go straight to step 1a.
 
 1a. **Resolve the latest daily standup thread** (run for `all`, empty, and `standup`):
 
@@ -107,7 +109,7 @@ stale channel_id either — normal escalation-thread reads (using the
    - `slack_search_public_and_private` with query: `{task_id} from:me in:#$SLACK_STANDUP_CHANNEL`
    - Sort by `timestamp` descending, take the first match
    - Extract `channel_id` and `message_ts` from the result
-   - Update the state file with corrected values
+   - Write the corrected values back: `bash <skills-root>/slack-check-reply/scripts/fix-ref.sh <key> <channel_id> <message_ts>` (exit 3 = key absent; never hand-edit the file)
    - Retry `slack_read_thread`
 
 5. **Return structured output** (for callers like `/drive`):

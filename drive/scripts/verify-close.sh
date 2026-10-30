@@ -4,7 +4,9 @@
 #
 # Checks the task's journal file as COMMITTED at HEAD (not the working tree, which
 # is exactly what a `git mv` followed by unstaged edits gets wrong):
-#   moved     exactly one dev/JOURNAL/*<id>-*.md at HEAD, no dev/TODO/<id>-*.md left
+#   moved     exactly one dev/JOURNAL/*<id>-*.md at HEAD and no dev/TODO/<id>-*.md
+#             left; the id is matched exactly (T1 never matches T10, and a short
+#             id never matches a longer T<8 digits>-<6 digits> id)
 #   committed the journal file has no unstaged/staged-but-uncommitted edits
 #   rename    the move is not a bare 100% rename vs <ref> (default main; skipped
 #             when <ref> does not resolve, e.g. after the merge on main)
@@ -35,9 +37,26 @@ git rev-parse --git-dir >/dev/null 2>&1 || { echo "verify-close.sh: not a git re
 fails=()
 fail() { fails+=("FAIL $1: $2"); }
 
+# The id a file name carries, matched EXACTLY: a short id (T20000101) must not
+# claim the files of a longer one (T20000101-000001). The long form
+# T<8 digits>-<6 digits> wins when the name starts with it.
+file_id() {
+  local b="${1##*/}"
+  b="$(printf '%s' "$b" | sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}-//')"
+  printf '%s\n' "$b" | sed -nE \
+    -e 's/^(T[0-9]{8}-[0-9]{6})([-.].*)$/\1/p;t' \
+    -e 's/^(T[0-9]+)([-.].*)$/\1/p'
+}
+matching() { # <dir-prefix> — paths from $tree under it whose file id is exactly $id
+  local p
+  while IFS= read -r p; do
+    case "$p" in "$1"*.md) [ "$(file_id "$p")" = "$id" ] && echo "$p" ;; esac
+  done <<<"$tree"
+}
+
 tree="$(git ls-tree --name-only HEAD dev/JOURNAL/ dev/TODO/ 2>/dev/null)"
-todo="$(printf '%s\n' "$tree" | grep -E "^dev/TODO/${id}(-.*)?\.md$" || true)"
-journal="$(printf '%s\n' "$tree" | grep -E "^dev/JOURNAL/.*${id}(-.*)?\.md$" || true)"
+todo="$(matching dev/TODO/)"
+journal="$(matching dev/JOURNAL/)"
 [ -z "$todo" ] || fail moved "still in dev/TODO ($(echo $todo)); the close must move it to dev/JOURNAL"
 n="$(printf '%s' "$journal" | grep -c . || true)"
 file=""

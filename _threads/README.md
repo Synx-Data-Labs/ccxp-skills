@@ -8,7 +8,8 @@ their own `jq`.
 |---|---|---|
 | `add <key> --channel --ts --type --summary [--sent-at]` | create or replace the entry | 0 / 2 / 4 |
 | `resolve <key> [--at] [--resolution]` | mark resolved | 0 / 3 absent or already resolved / 4 |
-| `list [--unresolved]` | TSV: key, resolved, type, sent_at, summary | 0 / 4 |
+| `fix-ref <key> --channel --ts` | repair a stale channel/ts in place, keep everything else | 0 / 2 / 3 absent / 4 |
+| `list [--unresolved] [--full]` | TSV: key, resolved, type, sent_at, summary (`--full`: + channel_id, message_ts) | 0 / 4 |
 | `prune [--days N]` | drop resolved entries older than N days (default 7) | 0 / 3 nothing to prune / 4 |
 
 - Global flags: `--file F` (default `$THREADS_FILE`, else `.claude/state/drive-threads.json`), `--dry-run` (print, do not write).
