@@ -232,8 +232,11 @@ sl-claimed-task-label() {
 
 # $1 ISO-8601 UTC -> epoch seconds, or empty. GNU date then BSD date — same
 # two-line fallback shape as ccxp/scripts/epic-status.sh's _epic_iso_to_epoch.
+# Empty input -> empty: GNU `date -d ""` means "today 00:00", which would turn a
+# missing timestamp into a time-of-day-dependent bogus epoch.
 sl-iso-to-epoch() {
   local iso="$1" e
+  [ -n "$iso" ] || { printf ''; return 0; }
   e="$(date -u -d "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
   e="$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$iso" +%s 2>/dev/null)" && { printf '%s' "$e"; return 0; }
   printf ''

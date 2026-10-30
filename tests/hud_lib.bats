@@ -331,6 +331,21 @@ _ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 m
   [ -z "$output" ]
 }
 
+@test "sl-iso-to-epoch returns empty for empty input (GNU date -d \"\" is midnight today)" {
+  run bash -c "source '$SCRIPT'; sl-iso-to-epoch ''"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "sl-autopilot-fields prints nothing for paused with no paused_at, even right after UTC midnight" {
+  local repo
+  repo=$(_make_repo repo-ap-paused-bad-midnight)
+  # started_at is always before today 00:00 UTC regardless of the wall clock.
+  _ap_state "$repo" '{"schema": 2, "status": "paused", "started_at": "2000-01-01T00:00:00Z", "stuck_count": 0, "cycle_count": 2}'
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$output" ]
+}
+
 @test "sl-autopilot-fields prints nothing when the JSON is malformed" {
   local repo
   repo=$(_make_repo repo-ap-malformed)
