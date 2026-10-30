@@ -10,7 +10,6 @@ incept	no-scripts
 ipm	no-scripts
 ipm	skills-root-note
 journal-compact	no-scripts
-labrun-rca	no-scripts
 md-to-pdf	desc-use-when
 md-to-pdf	no-scripts
 memory-to-skill	repo-relative-script:../_taskid/new.sh

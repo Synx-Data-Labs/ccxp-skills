@@ -6,6 +6,8 @@ argument-hint: "<slack-message-url>"
 
 Run root cause analysis on a GitHub Actions failure that was announced in Slack, and post the RCA report as a thread reply on the original notification.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 `$ARGUMENTS` is the permalink of the Slack message that announced the failure:
@@ -20,23 +22,11 @@ One URL per invocation. The permalink copy-path in Slack is _Copy link_ on the m
 
 ### 1. Parse the Slack URL
 
-Extract `channel_id` and `message_ts` from the permalink:
-
-```
-https://{workspace}.slack.com/archives/{channel_id}/p{ts_without_dot}
-                                       ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^
-```
-
-`message_ts` = the `p...` digits with a dot inserted 6 characters from the end:
-
 ```bash
-# p1600000000000000  ->  1600000000.000000
-ts_raw="${url##*/p}"
-message_ts="${ts_raw:0:${#ts_raw}-6}.${ts_raw:${#ts_raw}-6}"
-channel_id="$(echo "$url" | sed -E 's#.*/archives/([^/]+)/p.*#\1#')"
+bash <skills-root>/labrun-rca/scripts/labrun.sh parse "<slack-message-url>"
 ```
 
-Validate: `channel_id` must start with `C`/`G`/`D`, `message_ts` must match `^[0-9]{10}\.[0-9]{6}$`. Fail fast with a clear message if either is malformed.
+Prints `channel_id=<id>` and `message_ts=<10 digits>.<6 digits>` (the `p...` digits with a dot inserted 6 characters from the end); exit 2 on a malformed URL (channel must start with `C`/`G`/`D`) — fail fast and show the expected format.
 
 ### 2. Read the notification
 
@@ -45,7 +35,7 @@ Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent
 From the parent message text / attachments, extract:
 
 - **Workflow name** (e.g. "Release AcmeDB")
-- **Run ID** (numeric, usually embedded in a `/actions/runs/<id>` link or a bare number in the message)
+- **Run ID** — pipe the message text through `bash <skills-root>/labrun-rca/scripts/labrun.sh extract-run`: it prints `run_id=<id>` (plus `run_url=` when a link was present); exit 3 = no run id, exit 4 = several distinct ids (`candidate=` lines) — either way take the ambiguous path below, never guess
 - **Branch** (usually `main` for lab runs)
 - **Conclusion** (should be `failure`; if it's `success` because the run was retried, stop and note so)
 
@@ -76,20 +66,17 @@ Let `/rca` write the normal RCA report to the conversation. Capture its output s
 
 ### 5. Post the RCA report to the thread
 
-Format the RCA for Slack `mrkdwn` (`*bold*`, `_italic_`, `` `code` ``, `<url|label>`) and post via `slack_send_message` with `thread_ts=message_ts`:
+Render the reply from the `/rca` result, then post it via `slack_send_message` with `thread_ts=message_ts` (the script only renders; posting stays here):
 
+```bash
+bash <skills-root>/labrun-rca/scripts/labrun.sh render-reply --workflow "<workflow>" --run-id <run-id> \
+  --run-url "<run-url>" --error "<one-line error from logs>" --root-cause "<1–2 sentence explanation>" \
+  --classification "<Our code|Infrastructure|Upstream|Transient|Configuration>" \
+  --confidence "<Confirmed|Unconfirmed>" --impact "<what's blocked>" \
+  --action "<task-id if created, otherwise 'None — <reason>'>"
 ```
-*RCA — <workflow> run <run-id>*
 
-*Error:* `<one-line error from logs>`
-*Root cause:* <1–2 sentence explanation>
-*Classification:* <Our code | Infrastructure | Upstream | Transient | Configuration>
-*Confidence:* <Confirmed | Unconfirmed>
-*Impact:* <what's blocked>
-*Action:* <task-id if created, otherwise "None — <reason>">
-
-Logs: <run-url|run>
-```
+It prints the `mrkdwn` reply (`*RCA — <workflow> run <run-id>*` header, Error / Root cause / Classification / Confidence / Impact / Action, then `Logs: <run-url|run>`). Exit 5 = classification/confidence not in the enum (fix the input); exit 6 = the reply contains a token-like string — redact the offending text and re-render, never post around it; exit 2 = usage (every value is one line).
 
 Keep it compact. A Slack thread reply is for a quick read, not the full transcript — the run URL is the escape hatch for anyone who wants the raw logs.
 
@@ -106,7 +93,7 @@ If the caller is not in a repo context (e.g., running this from a personal dir),
 
 | Situation | Handling |
 |-----------|----------|
-| Malformed URL (no `/archives/…/p…`) | Fail fast, print the URL format expected |
+| Malformed URL (no `/archives/…/p…`) | `labrun.sh parse` exits 2 — fail fast, print the URL format expected |
 | Private channel the user can't see | `slack_read_thread` will error — surface the error verbatim |
 | Message already has a thread reply from labrun-rca | Read the thread, note "already analyzed by <ts>", stop |
 | Notification message has no run ID | Post a short "couldn't auto-detect run ID" reply and stop |
