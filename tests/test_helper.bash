@@ -90,7 +90,7 @@ _fakebin_dir() {
 # dev/TODO layout and an empty-but-valid dev/TODO/queue.md, one initial
 # commit. Prints the repo path (default $BATS_TEST_TMPDIR/repo) and leaves the
 # caller's cwd alone. Extra args after `--` are appended verbatim as queue
-# lines, e.g. make_fixture_repo "$d" -- '- [T20250101-000001](a.md): A'.
+# lines (without `--` they are ignored), e.g. make_fixture_repo "$d" -- '- [T20250101-000001](a.md): A'.
 make_fixture_repo() {
   local dir="${1:-$BATS_TEST_TMPDIR/repo}"
   [ "${1:-}" = "--" ] && dir="$BATS_TEST_TMPDIR/repo"
@@ -111,15 +111,19 @@ make_fixture_repo() {
 
 # fake_gh <fixtures-dir>
 # Installs a `gh` shim on PATH. Every invocation:
-#   1. appends its argv (one line, space-joined) to $FAKE_GH_LOG;
-#   2. exits 1 when the argv line matches the extended regex in
-#      $FAKE_GH_FAIL (simulates a gh/API failure for that call);
+#   1. forced failure: when the argv line matches the extended regex in
+#      $FAKE_GH_FAIL it logs "FAILED <argv>" and exits 1 (simulates a gh/API
+#      failure for that call);
+#   2. otherwise a call that is served is logged as the bare argv line
+#      (space-joined, quoting is not preserved) to $FAKE_GH_LOG;
 #   3. otherwise prints <fixtures-dir>/<key>.json (or .txt) to stdout, where
 #      <key> is the argv with every run of non-[A-Za-z0-9] characters collapsed
 #      to `_` (so `gh pr list --state open` -> `pr_list_state_open`), and
 #      exits with the contents of <key>.rc if present (default 0);
-#   4. an unmapped argv exits 97 and logs "UNMAPPED" so a test can never pass
-#      by silently hitting nothing.
+#   4. an unmapped argv exits 97 and logs "UNMAPPED <argv>" so a test can never
+#      pass by silently hitting nothing. Failed and unmapped calls are never
+#      logged as bare argv, so assert_calls '^pr merge' cannot pass on a call
+#      that did not succeed; assert '^FAILED pr merge' to check an attempt.
 # A fixture may also be a prefix match: <fixtures-dir>/<key-prefix>.json is
 # used when no exact key exists and the prefix is the longest that matches.
 fake_gh() {
@@ -131,8 +135,8 @@ fake_gh() {
   cat > "$FAKEBIN/gh" <<'SHIM'
 #!/usr/bin/env bash
 line="$*"
-printf '%s\n' "$line" >> "$FAKE_GH_LOG"
 if [ -n "${FAKE_GH_FAIL:-}" ] && printf '%s' "$line" | grep -Eq -- "$FAKE_GH_FAIL"; then
+  echo "FAILED $line" >> "$FAKE_GH_LOG"
   echo "fake gh: forced failure for: $line" >&2
   exit 1
 fi
@@ -150,6 +154,7 @@ if [ -z "$best" ]; then
   echo "UNMAPPED $line" >> "$FAKE_GH_LOG"
   exit 97
 fi
+printf '%s\n' "$line" >> "$FAKE_GH_LOG"
 cat "$bestfile"
 if [ -f "$FAKE_GH_FIXTURES/$best.rc" ]; then exit "$(cat "$FAKE_GH_FIXTURES/$best.rc")"; fi
 exit 0
@@ -180,8 +185,10 @@ SHIM
 # pin_now <ISO-8601-UTC>   e.g. pin_now 2026-10-30T12:00:00Z
 # Exports NOW (and NOW_EPOCH) and installs a `date` shim so `date`,
 # `date -u`, `date +FMT` and `date -u +FMT` report the pinned instant.
-# Any other form (date -d ..., date -v ..., date -r ...) passes straight
-# through to the real date, so both GNU and BSD arithmetic keep working.
+# Any other form (date -d ..., date -v ..., date -r ..., date -I, --iso-8601)
+# passes straight through to the REAL date, so GNU and BSD arithmetic keep
+# working but those forms see the real clock: scripts under test should take
+# their date via `date +FMT` or honor $NOW.
 # Scripts that take their own clock should honor $NOW; the shim covers the
 # ones that do not.
 pin_now() {

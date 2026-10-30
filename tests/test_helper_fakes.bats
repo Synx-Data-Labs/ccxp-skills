@@ -37,6 +37,7 @@ load test_helper
   run gh issue list
   [ "$status" -eq 97 ]
   assert_calls "$FAKE_GH_LOG" '^UNMAPPED issue list'
+  refute_calls "$FAKE_GH_LOG" '^issue list$'
 }
 
 @test "fake_gh: FAKE_GH_FAIL forces a non-zero exit for matching calls only" {
@@ -47,6 +48,8 @@ load test_helper
   export FAKE_GH_FAIL='^pr view'
   run gh pr view
   [ "$status" -eq 1 ]
+  assert_calls "$FAKE_GH_LOG" '^FAILED pr view$'
+  refute_calls "$FAKE_GH_LOG" '^pr view$'
   run gh pr list
   [ "$status" -eq 0 ]
 }
