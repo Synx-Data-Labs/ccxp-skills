@@ -32,28 +32,15 @@ apply — resolve every ID before touching `queue.md`.
 
 ### 2. Reorder `queue.md`
 
-Read `dev/TODO/queue.md`. Process the given IDs **in reverse order** —
-exactly like `/top`, just appending at the bottom instead of inserting at
-the top:
-
-```
-for id in reversed(argument_list):
-    bash <skills-root>/_queue/queue.sh bottom dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"
+```bash
+bash <skills-root>/bottom/scripts/bottom.sh [--dry-run] T<id> [T<id> ...]
 ```
 
-`queue.sh bottom` removes the line if present and appends it as the last entry (adds if new).
+`bottom.sh` is `<skills-root>/_queue/queue-op.sh bottom` (unit-tested in `tests/queue_op.bats`).
 
-`{slug}.md` is the actual `dev/TODO/T{id}-*.md` filename — same relative-link format `/stage`/`/top` use.
-
-Worked example — queue starts as `[X, Y, Z]`, running `/bottom A B`:
-
-1. Process `B` (last-listed) first: remove if present, append at bottom → `[X, Y, Z, B]`
-2. Process `A`: remove if present, append at bottom → `[X, Y, Z, B, A]`
-
-Final order has `A` truly last, `B` second-to-last — exactly matching the
-order given on the command line (first-listed = furthest back). If an ID
-wasn't already queued, this both adds and demotes it in one step — no need
-to `/stage` first.
+- Resolves every id to a single `dev/TODO/T<id>-*.md` before touching `queue.md` (exit 1 on any miss, nothing written).
+- Moves the ids to the back through `_queue/queue.sh` in reverse order, so the first-listed id ends up last. An unqueued id is added and demoted in one step. Queue `[X, Y, Z]`, `/bottom A B` gives `[X, Y, Z, B, A]`.
+- Stdout: the confirmation block (new tail), then `CHANGED=0|1` and `UNTRACKED=<paths>`. Exit: 0 ok, 1 unresolvable id, 2 usage.
 
 ### 3. Commit, push, and merge
 
@@ -73,16 +60,7 @@ branch.
 
 ### 4. Echo confirmation
 
-Print the new tail of the queue so the effect is visible, not just claimed:
-
-```
-New queue order (tail):
-...
-N-2. <previous last>: <title>
-N-1. T<id2>: <title>
-N.   T<id1>: <title>
-Landed: PR #<n> merged
-```
+Show the script's tail block and add `Landed: PR #<n> merged`.
 
 ## What this skill does NOT do
 

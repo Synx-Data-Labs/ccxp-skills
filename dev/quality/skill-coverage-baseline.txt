@@ -2,7 +2,6 @@
 # Format: <skill><TAB><finding>. Entries may only be REMOVED, never added;
 # `skill_score.py --coverage --coverage-check` fails on new findings and on
 # stale entries. Regenerate after fixing: --coverage --coverage-write FILE.
-bottom	no-scripts
 ccxp	skills-root-note
 claim	no-scripts
 claim	skills-root-note
@@ -24,12 +23,7 @@ quality-probe	desc-use-when
 rca	no-scripts
 rca	skills-root-note
 retro	skills-root-note
-stage	desc-use-when
-stage	no-scripts
-stage	skills-root-note
 to-task	no-scripts
-top	no-scripts
-top	skills-root-note
 turnstile-spin	desc-use-when
 turnstile-spin	untested-script:auth-probe.sh
 turnstile-spin	untested-script:fetch-secret.sh

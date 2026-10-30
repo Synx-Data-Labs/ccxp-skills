@@ -24,11 +24,8 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
   [ "$status" -ne 0 ]
 }
 
-@test "top: --before processes the expanded list forward (blocker stays ahead of its task)" {
-  block="$(sed -n '/^\*\*`--before` mode\.\*\*/,/^### 4\./p' "$REPO_ROOT/top/SKILL.md")"
-  [[ "$block" == *"for id in expanded_id_list"* ]]
-  [[ "$block" != *"for id in reversed"* ]]
-}
+# top: --before forward order (blocker stays ahead of its task) is now a real
+# behavior test: tests/queue_op.bats "top --before: blocker chain is expanded ...".
 
 @test "incept: never runs a --fix lint, scoped paths only" {
   run grep -n -- '--fix' "$REPO_ROOT/incept/SKILL.md"
