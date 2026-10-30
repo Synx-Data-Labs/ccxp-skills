@@ -6,6 +6,8 @@ argument-hint: list | next | sweep
 
 Manage the dev/TODO task backlog.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## The queue: `dev/TODO/queue.md`
 
 Priority is an explicit, ordered list, not a computed score. `dev/TODO/queue.md`
@@ -13,8 +15,6 @@ holds one line per task currently in `dev/TODO/`, top = highest priority:
 
 ```markdown
 # TODO Queue
-
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
 
 Ordered priority queue. Top = highest priority. One line per task, kept in
 sync with `dev/TODO/` by `/todo sweep` (adds missing, strikes closed/parked).
@@ -157,60 +157,40 @@ A true P0 — production down, customer-blocked, security incident — preempts 
 
 Clean up the TODO backlog: sync the queue, fix stale blockers, then prune. Unlike `list`/`next` (which only report), `sweep` modifies files. **Phases 1, 2, and Phase 3's auto-close step all act without asking** — they're mechanical (membership sync, stale-blocker resolution, ordering) or unambiguous (a task already marked `Done`, or already pointed at its superseding task). The **only** point where `sweep` stops and asks is Phase 3's Park recommendation — a move between `dev/TODO/` and `dev/PARKING/` is a judgment call about whether work is still worth tracking, so it always gets user sign-off first.
 
+The mechanical parts are `bash <skills-root>/todo/scripts/todo-sweep.sh` (writes nothing but the `apply` calls, never commits):
+
+```bash
+bash <skills-root>/todo/scripts/todo-sweep.sh plan [--root DIR]
+bash <skills-root>/todo/scripts/todo-sweep.sh apply --phase 1|2|3a [--root DIR] [--dry-run] [--supersede ID:COVERING]...
+```
+
+`plan` prints TSV findings (`ADD`, `REMOVE`, `UNBLOCK`, `ORDER_VIOLATION`, `CLOSE_DONE`, `SUPERSEDE_CANDIDATE`), exit 3 when there are none. Each `apply` re-plans from the current files; exit 0 = changed, 3 = nothing to do (fine, continue), 4 = unexpected input (missing queue, duplicate id, a cycle, an existing journal target — nothing moved; report it, do not work around it), 2 = usage. Report each printed line. Re-run `plan` at the end: it must exit 3 apart from judgment items.
+
 ### Phase 1: Sync `queue.md` with `dev/TODO/`
 
-1. For every `dev/TODO/*.md` file whose task ID has no line in `queue.md`, append it via `bash <skills-root>/_queue/queue.sh append dev/TODO/queue.md T{id} T{id}-{slug}.md "{title}"` (link target is the actual filename, title from the file's H1).
-2. For every line in `queue.md` whose task ID has no matching `dev/TODO/*.md` file (closed/parked by any means — a prior sweep's Phase 3, `/drive`, a manual move), remove it via `bash <skills-root>/_queue/queue.sh remove dev/TODO/queue.md T{id}`.
-3. Report additions and removals.
-
-This is pure membership sync — it never reorders an existing, still-valid line.
+`apply --phase 1`: append every `dev/TODO/*.md` task missing from `queue.md` (title from the H1) and remove every queue line with no matching file (closed/parked by any means). Pure membership sync — it never reorders an existing line.
 
 ### Phase 2: Fix stale blockers + enforce blocker ordering
 
-Fully automatic — no approval needed. Resolving a stale blocker is reading a fact off the filesystem (does T{id} still exist in `dev/TODO/`?), and enforcing topological order is mechanical once a violation is found.
-
-1. For each task with status containing `Blocked by T{id}` (treat as prefix — status may have trailing notes like `— waiting on X`):
-   - Check whether T{id} exists in `dev/TODO/`.
-   - **Stale** (blocker no longer exists — moved to `dev/JOURNAL/` or `dev/PARKING/`): the blocker is resolved.
-     - **Update the TODO file:**
-       - If all blockers are resolved, update Status to the appropriate next state (Open or Design, based on whether a design section exists). Preserve any non-blocker notes.
-       - Strike through resolved dependency lines (e.g. `~~**T{id}** — description~~ ✅ Done (see dev/JOURNAL/<filename>)`). Link to the actual journal file if found.
-   - **Still valid** (blocker exists in `dev/TODO/`): check `queue.md` — the blocker must appear **before** the task it blocks. A blocker ranked *behind* what it blocks is a broken order (you can't start the blocked task first regardless of where the queue says to work next), not a legitimate priority call, so it isn't left for a human to resolve manually. Record any blocker found out of order as a violation.
-   - Report each fix / violation found.
-2. **Enforce blocker ordering**: for every violation found in step 1, use `/top T{id} --before T{blocked}` (see `/top`'s `--before` mode) — inserting the blocker immediately ahead of the specific task it blocks, not jumping it to the absolute front. This still produces a topological order (every blocker ends up ahead of everything it blocks, every sweep run) without needlessly burying unrelated higher-priority work that has nothing to do with this blocker — a plain `/top` would leapfrog it over everything, `--before` only over what it actually gates. Group violations by their **shared** blocked task first — if several blockers block the *same* `T{blocked}`, pass them all to one `/top T{id1} T{id2} ... --before T{blocked}` call (in their current `queue.md` order, front-most first, so relative order among them is preserved); blockers with *different* targets need separate `/top --before` calls, one per distinct target.
-3. Show a summary of Phase 2 changes (blockers resolved + orderings enforced).
+`apply --phase 2`, fully automatic. A `Blocked by T{id}` status whose blockers are all gone from `dev/TODO/` (moved to `dev/JOURNAL/` or `dev/PARKING/`) is stale: status becomes `Design` if the task has a `## Design` section, else `Open`, trailing notes kept, and the matching `## Dependencies` lines are struck through with a link to the journal file when one exists. A blocker still in `dev/TODO/` but queued *behind* the task it blocks is a broken order, not a priority call: it is moved immediately ahead of that task (the `/top --before` mode, never to the absolute front); blockers of the same task keep their relative order, and the result is a topological order.
 
 ### Phase 3: Prune the backlog
 
-**Goal: keep the backlog actionable — auto-close finished/superseded work, ask before parking anything blocked or stale.** No task merging: two related tasks stay two tasks — a prior "Consolidate" recommendation was dropped because merging didn't reduce real work, it just added bookkeeping.
+**Goal: keep the backlog actionable — auto-close finished/superseded work, ask before parking anything blocked or stale.** No task merging: two related tasks stay two tasks.
 
-**Step A — auto-close (no approval needed):**
+**Step A — auto-close (no approval needed).** `plan` lists `CLOSE_DONE` (`status: Done` still in `dev/TODO/`) and `SUPERSEDE_CANDIDATE` (a task whose body says "superseded/absorbed by T{id}"; the script only finds that explicit cross-reference, with its evidence line). Read each candidate's evidence and confirm it really means this task is covered (or that the work is already done — that judgment is yours, the script never makes it). Then run `apply --phase 3a [--supersede ID:COVERING]...` listing only the confirmed candidates: it adds `## Closed (YYYY-MM-DD)` ("marked Done" / "superseded by T{id}"), `git mv`s the file to `dev/JOURNAL/yyyy-mm-dd-{file}` and drops its queue line. Git history makes every move revertable, so no approval gate. Work already done with no explicit cross-reference is closed by hand the same way.
 
-These two signals require no judgment call — reading a status flag or an explicit cross-reference, not an interpretation:
-
-- **Done**: `status: Done` but the file is still sitting in `dev/TODO/` (should have moved when it was marked Done — this just catches up).
-- **Superseded**: task mentions another task that covers the same scope (e.g. "absorbed by T{id}"), or the work has already been done.
-
-For each: add `## Closed (YYYY-MM-DD)` with a pointer (the covering task/PR, or "marked Done" for the Done signal), `git mv dev/TODO/{file} dev/JOURNAL/yyyy-mm-dd-{file}`, and remove its line from `queue.md`. Report what was closed — git history makes every move revertable, so there's no need to gate this behind approval.
-
-**Step B — ask before parking:**
+**Step B — ask before parking (not scripted).**
 
 1. Score remaining tasks for park-worthiness:
    - **Blocked indefinitely**: blocked by an external dependency (upstream team, infrastructure) with no ETA.
    - **Revisit**: already in legacy `Revisit` status — belongs in the parking lot, not active backlog.
 
-2. Present candidates in a table:
+2. Present candidates in a table (`| ID | Title | Signal | Recommendation |`); Recommendation is always **Park** — move to `dev/PARKING/`.
 
-```
-| ID | Title | Signal | Recommendation |
-|----|-------|--------|-----------------|
-```
+3. **Ask the user for approval** before acting; the user may override individual recommendations. This is the one step in `sweep` that always waits for a human.
 
-Recommendation is always **Park** — move to `dev/PARKING/`.
-
-3. **Ask the user for approval** before acting. The user may override individual recommendations. This is the one step in `sweep` that always waits for a human: moving something out of the active backlog (even to the parking lot, not JOURNAL) is a call about whether it's still worth tracking, not a fact `sweep` can read off the file.
-
-4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md`, plus `bash <skills-root>/_taskid/epic-links.sh sync` + `git add dev/EPICS` — all in one commit.
+4. For each approved Park: update the frontmatter `status:` to `Parked`, add `## Parked (YYYY-MM-DD)` with reason to the task body, `git mv dev/TODO/{file} dev/PARKING/{file}`, and remove its line from `queue.md` (`bash <skills-root>/_queue/queue.sh remove dev/TODO/queue.md T{id}`), plus `bash <skills-root>/_taskid/epic-links.sh sync` + `git add dev/EPICS` — all in one commit.
 
 5. Show final summary: queue sync (Phase 1) + blockers fixed (Phase 2) + tasks auto-closed (Step A) + tasks parked (Step B) + remaining open count + parking lot count.
 

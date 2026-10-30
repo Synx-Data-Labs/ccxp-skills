@@ -28,7 +28,6 @@ stage	desc-use-when
 stage	no-scripts
 stage	skills-root-note
 to-task	no-scripts
-todo	skills-root-note
 top	no-scripts
 top	skills-root-note
 turnstile-spin	desc-use-when
