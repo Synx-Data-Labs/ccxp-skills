@@ -14,6 +14,8 @@ export const VERSION_SHOW = 'show (default)'
 export const VERSION_HIDE = 'hide'
 /** Option label of the default colour; the other palette names are offered as they are. */
 export const COLOR_DEFAULT = `${FILL_DEFAULT} (default)`
+/** The engine's `$.ui.ask` rejects more than this many options per question (the free-text "Other" is extra). */
+export const MAX_OPTIONS = 4
 export const CI_QUESTION = 'Paste a GitHub Actions workflow URL (repo and workflow are derived from it), or none to hide CI.'
 
 export type ConfigIo = {
@@ -51,6 +53,7 @@ export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}
     ...rawIo,
     ask: async (q, o) => {
       let a: unknown
+      if (o.options.length > MAX_OPTIONS) throw new Error(`ask: ${o.options.length} options, at most ${MAX_OPTIONS}`) // a programming error, not a dismissal
       try {
         a = await rawIo.ask(q, o)
       } catch (e) {
@@ -75,12 +78,13 @@ export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}
     }
 
     let fillColor: string | undefined
-    const COLOR_QUESTION = 'Which colour for the always-on fill band? Pick one, or type a #rrggbb hex colour under Other (a custom hex is used on any theme; the named colours adapt to dark and light themes).'
+    const COLOR_QUESTION = 'Which colour for the always-on fill band? Pick one, or type a #rrggbb hex colour under Other (a custom hex is used on any theme; the named colours adapt to dark and light themes). yellow, purple or a hex go under Other.'
     let colorQuestion = COLOR_QUESTION
     for (let i = 0; i < TRIES && fillColor === undefined; i++) {
       const answer = await io.ask(colorQuestion, {
         header: 'Fill colour',
-        options: [COLOR_DEFAULT, ...FILL_COLOR_NAMES.filter(n => n !== FILL_DEFAULT), CANCEL],
+        // At most MAX_OPTIONS: yellow, purple and hex are typed under Other (parseFillColor takes the names).
+        options: [COLOR_DEFAULT, 'blue', 'green', CANCEL],
       })
       if (answer === CANCEL) return NOTHING
       const parsed = answer === COLOR_DEFAULT ? FILL_DEFAULT : parseFillColor(answer)

@@ -15,7 +15,8 @@
 #                         # GH_CONFIG_DIR + hosts.yml (never the token; cached 60 s; no network)
 #    "autopilot": null | {"status","prefix","elapsed_hr","requested_hr",
 #                         "stuck","cycle","last_outcome","last_task",
-#                         "stuck_reason","stop_reason","merged"},
+#                         "stuck_reason","stop_reason","merged",
+#                         "next_wake_at"},   # epoch secs of the next loop, 0 = none/unknown
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked",
 #                      "parked_ids","next_job","updated_at"},   # ledger.sh file
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
@@ -106,7 +107,8 @@ hud-data() {
          elapsed_hr: ($f[2] | tonumber), requested_hr: ($f[3] | tonumber),
          stuck: ($f[4] | tonumber), cycle: ($f[5] | tonumber),
          last_outcome: $f[6], last_task: $f[7],
-         stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0)} end),
+         stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
+         next_wake_at: (($f[11] // "") | tonumber? // 0)} end),
        ledger: $ledger, ci: $ci, plugin: $plugin,
        last_input_at: $last_input_at}'
 }

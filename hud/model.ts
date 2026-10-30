@@ -70,6 +70,7 @@ export function parseHelper(stdout: string): HelperData | null {
       stuck_reason: str(a.stuck_reason),
       stop_reason: str(a.stop_reason),
       merged: num(a.merged),
+      next_wake_at: num(a.next_wake_at),
     }
   }
   const led = r.ledger
@@ -463,36 +464,34 @@ export function formatAge(epochSec: number, nowMs: number = Date.now()): string 
 
 const ageSegs = (at: number, nowMs: number): Seg[] => (at > 0 ? [{ text: ` (${formatAge(at, nowMs)})`, dim: true }] : [])
 
-/** The running jobs as `r70 title`, titles shortened step by step, last as bare ids. */
-function runningVariants(running: ReadonlyArray<{ job: number; title: string }>): Variants {
-  const mk = (titleMax: number): Seg[] => {
-    const segs: Seg[] = []
-    running.forEach((j, i) => {
-      if (i > 0) segs.push({ text: '  ' })
-      segs.push({ text: `r${j.job}`, bold: true })
-      if (titleMax > 0 && j.title) segs.push({ text: ` ${truncate(j.title, titleMax)}` })
-    })
-    return segs
-  }
-  const out: Variants = []
-  for (const v of [mk(40), mk(24), mk(12), mk(0)]) if (out.length === 0 || joinText(out[out.length - 1]) !== joinText(v)) out.push(v)
-  return out
+/** "in <1m", "in 12m", "in 1h 5m", "in 2d" until an epoch-seconds time; "now" when it is due or past. */
+export function formatIn(epochSec: number, nowMs: number = Date.now()): string {
+  const s = Math.floor(epochSec - nowMs / 1000)
+  if (s <= 0) return 'now'
+  if (s < 60) return 'in <1m'
+  const m = Math.floor(s / 60)
+  if (m < 60) return `in ${m}m`
+  const h = Math.floor(m / 60)
+  if (h < 24) return m % 60 ? `in ${h}h ${m % 60}m` : `in ${h}h`
+  return `in ${Math.floor(h / 24)}d`
 }
 
 /** Detail lines, drop and shrink order per line (see README "Details"). */
 const DETAIL_STEPS = {
   where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
-  usage: ['drop:cost', 'drop:rate', 'step:ctx', 'drop:ctx'],
-  jobs: ['drop:tot', 'step:run', 'step:run', 'step:parked', 'step:run', 'drop:parked', 'drop:state'],
-  ap: ['step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap'],
+  usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
+  jobs: ['step:total', 'drop:total', 'step:parked', 'drop:parked', 'drop:state'],
+  ap: ['step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
   you: ['step:ver', 'step:ver', 'step:lastat', 'step:lastat', 'step:ver0', 'drop:ver0', 'drop:ver'],
 } as const
 
 /**
  * `/hud details`: the one-row band expanded to up to five live lines, each cut to the terminal
  * width with the same variant shrinking as the band. Lines with nothing to say are left out.
- *   1 repo, branch, dirty mark, claimed task   2 ctx left, rate limit, cost
- *   3 jobs (ledger)   4 autopilot and CI   5 last prompt (stamp and age) and the ccxp version
+ *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
+ *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
+ *   4 autopilot, next loop time, and CI   5 last prompt (stamp and age) and the ccxp version
+ * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
  * It ignores `fields`: the five lines are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
@@ -512,8 +511,23 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     DETAIL_STEPS.where,
   )
 
-  // 2. context and cost
-  add([pick('ctx'), pick('rate'), pick('cost')], DETAIL_STEPS.usage)
+  // 2. context, rate limit and cost, spelled out. context is what is LEFT (the band's ctx), 5-hour limit is the
+  // share of the subscription's rolling 5-hour window USED, cost is the engine's API-price estimate for this session.
+  const usage: Array<Item | null> = []
+  if (snap.ctxLeft !== null) {
+    const left = Math.round(snap.ctxLeft)
+    const color = ctxTone(left, cfg)
+    usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color }], [{ text: `context ${left}% left`, color }], [{ text: `ctx ${left}%`, color }]))
+  }
+  if (snap.rateUsed !== null) {
+    const used = Math.round(snap.rateUsed)
+    usage.push(one('rate', [{ text: `5-hour limit ${used}% used` }], [{ text: `5h limit ${used}%` }]))
+  }
+  if (snap.costUsd !== null) {
+    const usd = `$${snap.costUsd.toFixed(2)}`
+    usage.push(one('cost', [{ text: `API-equivalent cost ${usd}` }], [{ text: `cost ${usd}` }]))
+  }
+  add(usage, DETAIL_STEPS.usage)
 
   // 3. jobs, from the ledger (no ledger: no line)
   const led = h?.ledger
@@ -523,9 +537,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     add(
       [
         one('state', [{ text: state.text, color: state.color }]),
-        led.running.length ? one('run', ...runningVariants(led.running)) : null,
         one('parked', [{ text: `parked ${led.parked}${ids}`, dim: led.parked === 0 }], [{ text: `parked ${led.parked}`, dim: led.parked === 0 }]),
-        one('tot', [{ text: `tot ${led.lifetime_jobs}`, dim: true }]),
+        one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }], [{ text: `total ${led.lifetime_jobs}`, dim: true }]),
       ],
       DETAIL_STEPS.jobs,
     )
@@ -553,7 +566,19 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     ]
     ciItem = one('ci', mk(true, true), mk(false, true), mk(false, false), ...ciVariants(h.ci).slice(2))
   }
-  add([apItem, ciItem], DETAIL_STEPS.ap)
+  // The next loop: the clock time and the wait; paused says so (the stored time is stale then); nothing when unknown.
+  let wakeItem: Item | null = null
+  if (ap?.prefix === '[p]') {
+    wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
+  } else if (ap && ap.next_wake_at > 0) {
+    const wait = formatIn(ap.next_wake_at, nowMs)
+    const clock = formatStamp(ap.next_wake_at, nowMs)
+    wakeItem =
+      wait === 'now'
+        ? one('wake', [{ text: 'next loop due now', color: 'warning' }], [{ text: 'next loop now', color: 'warning' }])
+        : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
+  }
+  add([apItem, wakeItem, ciItem], DETAIL_STEPS.ap)
 
   // 5. you: the last prompt, stamp and age
   const at = h?.last_input_at

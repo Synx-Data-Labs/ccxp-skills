@@ -96,6 +96,16 @@ EOT
   [ "$(jq -r .autopilot.last_task <<<"$output")" = "T1-2" ]
 }
 
+@test "--json: autopilot.next_wake_at is epoch seconds, 0 when absent" {
+  local repo; repo=$(_make_repo r-wake)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":0,\"cycle_count\":1,\"next_wake_at\":\"2026-10-28T12:12:00Z\"}"
+  run _hud "$repo" --json
+  [ "$(jq -r '.autopilot.next_wake_at | . > 1700000000' <<<"$output")" = "true" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":0,\"cycle_count\":1}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.next_wake_at <<<"$output")" = "0" ]
+}
+
 @test "--json: autopilot backing off is [b]" {
   local repo; repo=$(_make_repo r-backoff)
   _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":2,\"cycle_count\":4,\"last_outcome\":\"stuck\",\"last_stuck_reason\":\"ci red\"}"
