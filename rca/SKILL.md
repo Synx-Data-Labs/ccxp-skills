@@ -129,7 +129,7 @@ bash <skills-root>/rca/scripts/action-plan.sh --class <our-code|upstream|configu
   --confidence <confirmed|unconfirmed> [--kb-task-open [T<id>]] [--recent <n>] [--retry-result pass|fail|pending]
 ```
 
-`--recent` (transient; optional with `--kb-task-open`) = occurrences in the last 7 days; `--retry-result` is infrastructure only. One action per line, in order: `RETRY`, `TOP`, `TASK kind=fix|instrument`, `PROMOTE`, `NOTE`; `IF_RETRY_FAILS ` = only after the retry failed. Exit 2 = bad inputs: fix them, never guess a plan.
+`--recent` (transient; optional with `--kb-task-open`) = occurrences in the last 7 days; `--retry-result` is infrastructure only. One action per line, in order: `RETRY`, `TOP`, `TASK kind=fix|instrument`, `PROMOTE`, `NOTE`; the `IF_RETRY_FAILS` prefix = only after the retry failed. Exit 2 = bad inputs: fix them, never guess a plan.
 
 If 3.5 flagged an open task: invoke `/top <id>` here instead of any task-creation gate below (Infrastructure's retry still always runs; Transient's 3+ check no longer applies).
 
