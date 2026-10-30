@@ -22,7 +22,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DATE="bash $ROOT/_date/date.sh"
+DATE() { bash "$ROOT/_date/date.sh" "$@"; }   # $ROOT may contain a space
 
 weeks=1 repo="."
 while [ $# -gt 0 ]; do
@@ -36,10 +36,10 @@ done
   || { echo "window.sh: WEEKS must be an integer 1..52, got '$weeks'" >&2; exit 2; }
 [ -d "$repo" ] || { echo "window.sh: not a directory: $repo" >&2; exit 3; }
 
-end="$($DATE today)" || exit 2
-start="$($DATE add "$end" "-$((weeks * 7))")" || exit 2
-since="$($DATE ago "$((weeks * 7))")" || exit 2
-monday="$($DATE monday "$end")" || exit 2
+end="$(DATE today)" || exit 2
+start="$(DATE add "$end" "-$((weeks * 7))")" || exit 2
+since="$(DATE ago "$((weeks * 7))")" || exit 2
+monday="$(DATE monday "$end")" || exit 2
 
 ipm=""
 [ -f "$repo/dev/JOURNAL/$monday-ipm-weekly.md" ] && ipm="dev/JOURNAL/$monday-ipm-weekly.md"

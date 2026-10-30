@@ -55,8 +55,10 @@ today="${date_in:-$(bash "$ROOT/_date/date.sh" today)}"
 since="$(bash "$ROOT/_date/date.sh" add "$today" -1)" || exit 2
 bash "$ROOT/_date/date.sh" dow "$today" >/dev/null || exit 2   # validates --date
 
-gh_cmd="${STANDUP_GH:-bash $ROOT/_gh/gh.sh}"
-prid_cmd="${STANDUP_PR_TASK_ID:-bash $ROOT/_session/pr_task_id.sh}"
+# STANDUP_GH / STANDUP_PR_TASK_ID are split on whitespace (a command plus
+# arguments); the defaults are arrays so a skills root containing a space survives.
+if [ -n "${STANDUP_GH:-}" ]; then read -r -a gh_cmd <<<"$STANDUP_GH"; else gh_cmd=(bash "$ROOT/_gh/gh.sh"); fi
+if [ -n "${STANDUP_PR_TASK_ID:-}" ]; then read -r -a prid_cmd <<<"$STANDUP_PR_TASK_ID"; else prid_cmd=(bash "$ROOT/_session/pr_task_id.sh"); fi
 
 ERRS='{}'
 err() { ERRS="$(jq -c --arg k "$1" --arg v "$2" '. + {($k): $v}' <<<"$ERRS")"; }
@@ -76,14 +78,12 @@ s_git_log() {
     | jq -R -s -c 'split("\n") | map(select(length>0) | split("\t") | {sha: .[0], subject: (.[1:] | join("\t"))})'
 }
 s_merged() {
-  # shellcheck disable=SC2086
-  $gh_cmd pr list --state merged --search "merged:>=$since merged:<$today" --limit 100 --json number,title,mergedAt \
+  "${gh_cmd[@]}" pr list --state merged --search "merged:>=$since merged:<$today" --limit 100 --json number,title,mergedAt \
     | jq -c 'map({number,title,mergedAt}) | sort_by(.number)'
 }
 OPEN_RAW='[]'
 s_open_raw() {
-  # shellcheck disable=SC2086
-  $gh_cmd pr list --state open --limit 100 --json number,title,body,mergeable,updatedAt | jq -c 'sort_by(.number)'
+  "${gh_cmd[@]}" pr list --state open --limit 100 --json number,title,body,mergeable,updatedAt | jq -c 'sort_by(.number)'
 }
 s_attention() {
   local n title body mergeable id reasons unresolved open_items
@@ -99,8 +99,7 @@ s_attention() {
       reasons+=("unchecked pre-merge item needs a human decision")
     fi
     [ "$mergeable" = CONFLICTING ] && reasons+=("merge conflicts")
-    # shellcheck disable=SC2086
-    id="$($prid_cmd "$n" 2>/dev/null)" || return 1
+    id="$("${prid_cmd[@]}" "$n" 2>/dev/null)" || return 1
     id="${id%%$'\n'*}"
     if [ -n "$id" ] && grep -qxE "$id|$id-pr$n" <<<"$unresolved"; then
       reasons+=("unresolved escalation on $id")
@@ -129,8 +128,7 @@ s_threads() {
 s_ipm() { jq -n -c --arg p "$(IPM_TODAY="$today" bash "$ROOT/_ipm/current.sh" dev/JOURNAL 2>/dev/null)" '$p'; }
 s_nightly() {
   local raw
-  # shellcheck disable=SC2086
-  raw="$($gh_cmd run list --branch main --created ">=$since" --limit 100 --json databaseId,name,conclusion,createdAt)" || return 1
+  raw="$("${gh_cmd[@]}" run list --branch main --created ">=$since" --limit 100 --json databaseId,name,conclusion,createdAt)" || return 1
   jq -c --arg s "$since" '{since:$s, total:length,
     failures: [.[] | select(.conclusion=="failure") | {id:.databaseId, name, createdAt}]}' <<<"$raw"
 }

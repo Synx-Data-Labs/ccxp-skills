@@ -47,7 +47,9 @@ limit="${METRICS_RUN_LIMIT:-1000}"
 command -v jq >/dev/null 2>&1 || { echo "metrics.sh: jq is required" >&2; exit 3; }
 cd "$repo" || exit 3
 
-gh_cmd="${METRICS_GH:-bash $ROOT/_gh/gh.sh}"
+# METRICS_GH is split on whitespace (a command plus arguments); the default is
+# built as an array so a skills root containing a space survives.
+if [ -n "${METRICS_GH:-}" ]; then read -r -a gh_cmd <<<"$METRICS_GH"; else gh_cmd=(bash "$ROOT/_gh/gh.sh"); fi
 since_date="${since%%T*}"
 fail() { echo "metrics.sh: $1 failed; no metrics printed" >&2; exit 3; }
 
@@ -76,13 +78,10 @@ done
 parking=0
 for f in dev/PARKING/*.md; do [ -f "$f" ] && parking=$((parking + 1)); done
 
-# shellcheck disable=SC2086
-merged_raw="$($gh_cmd pr list --state merged --search "merged:>=$since_date" \
+merged_raw="$("${gh_cmd[@]}" pr list --state merged --search "merged:>=$since_date" \
   --json number,title,mergedAt,createdAt,additions,deletions --limit 500)" || fail "gh pr list (merged)"
-# shellcheck disable=SC2086
-open_raw="$($gh_cmd pr list --state open --json number,title,createdAt --limit 500)" || fail "gh pr list (open)"
-# shellcheck disable=SC2086
-runs_raw="$($gh_cmd run list --created ">=$since" --limit "$limit" --json conclusion,name,createdAt)" || fail "gh run list"
+open_raw="$("${gh_cmd[@]}" pr list --state open --json number,title,createdAt --limit 500)" || fail "gh pr list (open)"
+runs_raw="$("${gh_cmd[@]}" run list --created ">=$since" --limit "$limit" --json conclusion,name,createdAt)" || fail "gh run list"
 
 esc="$(bash "$ROOT/_threads/threads.sh" list)"; rc=$?
 [ "$rc" -eq 0 ] || { echo "metrics.sh: drive-threads file unreadable or malformed" >&2; exit 4; }
