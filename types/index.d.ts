@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -58,6 +58,18 @@ export type Ledger = {
   updated_at: string
 }
 
+/** Breakdown of dev/TODO/queue.md; every task is in exactly one bucket, so they sum to `total`. */
+export type Queue = {
+  total: number
+  ready: number
+  blocked: number
+  decision: number
+  external: number
+  epic: number
+  /** Held by another session; shown only when above 0. */
+  claimed: number
+}
+
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
 
 export type Ci = {
@@ -94,6 +106,8 @@ export type HelperData = {
   autopilot: Autopilot | null
   /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null
+  /** dev/TODO/queue.md breakdown; null when the repo has no queue. */
+  queue: Queue | null
   /** Last run of the configured CI workflow (cached by the helper), null when unconfigured or unknown. */
   ci: Ci | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */

@@ -905,3 +905,28 @@ test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
   expect(ciFromAnswer('https://example.com/a/b/actions/workflows/x.yml').ok).toBe(false)
   expect(ciFromAnswer('https://github.com/a/b/blob/main/README.md').ok).toBe(false)
 })
+
+// --- queue breakdown (dev/TODO/queue.md) ---
+
+const QUEUE = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+
+test('queue: parseHelper clamps the counts and a missing or malformed queue is null', async () => {
+  expect(parseHelper(HELPER)!.queue).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: 'x' }))!.queue).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, blocked: 1.9, decision: 'a' } }))!.queue).toEqual({ total: 5, ready: 0, blocked: 1, decision: 0, external: 0, epic: 0, claimed: 0 })
+})
+
+test('queue: the band shows the compact form, details spell the labels out, claimed only when above 0', async () => {
+  const s = withHelper({ queue: QUEUE })
+  expect(text(bandRows(s as any, CI, 140))).toContain('queue 44 = 30r 6b 3d 2e 3x')
+  expect(detail(s as any, 140)).toContain('queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 140).join('\n')).toContain('3 epic | 2 claimed')
+  expect(text(bandRows(s as any, CI, 140))).not.toContain('claimed')
+})
+
+test('queue: no queue, no cell and no line; a tight band shrinks it to ready/total before dropping it', async () => {
+  expect(text(bandRows(withHelper({ queue: null }) as any, CI, 140))).not.toContain('queue')
+  expect(detail(withHelper({ queue: null }) as any, 140).join('\n')).not.toContain('queue')
+  const tight = text(bandRows(withHelper({ queue: QUEUE, ledger: null, ci: null }) as any, CI, 44))
+  expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
+})

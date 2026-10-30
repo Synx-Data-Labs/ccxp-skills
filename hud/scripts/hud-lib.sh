@@ -333,6 +333,83 @@ sl-ledger-json() {
                 | {job: (.job | numbers // 0), title: (.title | strings // "")}]}' "$f" 2>/dev/null || true
 }
 
+# Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
+# when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
+# one awk over the queued task files plus one jq; read-only, never fails.
+#   {"total","ready","blocked","decision","external","epic","claimed"}
+# Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
+# lands in EXACTLY ONE bucket, first match wins, so the buckets always sum to total:
+#   epic      kind=epic in autopilot's needs_attention, or the title/status says umbrella,
+#             epic or "tracking task|issue", or the frontmatter has a `children:` key.
+#             (Plain members of a dev/EPICS epic are ordinary work and stay takeable.)
+#   blocked   kind=blocked, or status `Blocked by T<id>` while that blocker is still in
+#             dev/TODO/, or the status contains BLOCKED or SUPERVISED (case-sensitive,
+#             so a resolved "Blocked by" is not blocked)
+#   external  kind=external, or the status mentions upstream, HashData, Apache, customer
+#             or external (waiting on an outside party)
+#   decision  kind=decision, or the status says needs/owner decision, "needs a human",
+#             "needs manual", sign-off; also an id in autopilot's skip_ids with no kind
+#             and no hint (a skipped task needs a human look)
+#   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
+#   ready     everything else: what the autopilot can take
+# autopilot state (dev/.autopilot-state.json) is read only while status is on|paused;
+# its `needs_attention[].kind` wins over the frontmatter hints. A queue line whose task
+# file is missing has no hints and counts as ready.
+sl-queue-json() {
+  local repo_root="$1" todo q
+  todo="$repo_root/dev/TODO"; q="$todo/queue.md"
+  [ -f "$q" ] || return 0
+  local rows="" files=() id file base
+  while IFS=$'\t' read -r id file; do
+    [ -n "$id" ] || continue
+    base="${file##*/}"
+    rows+="$id"$'\n'
+    [ -f "$todo/$base" ] && files+=("$todo/$base")
+  done < <(grep -E '^- \[T[0-9]+-[0-9]+\]\(' "$q" 2>/dev/null | sed -E 's/^- \[(T[0-9]+-[0-9]+)\]\(([^)]*)\).*/\1\t\2/')
+  local info=""
+  if [ "${#files[@]}" -gt 0 ]; then
+    info=$(awk '
+      function flush() { if (id != "") printf "%s\t%s\t%s\t%s\t%s\n", id, status, claimed, title, kids; id = "" }
+      FNR == 1 { flush(); n = 0; status = claimed = title = ""; kids = 0
+        id = FILENAME; sub(/^.*\//, "", id); if (match(id, /^T[0-9]+-[0-9]+/)) id = substr(id, RSTART, RLENGTH); else id = "" }
+      /\r$/ { sub(/\r$/, "") }
+      $0 == "---" && n < 2 { n++; next }
+      n == 1 && /^status:/ { v = $0; sub(/^status:[ \t]*/, "", v); gsub(/\t/, " ", v); status = v; next }
+      n == 1 && /^claimed_by:/ { v = $0; sub(/^claimed_by:[ \t]*/, "", v); gsub(/[ \t]+$/, "", v); claimed = v; next }
+      n == 1 && /^children:/ { kids = 1; next }
+      n >= 2 && title == "" && /^# / { title = $0; gsub(/\t/, " ", title) }
+      END { flush() }' "${files[@]}" 2>/dev/null) || info=""
+  fi
+  local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
+  local state='{"skip":[],"att":{},"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
+  if [ -f "$sf" ]; then
+    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | {
+        skip: [(.skip_ids // [])[] | strings],
+        att: ([(.needs_attention // [])[] | select(type == "object" and (.id | type) == "string") | {key: .id, value: ((.kind // "") | strings)}] | from_entries),
+        clone: ((.dispatch_clone_path // "") | strings)}' "$sf" 2>/dev/null) || st=""
+    [ -z "$st" ] || state="$st"
+  fi
+  local me1 me2="" ap_clone
+  me1=$(sl-clone-id "$repo_root")
+  ap_clone=$(printf '%s' "$state" | jq -r '.clone' 2>/dev/null) || ap_clone=""
+  [ -z "$ap_clone" ] || [ ! -d "$ap_clone" ] || me2=$(sl-clone-id "$ap_clone")
+  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" '
+    ($info | split("\n") | map(select(. != "") | split("\t") | {key: .[0], value: {status: (.[1] // ""), claimed: (.[2] // ""), title: (.[3] // ""), kids: ((.[4] // "0") == "1")}}) | from_entries) as $meta
+    | ($open | split("\n") | map(select(. != ""))) as $openIds
+    | ($rows | split("\n") | map(select(. != ""))) as $ids
+    | [$ids[] | . as $id | ($meta[$id] // {status: "", claimed: "", title: "", kids: false}) as $m
+        | ($st.att[$id] // "") as $kind
+        | ($m.status) as $s
+        | (if $kind == "epic" or $m.kids or ($m.title + " " + $s | test("umbrella|\\bepic\\b|tracking (task|issue)"; "i")) then "epic"
+           elif $kind == "blocked" or ($s | test("BLOCKED|SUPERVISED")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
+           elif $kind == "external" or ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
+           elif $kind == "decision" or ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
+           elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
+           elif ($st.skip | index($id)) != null then "decision"
+           else "ready" end)] as $b
+    | {total: ($ids | length)} + (["ready", "blocked", "decision", "external", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)' 2>/dev/null || true
+}
+
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt
 # this session submitted (the cache file's mtime, written by the
 # UserPromptSubmit hook), or nothing. A session_id with a path separator (or

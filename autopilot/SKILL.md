@@ -94,7 +94,7 @@ First re-read `autopilot-state.sh status`: not `on` means off/pause won while th
 
 Classify, in this order, then run `autopilot-state.sh record <outcome> <merged-count> <task-id> "<reason>"`; it prints a notice kind or `none` and sets the next wake time.
 
-- `NEEDS-ATTENTION` lines: for each, `autopilot-state.sh skip <id> "<reason>"` (prints `attention` when new, which is a notice kind to send). Then run another cycle in 60 s unless it is the only outcome, in which case record `idle`/`progress` per what else happened.
+- `NEEDS-ATTENTION` lines: for each, `autopilot-state.sh skip <id> "<reason>"` (prints `attention` when new, which is a notice kind to send). Pass `--kind blocked|decision|external|epic` when the reason is clear (waiting on a decision, an outside party, a blocker, an umbrella task): the HUD's queue breakdown counts it in that bucket. Then run another cycle in 60 s unless it is the only outcome, in which case record `idle`/`progress` per what else happened.
 - **progress** — something merged and nothing Stuck. Wake in 60 s.
 - **waiting** — nothing merged, `WAITING:` reported. Back-off ladder 5, 10, 20, 30 min (capped), using `waiting_count`.
 - **stuck** — `/drive` errored, merged and advanced nothing, hit its own Escalation Rules, or its `/address-pr` stopped without merging. Same ladder, using `stuck_count`.

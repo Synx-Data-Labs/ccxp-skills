@@ -19,6 +19,8 @@
 #                         "next_wake_at"},   # epoch secs of the next loop, 0 = none/unknown
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
+#    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},
+#                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
 #    "plugin": null | {"installed","latest"},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
@@ -78,6 +80,9 @@ hud-data() {
   local ledger; ledger=$(sl-ledger-json)
   [ -n "$ledger" ] || ledger="null"
 
+  local queue; queue=$(sl-queue-json "$repo_root" 2>/dev/null) || queue=""
+  [ -n "$queue" ] || queue="null"
+
   local repo_name ci
   repo_name=$(sl-origin-name "$repo_root")
   [ -n "$repo_name" ] || repo_name=$(basename "$repo_root")
@@ -95,7 +100,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -109,7 +114,7 @@ hud-data() {
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0)} end),
-       ledger: $ledger, ci: $ci, plugin: $plugin,
+       ledger: $ledger, queue: $queue, ci: $ci, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
 
