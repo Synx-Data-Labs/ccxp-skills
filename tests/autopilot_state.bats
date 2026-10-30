@@ -445,6 +445,26 @@ MD
   [[ "$output" == *"- Merged T9333333 (fm-pr) — PR #91"* ]]
 }
 
+@test "done: only dated top-level journal .md files count (not digests, archive/ or other files)" {
+  _final_fixture
+  mkdir -p dev/JOURNAL/archive/2026-09
+  echo x > dev/JOURNAL/2026-10-digest.md
+  echo x > dev/JOURNAL/archive/2026-09/2026-09-01-T20000101-000001-old.md
+  echo x > dev/JOURNAL/2026-10-28-notes.txt
+  echo x > dev/JOURNAL/2026-10-28-real-task.md
+  git add -A; GIT_AUTHOR_DATE="2026-10-28T08:30:00Z" GIT_COMMITTER_DATE="2026-10-28T08:30:00Z" git commit -q -m j
+  run _ap done
+  [ "$output" = "- Merged (2026-10-28-real-task)" ] || [ "$output" = "- Merged (real-task)" ]
+}
+
+@test "classify: a MERGED line without a task id still counts; the unfilled template does not" {
+  _report 'MERGED: fix-thing — PR #5'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "progress 1 - -" ]
+  _report 'MERGED: T<id> (<slug>) — PR #<n>'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"; [ "$status" -eq 2 ]
+}
+
 @test "final-report: journal files from before started_at are not Done" {
   _final_fixture
   echo x > dev/JOURNAL/2026-10-01-T9444444-old.md

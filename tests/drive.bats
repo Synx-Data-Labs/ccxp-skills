@@ -71,14 +71,27 @@ STUB
   : > "$WS/other/dev/TODO/$ID-thing.md"
   _pf "$ID"
   [ "$status" -eq 12 ]
-  [[ "$output" == "verdict=cross-repo phase0=skip detail=not in this clone; clone acme/other fresh" ]]
+  [[ "$output" == "verdict=cross-repo phase0=skip detail=not in this clone; hub is acme/other; clone it fresh" ]]
 }
 
-@test "preflight: cross-repo with no sibling says the slug is unknown; strict mode is named" {
+@test "preflight: cross-repo with no sibling says the slug is unknown" {
   _pf "$ID"
-  [ "$status" -eq 12 ]; [[ "$output" == *"slug unknown"* ]]; [[ "$output" != *STRICT* ]]
+  [ "$status" -eq 12 ]; [[ "$output" == *"slug could not be detected"* ]]
+}
+
+@test "preflight: DRIVE_STRICT_CLONE=1 turns cross-repo into refused (14) but leaves closed alone" {
   DRIVE_STRICT_CLONE=1 _pf "$ID"
-  [ "$status" -eq 12 ]; [[ "$output" == *"DRIVE_STRICT_CLONE=1 refuses"* ]]
+  [ "$status" -eq 14 ]; [[ "$output" == verdict=refused* ]]
+  _task JOURNAL
+  DRIVE_STRICT_CLONE=1 _pf "$ID"
+  [ "$status" -eq 13 ]
+}
+
+@test "preflight: the task file is matched by whole id, not by prefix" {
+  mkdir -p dev/TODO
+  printf -- '---\nstatus: Open\nclaimed_by: cc1-deadbeef:0123456789abcdef\n---\n' > dev/TODO/T20000101-0000019-longer.md
+  _pf "$ID"
+  [ "$status" -eq 0 ]; [[ "$output" == *"no task file"* ]]
 }
 
 @test "preflight: a task only in dev/JOURNAL is closed (13)" {

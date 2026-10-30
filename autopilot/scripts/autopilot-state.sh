@@ -317,7 +317,9 @@ ap-classify() {
     case "$line" in
       MERGED:*)
         rest=$(printf '%s' "${line#MERGED:}" | sed -E 's/^[[:space:]]+//')
-        if [[ "$rest" =~ $re_id ]]; then merged=$(( merged + 1 )); merged_id="${BASH_REMATCH[1]}"; fi ;;
+        case "$rest" in ''|'<'*|'T<'*) continue ;; esac   # empty or the unfilled template
+        merged=$(( merged + 1 ))
+        if [[ "$rest" =~ $re_id ]]; then merged_id="${BASH_REMATCH[1]}"; fi ;;
       STUCK:*)
         rest=$(printf '%s' "${line#STUCK:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
         case "$rest" in ''|'<'*) continue ;; esac
@@ -339,7 +341,7 @@ EOF_LINES
   # Precedence follows autopilot/SKILL.md Phase 4: progress (merged, nothing
   # stuck), waiting (nothing merged), stuck, then a lone NEEDS-ATTENTION = idle.
   if [ "$merged" -gt 0 ] && [ "$stuck" = 0 ]; then
-    printf 'progress %s %s -\n' "$merged" "$merged_id"
+    printf 'progress %s %s -\n' "$merged" "${merged_id:--}"
   elif [ "$merged" = 0 ] && [ "$waiting" = 1 ]; then
     printf 'waiting 0 - %s\n' "$wait_reason"
   elif [ "$stuck" = 1 ]; then
@@ -420,7 +422,8 @@ ap-done() {
       pr=$(_ap_journal_pr "$root/$path")
       printf -- '- Merged %s%s\n' "${id:+$id }($slug)" "${pr:+ — PR #$pr}"
       n=$(( n + 1 ))
-    done < <(git -C "$root" log --since="$started" --diff-filter=A --name-only --pretty=format: -- dev/JOURNAL/ 2>/dev/null | sort -u)
+    done < <(git -C "$root" log --since="$started" --diff-filter=A --name-only --pretty=format: -- dev/JOURNAL/ 2>/dev/null \
+      | grep -E '^dev/JOURNAL/[0-9]{4}-[0-9]{2}-[0-9]{2}-[^/]*\.md$' | sort -u || true)
   fi
   [ "$n" -gt 0 ] || echo "- No tasks merged this run"
 }
