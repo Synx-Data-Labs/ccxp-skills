@@ -1,0 +1,31 @@
+{
+  "resolved": [
+    {
+      "pr": 20,
+      "text": "<u|T20000101-000020> — does a thing"
+    }
+  ],
+  "nightly_failures": [
+    {
+      "run": 902,
+      "classification": "Transient",
+      "task_id": "T20000101-000099",
+      "task_link": "<u|T20000101-000099>"
+    }
+  ],
+  "top5": [
+    "<u|T1> — a",
+    "<u|T2> — b"
+  ],
+  "weekly_focus": {
+    "shipped": 1,
+    "total": 3,
+    "in_flight": 1,
+    "not_started": 1,
+    "trend": "On-track",
+    "table": "| # | Task |\n|---|---|\n| 1 | T |"
+  },
+  "links": {
+    "T20000101-000011": "<u|T20000101-000011>"
+  }
+}
