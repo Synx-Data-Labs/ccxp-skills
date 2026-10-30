@@ -351,3 +351,16 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   run bash "$SWEEP" park --root "$R" "$A"; [ "$status" -eq 2 ]
   run bash "$SWEEP" plan --root "$R" "$A:why"; [ "$status" -eq 2 ]
 }
+
+@test "park: a repeated id is parked once (first reason wins); a stale queue line for a parked id is dropped" {
+  _task $A t Open; _task $B t Open; _queue $A $B
+  _sw park "$A:first" "$A:second"
+  [ "$status" -eq 0 ]
+  grep -qx 'first' "$R/dev/PARKING/$A-t.md"
+  ! grep -q second "$R/dev/PARKING/$A-t.md"
+  mv "$R/dev/TODO/$B-t.md" "$R/dev/PARKING/$B-t.md"
+  _queue $B
+  _sw park "$B:why"
+  [ "$status" -eq 3 ]
+  [ -z "$(_ids)" ]
+}
