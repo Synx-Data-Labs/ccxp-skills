@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Scratch dir for the env file, results and logs; override for hermetic runs.
+VS_TMP="${VERIFY_SITE_TMP:-/tmp}"
 # shellcheck disable=SC1091
-source /tmp/verify-site.env
+source "${VS_TMP}/verify-site.env"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -12,7 +14,7 @@ if [ "${#ROUTES[@]}" -eq 0 ]; then
 fi
 ROUTES_JSON=$(printf '%s\n' "${ROUTES[@]}" | jq -R . | jq -s .)
 
-SCRIPT="/tmp/verify-a11y-$$.mjs"
+SCRIPT="${VS_TMP}/verify-a11y-$$.mjs"
 cat > "$SCRIPT" <<NODE
 import { chromium } from '$HERE/node_modules/playwright/index.mjs';
 import AxeBuilder from '$HERE/node_modules/@axe-core/playwright/dist/index.js';
