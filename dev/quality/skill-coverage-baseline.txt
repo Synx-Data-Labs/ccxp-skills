@@ -21,7 +21,6 @@ proof-read	no-scripts
 quality-probe	desc-use-when
 rca	no-scripts
 rca	skills-root-note
-retro	skills-root-note
 to-task	no-scripts
 turnstile-spin	desc-use-when
 turnstile-spin	untested-script:auth-probe.sh
