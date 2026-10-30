@@ -9,9 +9,10 @@
 # Phase 0.5 re-reads the whole file. The grace window keeps recently-resolved
 # threads scrollable for a few days before they're dropped.
 #
-# Idempotent — a no-op on a missing file or a file with nothing to prune. The
-# `&& mv` guard leaves the original untouched if jq errors (e.g. a malformed
-# file). Unresolved escalations are always kept regardless of age.
+# Idempotent — a no-op on a missing file or a file with nothing to prune; a
+# malformed file is left untouched (non-zero exit). Unresolved escalations are
+# always kept regardless of age. A resolved entry's age is measured from its
+# resolved_at, falling back to sent_at.
 #
 # Options:
 #   --file PATH   Path to drive-threads.json (default: .claude/state/drive-threads.json).
@@ -28,11 +29,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-if [ -f "$file" ]; then
-  cutoff=$(date -u -d "${days} days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
-        || date -u -v-"${days}"d +"%Y-%m-%dT%H:%M:%SZ")
-  tmp=$(mktemp)
-  jq --arg cutoff "$cutoff" \
-    'with_entries(select(.value.resolved != true or .value.sent_at > $cutoff))' \
-    "$file" > "$tmp" && mv "$tmp" "$file"
-fi
+# The prune logic (and the portable date maths behind its cutoff) lives in
+# _threads/threads.sh, the single owner of drive-threads.json. Exit 3 there
+# means "nothing to prune / no file", which this wrapper has always treated as
+# success.
+threads="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/_threads/threads.sh"
+rc=0
+bash "$threads" --file "$file" prune --days "$days" || rc=$?
+[ "$rc" -eq 3 ] && rc=0
+exit "$rc"
