@@ -124,6 +124,9 @@ make_fixture_repo() {
 #      pass by silently hitting nothing. Failed and unmapped calls are never
 #      logged as bare argv, so assert_calls '^pr merge' cannot pass on a call
 #      that did not succeed; assert '^FAILED pr merge' to check an attempt.
+# When FAKE_GH_STDIN=1 a served call's stdin is appended to "$FAKE_GH_LOG.stdin"
+# (e.g. `gh pr comment --body-file -`); otherwise stdin is never read, because an
+# inherited, never-closed stdin would hang the test.
 # A fixture may also be a prefix match: <fixtures-dir>/<key-prefix>.json is
 # used when no exact key exists and the prefix is the longest that matches.
 fake_gh() {
@@ -155,6 +158,7 @@ if [ -z "$best" ]; then
   exit 97
 fi
 printf '%s\n' "$line" >> "$FAKE_GH_LOG"
+if [ "${FAKE_GH_STDIN:-0}" = 1 ]; then cat >> "$FAKE_GH_LOG.stdin"; fi
 cat "$bestfile"
 if [ -f "$FAKE_GH_FIXTURES/$best.rc" ]; then exit "$(cat "$FAKE_GH_FIXTURES/$best.rc")"; fi
 exit 0

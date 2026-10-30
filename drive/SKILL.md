@@ -243,7 +243,7 @@ If you skip, note `Design approved in-conversation YYYY-MM-DD` in the task file'
 
 #### Phase 3.0: Detect change kind (route TDD + verification)
 
-Run `bash <skills-root>/drive/scripts/classify-change.sh [base]` (default base `main`); it prints one word and exits 0 (2 usage, 3 not a git repo). Do not re-derive the rule in prose.
+Run `bash <skills-root>/drive/scripts/classify-change.sh [base]` (default base `main`); it prints one word and exits 0 (2 usage, 3 not a git repo, 4 base ref does not resolve or the diff cannot run: fetch it or pass `origin/main`; never treat 4 as `empty`). Do not re-derive the rule in prose.
 
 - Docs: all of `dev/**`, `docs/**`, any `*.md` (incl. `README.md`, `CLAUDE.md`, `SKILL.md`), `.github/ISSUE_TEMPLATE/**`, `.github/pull_request_template.md`. Everything else (workflows, `scripts/**/*.sh`, `**/*.bats`, `Makefile`, build configs) is code. Any code → **code** (mixed: stricter wins); all docs → **docs**; nothing changed → **empty**.
 

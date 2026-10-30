@@ -3,6 +3,7 @@
 # Offline: a throwaway repo, an isolated claimant identity, the shared fake gh.
 
 load test_helper
+bats_require_minimum_version 1.5.0
 PREFLIGHT="$REPO_ROOT/drive/scripts/preflight.sh"
 GUARD="$REPO_ROOT/drive/scripts/cross-repo-guard.sh"
 CLASSIFY="$REPO_ROOT/drive/scripts/classify-change.sh"
@@ -251,16 +252,28 @@ _branch_with() { # <path>... — commit each path on a feature branch off main
   done
 }
 
-@test "classify: an explicit base is honoured and a missing base falls back to the working tree" {
+@test "classify: an explicit base is honoured" {
   git checkout -q -b feat
   echo x > a.sh; git add a.sh; git commit -q -m a
   git checkout -q -b feat2; echo y > b.md; git add b.md; git commit -q -m b
-  run bash "$CLASSIFY" feat; [ "$output" = docs ]
+  run bash "$CLASSIFY" feat; [ "$status" -eq 0 ]; [ "$output" = docs ]
   run bash "$CLASSIFY" main; [ "$output" = code ]
-  git checkout -q main; echo z > new.sh
-  run bash "$CLASSIFY" no-such-ref; [ "$status" -eq 0 ]; [ "$output" = code ]
-  rm -f new.sh; mkdir newdir; echo q > newdir/a.md
-  run bash "$CLASSIFY" no-such-ref; [ "$output" = docs ]
+}
+
+@test "classify: a base that does not resolve fails with exit 4 and never prints empty" {
+  git checkout -q -b feat; echo x > a.sh; git add a.sh; git commit -q -m a
+  run --separate-stderr bash "$CLASSIFY" no-such-ref
+  [ "$status" -eq 4 ]; [ -z "$output" ]; [[ "$stderr" == *"no-such-ref"*"does not resolve"* ]]
+  # the default base is main: a clone without a local main must not read as "empty"
+  git checkout -q feat; git branch -q -m main gone
+  run --separate-stderr bash "$CLASSIFY"
+  [ "$status" -eq 4 ]; [ -z "$output" ]; [[ "$stderr" == *"'main' does not resolve"* ]]
+}
+
+@test "classify: a resolvable base with no merge base fails with exit 4" {
+  git checkout -q --orphan other; git rm -rfq . ; echo x > o.sh; git add o.sh; git commit -q -m o
+  run --separate-stderr bash "$CLASSIFY" main
+  [ "$status" -eq 4 ]; [ -z "$output" ]; [[ "$stderr" == *"failed"* ]]
 }
 
 # --- verify-close ------------------------------------------------------------
@@ -333,6 +346,37 @@ _close() { # [status] [claimed_by] [closed:yes|no] [mode:mv-edit|mv-only] — ta
   git checkout -q main; git merge -q --ff-only close
   run bash "$VCLOSE" "$ID" --base no-such-ref
   [[ "$output" != *"FAIL rename"* ]]; [[ "$output" == *"FAIL closed"* ]]
+}
+
+@test "verify-close: a short id does not match the files of a longer id" {
+  local long="T20000101-000001" short="T20000101"
+  git checkout -q -b close
+  printf -- '---\nstatus: Done\nclaimed_by:\n---\n\n## Closed (2026-01-01)\n' > "dev/JOURNAL/2026-01-01-$long-thing.md"
+  printf -- '---\nstatus: Open\n---\n' > "dev/TODO/$long-other.md"
+  git add -A; git commit -q -m c
+  run bash "$VCLOSE" "$short" --base no-such-ref
+  [ "$status" -eq 1 ]; [[ "$output" == *"no dev/JOURNAL file for $short"* ]]
+  [[ "$output" != *"still in dev/TODO"* ]]
+  run bash "$VCLOSE" "$long" --base no-such-ref
+  [[ "$output" == *"still in dev/TODO"* ]]; [[ "$output" != *"no dev/JOURNAL file"* ]]
+}
+
+@test "verify-close: T1 does not match T10 and a long id never matches a different long id" {
+  git checkout -q -b close
+  printf -- '---\nstatus: Done\n---\n\n## Closed (2026-01-01)\n' > dev/JOURNAL/2026-01-01-T10-thing.md
+  printf -- '---\nstatus: Done\n---\n\n## Closed (2026-01-01)\n' > dev/JOURNAL/2026-01-01-T20000101-000002-thing.md
+  git add -A; git commit -q -m c
+  run bash "$VCLOSE" T1 --base no-such-ref;  [[ "$output" == *"no dev/JOURNAL file for T1"* ]]
+  run bash "$VCLOSE" T10 --base no-such-ref; [ "$status" -eq 0 ]; [[ "$output" == "ok dev/JOURNAL/2026-01-01-T10-thing.md" ]]
+  run bash "$VCLOSE" T20000101-000001 --base no-such-ref; [[ "$output" == *"no dev/JOURNAL file"* ]]
+}
+
+@test "verify-close: two journal files for one exact id are still reported" {
+  git checkout -q -b close
+  for n in a b; do printf -- '---\nstatus: Done\n---\n\n## Closed (2026-01-01)\n' > "dev/JOURNAL/2026-01-01-$ID-$n.md"; done
+  git add -A; git commit -q -m c
+  run bash "$VCLOSE" "$ID" --base no-such-ref
+  [ "$status" -eq 1 ]; [[ "$output" == *"2 dev/JOURNAL files match"* ]]
 }
 
 # --- threads adoption (drive Phase 0.5 / Sending use _threads/threads.sh) ----

@@ -2,8 +2,9 @@
 # classify-change.sh [base] — /drive Phase 3.0: classify the change as docs or code.
 #
 #   base   ref to diff against (default: main); the changed set is
-#          `git diff --name-only <base>...HEAD`, falling back to the working-tree
-#          status when that diff cannot run (no such ref).
+#          `git diff --name-only <base>...HEAD`. A base that does not resolve
+#          (e.g. a clone with only origin/main) or a diff that cannot run is an
+#          error (exit 4), never a silent `empty`: pass origin/main or fetch.
 #
 # A path is docs when it is
 #   dev/** or docs/** (docs/ at any depth), any *.md (any depth),
@@ -12,7 +13,8 @@
 # Aggregate: all docs -> docs; any code -> code (mixed is code: stricter wins);
 # nothing changed -> empty (defer; re-run after the first commit).
 #
-# stdout: one word, docs | code | empty.   Exit: 0 | 2 usage | 3 not a git repo.
+# stdout: one word, docs | code | empty.   Exit: 0 | 2 usage | 3 not a git repo |
+# 4 base ref does not resolve / diff failed (message on stderr, nothing on stdout).
 # Judgment stays with the caller: which TDD/verification route each class takes.
 
 set -uo pipefail
@@ -28,10 +30,14 @@ esac
 
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "classify-change.sh: not a git repository" >&2; exit 3; }
 
-if ! changed="$(git diff --name-only "$base...HEAD" 2>/dev/null)"; then
-  # porcelain: "XY path" or "XY old -> new"; keep the new path
-  changed="$(git status --porcelain -uall 2>/dev/null | cut -c4- | sed 's/.* -> //; s/^"//; s/"$//')"
-fi
+git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1 || {
+  echo "classify-change.sh: base ref '$base' does not resolve; fetch it or pass an existing ref (e.g. origin/main)" >&2
+  exit 4
+}
+changed="$(git diff --name-only "$base...HEAD" 2>/dev/null)" || {
+  echo "classify-change.sh: git diff $base...HEAD failed (no merge base?); pass a different base" >&2
+  exit 4
+}
 
 kind=empty
 while IFS= read -r f; do

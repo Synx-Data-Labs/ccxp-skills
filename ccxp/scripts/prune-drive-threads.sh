@@ -15,11 +15,11 @@
 # resolved_at, falling back to sent_at.
 #
 # Options:
-#   --file PATH   Path to drive-threads.json (default: .claude/state/drive-threads.json).
+#   --file PATH   Path to drive-threads.json (default: $THREADS_FILE, else .claude/state/drive-threads.json).
 #   --days N      Grace window in days (default: 7).
 set -euo pipefail
 
-file=".claude/state/drive-threads.json"
+file=""
 days=7
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -35,6 +35,6 @@ done
 # success.
 threads="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/_threads/threads.sh"
 rc=0
-bash "$threads" --file "$file" prune --days "$days" || rc=$?
+bash "$threads" ${file:+--file "$file"} prune --days "$days" || rc=$?
 [ "$rc" -eq 3 ] && rc=0
 exit "$rc"

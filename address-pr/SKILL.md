@@ -6,6 +6,8 @@ argument-hint: "[PR number or URL]"
 
 Address a PR's review comments, verify CI and affected pipelines, then merge or notify.
 
+> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
+
 ## Argument
 
 `<arg>` is optional:
@@ -16,53 +18,42 @@ Address a PR's review comments, verify CI and affected pipelines, then merge or 
 
 ## Workflow
 
-### 1. Find PR
+### 1. Find PR, authorship gate (§1.3) and ownership (§1.6)
 
-- If `<arg>` is a number, use it directly
-- If `<arg>` is a URL, extract the PR number from the path
-- If empty, auto-pick (note `--author @me` — only our own PRs are ever auto-picked). Rather than
-  taking the single oldest open PR regardless of its ownership verdict (a permanently-owned-by-
-  another oldest PR would otherwise block every PR behind it forever), walk
-  the oldest-first list and pick the first PR whose ownership (§1.6) resolves to
-  `mine`/`free`/`new`/`untracked`, skipping `owned:<other>`/`unknown` candidates:
-
-  ```bash
-  bash <skills-root>/address-pr/scripts/auto-pick.sh
-  ```
-
-  Prints the picked PR's JSON (`{"number":...,"title":"...","createdAt":"...","reason":"<verdict>"}`)
-  on stdout, or nothing if no open PR is pickable (whether because there are none, or every one is
-  deferred). If it printed nothing, report "No open PRs to address" (or, if every PR was deferred,
-  say so — the script's stderr names which PRs were skipped and why) and exit.
-
-### 1.3. Authorship gate — only drive our OWN PRs (hard stop on foreign PRs)
-
-- Auto-pick (§1) filters `--author @me`, but the explicit number/URL path does **not** — so a session handed `address-pr 877` (by a human, by `/drive`, or by the `/ccxp` cron) would otherwise run the full loop on a PR a *teammate* authored: posting a Claude Code review comment, editing the body, and **merging it**.
-- That is "touching other people's PRs." Gate it before §1.5/§1.6:
+One read-only script decides all three; it writes nothing:
 
 ```bash
-ME=$(bash <skills-root>/_gh/gh.sh api user --jq .login 2>/dev/null)
-PR_AUTHOR=$(bash <skills-root>/_gh/gh.sh pr view <number> --json author --jq '.author.login' 2>/dev/null)
+GATE=$(bash <skills-root>/address-pr/scripts/entry-gate.sh <number|url|->); RC=$?
 ```
 
-- **`PR_AUTHOR == ME`** → ours, proceed to §1.5. (PRs the automation opened are authored by the token's account — the same `@me` — so all `/drive`/`/ccxp`-created PRs pass.)
-- **`PR_AUTHOR != ME`** (a teammate, or a bot like `app/*`) → **a foreign PR. Do NOT take any write action**: no merge, no push, no review comment, no body/label edit, no task-claim/ownership write.
-  - **Autonomous context** (`/ccxp` cron, auto-pick, `/drive` dispatch): `echo "PR #<number> authored by $PR_AUTHOR (not us) — skipping, not touching."` and **exit**. Never pick a foreign PR again this run.
-  - **Explicit human invocation** (`/address-pr <foreign-number>` typed by the user): STOP and ask the user what they want — a read-only review/summary is fine if they confirm, but **never merge or mutate a foreign PR**, even on request (tell them to merge it themselves or have the author do it). Treat "help with" as advisory-only.
-- If author can't be read (`PR_AUTHOR` empty / API error): treat as foreign and stop — err toward not touching, same principle as §1.6's `owned:?` rule.
+`<number|url|->`: a PR number, a `…/pull/<n>` URL, or `-` to auto-pick (our own open PRs only; oldest-first, skipping `owned:<other>`/`unknown`, so one permanently-owned PR cannot block the rest). `$GATE` is one JSON line `{number, task_id, author, verdict, head_ref}`. `$RC` is the gate; **anything not in this table, or an empty `$GATE`, is a stop** (fail closed):
 
-This gate is about **whose PR it is** (human-authorship); §1.6 is about **which CC session is driving our shared PRs**. Both must pass: a PR is workable only when it's *ours* (this gate) *and* not actively owned by another CC session (§1.6).
+- `0` (`mine`, `untracked`): proceed to §1.5
+- `10` (`free`): claim the task first (§1.6 `free`), then proceed
+- `11` (`new`): claim on the PR's own branch (§1.6 `new`), then proceed
+- `20` (`foreign`): **hard stop, no write action of any kind** (below)
+- `21` (`owned:<agent>`): defer: another session owns the task; do not run the loop or merge
+- `22` (`unknown`): defer: ownership unresolvable (fail-safe, never a silent merge)
+- `1`: `-` found no pickable PR: report "No open PRs to address" (the script's stderr names skipped PRs) and exit
+- `2`: usage, fix the argument
+
+**`20` foreign PR** (authored by someone else or a bot like `app/*`, or author/login unreadable): the explicit number/URL path is not filtered by `--author @me`, so `address-pr 877` would otherwise review, edit and **merge a teammate's PR**. No merge, push, review comment, body/label edit or task-claim write.
+
+- **Autonomous context** (`/ccxp` cron, auto-pick, `/drive` dispatch): `echo "PR #<number> authored by <author> (not us) — skipping, not touching."` and **exit**. Never pick a foreign PR again this run.
+- **Explicit human invocation**: STOP and ask the user what they want — a read-only review/summary is fine if they confirm, but **never merge or mutate a foreign PR**, even on request (tell them to merge it themselves or have the author do it). Treat "help with" as advisory-only.
+
+§1.3 is about **whose PR it is**; §1.6 about **which CC session is driving our shared PRs**; the script checks them in that order and both must pass. The §1.5 Project writes below run only after the gate.
 
 ### 1.5. Status=Review + PR ref (best-effort)
 
 `/address-pr` may be invoked independently of `/drive` (e.g., reviewing an already-open PR). To make the Project board show the PR is in human-reviewable state, do two things up front:
 
-1. **Correlate the PR back to its task** via `_session/pr_task_id.sh` (branch name → PR body `Task:` link → commit-message scan).
+1. **Correlate the PR back to its task**: the gate's `task_id` (from `_session/pr_task_id.sh`: branch name → PR body `Task:` link → commit-message scan).
 2. **Set Project Status = Review** so the board flips out of `In Progress` for the duration of the PR loop.
 3. **Append the PR ref to the task's Project item title** (`set-pr-ref.sh`) so the board shows the task→PR mapping at a glance. Idempotent — a no-op if `/gcpr` already stamped it, or on re-entry.
 
 ```bash
-TASK_ID=$(bash <skills-root>/_session/pr_task_id.sh <number>)
+TASK_ID=$(jq -r .task_id <<<"$GATE")
 if [ -n "$TASK_ID" ]; then
   # 1) Status=Review
   bash <skills-root>/_session/status.sh "$TASK_ID" Review
@@ -72,7 +63,7 @@ if [ -n "$TASK_ID" ]; then
 fi
 ```
 
-Both calls are best-effort: failures log to stderr and don't block the workflow. If `pr_task_id.sh` returns empty (untracked branch, no body Task: link, no T-id in commits), skip the Project writes — the file-driven mirror workflow will reconcile state on the next push.
+Both calls are best-effort: failures log to stderr and don't block the workflow. If `task_id` is empty (untracked branch, no body Task: link, no T-id in commits), skip the Project writes — the file-driven mirror workflow will reconcile state on the next push.
 
 **Clone-locality note (informational only):** once `TASK_ID` is resolved you *may* run the guard for visibility:
 
@@ -99,28 +90,7 @@ Both calls are best-effort: failures log to stderr and don't block the workflow.
 - The old per-PR marker stranded green PRs under dead sessions (#1361/#1326/#1386/#1524) and leaned on a verified-dead liveness probe that isn't feasible on stable signals.
 - Deriving ownership from the task makes that whole failure class vanish: a dead agent's claim self-clears when its clone next picks up work (release-on-pickup), or via the reclaim sweep for a foreign dead clone.
 
-So before doing **any** work on the PR, resolve its owner from the task claim:
-
-```bash
-OWN=$(bash <skills-root>/_session/task_claim.sh pr-owner <number>)
-case "$OWN" in
-  mine|untracked) ;;        # our task, or not task-tracked — proceed
-  free)                     # the task is unclaimed — claim it FIRST (see below), then proceed
-    ;;
-  new)                      # THIS PR itself introduces the (unclaimed) task file — claim
-    ;;                      # differently (see below), then proceed
-  owned:*)                  # the PR's task is claimed by ANOTHER (machine, clone) agent
-    echo "PR #<number>'s task is owned by ${OWN#owned:} — deferring, not touching."
-    # STOP: do not run the loop, do not merge. The reclaim sweep frees it if the
-    # owning clone is genuinely dead (no PR activity past the window); a live
-    # agent keeps it. No Slack escalation, no silent takeover.
-    ;;
-  unknown)                  # task file unresolvable (network / not found)
-    echo "PR #<number> ownership unresolvable — deferring (fail-safe, never a silent merge)."
-    # STOP.
-    ;;
-esac
-```
+The gate (§1) already resolved the owner via `_session/task_claim.sh pr-owner <number>`; its verdicts mean:
 
 - **`mine`** — this clone holds the task claim (the normal `/drive` path: it claimed the task before opening the PR). Proceed.
 - **`free`** — the task exists **on `main`** but is unclaimed. **Claim it before doing anything else** — see below. Don't just "proceed"; a PR can sit open against an unclaimed task for weeks, during which the Project board reads `Open`/unclaimed even while a PR against it exists, and a peer session could pick the same task for duplicate work.
@@ -243,34 +213,17 @@ bash <skills-root>/_gh/gh.sh pr checks <number>
 - The reviewer is a **fresh, independent Claude agent** dispatched via the `Agent` tool — it has no memory of why this change was made, which is the property that made Copilot's review useful in the first place (a second pair of eyes, not the same author grading their own work).
 - This also drops the org-tier dependency (Copilot Enterprise / Code Review add-on) entirely — every repo gets the same review mechanism regardless of GitHub plan.
 
-- State lives on the PR itself, not in local files — the same durability requirement §1.5/§1.6 already impose elsewhere in this skill (re-invoking `/address-pr` from a different clone or session must re-derive the same state, not restart blind).
-- Keyed to the **head SHA the review actually covered**, not just a timestamp — a timestamp-only comparison has a TOCTOU gap (a push landing between the diff fetch and the comment post would date-order *after* the comment despite never having been reviewed):
+- State lives on the PR itself, not in local files — re-invoking `/address-pr` from a different clone or session must re-derive the same state, not restart blind (same durability rule as §1.5/§1.6).
+- Keyed to the **head SHA the review actually covered**, not a timestamp — a push landing between the diff fetch and the comment post would date-order *after* the comment despite never having been reviewed.
 
 ```bash
-OWNER=$(bash <skills-root>/_gh/gh.sh repo view --json owner --jq .owner.login)
-NAME=$(bash <skills-root>/_gh/gh.sh repo view --json name --jq .name)
-ME=$(bash <skills-root>/_gh/gh.sh api user --jq .login 2>/dev/null)
-
-HEAD_SHA=$(bash <skills-root>/_gh/gh.sh pr view <NUMBER> --json headRefOid --jq .headRefOid)
-
-# Our own most recent "Claude Code review:" comment carries the SHA it
-
-> `<skills-root>` = this skill's "Base directory" minus its last component; substitute the literal path (`skill-conventions` §9).
-# reviewed in its body (posted in step 3 below) — extract it, not just the
-# comment's timestamp, so a push landing mid-dispatch can't be mistaken for
-# "already covered" by date ordering alone.
-LAST_REVIEWED_SHA=$(bash <skills-root>/_gh/gh.sh api "/repos/$OWNER/$NAME/issues/<NUMBER>/comments" \
-  | jq --arg me "$ME" -r '[.[] | select(.user.login==$me and (.body | startswith("**Claude Code review:**"))) | .body] | last // ""' \
-  | grep -oE '\(sha: [0-9a-f]+\)' | grep -oE '[0-9a-f]+' || true)
-
-if [ "$LAST_REVIEWED_SHA" = "$HEAD_SHA" ]; then
-  : # already reviewed this exact commit — skip to the approval gate below (LGTM check), then step e
-else
-  : # dispatch a fresh review (steps 1-3 below)
-fi
+bash <skills-root>/address-pr/scripts/review-state.sh <NUMBER>   # -> "reviewed <head-sha>" | "needs-review <head-sha>"
 ```
 
-Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise skip straight to step e.
+It reads our own latest `**Claude Code review:**` comment, takes the `(sha: …)` from its header line, and compares it with the PR's current head (exit 3 = gh failed: stop, never read as `reviewed`). Keep the printed sha as `HEAD_SHA`.
+
+- `reviewed <sha>`: this exact commit is already reviewed — skip to the approval gate below (LGTM check), then step e.
+- `needs-review <sha>`: dispatch a fresh review (steps 1-3 below).
 
 1. **Diff the PR**, scoped to the actual changed files:
 
@@ -279,19 +232,13 @@ Only dispatch a fresh review when `$LAST_REVIEWED_SHA` != `$HEAD_SHA`; otherwise
    ```
 
 2. **Dispatch an independent review agent** via the `Agent` tool (`subagent_type: code-improvement-scanner`, or `general-purpose` if the diff is a workflow/config change outside that agent's usual scope). Give it the diff (or point it at the branch/files — its own choice how to read them) and an explicit review brief: find real bugs, correctness issues, security issues, and quality problems; if the diff is correct and complete, say so plainly (a clean bill) rather than manufacturing nitpicks. **Do not tell it what the implementation was trying to achieve beyond the PR's own title/description** — that context gap is what makes the review independent.
-3. **Post the agent's report as a PR comment**, via a file/stdin — **never** splice the agent's freeform text into an inline double-quoted shell argument; a review report routinely contains `$`, backticks, or code snippets that bash would try to expand or command-substitute before `gh` ever sees them:
+3. **Post the agent's report as a PR comment** from a file: write the report to `$REVIEW_REPORT_FILE` (never splice the agent's freeform text into a shell argument — it routinely contains `$`, backticks or code snippets), then:
 
    ```bash
-   {
-     echo "**Claude Code review:** (sha: ${HEAD_SHA})"
-     echo
-     cat "$REVIEW_REPORT_FILE"   # the agent's report, written to a file — not interpolated
-   } > /tmp/cc-review-comment.md
-
-   bash <skills-root>/_gh/gh.sh pr comment <NUMBER> --body-file /tmp/cc-review-comment.md
+   bash <skills-root>/address-pr/scripts/post-review.sh <NUMBER> "$HEAD_SHA" "$REVIEW_REPORT_FILE"   # add --dry-run to preview
    ```
 
-   This both preserves the audit trail a human skimming the PR used to get from Copilot's comments (visible on the PR itself, not just in this session's transcript) and re-derives cleanly next time this section runs — no local state to lose or hand off between sessions.
+   It posts `**Claude Code review:** (sha: <HEAD_SHA>)` plus the report, so the audit trail lives on the PR. Nothing is posted on a non-zero exit: `2` empty/unreadable report, `3` stale (the head moved since `HEAD_SHA`; re-run `review-state.sh` and review the new head), `4` gh failure.
 
 - If the report is a clean bill (no real findings): review is complete — set `CLEAN_BILL=1`, dispatch the approval gate below, then continue to step e.
 - If the report describes real issues: **before responding**, invoke `superpowers:receiving-code-review`. It enforces: steelman the finding before deciding to push back; distinguish "wrong because I have context the reviewer lacked" from "wrong because I want to be done"; and when pushing back (not making a code change), post a follow-up PR comment with the specific design constraint or test that makes the finding incorrect — not "stylistic preference". Then address each per the skill's output: fix code (commit + push — the head SHA changes, so the check above no longer matches `$LAST_REVIEWED_SHA` and a fresh review re-triggers next iteration), or post the pushback comment and move on. **Never silently drop a finding without a comment explaining why.** This targets the same "argue with the reviewer to feel productive" anti-pattern the Copilot-era wording warned about — the skill is still the brake, just aimed at a different reviewer.

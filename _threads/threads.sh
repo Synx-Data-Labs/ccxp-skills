@@ -15,7 +15,12 @@
 #         earlier unresolved one for the same key is superseded by definition)
 #   resolve <key> [--at ISO] [--resolution TEXT]
 #         mark resolved (adds resolved_at and optional resolution)
-#   list [--unresolved]      TSV: key, resolved, type, sent_at, summary
+#   fix-ref <key> --channel C --ts TS
+#         repair a stale reference in place (channel_id / message_ts only; the
+#         type, summary, sent_at and resolved state are kept); exit 3 if absent
+#   list [--unresolved] [--full]
+#                            TSV: key, resolved, type, sent_at, summary
+#                            (--full appends channel_id, message_ts)
 #   prune [--days N]         drop resolved entries whose resolved_at (else
 #                            sent_at) is older than N days (default 7);
 #                            unresolved entries are always kept
@@ -112,15 +117,42 @@ function th_resolve() {
     <<<"$state")"
 }
 
+function th_fix_ref() {
+  local key="${1:-}" channel="" ts="" state
+  [[ -n "$key" ]] || { th_die "fix-ref needs <key>"; return 2; }
+  shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --channel) channel="$(th_arg "$@")"; shift 2 ;;
+      --ts) ts="$(th_arg "$@")"; shift 2 ;;
+      *) th_die "fix-ref: unknown argument: $1"; return 2 ;;
+    esac
+  done
+  [[ -n "$channel" && -n "$ts" ]] || { th_die "fix-ref needs --channel and --ts"; return 2; }
+  [[ -f "$TH_FILE" ]] || return 3
+  state="$(th_load)" || return $?
+  jq -e --arg k "$key" 'has($k)' <<<"$state" >/dev/null || return 3
+  th_store "$(jq --arg k "$key" --arg c "$channel" --arg t "$ts" \
+    '.[$k] += {channel_id: $c, message_ts: $t}' <<<"$state")"
+}
+
 function th_list() {
-  local only=0 state
-  [[ "${1:-}" == "--unresolved" ]] && only=1
+  local only=0 full=0 state
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --unresolved) only=1; shift ;;
+      --full) full=1; shift ;;
+      *) th_die "list: unknown argument: $1"; return 2 ;;
+    esac
+  done
   [[ -f "$TH_FILE" ]] || return 0
   state="$(th_load)" || return $?
-  jq -r --argjson only "$only" 'to_entries[]
+  jq -r --argjson only "$only" --argjson full "$full" 'to_entries[]
     | select($only == 0 or .value.resolved != true)
     | [.key, (.value.resolved // false | tostring), (.value.type // ""),
-       (.value.sent_at // ""), (.value.summary // "" | gsub("[\t\n]"; " "))] | @tsv' <<<"$state"
+       (.value.sent_at // ""), (.value.summary // "" | gsub("[\t\n]"; " "))]
+      + (if $full == 1 then [(.value.channel_id // ""), (.value.message_ts // "")] else [] end)
+    | @tsv' <<<"$state"
 }
 
 function th_prune() {
@@ -156,8 +188,9 @@ function th_main() {
     add) th_add "$@" ;;
     resolve) th_resolve "$@" ;;
     list) th_list "$@" ;;
+    fix-ref) th_fix_ref "$@" ;;
     prune) th_prune "$@" ;;
-    *) echo "usage: threads.sh [--file F] [--dry-run] add|resolve|list|prune ..." >&2; return 2 ;;
+    *) echo "usage: threads.sh [--file F] [--dry-run] add|resolve|fix-ref|list|prune ..." >&2; return 2 ;;
   esac
 }
 

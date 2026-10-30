@@ -98,3 +98,13 @@ load test_helper
   run bash -c 'date -u -d "2026-01-02" +%F 2>/dev/null || date -u -j -f %Y-%m-%d 2026-01-02 +%F'
   [ "$output" = 2026-01-02 ]
 }
+
+@test "fake_gh: FAKE_GH_STDIN=1 captures stdin of a served call, otherwise stdin is not read" {
+  mkdir "$BATS_TEST_TMPDIR/fx"
+  echo 'ok' > "$BATS_TEST_TMPDIR/fx/pr_comment.txt"
+  fake_gh "$BATS_TEST_TMPDIR/fx"
+  FAKE_GH_STDIN=1 run bash -c 'printf "hello body" | gh pr comment 1 --body-file -'
+  [ "$status" -eq 0 ]
+  [ "$(cat "$FAKE_GH_LOG.stdin")" = "hello body" ]
+  assert_calls "$FAKE_GH_LOG" '^pr comment 1 --body-file -$'
+}
