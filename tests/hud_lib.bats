@@ -443,3 +443,17 @@ _queue_fixture() {
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -r .total <<<"$output")" = 15 ]
 }
+
+@test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {
+  local repo; repo=$(_make_repo q-edge)
+  local ap="$BATS_TEST_TMPDIR/ap-clone"; mkdir -p "$ap"; git -C "$ap" init -q
+  printf '# Q\n' > "$repo/dev/TODO/queue.md"
+  _task "$repo" 1 Open "claimed_by: null"
+  _task "$repo" 2 "In Progress — UNBLOCKED now"
+  _task "$repo" 3 Open "claimed_by: $(_clone_id "$ap")"
+  _task "$repo" 4 Open
+  local i; for i in 1 2 3 4; do _qline "$i" "$repo"; done
+  printf '{"schema":2,"status":"paused","skip_ids":[],"needs_attention":[{"id":"T20260101-000004","reason":"r","kind":"blocked"}],"dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$output" = '{"total":4,"ready":3,"blocked":1,"decision":0,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
+}
