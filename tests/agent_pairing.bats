@@ -233,7 +233,7 @@ EOF
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `finish`, `park`, `unpark`, `next`, `ref` and `show`' "$f"
+  grep -q 'only `start`, `finish`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render` and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
 }
 

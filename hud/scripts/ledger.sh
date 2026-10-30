@@ -49,8 +49,8 @@ LEDGER_EMPTY='{"schema":3,"lifetime_jobs":0,"running":[],"next":[],"parked":[],"
 
 # Current ledger, normalized to v3; defaults when missing/corrupt. Reads old shapes too.
 ledger-read() {
-  local f; f=$(ledger-file)
-  jq -c 'if type == "object" then . else {} end
+  local f out; f=$(ledger-file)
+  out=$(jq -c 'if type == "object" then . else {} end
     | {schema: 3,
        updated_at: (.updated_at | strings // ""),
        lifetime_jobs: (.lifetime_jobs | numbers // 0),
@@ -68,7 +68,8 @@ ledger-read() {
                 | {id, context: (.context | strings // "")} + (if (.title | strings // "") != "" then {title} else {} end)],
        ref_counters: ((.ref_counters | if type == "object" then . else {} end) as $c
                       | {n: ($c.n | numbers // 0), s: ($c.s | numbers // 0), k: ($c.k | numbers // 0)})}' \
-    "$f" 2>/dev/null || printf '%s' "$LEDGER_EMPTY"
+    "$f" 2>/dev/null) || out=""
+  printf '%s' "${out:-$LEDGER_EMPTY}"
 }
 
 # Render the markdown view of a normalized ledger ($1 = JSON) into ccxp-ledger.md. Best-effort.
@@ -97,7 +98,8 @@ ledger-migrate-backup() {
   local f="$1"
   [[ -s "$f" ]] || return 0
   jq -e '.schema == 3' "$f" >/dev/null 2>&1 && return 0
-  cp -p "$f" "$f.bak-$(date -u +%Y%m%dT%H%M%SZ)-$$" 2>/dev/null || true
+  cp -p "$f" "$f.bak-$(date -u +%Y%m%dT%H%M%SZ)-$$" 2>/dev/null \
+    || { echo "ledger: cannot back up $f; not migrating" >&2; return 1; }
   jq -r 'select(type == "object" and (.parked | type) == "number")
     | select(.parked > ((.parked_ids // []) | length))
     | "ledger: migrated old file: legacy parked count \(.parked) > \((.parked_ids // []) | length) ids; kept the ids only"' \
@@ -110,13 +112,16 @@ ledger-update() {
   local f tmp cur
   f=$(ledger-file)
   mkdir -p "$(dirname "$f")" 2>/dev/null || return 1
+  if jq -e '(.schema | numbers // 0) > 3' "$f" >/dev/null 2>&1; then
+    echo "ledger: $f has a newer schema than this script (3); not writing" >&2; return 1
+  fi
   cur=$(ledger-read)
   tmp=$(mktemp "$f.XXXXXX") || return 1
   if printf '%s' "$cur" | jq -c "$@" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       "$filter | .schema = 3 | .updated_at = \$now | .next_job = (.lifetime_jobs + 1)" > "$tmp" 2>/dev/null; then
     chmod 600 "$tmp" 2>/dev/null
     LEDGER_LAST=$(<"$tmp")
-    ledger-migrate-backup "$f"
+    ledger-migrate-backup "$f" || { unlink "$tmp" 2>/dev/null; return 1; }
     mv "$tmp" "$f"
     ledger-render "$LEDGER_LAST"
   else
@@ -125,7 +130,9 @@ ledger-update() {
   fi
 }
 
-ledger-int() { [[ "$1" =~ ^[0-9]+$ ]] || { echo "ledger: not a number: $1" >&2; return 2; }; }
+ledger-int() {
+  [[ "$1" =~ ^[0-9]{1,9}$ ]] || { echo "ledger: not a number (1-9 digits): $1" >&2; return 2; }
+}
 
 ledger-kid() { local k; k=$(ledger-refnum "${1:-}") || return 2; printf 'k%s' "$k"; }
 
@@ -186,6 +193,7 @@ ledger-add() {
 # $1 ref: n3, N3, 3 (bare = n3), or a legacy i3 / a3
 ledger-done() {
   local r="${1:-}" p="n" n
+  [[ "$r" =~ ^[sSkK] ]] && { echo "ledger: next refs are n<k> (or legacy i/a): $r" >&2; return 2; }
   n=$(ledger-refnum "$r") || return 2
   [[ "$r" =~ ^[iaIA] ]] && p=$(printf '%s' "${r:0:1}" | tr 'IA' 'ia')
   ledger-update '(.next | map(select(.ref == $r))) as $hit
@@ -229,10 +237,10 @@ ledger() {
                       + [{job: $n, title: $t, context: (if $hc then $c else ($old.context // "") end),
                           started_at: (if ($old.started_at // "") != "" then $old.started_at else $hm end)}] | sort_by(.job))
         | .lifetime_jobs = ([.lifetime_jobs, $n] | max)' \
-        --argjson n "${POS[0]}" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" ;;
+        --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" ;;
     finish)
       ledger-int "${1:-}" || return 2
-      ledger-update '.running |= map(select(.job != $n))' --argjson n "$1" ;;
+      ledger-update '.running |= map(select(.job != $n))' --argjson n "$((10#$1))" ;;
     park)
       ledger-args "$@" || return 2
       local k extra; k=$(ledger-kid "${POS[0]:-}") || return 2
@@ -250,7 +258,6 @@ ledger() {
     set-counter)
       [[ "${1:-}" =~ ^[nsk]$ ]] || { echo "ledger: set-counter prefix must be n, s or k: ${1:-}" >&2; return 2; }
       ledger-int "${2:-}" || return 2
-      [[ ${#2} -le 9 ]] || { echo "ledger: number too large: $2" >&2; return 2; }
       ledger-update '.ref_counters[$p] = $v' --arg p "$1" --argjson v "$((10#$2))" ;;
     render) ledger-render-text ;;
     next | input | action) case "${1:-}" in

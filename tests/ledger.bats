@@ -289,3 +289,18 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ "${lines[9]}" = "**k4**" ]
   [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
 }
+
+@test "review fixes: empty file starts fresh, s/k refs rejected by next done, newer schema not overwritten, big numbers rejected" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"; : > "$CCXP_LEDGER_FILE"
+  bash "$LEDGER" start 3 "t"
+  [ "$(bash "$LEDGER" show | jq .lifetime_jobs)" = "3" ]
+  bash "$LEDGER" next add "q" >/dev/null
+  run bash "$LEDGER" next done k1
+  [ "$status" -ne 0 ]
+  run bash "$LEDGER" start 99999999999999999999 x
+  [ "$status" -ne 0 ]
+  echo '{"schema":4,"lifetime_jobs":1}' > "$CCXP_LEDGER_FILE"
+  run bash "$LEDGER" start 5 x
+  [ "$status" -ne 0 ]
+  [ "$(cat "$CCXP_LEDGER_FILE")" = '{"schema":4,"lifetime_jobs":1}' ]
+}

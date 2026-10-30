@@ -53,7 +53,7 @@ Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): r
 
 ## Migration
 
-- The first write onto an older file copies it to `<file>.bak-<UTC timestamp>-<pid>` (also for a corrupt one), then writes schema 3. No data is lost:
+- The first write onto an older file copies it to `<file>.bak-<UTC timestamp>-<pid>` (also for a corrupt one), then writes schema 3. The backup keeps everything; the new file drops only the old parked count and `i`/`a` counters:
   - `parked_ids` become `parked` items with an empty `context`; the old count is dropped. A count larger than its ids is reported on stderr and no placeholders are invented.
   - `inputs`/`actions` merge into `next` with their legacy refs (`i3`, `a2`) kept; `next done i3` closes one.
   - Running items and `next` items get `context: ""`.
