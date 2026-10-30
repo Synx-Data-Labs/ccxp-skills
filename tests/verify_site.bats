@@ -172,7 +172,7 @@ match() { run bash "$SCR/match-testplan.sh" "$BODY" "$RES" "$OUT"; }
   echo 'this is not json' >> "$RES"
   match
   [ "${lines[-1]}" = 0 ]
-  ! grep -q '\[x\]' "$OUT"
+  if grep -q '\[x\]' "$OUT"; then return 1; fi
 }
 
 @test "match: the build item ticks when the script runs at all" {
@@ -343,7 +343,7 @@ SHIM
   [[ "$output" == *"lighthouse failed: boom"* ]]
   [ "$(printf '%s\n' "$output" | jq -rs '.[0].scores.performance')" = 95 ]
   [ -z "$(ls "$VERIFY_SITE_TMP" | grep -E '^lh-' || true)" ]
-  ! grep -vE '^http://127\.0\.0\.1:4321/' "$FAKE_LH_LOG"
+  if grep -vE '^http://127\.0\.0\.1:4321/' "$FAKE_LH_LOG"; then return 1; fi
 }
 
 @test "a11y and responsive: empty stdin is a skip record, no browser started" {
@@ -383,7 +383,7 @@ SHIM
   run bash "$SCR/preview-down.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"stopped"* ]]
-  ! kill -0 "$pid" 2>/dev/null
+  if kill -0 "$pid" 2>/dev/null; then return 1; fi
   [ ! -f "$VERIFY_SITE_TMP/verify-site.env" ]
 }
 
@@ -436,7 +436,7 @@ SHIM
   run bash -c "cd '$d' && bash '$SCR/preview-up.sh'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"Previous preview (pid $first) still running"* ]]
-  ! kill -0 "$first" 2>/dev/null
+  if kill -0 "$first" 2>/dev/null; then return 1; fi
   bash "$SCR/preview-down.sh"
 }
 
@@ -575,5 +575,5 @@ e2e_setup() {
   for s in $(grep -oE '[a-z0-9-]+\.sh' "$REPO_ROOT/verify-site/SKILL.md" | sort -u); do
     [ -f "$SCR/$s" ] || [ -f "$REPO_ROOT/_gh/$s" ] || { echo "SKILL.md names missing script: $s" >&2; return 1; }
   done
-  ! grep -q 'check-links' "$REPO_ROOT/verify-site/SKILL.md"
+  if grep -q 'check-links' "$REPO_ROOT/verify-site/SKILL.md"; then return 1; fi
 }
