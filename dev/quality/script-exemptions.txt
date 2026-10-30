@@ -1,0 +1,18 @@
+# Skills exempt from the scripts+tests coverage contract (skill-conventions section 9).
+# Format: <name><TAB><class: reference|vendored|alias|mod|nonskill><TAB><reason>
+# An exempt skill still gets the structural checks (frontmatter, refs, cited script paths).
+# A missing reason, unknown class or a stale (nonexistent) name fails the lint.
+agents-sdk	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+cloudflare	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+cloudflare-email-service	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+cloudflare-one	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+cloudflare-one-migrations	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+durable-objects	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+sandbox-sdk	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+workers-best-practices	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+wrangler	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+web-perf	vendored	Vendored from the upstream Cloudflare skills set; kept verbatim, so structural lint only.
+help-net	reference	Diagnostic decision tree; its probe script gets a classifier in a later phase.
+land	alias	Pure alias of gcpr; has no workflow of its own.
+hud	mod	Statusline mod, not a skill (no SKILL.md); its contract lives in hud/README.md.
+hooks	nonskill	Plugin hook scripts, not a skill.
