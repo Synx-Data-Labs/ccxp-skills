@@ -51,7 +51,7 @@ function world($: any, on: any, w: World) {
   })
   on('process.run', (_: any, e: any) => {
     w.runs.push([...e.argv])
-    w.stdins.push(JSON.stringify(e))
+    w.stdins.push(String(e.init?.stdin ?? e.stdin ?? ''))
     w.cwds.push(e.init?.cwd)
     if (w.helper === 'throw') throw new Error('boom')
     if (w.helperByCwd?.[e.init?.cwd]) return { value: { exitCode: 0, stdout: w.helperByCwd[e.init?.cwd], stderr: '' } }
@@ -432,9 +432,16 @@ test('fill, light theme: the light background', async ($: any, on: any) => {
   expect(await fillBand($, on, 'light', { backgroundColor: FILL_BG.light })).toBe(true)
 })
 
-test('fillColor in the config file is used (blue, dark; hex on any theme); an old fill:false is ignored', async ($: any, on: any) => {
+// One world per test: the engine refuses on() hooks registered after a test first called $.
+test('fillColor in the config file is used: a named colour (blue, dark)', async ($: any, on: any) => {
   expect(await fillBand($, on, 'dark', { backgroundColor: FILL_COLORS.blue.dark }, '{"fillColor": "blue"}')).toBe(true)
+})
+
+test('fillColor in the config file is used: hex on any theme', async ($: any, on: any) => {
   expect(await fillBand($, on, 'auto', { backgroundColor: '#112233' }, '{"fillColor": "#112233"}')).toBe(true)
+})
+
+test('an old fill:false in the config file is ignored', async ($: any, on: any) => {
   expect(await fillBand($, on, 'dark', { backgroundColor: FILL_BG.dark }, '{"fill": false}')).toBe(true)
 })
 
