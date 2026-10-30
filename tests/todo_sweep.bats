@@ -364,3 +364,12 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   [ "$status" -eq 3 ]
   [ -z "$(_ids)" ]
 }
+
+@test "park: an id mentioned in an earlier reason is not mistaken for a duplicate" {
+  _task $A t Open; _task $B t Open; _queue $A $B
+  _sw park "$A:blocked on $B: waiting" "$B:why"
+  [ "$status" -eq 0 ]
+  [ -e "$R/dev/PARKING/$A-t.md" ]
+  [ -e "$R/dev/PARKING/$B-t.md" ]
+  [ -z "$(_ids)" ]
+}
