@@ -27,7 +27,7 @@
 # park applies an owner-APPROVED list and never decides what to park: per ID:REASON
 # set `status: Parked`, add `## Parked (date)` + the reason, move the file to
 # dev/PARKING/ (git mv when tracked) and drop its queue line. An ID already in
-# dev/PARKING/ is skipped; epic-links sync and the commit stay with the caller.
+# dev/PARKING/ is skipped (a stale queue line is dropped); a repeated ID keeps its first reason; epic-links sync and the commit stay with the caller.
 # --dry-run prints `DRY-RUN <action>` lines and changes nothing. apply never
 # commits. Exit: 0 ok, 2 usage, 3 nothing to do, 4 unexpected input (missing
 # queue, malformed queue entry, duplicate id, journal target exists, a
@@ -319,7 +319,7 @@ function sw_apply_phase3a() {
 }
 
 function sw_park() {
-  local date item id reason src file n=0 skipped=0 todo_ids=""
+  local date item id reason src file n=0 todo_ids=""
   date="$(bash "$TODO_LIB_REPO_ROOT/_date/date.sh" today)"
   # Validate everything first (fail closed before writing anything).
   for item in "${PARK[@]}"; do
@@ -337,12 +337,12 @@ function sw_park() {
   done
   for item in "${PARK[@]}"; do
     id="${item%%:*}"; reason="${item#*:}"
-    case " $todo_ids " in *" $id "*) ;; *) printf 'SKIPPED %s (already in dev/PARKING)\n' "$id"; skipped=$((skipped+1)); continue ;; esac
+    case " $todo_ids " in *" $id "*) ;; *) printf 'SKIPPED %s (already in dev/PARKING)\n' "$id"; [ "$DRY" = 1 ] || q_remove "$QUEUE" "$id"; continue ;; esac
     src="$(sw_path "$id")"; file="${src##*/}"
     n=$((n+1))
     if sw_do "PARKED $id -> dev/PARKING/$file"; then
       sw_set_status "$src" Parked
-      grep -q '^## Parked (' "$src" || printf '\n## Parked (%s)\n\n%s\n' "$date" "$reason" >> "$src"
+      printf '\n## Parked (%s)\n\n%s\n' "$date" "$reason" >> "$src"
       mkdir -p "$ROOT/dev/PARKING"
       if git -C "$ROOT" ls-files --error-unmatch "dev/TODO/$file" >/dev/null 2>&1; then
         git -C "$ROOT" mv "dev/TODO/$file" "dev/PARKING/$file"
@@ -367,7 +367,7 @@ function todo-sweep-main() {
       --phase) [ $# -ge 2 ] || sw_usage; phase="$2"; shift 2 ;;
       --dry-run) DRY=1; shift ;;
       --supersede) [ $# -ge 2 ] || sw_usage; [[ "$2" =~ ^$SW_ID_RE:$SW_ID_RE$ ]] || sw_usage; SUPERSEDE+=("$2"); shift 2 ;;
-      *) [ "$cmd" = park ] && [[ "$1" =~ ^$SW_ID_RE:.+ ]] || sw_usage; PARK+=("$1"); shift ;;
+      *) [ "$cmd" = park ] && [[ "$1" =~ ^$SW_ID_RE:.+ ]] || sw_usage; case " ${PARK[*]:-} " in *" ${1%%:*}:"*) ;; *) PARK+=("$1") ;; esac; shift ;;
     esac
   done
   [ -d "$ROOT" ] || sw_die 2 "no such directory: $ROOT"
