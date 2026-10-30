@@ -82,6 +82,8 @@ export type Ci = {
 export type PluginVersion = {
   installed: string
   latest: string | null
+  /** The plugin's GitHub repo URL from its plugin.json (`https://github.com/<owner>/<repo>`); absent when unknown. */
+  url?: string
 }
 
 export type HelperData = {

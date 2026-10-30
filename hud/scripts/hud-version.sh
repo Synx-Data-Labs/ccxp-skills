@@ -2,7 +2,10 @@
 # ccxp-skills version data for the ccxp-hud band (hud-data.sh sources this).
 #
 # hud-version-json <plugin_root> <enabled 1|0> [<repo_url>]
-#   prints {"installed":"X.Y.Z","latest":"X.Y.Z"|null} or "null" (disabled, or no readable version).
+#   prints {"installed":"X.Y.Z","latest":"X.Y.Z"|null[,"url":"https://github.com/<owner>/<repo>"]} or "null"
+#   (disabled, or no readable version). `url` is the plugin's GitHub location from its own plugin.json
+#   (`repository`, else `homepage`, a `.git` suffix or `#fragment` dropped); absent when neither is a plain
+#   github.com repo URL (the mod then falls back to the public ccxp-skills URL).
 #
 # installed = the running plugin's own .claude-plugin/plugin.json (local read, no network).
 # latest    = the highest plain `ccxp-skills--vX.Y.Z` tag of the public repo, from
@@ -54,6 +57,17 @@ hvr-installed() {
   local v
   v=$(jq -r 'if (.version | type) == "string" then .version else "" end' "$1/.claude-plugin/plugin.json" 2>/dev/null | head -n1) || v=""
   hvr-valid "$v" && printf '%s' "$v"
+  return 0
+}
+
+# $1 plugin root -> the plugin's GitHub repo URL from plugin.json ("" when missing or not a plain github.com/<owner>/<repo>).
+hvr-url() {
+  local u f
+  for f in repository homepage; do
+    u=$(jq -r --arg f "$f" '(.[$f] | if type == "object" then .url else . end) | if type == "string" then . else "" end' "$1/.claude-plugin/plugin.json" 2>/dev/null | head -n1) || u=""
+    u="${u%%#*}"; u="${u%.git}"; u="${u%/}"
+    if [[ "$u" =~ ^https://github\.com/[A-Za-z0-9_.-]{1,60}/[A-Za-z0-9_.-]{1,100}$ ]]; then printf '%s' "$u"; return 0; fi
+  done
   return 0
 }
 
@@ -125,5 +139,6 @@ hud-version-json() {
 
   [ -z "$cached" ] || latest=$(jq -r '.latest // ""' <<<"$cached" 2>/dev/null | head -n1) || latest=""
   hvr-valid "$latest" || latest=""
-  jq -n -c --arg i "$installed" --arg l "$latest" '{installed: $i, latest: (if $l == "" then null else $l end)}'
+  local url; url=$(hvr-url "$root")
+  jq -n -c --arg i "$installed" --arg l "$latest" --arg u "$url" '{installed: $i, latest: (if $l == "" then null else $l end)} + (if $u == "" then {} else {url: $u} end)'
 }
