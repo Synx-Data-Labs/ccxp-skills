@@ -233,7 +233,7 @@ EOF
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `start`, `finish`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render` and `show`' "$f"
+  grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render` and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
 }
 
@@ -539,4 +539,17 @@ install_outdated_agent() {
   grep -q 'start <n> "<title>" --context' "$f"
   grep -q 'park <n> --context <abs path> --title' "$f"
   grep -q 'next add "<text>" --context <abs path>' "$f"
+}
+
+@test "asset: persona has the session-start reconcile step and saves job prompts" {
+  f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## On session start: resume interrupted jobs' "$f"
+  grep -q 'ledger.sh\|"\$L" reconcile --alive' "$f"
+  grep -qF '"$L" reconcile --alive' "$f"
+  grep -qF '"$L" resumed' "$f"
+  grep -q 'previous run was interrupted by a restart' "$f"
+  grep -q 'needs-confirmation' "$f"
+  grep -qF -- '--prompt-stdin' "$f"
+  # the step comes before the loop's later sections
+  [ "$(grep -n '^## On session start' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Writing a job prompt' "$f" | cut -d: -f1)" ]
 }

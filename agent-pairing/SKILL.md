@@ -16,6 +16,10 @@ Pairing, XP-style, but with subagents as the drivers:
   requests that need real work straight to a background subagent and
   replies immediately, so you're never kept waiting on one thread to
   work on the next.
+- On session start the persona reconciles the HUD job ledger against
+  the live agent list and resumes jobs a restart interrupted (same job
+  number, saved prompt; release/publish jobs and jobs without a saved
+  prompt are listed under Next instead). See `hud/scripts/ledger.md`.
 - One navigator, potentially several concurrent driver-agents at once —
   not literal 1:1 pairing, but the same spirit: tight visibility into
   what each driver is doing, consent before anything hard to undo,

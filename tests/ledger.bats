@@ -12,7 +12,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   bash "$LEDGER" start 230 "second"
   bash "$LEDGER" finish 229
   run bash "$LEDGER" show
-  [ "$(jq -c '.running | map(del(.started_at))' <<<"$output")" = '[{"job":230,"title":"second","context":""}]' ]
+  [ "$(jq -c '.running | map({job, title, context})' <<<"$output")" = '[{"job":230,"title":"second","context":""}]' ]
   [ "$(jq .lifetime_jobs <<<"$output")" = "230" ]
   [ "$(jq .next_job <<<"$output")" = "231" ]
   bash "$LEDGER" start 12 "older number"
@@ -39,7 +39,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   bash "$LEDGER" park k3 --context /ctx/p.md --title "Parked thing"
   bash "$LEDGER" park k3 --context /ctx/p2.md
   run bash "$LEDGER" show
-  [ "$(jq -c '.running | map(del(.started_at))' <<<"$output")" = '[{"job":8,"title":"job again","context":"/ctx/a.md"}]' ]
+  [ "$(jq -c '.running | map({job, title, context})' <<<"$output")" = '[{"job":8,"title":"job again","context":"/ctx/a.md"}]' ]
   [ "$(jq -c '[.next[] | [.ref, .context]]' <<<"$output")" = '[["n1","/ctx/n.md"],["n2",""]]' ]
   [ "$(jq -c .parked <<<"$output")" = '[{"id":"k3","context":"/ctx/p2.md","title":"Parked thing"}]' ]
   run bash "$LEDGER" next add "x" --context relative/path
@@ -303,4 +303,106 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   run bash "$LEDGER" start 5 x
   [ "$status" -ne 0 ]
   [ "$(cat "$CCXP_LEDGER_FILE")" = '{"schema":4,"lifetime_jobs":1}' ]
+}
+
+@test "start saves prompt, agent and flags; a repeated start keeps them; finish drops the prompt copy" {
+  bash "$LEDGER" start 5 "five" --context /c/5.md --agent general-purpose/sonnet --flags autopilot --prompt-stdin <<<"do the thing"
+  f="$(dirname "$CCXP_LEDGER_FILE")/ccxp-prompts/5.md"
+  [ "$(cat "$f")" = "do the thing" ]
+  [ "$(ls -l "$f" | cut -c1-10)" = "-rw-------" ]
+  bash "$LEDGER" start 5 "five again"
+  run bash "$LEDGER" show
+  [ "$(jq -r '.running[0] | [.prompt, .agent, .flags, .context] | join("|")' <<<"$output")" = "$f|general-purpose/sonnet|autopilot|/c/5.md" ]
+  bash "$LEDGER" finish 5
+  [ ! -e "$f" ]
+}
+
+@test "start refuses a prompt that looks like a credential and bad flags" {
+  run bash "$LEDGER" start 5 x --prompt-stdin <<<"token ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+  [ "$status" -eq 2 ]
+  [ "$(bash "$LEDGER" show --brief)" = "running=0 parked=0 next=0" ]
+  run bash "$LEDGER" start 5 x --flags bogus
+  [ "$status" -eq 2 ]
+}
+
+@test "reconcile: lists only running rows that are not alive, as TSV" {
+  bash "$LEDGER" start 531 "alive one" --context /c/531.md --prompt-stdin <<<"p531"
+  bash "$LEDGER" start 532 "dead one" --context /c/532.md --agent general-purpose/sonnet --flags needs-confirmation --prompt-stdin <<<"p532"
+  run bash "$LEDGER" reconcile --alive 531,533
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 1 ]
+  IFS=$'\t' read -r job title ctx prompt started agent flags resumed <<<"$output"
+  [ "$job" = "532" ]; [ "$title" = "dead one" ]; [ "$ctx" = "/c/532.md" ]
+  [ "$prompt" = "$(dirname "$CCXP_LEDGER_FILE")/ccxp-prompts/532.md" ]
+  [ "$agent" = "general-purpose/sonnet" ]; [ "$flags" = "needs-confirmation" ]; [ "$resumed" = "0" ]
+  [ -n "$started" ]
+}
+
+@test "reconcile: all alive prints nothing; none alive prints all; list from stdin; list is required" {
+  bash "$LEDGER" start 1 "a"; bash "$LEDGER" start 2 "b"
+  run bash "$LEDGER" reconcile --alive "1, 2"
+  [ "$output" = "" ]
+  run bash "$LEDGER" reconcile --alive ""
+  [ "${#lines[@]}" -eq 2 ]
+  run bash -c 'echo "#1" | bash "$0" reconcile --alive -' "$LEDGER"
+  [ "${#lines[@]}" -eq 1 ]
+  [[ "$output" == 2$'\t'* ]]
+  run bash "$LEDGER" reconcile
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" reconcile --alive abc
+  [ "$status" -eq 2 ]
+}
+
+@test "reconcile: a row without a prompt (old rows) or with a vanished prompt file shows -; quotes and spaces survive" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":7,"running":[{"job":7,"title":"old row","context":"","started_at":"09:00"}]}' > "$CCXP_LEDGER_FILE"
+  run bash "$LEDGER" reconcile --alive ""
+  [ "$output" = $'7\told row\t-\t-\t09:00\t-\t-\t0' ]
+  bash "$LEDGER" start 8 "it's \"quoted\" \$x" --context "/c/a b.md" --prompt-file /nonexistent/p.md
+  run bash "$LEDGER" reconcile --alive 7
+  [ "$output" = $'8\tit\'s "quoted" $x\t/c/a b.md\t-\t'"$(bash "$LEDGER" show | jq -r '.running[] | select(.job==8) | .started_at')"$'\t-\t-\t0' ]
+}
+
+@test "resumed: bumps the restart count, keeps the job number; unknown job fails" {
+  bash "$LEDGER" start 4 "four"
+  bash "$LEDGER" resumed 4; bash "$LEDGER" resumed 4
+  [ "$(bash "$LEDGER" show | jq -c '.running | map([.job, .resumed])')" = "[[4,2]]" ]
+  run bash "$LEDGER" resumed 9
+  [ "$status" -ne 0 ]
+}
+
+@test "ccxp-ledger.md: every row has a file:// link plus the plain path, empty context is (none)" {
+  bash "$LEDGER" start 6 "run" --context "/tmp/my dir/r 6.md"
+  bash "$LEDGER" start 7 "run nocontext"
+  bash "$LEDGER" next add "ask" --context /ctx/n1.md >/dev/null
+  bash "$LEDGER" next add "ask2" >/dev/null
+  bash "$LEDGER" park k3 --context "/ctx/p 3.md" --title "Park"
+  bash "$LEDGER" park k4
+  md="$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
+  grep -qF -- '- r6 [' "$md"
+  grep -qF 'context: [context](file:///tmp/my%20dir/r%206.md)' "$md"
+  grep -qxF '  /tmp/my dir/r 6.md' "$md"
+  grep -qF 'context: [context](file:///ctx/n1.md)' "$md"
+  grep -qxF '  /ctx/n1.md' "$md"
+  grep -qF 'context: [context](file:///ctx/p%203.md)' "$md"
+  grep -qxF '  /ctx/p 3.md' "$md"
+  [ "$(grep -c 'context: (none)' "$md")" = "3" ]
+  grep -qF "Ledger: [ledger](file://$(dirname "$CCXP_LEDGER_FILE" | sed 's/ /%20/g')/ledger.md)" "$md"
+  run bash "$LEDGER" render
+  [[ "$output" == *$'  /tmp/my dir/r 6.md'* ]]
+}
+
+@test "--started-at on start and set-started override the start time; format is validated" {
+  bash "$LEDGER" start 531 "old" --started-at 09:35
+  [ "$(bash "$LEDGER" show | jq -r '.running[0].started_at')" = "09:35" ]
+  bash "$LEDGER" start 531 "old again"
+  [ "$(bash "$LEDGER" show | jq -r '.running[0].started_at')" = "09:35" ]
+  bash "$LEDGER" start 533 "other"
+  bash "$LEDGER" set-started 533 12:19
+  [ "$(bash "$LEDGER" show | jq -r '.running[] | select(.job==533) | .started_at')" = "12:19" ]
+  for bad in 9:35 24:00 12:60 noon ""; do
+    run bash "$LEDGER" set-started 533 "$bad"; [ "$status" -eq 2 ]
+  done
+  run bash "$LEDGER" start 534 x --started-at 25:00; [ "$status" -eq 2 ]
+  run bash "$LEDGER" set-started 999 10:00; [ "$status" -ne 0 ]
 }

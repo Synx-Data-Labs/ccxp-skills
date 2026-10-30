@@ -10,6 +10,9 @@ hides the cell; the text line prints its own section only when the ledger exists
 ```bash
 bash <plugin>/hud/scripts/ledger.sh start <n> "<title>" [--context <abs-path>]   # job r<n> dispatched
 bash <plugin>/hud/scripts/ledger.sh finish <n>                                   # job r<n> done/failed/killed
+bash <plugin>/hud/scripts/ledger.sh reconcile --alive <n,n,...|->                 # running rows NOT alive, TSV (see Resume)
+bash <plugin>/hud/scripts/ledger.sh set-started <n> HH:MM                         # fix a row's start time (also: start ... --started-at HH:MM)
+bash <plugin>/hud/scripts/ledger.sh resumed <n>                                  # count a restart of r<n>; the number is kept
 bash <plugin>/hud/scripts/ledger.sh park <k> [--context <abs-path>] [--title "<t>"]   # k<k> parked (k5 or 5); re-park updates
 bash <plugin>/hud/scripts/ledger.sh unpark <k>                                   # k<k> resumed/dropped
 bash <plugin>/hud/scripts/ledger.sh show [--brief]
@@ -29,11 +32,17 @@ ledger.sh ref next <n|s|k>      # allocate and print the next ref
 ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g. n22)
 ```
 
+## Resume after a restart
+
+A restart ends running subagents but leaves their `running` rows. `start` can record what a restart needs: `--prompt-stdin` (saves stdin as `ccxp-prompts/<n>.md` next to the ledger, mode 600; refused when it looks like a credential) or `--prompt-file <abs path>` (stores the path), `--agent <type>/<model>`, `--flags autopilot,needs-confirmation,detached`. A repeated `start` keeps what is stored; `finish` removes the saved prompt copy. Never store secrets in a prompt.
+
+`reconcile --alive 531,533` (or `--alive -` to read the list from stdin; the list is required and may be empty, `""`) prints each running row not in the list as one tab-separated line: `job title context prompt started_at agent flags resumed`, with `-` for an empty field (and for a prompt file that is gone). Only the dispatcher can call ListAgents, so it passes the live job numbers. `resumed <n>` bumps the row's restart count and keeps its job number. Old rows without a prompt show `-` (not resumable). The ccxp-agent persona ("On session start") has the dispatcher's steps and safety rules.
+
 ## File shape (schema 3)
 
 ```json
 {"schema":3,"updated_at":"2026-10-30T12:40:47Z","next_job":7,"lifetime_jobs":6,
- "running":[{"job":6,"title":"new job","context":"/tmp/ctx/6.md","started_at":"14:09"}],
+ "running":[{"job":6,"title":"new job","context":"/tmp/ctx/6.md","prompt":"","agent":"","flags":"","resumed":0,"started_at":"14:09"}],
  "next":[{"ref":"n1","text":"do it","context":"/tmp/n.md","added_at":"2026-10-30T12:40:47Z"}],
  "done":[],
  "parked":[{"id":"k7","context":"/tmp/c7.md","title":"Park me"}],
@@ -49,7 +58,7 @@ ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g
 
 ## Markdown view
 
-Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items, each context path on its own line so a terminal makes it cmd-clickable. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
+Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows `context: [context](file:///abs/path)` (path percent-encoded) and the plain absolute path on the next line so a terminal can cmd-click it; an empty context shows `context: (none)`. The header has a `Ledger:` link to the file itself. `render` (the reply text) prints full absolute paths. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
 
 ## Migration
 
