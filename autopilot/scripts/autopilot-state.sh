@@ -24,6 +24,21 @@
 #                               breakdown counts it as); prints "attention" when new
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
+#   classify <file|->           parse a /drive sub-agent's final report (the
+#                               MERGED:/STUCK:/NEEDS-ATTENTION:/WAITING: lines)
+#                               -> "<outcome> <merged> <task-id|-> <reason>",
+#                               outcome progress|waiting|stuck|idle, ready for
+#                               `record`; exit 2 (and a stuck line) when no
+#                               report line is recognized
+#   attention <file|->          one "<task-id><TAB><reason>" line per
+#                               NEEDS-ATTENTION entry of a report (for `skip`)
+#   clone-path [repo-root]      deterministic dispatch-clone path for a repo
+#   done                        "- Merged T<id> (<slug>)[ — PR #<n>]" per journal
+#                               file added since started_at ("- No tasks merged
+#                               this run" when none); needs a git repo
+#   final-report [--stopped <why>]
+#                               the Phase 5 bullet report (elapsed, Done,
+#                               Needs your attention) from the state file
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_NOW,
 #   AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND.
 
@@ -281,13 +296,180 @@ ap-report() {
   fi
 }
 
+# --- classify: a /drive sub-agent's final report -> a `record` line ----------
+
+# Report lines, normalized: CR, leading bullets/quotes/backticks and ** removed.
+_ap_report_lines() {
+  local src="${1:--}"
+  if [ "$src" = - ]; then cat; else [ -f "$src" ] || return 2; cat "$src"; fi \
+    | sed -E 's/\r$//; s/\*\*//g; s/^[[:space:]>`_*-]+//'
+}
+
+_ap_strip_runs() { sed -E 's/[[:space:]]*;[[:space:]]*runs:.*$//; s/[[:space:]]+$//'; }
+
+ap-classify() {
+  local src="${1:-}" line rest id reason lines
+  [ -n "$src" ] || { echo "classify <file|->" >&2; return 2; }
+  lines=$(_ap_report_lines "$src") || { echo "classify: no such file: $src" >&2; return 2; }
+  local merged=0 merged_id="" stuck=0 stuck_id="" stuck_reason="" waiting=0 wait_reason="" attn=0
+  local re_id='^(T[0-9]+(-[0-9]+)?)'
+  while IFS= read -r line; do
+    case "$line" in
+      MERGED:*)
+        rest=$(printf '%s' "${line#MERGED:}" | sed -E 's/^[[:space:]]+//')
+        if [[ "$rest" =~ $re_id ]]; then merged=$(( merged + 1 )); merged_id="${BASH_REMATCH[1]}"; fi ;;
+      STUCK:*)
+        rest=$(printf '%s' "${line#STUCK:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+        case "$rest" in ''|'<'*) continue ;; esac
+        stuck=1; stuck_id=""; stuck_reason="$rest"
+        if [[ "$rest" =~ (.*)[[:space:]]+—[[:space:]]+last[[:space:]]+task[[:space:]]+(T[0-9]+(-[0-9]+)?) ]]; then
+          stuck_reason="${BASH_REMATCH[1]}"; stuck_id="${BASH_REMATCH[2]}"
+        fi ;;
+      WAITING:*)
+        rest=$(printf '%s' "${line#WAITING:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+        case "$rest" in ''|'<'*) continue ;; esac
+        waiting=1; wait_reason="$rest" ;;
+      NEEDS-ATTENTION:*)
+        rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//')
+        if [[ "$rest" =~ $re_id ]]; then attn=$(( attn + 1 )); fi ;;
+    esac
+  done <<EOF_LINES
+$lines
+EOF_LINES
+  # Precedence follows autopilot/SKILL.md Phase 4: progress (merged, nothing
+  # stuck), waiting (nothing merged), stuck, then a lone NEEDS-ATTENTION = idle.
+  if [ "$merged" -gt 0 ] && [ "$stuck" = 0 ]; then
+    printf 'progress %s %s -\n' "$merged" "$merged_id"
+  elif [ "$merged" = 0 ] && [ "$waiting" = 1 ]; then
+    printf 'waiting 0 - %s\n' "$wait_reason"
+  elif [ "$stuck" = 1 ]; then
+    [ -n "$stuck_id" ] || stuck_id="${merged_id:--}"
+    printf 'stuck %s %s %s\n' "$merged" "$stuck_id" "${stuck_reason:-stuck}"
+  elif [ "$attn" -gt 0 ]; then
+    printf 'idle 0 - only needs-attention tasks reported\n'
+  else
+    printf 'stuck 0 - dispatch failed or report unparseable\n'
+    return 2
+  fi
+}
+
+ap-attention() {
+  local src="${1:-}" line rest
+  [ -n "$src" ] || { echo "attention <file|->" >&2; return 2; }
+  local lines; lines=$(_ap_report_lines "$src") || { echo "attention: no such file: $src" >&2; return 2; }
+  local re='^(T[0-9]+(-[0-9]+)?)[[:space:]]*(—|-)[[:space:]]*(.*)$' re_id='^(T[0-9]+(-[0-9]+)?)'
+  while IFS= read -r line; do
+    case "$line" in NEEDS-ATTENTION:*) ;; *) continue ;; esac
+    rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+    if [[ "$rest" =~ $re ]]; then printf '%s\t%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[4]:-needs attention}"
+    elif [[ "$rest" =~ $re_id ]]; then printf '%s\tneeds attention\n' "${BASH_REMATCH[1]}"; fi
+  done <<EOF_LINES
+$lines
+EOF_LINES
+}
+
+# --- dispatch clone path ------------------------------------------------------
+
+_ap_sha256() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum
+  else openssl dgst -sha256 | sed 's/^.* //'; fi
+}
+
+ap-clone-path() {
+  local root="${1:-}" hash
+  [ -n "$root" ] || root=$(_ap_root)
+  hash=$(printf '%s' "$root" | _ap_sha256 | cut -c1-8)
+  printf '/tmp/autopilot-clone-%s-%s\n' "$(basename "$root")" "$hash"
+}
+
+# --- final report -------------------------------------------------------------
+
+# "T<id> (<slug>)" from the task's file name under dev/{TODO,PARKING,JOURNAL}; bare id when not found.
+_ap_label() {
+  local id="$1" root f b slug; root=$(_ap_root)
+  for f in "$root"/dev/TODO/"$id"-*.md "$root"/dev/PARKING/"$id"-*.md "$root"/dev/JOURNAL/*-"$id"-*.md; do
+    [ -e "$f" ] || continue
+    b=$(basename "$f" .md); slug="${b#*"$id"-}"
+    printf '%s (%s)' "$id" "$slug"; return 0
+  done
+  printf '%s' "$id"
+}
+
+# The PR a journal file records: frontmatter pr:, else the one distinct "PR #n" in it, else none.
+_ap_journal_pr() {
+  local f="$1" pr prs
+  [ -f "$f" ] || return 0
+  pr=$(awk 'NR==1&&$0!="---"{exit} /^---$/{n++; if(n==2)exit} n==1&&/^pr:/{sub(/^pr:[[:space:]]*/,""); print; exit}' "$f")
+  pr=$(printf '%s' "$pr" | grep -Eo '[0-9]+' | tail -1 || true)
+  if [ -z "$pr" ]; then
+    prs=$(grep -Eo 'PR #[0-9]+' "$f" | sort -u || true)
+    [ "$(printf '%s\n' "$prs" | grep -c .)" = 1 ] && pr="${prs#PR #}"
+  fi
+  [ -z "$pr" ] || printf '%s' "$pr"
+}
+
+ap-done() {
+  local f started root path b id slug pr n=0; f=$(ap-state-file); root=$(_ap_root)
+  started=$(jq -r '.started_at // empty' "$f" 2>/dev/null || true)
+  if [ -n "$started" ]; then
+    while IFS= read -r path; do
+      [ -n "$path" ] || continue
+      b=$(basename "$path" .md); id=""; slug="$b"
+      if [[ "$b" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-(T[0-9]+(-[0-9]+)?)-(.*)$ ]]; then id="${BASH_REMATCH[1]}"; slug="${BASH_REMATCH[3]}"; fi
+      pr=$(_ap_journal_pr "$root/$path")
+      printf -- '- Merged %s%s\n' "${id:+$id }($slug)" "${pr:+ — PR #$pr}"
+      n=$(( n + 1 ))
+    done < <(git -C "$root" log --since="$started" --diff-filter=A --name-only --pretty=format: -- dev/JOURNAL/ 2>/dev/null | sort -u)
+  fi
+  [ "$n" -gt 0 ] || echo "- No tasks merged this run"
+}
+
+ap-final-report() {
+  local why=user-requested f started se now secs h m el
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --stopped) why="${2:?--stopped needs a reason}"; shift 2 ;;
+      *) echo "final-report [--stopped <why>]" >&2; return 2 ;;
+    esac
+  done
+  f=$(ap-state-file)
+  [ -f "$f" ] || { echo "final-report: no state file" >&2; return 2; }
+  started=$(jq -r '.started_at // empty' "$f" 2>/dev/null || true)
+  se=$(_ap_epoch "$started"); now=$(_ap_epoch "$(ap-now)"); el="unknown"
+  if [ -n "$se" ] && [ -n "$now" ] && [ "$now" -ge "$se" ]; then
+    secs=$(( now - se )); h=$(( secs / 3600 )); m=$(( secs % 3600 / 60 ))
+    if [ "$h" -gt 0 ]; then el="${h}h ${m}m"; else el="${m}m"; fi
+  fi
+  printf 'Autopilot run: %s elapsed — stopped: %s\n\nDone:\n' "$el" "$why"
+  ap-done
+  printf '\nNeeds your attention:\n'
+  local out="" id reason ids
+  while IFS=$'\t' read -r id reason; do
+    [ -n "$id" ] || continue
+    out="${out}- $(_ap_label "$id") — ${reason}"$'\n'
+  done < <(jq -r '.needs_attention[]? | [.id, .reason] | @tsv' "$f")
+  ids=$(jq -r '.needs_attention[]?.id' "$f")
+  if [ "$(jq -r '.last_outcome // empty' "$f")" = stuck ]; then
+    id=$(jq -r '.last_task // empty' "$f"); reason=$(jq -r '.last_stuck_reason // "stuck"' "$f")
+    if [ -n "$id" ] && ! printf '%s\n' "$ids" | grep -qxF "$id"; then
+      out="${out}- Stuck: $(_ap_label "$id") — ${reason}"$'\n'
+    elif [ -z "$id" ]; then
+      out="${out}- Stuck — ${reason}"$'\n'
+    fi
+  fi
+  if [ -n "$out" ]; then printf '%s' "$out"; else echo "- Nothing outstanding"; fi
+}
+
 autopilot-state() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; notify) ap-notify "$@" ;;
-    *) sed -n '2,30p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
+    done) ap-done ;; final-report) ap-final-report "$@" ;;
+    *) sed -n '2,50p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 
