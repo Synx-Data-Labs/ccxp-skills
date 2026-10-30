@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Scratch dir for the env file, results and logs; override for hermetic runs.
+VS_TMP="${VERIFY_SITE_TMP:-/tmp}"
 # shellcheck disable=SC1091
-source /tmp/verify-site.env
+source "${VS_TMP}/verify-site.env"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LH="$HERE/node_modules/.bin/lighthouse"
@@ -21,8 +23,8 @@ while IFS= read -r route; do
   [ -z "$route" ] && continue
   [[ "$route" != /* ]] && route="/$route"
 
-  out=$(mktemp /tmp/lh-XXXXXX.json)
-  err=$(mktemp /tmp/lh-err-XXXXXX.log)
+  out=$(mktemp "${VS_TMP}/lh-XXXXXX.json")
+  err=$(mktemp "${VS_TMP}/lh-err-XXXXXX.log")
   if ! "$LH" "$URL$route" \
         --quiet --chrome-flags="--headless=new --no-sandbox" \
         --output=json --output-path="$out" \

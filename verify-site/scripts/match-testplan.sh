@@ -5,19 +5,30 @@
 # Prints (stdout): count of ticked items
 set -euo pipefail
 BODY="$1"; RESULTS="$2"; OUT="$3"
+# Fail closed on unreadable inputs (a failed read inside fam_pass's command
+# substitution would otherwise look like "no results" and still tick the build item).
+[ -r "$BODY" ] && [ -r "$RESULTS" ] || { echo "match-testplan: cannot read body or results" >&2; exit 1; }
 
+# fam_pass <family>: pass = at least one pass and nothing else but skips;
+# any other status (fail, error, typo) fails closed; no record or only skips
+# is "none", which never ticks.
 fam_pass() {
-  local fam="$1" total=0 failed=0
+  local fam="$1" passed=0 failed=0 line c s
   while IFS= read -r line; do
     [ -z "$line" ] && continue
-    c=$(echo "$line" | jq -r '.check // empty')
-    s=$(echo "$line" | jq -r '.status // empty')
+    # An unparseable record cannot be trusted either way: fail closed.
+    c=$(echo "$line" | jq -r '.check // empty') || { echo "fail"; return; }
+    s=$(echo "$line" | jq -r '.status // empty') || { echo "fail"; return; }
     [ "$c" != "$fam" ] && continue
-    total=$((total+1))
-    [ "$s" = "fail" ] && failed=$((failed+1))
+    case "$s" in
+      pass) passed=$((passed+1)) ;;
+      skip) ;;
+      *) failed=$((failed+1)) ;;
+    esac
   done < "$RESULTS"
-  if [ $total -eq 0 ]; then echo "none"; return; fi
-  [ $failed -eq 0 ] && echo "pass" || echo "fail"
+  if [ $failed -gt 0 ]; then echo "fail"; return; fi
+  if [ $passed -eq 0 ]; then echo "none"; return; fi
+  echo "pass"
 }
 
 routes_status=$(fam_pass routes)
@@ -29,17 +40,20 @@ build_status="pass"  # we're here, so build succeeded
 # Portable awk (BSD + gawk). No array capture.
 awk -v routes="$routes_status" -v lh="$lh_status" -v a11y="$a11y_status" \
     -v resp="$resp_status" -v build="$build_status" '
-BEGIN { IGNORECASE=1; ticked=0 }
+BEGIN { ticked=0 }
 {
   line=$0
   if (line ~ /^[[:space:]]*- \[ \]/) {
-    lower=tolower(line)
+    # Lowercase, non-alphanumerics -> spaces, padded: a keyword with spaces
+    # around it is a whole-word match (BSD awk lacks a word-boundary escape).
+    lower=" " tolower(line) " "
+    gsub(/[^a-z0-9]+/, " ", lower)
     fam=""
-    if (lower ~ /(npm run build|build green|compiles)/) fam="build"
-    else if (lower ~ /(lighthouse|performance|\bperf\b|best practices|\bseo\b)/) fam="lighthouse"
-    else if (lower ~ /(axe|accessibility|aria|focus ring|keyboard|skip link|\ba11y\b)/) fam="a11y"
+    if (lower ~ /(npm run build| build green | compiles )/) fam="build"
+    else if (lower ~ /(lighthouse|performance| perf |best practices| seo )/) fam="lighthouse"
+    else if (lower ~ /(axe|accessibility|aria|focus ring|keyboard|skip link| a11y )/) fam="a11y"
     else if (lower ~ /(mobile|375|768|1280|responsive|stacks|horizontal overflow)/) fam="responsive"
-    else if (lower ~ /(renders|loads|\broute\b|\b200\b|no 500)/) fam="routes"
+    else if (lower ~ /(renders|loads| route | 200 |no 500)/) fam="routes"
     status=""
     if (fam == "build") status=build
     else if (fam == "routes") status=routes
@@ -53,7 +67,9 @@ BEGIN { IGNORECASE=1; ticked=0 }
   }
   print line
 }
-END { print ticked > "/tmp/verify-tick-count.txt" }
 ' "$BODY" > "$OUT"
 
-cat /tmp/verify-tick-count.txt
+# Only [ ] -> [x] ever changes, so the tick count is the growth in [x] lines.
+before=$(grep -cE '^[[:space:]]*- \[[xX]\]' "$BODY" || true)
+after=$(grep -cE '^[[:space:]]*- \[[xX]\]' "$OUT" || true)
+echo $((after - before))
