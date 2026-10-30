@@ -1,0 +1,48 @@
+# Daily Summary: 2026-10-30
+
+## Resolved
+- <u|T20000101-000020> — does a thing (PR #20)
+- second (PR #21)
+
+## Nightly health
+- Runs checked: 3
+- Failures: 1 (Nightly B)
+- Tasks created: 1 (T20000101-000099)
+- Classification breakdown: 1 transient
+
+## PRs needing attention
+
+| PR | Title | Why it needs you |
+|----|-------|-------------------|
+| #11 | needs a call | a; b |
+
+## Top 5 next
+
+1. <u|T1> — a
+2. <u|T2> — b
+
+## Epic progress
+
+E1 line
+
+## Weekly focus progress
+
+References: dev/JOURNAL/2026-10-26-ipm-weekly.md
+
+| # | Task |
+|---|---|
+| 1 | T |
+
+**Summary**: 1/3 shipped, 1 in flight, 1 not started. **Trend**: On-track.
+
+## Task attribution by location
+
+| Location | Class | Shipped | In-flight | Total |
+|----------|-------|---------|-----------|-------|
+| h:/p | ccxp | 2 | 1 | 3 |
+
+## Open escalations
+- T20000101-000011 — which way
+
+## Housekeeping
+- No claim housekeeping needed (one session per clone)

@@ -127,6 +127,15 @@ Generate a daily progress summary by reviewing yesterday's work.
 
 #### 1.1 Gather yesterday's data (parallel reads)
 
+Collect the facts once, deterministically (`--date` defaults to today; yesterday is computed portably). One JSON document, each section independent — a failed read leaves its default and a `.errors.<section>` message, never an abort:
+
+```bash
+STANDUP_DATA="$(mktemp)"; bash <skills-root>/ccxp/scripts/standup-data.sh > "$STANDUP_DATA"
+```
+
+It covers items 1–3 and 5 below, the nightly runs (1.2.1), the mechanical PR-attention rules (1.2a), attribution (1.3a) and the epic rollup (1.3c).
+Still yours: item 5b, reading the files it names (`journal_yesterday`, `previous_summary`, `ipm_file`, item 4/6/7), and any section listed in `.errors` (run that item by hand).
+
 1. **Git log**: `git log --since="yesterday 00:00" --until="today 00:00" --oneline --stat`
 2. **PRs merged yesterday**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>=YYYY-MM-DD merged:<YYYY-MM-DD" --json number,title,mergedAt` (use yesterday's date then today's date)
 3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
@@ -207,24 +216,11 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
 
 ##### 1.2.1 List nightly runs
 
-Determine the lookback window based on today:
+Lookback = yesterday through now. `standup-data.sh` already listed **all** runs on `main` in that window (not just failures — the total feeds the health summary) as `.nightly` = `{total, failures[{id,name,createdAt}]}`, using `--limit 100`.
 
-- **Normal day**: SINCE = yesterday's date
-- Use `date -v-1d +%Y-%m-%d` (macOS) or `date -d yesterday +%Y-%m-%d` (Linux) for SINCE
+A recurring single-workflow failure must never fall off gh's default 20-run page, so **never lower that limit** — the small over-fetch is the cost of never hiding a recurrence. If `.errors.nightly` is set, list the runs by hand (`_gh/gh.sh run list --branch main --created ">=<yesterday>" --limit 100 --json databaseId,name,conclusion,createdAt`) and never report "all green" from a failed read.
 
-List **all** runs on main in the window (not just failures — we need the total count for the health summary):
-
-```bash
-bash <skills-root>/_gh/gh.sh run list --branch main --created ">=SINCE" --limit 100 \
-  --json databaseId,name,conclusion,createdAt \
-  --jq '.[] | "\(.databaseId) \(.name) \(.conclusion) \(.createdAt)"'
-```
-
-- The explicit `--limit 100` overrides `gh`'s default page size (20).
-- On a busy night a recurring single-workflow failure can be the 21st-newest run and silently fall off the default page — so the recurrence (the thing the nightly RCA most needs to catch) is exactly what gets dropped. 100 comfortably covers a normal day's run volume; bump it if a real window ever overflows.
-- **Do not remove it** — the small over-fetch is the cost of never hiding a recurrence.
-
-Filter failures from the result. If no failures, record "Nightly runs: all green ({N} runs checked)" and proceed to 1.2a.
+If `.nightly.failures` is empty, record "Nightly runs: all green ({N} runs checked)" and proceed to 1.2a.
 
 > **Single-workflow recurrence safety-net**: `--limit 100` makes a dropped recurrence very unlikely, but the count is still a global page across all workflows. `/rca`'s own "has it happened before?" check (Step 4) sidesteps the busy-window problem entirely by querying *per workflow* (`run list --workflow <name> --limit 5`), so once a failure is being RCA'd its recurrence history is robust regardless of this page size.
 
@@ -302,18 +298,14 @@ Hold onto this tick's nightly-health facts — **do not write them to a file yet
 
 Not every open PR needs a human — most are either actionable (Phase 0 will drain them in due course) or simply waiting on their own CI. Flag a PR here only when it's stuck on something this loop can't resolve by itself, so the section stays a short exceptions list, not a full PR roster.
 
-Fetch open PRs with body + mergeability (extends 1.1 step 3's PR list):
-
-```bash
-bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,body,mergeable,updatedAt
-```
+`standup-data.sh` already fetched open PRs with body + mergeability and applies the three mechanical rules below as `.attention[{number,title,reasons[]}]` (a PR's task is resolved via `_session/pr_task_id.sh`, unresolved entries from `_threads/threads.sh list --unresolved`). The fourth rule (CI) needs run history — apply it yourself and pass the full list as `attention` in the judgment file.
 
 Flag a PR as needing attention when **any** of:
 
-- Its body has an unchecked `- [ ]` pre-merge item whose text names a human decision (grep case-insensitive for `maintainer`, `your call`, `decision`, `approve`, `escalation`) — this is exactly the shape of a real incident: weeks open on a "maintainer release-strategy call ... no reply yet" item.
-- `mergeable` is `CONFLICTING`.
-- CI has been `failure` for 2+ consecutive checks (not a transient one-off that's likely to clear on retry).
-- Its task (resolve via `bash <skills-root>/_session/pr_task_id.sh <number>`) has an unresolved entry (`bash <skills-root>/_threads/threads.sh list --unresolved`, key `<id>` or `<id>-pr<N>`).
+- Its body has an unchecked `- [ ]` pre-merge item whose text names a human decision (case-insensitive `maintainer`, `your call`, `decision`, `approve`, `escalation`) — the shape of a real incident: weeks open on a "maintainer release-strategy call ... no reply yet" item. *(script)*
+- `mergeable` is `CONFLICTING`. *(script)*
+- Its task has an unresolved drive-thread entry (key `<id>` or `<id>-pr<N>`). *(script)*
+- CI has been `failure` for 2+ consecutive checks (not a transient one-off that's likely to clear on retry). *(you)*
 
 For each flagged PR, record: PR number, title, and the one-line reason it's flagged (which condition above matched). Anything not flagged is left to Phase 0's normal drain — don't list it.
 
@@ -327,79 +319,23 @@ Run the `/todo next` logic (same walk that skill documents: queue order top-to-b
 
 #### 1.3 Generate daily summary
 
-Create `dev/JOURNAL/YYYY-MM-DD-daily-summary.md`. **Four sections carry the real content (Resolved, Nightly, Attention, Top 5); everything else is supporting context** — this is the maintainer-facing rewrite from the 2026-07-18 revision (previously "Yesterday"/"Today's plan" one-liners plus a separate nightly-health Slack ping):
+Write the **judgment** the scripts must not decide into a JSON file, then render. Four sections carry the real content: Resolved, Nightly, Attention and Top 5; everything else is supporting context.
 
-```markdown
-# Daily Summary: YYYY-MM-DD
-
-## Resolved
-{one bullet per PR merged yesterday — a HIGHLIGHT, not just a number/title:
-"<…|Tid> — {what it does or fixes, and why it mattered, in one line} (PR #N)".
-Draw the highlight from the task's `## Closed` section if the task/journal entry
-resolves (richer than a PR title); fall back to the PR title only when no task
-resolves. "Nothing merged yesterday" if empty — never an empty section.}
-
-## Nightly health
-(From 1.2 — computed BEFORE this doc is written, not appended after.)
-- Runs checked: {N total from 1.2.1}
-- Failures: {M} ({list of workflow names, or "None"})
-- Tasks created: {K} ({list of task IDs, or "None"})
-- Classification breakdown: {e.g., "1 our code, 1 transient", or "All green"}
-- Alert-thread replies: {P} posted, {Q} no matching alert found (omit this line when {M} is 0)
-
-## PRs needing attention
-(From 1.2a — an exceptions list, not a full PR roster.)
-
-| PR | Title | Why it needs you |
-|----|-------|-------------------|
-| #NNNN | ... | Maintainer release-strategy call open for weeks, no reply |
-
-"None — every open PR is actionable or already in flight" if empty.
-
-## Top 5 next
-(From 1.2b — `/todo next`'s top 5, reporting only, nothing committed.)
-
-1. {<…|Tid> — one-line what + why it's next (queue position, unblocks, deadline)}
-2. ...
-
-## Epic progress
-(From `epic-status.sh render` — token-free, deterministic; reads
-this repo's own local `dev/EPICS/E*.md` (no hub repo). Paste
-its stdout verbatim; the script itself prints a one-line note instead of the
-heading's body when `dev/EPICS/E*.md` is missing/unreadable, or no epics are
-defined yet — so this section, like Resolved/Nightly/Attention/Top-5, is
-never simply omitted.) To act on an epic rather than report it, see `/epic` (`status | refresh | drive`).
-
-{verbatim output of `bash <skills-root>/ccxp/scripts/epic-status.sh render`}
-
-## Weekly focus progress
-
-(Skip this block if no `*-ipm-weekly.md` exists yet — first IPM hasn't run.)
-
-References: `dev/JOURNAL/{this-week-Monday}-ipm-weekly.md`.
-
-| # | Task | Picked status | Today's status | Note |
-|---|------|---------------|----------------|------|
-| 1 | T... | In Progress | In Progress | PR #... awaiting CI |
-| 2 | T... | Open        | In Progress | Started yesterday |
-| 3 | T... | Open   | Open   | Not yet started |
-
-**Summary**: {X}/{N} shipped, {Y} in flight, {Z} not started. **Trend**: {On-track / Slipping / At-risk — based on remaining days vs remaining cumulative estimate}.
-
-## Task attribution by location
-
-(Generated by `_session/attribution.sh` — see 1.3a. Splits yesterday's throughput by `claimed_by` host:clone-path so autonomous-ccxp vs interactive work is measurable. **Omit the whole section on a no-data day** — the helper prints nothing.)
-
-| Location | Class | Shipped | In-flight | Total |
-|----------|-------|---------|-----------|-------|
-| {host:clone-path} | {ccxp/interactive/unattributed} | {N} | {M} | {N+M} |
-
-## Open escalations
-- {list of unresolved Slack threads, if any}
-
-## Housekeeping
-- No claim housekeeping needed (one session per clone)
+```bash
+STANDUP_JUDGMENT="$(mktemp)"   # write it (keys below), then:
+bash <skills-root>/ccxp/scripts/render-standup.sh "$STANDUP_DATA" "$STANDUP_JUDGMENT" --format journal > dev/JOURNAL/YYYY-MM-DD-daily-summary.md
 ```
+
+Judgment keys (full schema in the script header; all optional except `top5`):
+
+- `resolved[{pr,text}]` — one **highlight** per merged PR, not just a number/title: `"<…|Tid> — what it does or fixes, and why it mattered, one line"` (the renderer appends `(PR #N)`). Draw it from the task's `## Closed` section when the task/journal entry resolves (richer than a PR title); a PR with no entry falls back to its title.
+- `nightly_failures[{run,classification,task_link,task_id}]` — one per failed run in `.nightly.failures` (from 1.2.2's recorded lines); a missing one is an error (exit 4), not a guess. `alert_replies{posted,no_alert,already}` from 1.2.2a.
+- `attention[{pr,title,why}]` — only to add the CI rule on top of `.attention`; absent means use the script's list.
+- `top5[]` — from 1.2b (`/todo next`'s top 5, reporting only): `"<…|Tid> — one-line what + why it's next"`.
+- `weekly_focus{shipped,total,in_flight,not_started,trend,table}` — from the IPM table; omit when `ipm_file` is empty (IPM is opt-in). `trend` is On-track / Slipping / At-risk from remaining days vs remaining cumulative estimate.
+- `links{<thread key>: "<…|Tid>"}` — mrkdwn links for Blockers.
+
+The journal doc renders Resolved, Nightly health, PRs needing attention, Top 5 next, Epic progress (verbatim `epic-status.sh render`; never omitted), Weekly focus progress, Task attribution by location (omitted on a no-data day), Open escalations and Housekeeping. A failed data section renders "unavailable", never as a clean answer. To act on an epic rather than report it, see `/epic`.
 
 **"Today's plan" is retired** — the Top 5 next section supersedes it (item 1 *is* today's plan); keeping both would just duplicate the same ranking under two headings.
 
@@ -522,55 +458,14 @@ taskid-slacklink T20260427-298901 --issue  # -> link to the stable issue instead
 - The helper globs `dev/{TODO,PARKING,JOURNAL}/` in the cwd repo (map-free), so the link points at the task's *current* path even after it moves `TODO → JOURNAL` on close; unresolvable tasks fall back to a code-search link.
 - Slack uses mrkdwn — links are `<url|text>`, **not** `[text](url)` (which renders literally). Build each link with `taskid-slacklink` and drop the `<…|Tid>` string straight into the message; never paste a bare `T…` ID.
 
-**Epic progress line(s).** One compact line per epic, from the same script as 1.3c's
-section, in `--slack` mode:
+**Render the message** from the same two files (epic lines come from the data file; do not compose the template by hand):
 
 ```bash
-bash <skills-root>/ccxp/scripts/epic-status.sh render --slack
+STANDUP_MESSAGE="$(bash <skills-root>/ccxp/scripts/render-standup.sh "$STANDUP_DATA" "$STANDUP_JUDGMENT")"
 ```
 
-```
-*Daily Standup* (YYYY-MM-DD)
-
-*✅ Resolved* ({N})
-{one bullet per merged PR: <…|Tid> — {one-line highlight, what/why it mattered} (PR #N)}
-{or "Nothing merged yesterday" if N=0 — never an empty section}
-
-*🌙 Nightly*: {"all green ({N} runs)" if M=0, else "{M} failure(s) / {N} runs"}
-{if M>0: one line per failure — <workflow> (run <id>) — <classification> — {<…|Tid> or "no task filed (transient/infra)"}}
-
-*🔀 Needs your attention* ({K})
-{one bullet per flagged PR: PR #N — {title} — {why, one line}}
-{or "None — every open PR is actionable or already in flight" if K=0}
-
-*📋 Top 5 next*
-{numbered 1-5: <…|Tid> — one-line what + why it's next}
-
-*🎯 Epic progress*
-{one line per epic from `epic-status.sh render --slack`}
-{omit this whole block, header included, when the script emits no lines}
-
-*📌 Weekly focus*
-• {X}/{N} shipped, {Y} in flight, {Z} not started
-• Trend: {On-track / Slipping / At-risk}
-
-*📊 Attribution*
-• ccxp: {S} shipped / {F} in-flight
-• interactive: {S} shipped / {F} in-flight
-
-*🚧 Blockers*
-• {one bullet per unresolved escalation}
-{or "• None" if empty}
-```
-
-- Omit the whole `*📌 Weekly focus*` block on days where no `*-ipm-weekly.md` exists yet. Omit the whole `*📊 Attribution*` block on a no-data day.
-- Omit the whole `*🎯 Epic progress*` block too when `epic-status.sh render --slack` emits no lines (`dev/EPICS/E*.md` missing/unreadable, or no epics defined) — same optional-block class as Weekly focus/Attribution, not one of the four always-render headline sections.
-- Every other section — Resolved, Nightly, Needs your attention, Top 5 next — always renders, using its "None"/"Nothing"/"all green" fallback rather than being cut; those four are the sections a reader scans for first, so a missing one reads as broken rather than empty.
-- **Blockers always renders** (unlike Weekly focus/Attribution) — "None" is itself the informative answer to "is anything stuck," so cutting the section on a clean day would read as unchecked, not clean.
-
-- **Message-length discipline.** The tool has a 5000-char cap per text element.
-- On a very busy day (many merges + many flagged PRs), trim rather than truncate mid-sentence: cap *Resolved* highlights at one line each (drop extra detail, keep the task link + PR #), and cap *Needs your attention* to the single clearest reason per PR.
-- Top 5 next is already bounded. If still tight, drop the whole *📊 Attribution* block first (it's the least actionable of the trailing context sections) before shortening the four headline sections.
+- It prints the `*Daily Standup* (YYYY-MM-DD)` block: Resolved, Nightly, Needs your attention, Top 5 next, then the optional Epic progress / Weekly focus / Attribution blocks (each omitted when it has no data), then Blockers. The five headline sections (Resolved, Nightly, Needs your attention, Top 5 next, Blockers) **always render** with their None/Nothing/all-green fallback — a missing one reads as broken, not empty.
+- **Message-length discipline.** The tool has a 5000-char cap per text element; `--max-chars` defaults to it. The renderer trims in the documented order (one line per highlight and the first reason per PR, then the whole Attribution block). If it still exits 5 (too long), shorten the judgment text and rerun — never truncate mid-sentence.
 
 ### Phase 2a: Monday IPM — optional, not auto-invoked
 

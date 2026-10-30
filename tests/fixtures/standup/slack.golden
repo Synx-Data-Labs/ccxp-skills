@@ -1,0 +1,29 @@
+*Daily Standup* (2026-10-30)
+
+*✅ Resolved* (2)
+• <u|T20000101-000020> — does a thing (PR #20)
+• second (PR #21)
+
+*🌙 Nightly*: 1 failure(s) / 3 runs
+• Nightly B (run 902) — Transient — <u|T20000101-000099>
+
+*🔀 Needs your attention* (1)
+• PR #11 — needs a call — a; b
+
+*📋 Top 5 next*
+1. <u|T1> — a
+2. <u|T2> — b
+
+*🎯 Epic progress*
+E1: 50%
+
+*📌 Weekly focus*
+• 1/3 shipped, 1 in flight, 1 not started
+• Trend: On-track
+
+*📊 Attribution*
+• ccxp: 2 shipped / 1 in-flight
+• interactive: 0 shipped / 0 in-flight
+
+*🚧 Blockers*
+• <u|T20000101-000011> — which way

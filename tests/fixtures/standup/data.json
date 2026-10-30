@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-30",
+  "since": "2026-10-29",
+  "errors": {},
+  "git_log": [],
+  "merged_prs": [
+    {
+      "number": 20,
+      "title": "first merged",
+      "mergedAt": "x"
+    },
+    {
+      "number": 21,
+      "title": "second",
+      "mergedAt": "y"
+    }
+  ],
+  "open_prs": [],
+  "attention": [
+    {
+      "number": 11,
+      "title": "needs a call",
+      "reasons": [
+        "a",
+        "b"
+      ]
+    }
+  ],
+  "threads": [
+    {
+      "key": "T20000101-000011",
+      "type": "d",
+      "sent_at": "x",
+      "summary": "which way"
+    }
+  ],
+  "ipm_file": "dev/JOURNAL/2026-10-26-ipm-weekly.md",
+  "nightly": {
+    "since": "2026-10-29",
+    "total": 3,
+    "failures": [
+      {
+        "id": 902,
+        "name": "Nightly B",
+        "createdAt": "x"
+      }
+    ]
+  },
+  "attribution": [
+    {
+      "location": "h:/p",
+      "class": "ccxp",
+      "shipped": 2,
+      "in_flight": 1,
+      "total": 3
+    }
+  ],
+  "epics": {
+    "text": "E1 line",
+    "slack": [
+      "E1: 50%"
+    ]
+  }
+}
