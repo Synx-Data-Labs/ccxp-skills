@@ -17,6 +17,8 @@ bash <plugin>/hud/scripts/ledger.sh park <k> [--context <abs-path>] [--title "<t
 bash <plugin>/hud/scripts/ledger.sh unpark <k>                                   # k<k> resumed/dropped
 bash <plugin>/hud/scripts/ledger.sh show [--brief]
 bash <plugin>/hud/scripts/ledger.sh render                                       # reply sections + "Ledger: <abs path>" line
+bash <plugin>/hud/scripts/ledger.sh reply [--tldr "<t>"]                         # reply tail: Running, Next, Parked, "Ledger: <abs path>"
+bash <plugin>/hud/scripts/ledger.sh check <replyfile|->                           # draft reply vs ledger: MISSING / EXTRA / NO-CONTEXT refs, exit 1
 bash <plugin>/hud/scripts/ledger.sh set-counter <n|s|k> <value>                  # initialise a ref counter exactly
 ```
 
