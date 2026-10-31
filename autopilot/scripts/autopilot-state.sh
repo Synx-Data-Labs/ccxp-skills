@@ -11,7 +11,7 @@
 #   resume                      print dispatch|busy (a cycle is still finishing: do nothing)|noop
 #   busy on [<task-id>]|off     mark a dispatched cycle running (optionally which
 #                               task it drives, T<yyyymmdd>-<6 digits>; an invalid
-#                               id is ignored; the HUD shows "loop on T<id>") / finished
+#                               id is ignored; informational; the HUD shows "running r<n>" from the ledger) / finished
 #   cap                         print ok | capped:<cycles|merges>  (rolls the day)
 #   record <outcome> [merged] [task-id] [reason]
 #                               outcome: progress|idle|stuck|waiting|capped;

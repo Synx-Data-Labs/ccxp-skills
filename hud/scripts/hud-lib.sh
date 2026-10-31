@@ -355,7 +355,7 @@ sl-ledger-json() {
                | (if type == "string" then {id: .} elif type == "object" then . else {} end)
                | select(.id | strings) | {id}],
       running: [(.running // [])[] | select(type == "object")
-                | {job: (.job | numbers // 0), title: (.title | strings // "")}]}' "$f" 2>/dev/null || true
+                | {job: (.job | numbers // 0), title: (.title | strings // ""), flags: (.flags | strings // "")}]}' "$f" 2>/dev/null || true
 }
 
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing

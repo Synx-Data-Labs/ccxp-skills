@@ -627,10 +627,20 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
   expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
-  // a running cycle names its task instead of a due time; without an id: loop running; paused still wins
-  expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063' })).toBe('AP on 2/6h 3 loops ✓2 merged │ loop on T20261028-151063')
-  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5, busy: true, current_task: 'T20261028-151063' })).toMatch(/loop on T20261028-151063$/)
-  expect(apLine({ next_wake_at: wake, busy: true, current_task: '' })).toMatch(/loop running$/)
+  // a running cycle names its ledger job (flag autopilot, highest number); no flagged row: plain `running`
+  const led = (rows: object[]) => ({ ledger: { running: rows, lifetime_jobs: 600, parked: [], next_job: 700, updated_at: '' } })
+  const apWith = (rows: object[], over: object) => detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null, ...led(rows) }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP'))!
+  const busy = { next_wake_at: wake, busy: true, current_task: 'T20261028-151063' }
+  const rows = [{ job: 590, title: 'other', flags: '' }, { job: 596, title: 'autopilot cycle', flags: 'autopilot' }, { job: 599, title: 'x', flags: 'detached' }]
+  expect(apWith(rows, busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running r596')
+  expect(apWith([...rows, { job: 598, title: 'older', flags: 'detached,autopilot' }], busy)).toMatch(/running r598$/)
+  expect(apWith(rows, { ...busy, next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/running r596$/)
+  expect(apWith(rows, { ...busy, current_task: '' })).toMatch(/running r596$/)
+  expect(apWith([{ job: 599, title: 'x', flags: 'detached' }], busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
+  expect(apWith([], busy)).toMatch(/│ running$/)
+  expect(apWith(rows, { next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
+  expect(apWith(rows, { next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due$/)
+  // paused still wins over a busy mark
   expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063', status: 'paused', prefix: '[p]' })).toMatch(/next loop paused$/)
   // AP off or no record: no schedule
   expect(detailRows(withHelper({ autopilot: null }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('next')

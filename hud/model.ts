@@ -95,7 +95,7 @@ export function parseHelper(stdout: string): HelperData | null {
     ledger = {
       running: (Array.isArray(l.running) ? l.running : [])
         .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
-        .map(x => ({ job: num(x.job), title: str(x.title) })),
+        .map(x => ({ job: num(x.job), title: str(x.title), flags: str(x.flags) })),
       lifetime_jobs: num(l.lifetime_jobs),
       // v3: array of {id,...}; old files: a count plus parked_ids
       parked: (Array.isArray(l.parked)
@@ -654,8 +654,9 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   if (ap?.prefix === '[p]') {
     wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
   } else if (ap?.busy) {
-    // A cycle is running: name its task rather than a due time that is stale until the cycle ends.
-    wakeItem = one('wake', [{ text: ap.current_task ? `loop on ${ap.current_task}` : 'loop running' }])
+    // A cycle is running: name its job (the running ledger row flagged autopilot, highest number) rather than a due time that is stale until the cycle ends.
+    const cycle = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).reduce((m, j) => Math.max(m, j.job), 0)
+    wakeItem = one('wake', [{ text: cycle > 0 ? `running r${cycle}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
     const wait = formatIn(ap.next_wake_at, nowMs)
     const clock = formatStamp(ap.next_wake_at, nowMs)
