@@ -315,7 +315,8 @@ function apVariants(ap: Autopilot): Variants {
 
 /**
  * The autopilot's progress cell, most to least detail (with history; without it only the average shows):
- * `24h 8 merged/26 loops ▲ avg 5.2/day`, `24h ✓8/26L ▲ avg 5.2/d`, `24h ✓8 ▲`. The marker compares the
+ * `last 24h: 8 merged / 26 loops ▲ average 5.2/day`, `24h: 8 merged/26 loops ▲ average 5.2/day`,
+ * `24h: ✓8/26L ▲ average 5.2/d`, then (narrowest only) `24h ✓8/26L ▲ avg 5.2/d`, `24h ✓8 ▲`. The marker compares the
  * last 24 h merged with the lifetime average per 24 h (▲ above, ▼ below, = equal).
  */
 function apStatsVariants(ap: Autopilot): Variants | null {
@@ -323,10 +324,12 @@ function apStatsVariants(ap: Autopilot): Variants | null {
   if (!st) return null
   const avg = st.avg_merged_24h.toFixed(1)
   const mark: Seg = st.trend === 'up' ? { text: '▲', color: 'success' } : st.trend === 'down' ? { text: '▼', color: 'warning' } : { text: '=', dim: true }
-  if (!st.has_history) return [[{ text: `avg ${avg}/day`, dim: true }], [{ text: `avg ${avg}/d`, dim: true }]]
+  if (!st.has_history) return [[{ text: `average ${avg}/day`, dim: true }], [{ text: `average ${avg}/d`, dim: true }], [{ text: `avg ${avg}/d`, dim: true }]]
   const mk = (head: string, tail: string): Seg[] => [{ text: head }, mark, ...(tail ? [{ text: tail, dim: true }] : [])]
   return [
-    mk(`24h ${st.merged_24h} merged/${st.cycles_24h} loops `, ` avg ${avg}/day`),
+    mk(`last 24h: ${st.merged_24h} merged / ${st.cycles_24h} loops `, ` average ${avg}/day`),
+    mk(`24h: ${st.merged_24h} merged/${st.cycles_24h} loops `, ` average ${avg}/day`),
+    mk(`24h: ✓${st.merged_24h}/${st.cycles_24h}L `, ` average ${avg}/d`),
     mk(`24h ✓${st.merged_24h}/${st.cycles_24h}L `, ` avg ${avg}/d`),
     mk(`24h ✓${st.merged_24h} `, ''),
   ]
@@ -456,7 +459,7 @@ const ORDER = {
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
   off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:apstats', 'step:apstats', 'drop:apstats', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:ci', 'step:ci', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -486,10 +489,10 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
     const it = itemFor(f, snap, cfg)
     // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
-    // The 24h progress cell rides with the AP cell (same switch) and is the first thing to shrink.
+    // The 24h progress cell rides with the AP cell (same switch); it shrinks after the ctx bar, CI and jobs cells, so the 24h merged count and the average survive common widths.
     if (f === 'ap' && it) {
       const sv = apStatsVariants(snap.helper!.autopilot!)
-      if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(start, sv.length - 1) })
+      if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(tier === 'wide' ? 0 : tier === 'compact' ? 1 : 3, sv.length - 1) })
     }
   }
   // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
