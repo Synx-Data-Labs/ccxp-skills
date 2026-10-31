@@ -38,16 +38,22 @@ skills_dir_explicit=0
 repo="."
 while [ $# -gt 0 ]; do
   case "$1" in
-    --skills-dir) skills_dir="${2:?--skills-dir needs a value}"; skills_dir_explicit=1; shift 2 ;;
-    --repo) repo="${2:?--repo needs a value}"; shift 2 ;;
+    --skills-dir|--repo)
+      [ $# -ge 2 ] || { echo "sync-and-prune-branches: $1 needs a value" >&2; exit 2; }
+      if [ "$1" = "--repo" ]; then repo="$2"; else skills_dir="$2"; skills_dir_explicit=1; fi
+      shift 2 ;;
     *) echo "sync-and-prune-branches: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 # Guard: the working repo must be a git work tree.
-if ! git -C "$repo" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ "$(git -C "$repo" rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
   echo "sync-and-prune-branches: '$(cd "$repo" 2>/dev/null && pwd || echo "$repo")' is not a git repo — run from the working repo's directory or pass --repo DIR." >&2
   exit 1
+fi
+# Absolutize an explicit relative --skills-dir against the caller's cwd before we cd.
+if [ "$skills_dir_explicit" -eq 1 ] && [ -d "$skills_dir" ]; then
+  skills_dir="$(cd "$skills_dir" && pwd)"
 fi
 cd "$repo"
 
