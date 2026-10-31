@@ -517,6 +517,15 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   [ "$(jq -r '.ledger.lifetime_jobs' <<<"$output")" = "231" ]
 }
 
+@test "--json: ledger.running rows carry flags (the HUD names the autopilot cycle from them)" {
+  local repo; repo=$(_make_repo r-flags)
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 596 "autopilot cycle" --flags autopilot
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 597 "plain job"
+  run _hud "$repo" --json
+  [ "$(jq -r '.ledger.running[] | select(.job == 596) | .flags' <<<"$output")" = "autopilot" ]
+  [ "$(jq -r '.ledger.running[] | select(.job == 597) | .flags' <<<"$output")" = "" ]
+}
+
 @test "--json: queue is null without queue.md and carries the breakdown with one" {
   local repo; repo=$(_make_repo r-queue)
   run _hud "$repo" --json
