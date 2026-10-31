@@ -572,3 +572,18 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   run _hud "$off" --json
   [ "$(jq -r '.autopilot' <<<"$output")" = null ]
 }
+
+@test "reply, render and the HUD input list the same rows of one ledger" {
+  local repo L out refs; repo=$(_make_repo r-agree); L="$REPO_ROOT/hud/scripts/ledger.sh"
+  bash "$L" start 230 "do it" --context /c/230.md
+  bash "$L" next add "ask me" --context /c/n.md
+  bash "$L" park k5 --title "later" --context /c/p.md
+  run _hud "$repo" --json
+  refs=$(jq -r '[(.ledger.running[] | "r\(.job)"), (.ledger.parked[] | .id)] | sort | .[]' <<<"$output")
+  [ "$refs" = "$(printf 'k5\nr230')" ]
+  run bash "$L" reply
+  bash "$L" check - <<<"$output"
+  bash "$L" check - <<<"$(bash "$L" render | sed 's/\*\*//g')"
+  grep -q "do it" "$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
+  grep -q "k5 later" <<<"$(bash "$L" reply)"
+}

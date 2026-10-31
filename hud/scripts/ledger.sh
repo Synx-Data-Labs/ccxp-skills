@@ -18,6 +18,12 @@
 #   ledger.sh next set <ref> [--text <t>] [--context <abs-path>]   edit an open item
 #   ledger.sh set-counter <n|s|k> <value>   set a ref counter exactly (to initialise it)
 #   ledger.sh render              print Next / Running / Parked as the reply sections + a "Ledger:" line
+#   ledger.sh reply [--tldr "<text>"]   the reply tail, plain text, to paste verbatim: Running (r<n> [HH:MM] title, context path),
+#                                 Next: (n<k>, context path), Parked: (k<n>, context path), then "Ledger: <abs path of ccxp-ledger.md>"
+#   ledger.sh check <replyfile|->   compare the r<n>/n<k>/k<n> refs that open a line of a draft reply with the ledger;
+#                                 prints each MISSING (in ledger, not in reply) / EXTRA (in reply, not in ledger) ref, and each
+#                                 NO-CONTEXT ref (a running, next or parked item with an empty context); exit 1 on any
+#   context is required for every running, next and parked item: reply shows "context: MISSING", next add / park warn on stderr
 #   ledger.sh input|action add|done   DEPRECATED aliases of next add|done
 #   ledger.sh ref next <n|s|k>    allocate and print the next ref (for s and k)
 #   ledger.sh ref bump <ref>      raise that prefix's counter to at least this number (n22)
@@ -247,6 +253,39 @@ ledger-render-text() {
     "Ledger: " + $md'
 }
 
+# Reply tail in the user-mandated order (Running, Next, Parked, Ledger line), plain text, no markdown.
+# $1 optional TL;DR text (printed first).
+ledger-reply() {
+  local md; md=$(ledger-md-file)
+  [[ "$md" == /* ]] || md="$(pwd)/$md"
+  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" '
+    def ctx: if .context != "" then "\n  " + .context else "\n  context: MISSING" end;
+    def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
+    (if $tldr != "" then "TL;DR: " + $tldr + "\n" else empty end),
+    sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
+    sect("Next:"; [.next[] | "\(.ref) \(.text)" + ctx]),
+    sect("Parked:"; [.parked[] | .id + (if .title then " " + .title else "" end) + ctx]),
+    "Ledger: " + $md'
+}
+
+# $1 file or "-" (stdin). Refs count only when they open a line (after list/bold markers), so prose is ignored.
+ledger-check() {
+  local src="${1:-}" draft want got missing extra rc=0
+  [[ -n "$src" ]] || { echo "usage: ledger.sh check <replyfile|->" >&2; return 2; }
+  if [[ "$src" == "-" ]]; then draft=$(cat); else [[ -r "$src" ]] || { echo "ledger: cannot read $src" >&2; return 2; }; draft=$(<"$src"); fi
+  want=$(ledger-read | jq -r '[(.running[] | "r\(.job)"), (.next[] | .ref), (.parked[] | .id)] | .[]' | sort -u)
+  got=$(printf '%s\n' "$draft" | sed -nE 's/^[[:space:]]*([-*+]|[0-9]+[.)])?[[:space:]]*[*_]*([rRnNkK][0-9]{1,9})([^0-9A-Za-z].*)?$/\2/p' \
+    | tr 'RNK' 'rnk' | sed -E 's/^([rnk])0+([0-9])/\1\2/' | sort -u)
+  missing=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed '/^$/d')
+  extra=$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed '/^$/d')
+  [[ -z "$missing" ]] || { while read -r r; do echo "MISSING $r (in ledger, not in reply)"; done <<<"$missing"; rc=1; }
+  local nocx; nocx=$(ledger-read | jq -r '[(.running[] | select(.context == "") | "r\(.job)"), (.next[] | select(.context == "") | .ref),
+    (.parked[] | select(.context == "") | .id)] | .[]')
+  [[ -z "$nocx" ]] || { while read -r r; do echo "NO-CONTEXT $r (context file is required)"; done <<<"$nocx"; rc=1; }
+  [[ -z "$extra" ]] || { while read -r r; do echo "EXTRA $r (in reply, not in ledger)"; done <<<"$extra"; rc=1; }
+  return $rc
+}
+
 ledger-hm() { [[ "${1:-}" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || { echo "ledger: time must be HH:MM (24h): ${1:-}" >&2; return 2; }; }
 
 ledger-sha() { { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1" 2>/dev/null; } | cut -d' ' -f1; }
@@ -347,7 +386,9 @@ ledger() {
         '(if $hc then {context: $c} else {} end) + (if $ht and $t != "" then {title: $t} else {} end)')
       ledger-update '(if (.parked | map(.id) | index($k)) then .parked |= map(if .id == $k then . + $x else . end)
                       else .parked += [{id: $k, context: ""} + $x] end)
-        | .ref_counters.k = ([.ref_counters.k, ($k[1:] | tonumber)] | max)' --arg k "$k" --argjson x "$extra" ;;
+        | .ref_counters.k = ([.ref_counters.k, ($k[1:] | tonumber)] | max)' --arg k "$k" --argjson x "$extra" || return 1
+      [[ "$(jq -r --arg k "$k" '.parked[] | select(.id == $k) | .context' <<<"$LEDGER_LAST")" != "" ]] \
+        || echo "ledger: warning: $k has no context (pass --context <abs path>)" >&2 ;;
     unpark)
       local k; k=$(ledger-kid "${1:-}") || return 2
       ledger-update '.parked |= map(select(.id != $k))' --arg k "$k" ;;
@@ -359,8 +400,18 @@ ledger() {
       ledger-int "${2:-}" || return 2
       ledger-update '.ref_counters[$p] = $v' --arg p "$1" --argjson v "$((10#$2))" ;;
     render) ledger-render-text ;;
+    reply)
+      case "${1:-}" in
+        "") ledger-reply "" ;;
+        --tldr) [[ $# -ge 2 ]] || { echo "ledger: --tldr needs text" >&2; return 2; }
+          ledger-reply "$(ledger-clip "$2" 300)" ;;
+        *) echo "usage: ledger.sh reply [--tldr <text>]" >&2; return 2 ;;
+      esac ;;
+    check) ledger-check "${1:-}" ;;
     next | input | action) case "${1:-}" in
-        add) shift; ledger-args "$@" || return 2; ledger-add "${POS[0]:-}" "$CTX" "$REF" ;;
+        add) shift; ledger-args "$@" || return 2
+          [[ -n "$CTX" ]] || echo "ledger: warning: next add without --context (every item needs a context file)" >&2
+          ledger-add "${POS[0]:-}" "$CTX" "$REF" ;;
         done) ledger-done "${2:-}" ;;
         set) shift; ledger-args "$@" || return 2; ledger-set "${POS[0]:-}" ;;
         *) echo "usage: ledger.sh next add <text> [--context <path>] [--ref nN] | next done <ref> | next set <ref> [--text t] [--context p]  (input/action: deprecated aliases)" >&2; return 2 ;;
@@ -385,7 +436,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k> <v> | ref next|bump | render | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k> <v> | ref next|bump | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 

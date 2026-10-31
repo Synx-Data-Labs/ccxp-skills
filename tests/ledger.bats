@@ -94,7 +94,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
 
 
 @test "next add/done allocate increasing n refs and never reuse one" {
-  run bash "$LEDGER" next add "Nightly fix: which repo?"
+  run bash "$LEDGER" next add "Nightly fix: which repo?" --context /c/q.md
   [ "$output" = "n1" ]
   [ "$(bash "$LEDGER" next add "second")" = "n2" ]
   bash "$LEDGER" next done n1
@@ -420,4 +420,71 @@ allow: pr-merge" >> "$f"
   done
   run bash "$LEDGER" start 534 x --started-at 25:00; [ "$status" -eq 2 ]
   run bash "$LEDGER" set-started 999 10:00; [ "$status" -ne 0 ]
+}
+
+@test "reply prints Running, Next, Parked, Ledger in that order as plain text; --tldr goes first" {
+  run bash "$LEDGER" reply
+  [ "$output" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  bash "$LEDGER" start 8 "job eight" --context /c/8.md
+  bash "$LEDGER" next add "ask me" --context /c/n.md
+  bash "$LEDGER" park k3 --title "Parked thing" --context /c/p.md
+  run bash "$LEDGER" reply --tldr "all good"
+  [ "${lines[0]}" = "TL;DR: all good" ]
+  [ "${lines[1]}" = "Running:" ]
+  [[ "${lines[2]}" =~ ^r8\ \[[0-9:-]{5}\]\ job\ eight$ ]]
+  [ "${lines[3]}" = "  /c/8.md" ]
+  [ "${lines[4]}" = "Next:" ]
+  [ "${lines[5]}" = "n1 ask me" ]
+  [ "${lines[6]}" = "  /c/n.md" ]
+  [ "${lines[7]}" = "Parked:" ]
+  [ "${lines[8]}" = "k3 Parked thing" ]
+  [ "${lines[9]}" = "  /c/p.md" ]
+  [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  [[ "$output" != *'**'* && "$output" != *'|'* ]]
+  run bash "$LEDGER" reply --bogus
+  [ "$status" -eq 2 ]
+}
+
+@test "check passes on the reply tail, and reports MISSING and EXTRA refs with exit 1" {
+  bash "$LEDGER" start 8 "job eight" --context /c/8.md
+  bash "$LEDGER" next add "ask me" --context /c/n.md
+  bash "$LEDGER" park k3 --context /c/p.md
+  bash "$LEDGER" reply > "$BATS_TEST_TMPDIR/ok.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/ok.txt"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run bash "$LEDGER" check - < "$BATS_TEST_TMPDIR/ok.txt"
+  [ "$status" -eq 0 ]
+  # drop n1, add n9 (bold and list markers are tolerated), prose mentions are ignored
+  { echo "see r8 and n1 in prose"; echo "- **r8** job"; echo "1. **n9** invented"; echo "k3"; } > "$BATS_TEST_TMPDIR/bad.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/bad.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"MISSING n1"* ]]
+  [[ "$output" == *"EXTRA n9"* ]]
+  [[ "$output" != *"r8"* && "$output" != *"k3"* ]]
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/none.txt"
+  [ "$status" -eq 2 ]
+}
+
+@test "context is required: reply shows context: MISSING, check prints NO-CONTEXT refs, next add and park warn" {
+  bash "$LEDGER" start 8 "job eight"
+  run bash "$LEDGER" next add "ask me"
+  [[ "$output" == *"warning: next add without --context"* ]]
+  run bash "$LEDGER" park k3
+  [[ "$output" == *"warning: k3 has no context"* ]]
+  run bash "$LEDGER" next add "fine" --context /c/n.md
+  [ "$output" = "n2" ]
+  run bash "$LEDGER" park k3 --context /c/p.md
+  [ -z "$output" ]
+  run bash "$LEDGER" park k3
+  [ -z "$output" ]
+  bash "$LEDGER" unpark k3
+  run bash "$LEDGER" reply
+  [[ "$output" == *$'r8 '*$'\n  context: MISSING'* ]]
+  [[ "$output" == *$'n1 ask me\n  context: MISSING'* ]]
+  [[ "$output" == *$'n2 fine\n  /c/n.md'* ]]
+  bash "$LEDGER" reply > "$BATS_TEST_TMPDIR/r.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO-CONTEXT r8"* && "$output" == *"NO-CONTEXT n1"* && "$output" != *"NO-CONTEXT n2"* ]]
 }
