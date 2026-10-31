@@ -3,8 +3,8 @@
 A Claude Code **mod** that ships inside the `ccxp-skills` plugin, **on by default**.
 
 - **Prompt rows**: your own prompts get a colored left bar (`quote` border) and yellow text (`USER_TEXT_COLOR` in `config.ts`; the renderer honours `NO_COLOR`); the agent's replies, task notifications and peer messages are left alone.
-- **Status band** above the prompt: always exactly ONE row, in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
-- **`/hud`**: `on | off | status | details | config`. A bare `/hud` (no argument) or an unknown one only prints the status line and usage; it never opens a dialog or writes. Run `/hud config` (optionally `/hud config <url>`, quoted or not) to configure. `details` is a toggle: it expands the one-row band into up to six live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
+- **Status band** above the prompt: one row, or TWO when `ci` is set (the CI cell alone on a top row, red and highlighted when failing), in one of two modes (autopilot on / off). It names the repo you are working in (following `/cd`), colours context left, and shows a READY / WORKING jobs indicator. The HUD replaces the retired `statusline-setup` skill and its `statusLine.command`; the band is the only status line.
+- **`/hud`**: `on | off | status | details | config`. A bare `/hud` (no argument) or an unknown one only prints the status line and usage; it never opens a dialog or writes. Run `/hud config` (optionally `/hud config <url>`, quoted or not) to configure. `details` is a toggle: it expands the band into up to six live detail lines (run it again to collapse); `config` asks for a workflow URL, the fill colour and whether to show the version cell, and writes them (see below). `/hud pane` was retired: it was a static side pane, `details` updates with the band.
 
 ## Turn it off (without uninstalling ccxp-skills)
 
@@ -38,20 +38,30 @@ Example, in a repo whose nightly orchestrator workflow is `nightly-orchestrator.
 
 ## Modes and layout
 
-The mode is picked automatically: **AP on** while autopilot is on (working, backing off, idle or capped all count; paused counts and is marked), **AP off** otherwise (`/autopilot off`, an old-format state file, or none). The band is ONE row at every width; cells with nothing to say are dropped, never padded.
+The mode is picked automatically: **AP on** while autopilot is on (working, backing off, idle or capped all count; paused counts and is marked), **AP off** otherwise (`/autopilot off`, an old-format state file, or none). The band is ONE row at every width, or TWO when `ci` is configured and answered: CI is alone on the top row, everything else on the second (see "CI cell"). Cells with nothing to say are dropped, never padded.
 
 | Mode | Row |
 |---|---|
-| AP off | `acme/widgets @ main* \| T<id> <task slug> \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no AP cell, no ctx) |
-| AP on | `AP 2/6h 3 loops ✓2 merged \| last 24h: 8 merged / 26 loops ▲ average 5.2/day \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
+| AP off | `acme/widgets @ main* \| T<id> <task slug> \| WORKING (2) \| queue 44 = 30r 6b 3d 2e 3x \| you 09:05` (no AP cell, no ctx) |
+| AP on | `AP 2/6h 3 loops ✓2 merged \| last 24h: 8 merged / 26 loops ▲ average 5.2/day \| queue 44 = 30r 6b 3d 2e 3x \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
 
-| Width | Tier | CI | AP | ctx |
-|---|---|---|---|---|
-| < 70 | tiny | `CI ✗` | `AP 2/6h 3L ✓2` | `ctx 64%` |
-| 70-99 | compact | `CI ✗ 10-26` | `AP 2/6h 3 loops ✓2` | `ctx 64%` |
-| >= 100 | wide | `CI ✗ failing 10-26` | `AP 2/6h 3 loops ✓2 merged` | `ctx 64% ▓▓▓▓▓▓░░░░` |
+With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the mock is drawn with `[ ]` where the row is reverse video):
 
-- Tiers only set how detailed the AP, ctx and CI cells start. When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), CI detail (word, then date), `WORKING (N)` loses its count, task slug (the task ID stays), repo cell detail (worktree, account, then owner and long names), task ID, then the repo cell loses its branch. AP on: last input, ctx meter, CI detail, jobs count, the 24h cell (spelled out, then shorter, `avg` only in the last two forms), AP words, then ctx, then the 24h cell, then the version. Repo (or AP), jobs and CI stay longest.
+```text
+[ CI (nightly.yml) ✗ failing 10-28 (2h ago)                                                    ]
+ AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged / 26 loops ▲ average 5.2/day │ queue 30/44 │ ctx 64% │ WORKING (2)
+```
+
+- Row 2 order: AP, the 24h cell, then queue (so AP and queue always share a row), then ctx, jobs, last input, version. Queue is never on the CI row.
+- No `ci` (or no answer yet): row 2 alone, exactly as before.
+
+| Width | Tier | AP | ctx |
+|---|---|---|---|
+| < 70 | tiny | `AP 2/6h 3L ✓2` | `ctx 64%` |
+| 70-99 | compact | `AP 2/6h 3 loops ✓2` | `ctx 64%` |
+| >= 100 | wide | `AP 2/6h 3 loops ✓2 merged` | `ctx 64% ▓▓▓▓▓▓░░░░` |
+
+- Tiers only set how detailed the AP and ctx cells start (the CI row always starts full). When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), `WORKING (N)` loses its count, task slug (the task ID stays), repo cell detail (worktree, account, then owner and long names), task ID, then the repo cell loses its branch. AP on: last input, ctx meter, jobs count, the 24h cell (spelled out, then shorter, `avg` only in the last two forms), AP words, then ctx, then the 24h cell, then the version. Repo (or AP) and jobs stay longest.
 - `READY` has one form; `WORKING (N)` becomes `WORKING` when narrow.
 - The AP elapsed/requested pair keeps its `h` so `2/6h` cannot read as loops.
 - **24h progress cell** (AP on, next to the AP cell, switched by the `ap` field): the last 24 hours as a rolling window (not a calendar day) against the lifetime average per 24 h, so you can see whether productivity trends up. `last 24h: 8 merged / 26 loops ▲ average 5.2/day` shrinks to `24h: 8 merged/26 loops ▲ average 5.2/day`, `24h: ✓8/26L ▲ average 5.2/d`, then (the last two forms, also where the terminal is under 70 columns) `24h ✓8/26L ▲ avg 5.2/d` and `24h ✓8 ▲`, and drops after the ctx cell; the ctx bar, CI and jobs cells shrink first, so the 24h merged count and the average stay visible from about 80 columns up. `▲` = 24 h merged above the average (green), `▼` below (yellow), `=` equal; the average is compared at one decimal. Before any cycle is logged only `average 5.2/day` shows; with no counters and no history the cell is absent. Data: `autopilot-state.sh stats --json` over `dev/.autopilot-history.jsonl` and the state file's lifetime counters (one jq pass, no network). The 24 h part is exact from the first logged cycle; earlier work reaches the average through the state counters, and `off`/`start` keeps the baseline. The details view repeats the cell on its AP line.
@@ -78,6 +88,19 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## CI cell
 
+- Layout: the CI cell is not part of the second row; it has its own TOP row, only when `ci` is configured and the helper has an answer (`fields` still switches it off with `ci`). No `ci`: the band stays one row.
+- Colours (state, text, row look):
+
+| State | Text | Colour | Row highlight |
+|---|---|---|---|
+| passing | `✓ passing` | green | none |
+| running (queued or in progress) | `◐ running` | yellow | none |
+| failing (also timed out) | `✗ failing` | red | whole row: bold, red text in reverse video (a solid red bar across the width), whatever the fill colour or theme |
+| unknown (cancelled, skipped, other) | `? unknown` | grey | none |
+
+- `NO_COLOR` set: the red row loses its colour but keeps bold reverse video, and the state word is shouted: `✗ FAILING` (read through the engine's `env.get`, so the mod never touches `process.env`).
+- Text: `CI (workflow) ✗ failing 10-28 (2h ago)`, shrinking by width to `CI ✗ failing 10-28 (2h ago)`, `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗` (workflow name first, then the state word, the age, the date).
+
 - Source: the LAST run of the configured workflow (`ci` above), via `gh run list --workflow <w> --branch <b> --limit 1` in `hud/scripts/hud-ci.sh`. Nothing is hard coded; no `ci` means no cell and no `gh` call.
 - States: `✓ passing` (green), `✗ failing` (red; also timed out), `◐ running` (yellow; queued or in progress), `? unknown` (grey; cancelled, skipped, other). The date is the run's creation day (`MM-DD`).
 - Never blocks the band: the helper answers from an on-disk cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-ci/`) and starts one detached refresh when the cache is older than 120 s (or `pollSeconds`, whichever is larger), 5 s timeout per call. The first result can take a couple of minutes.
@@ -85,7 +108,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## Queue cell
 
-- Shows where `dev/TODO/queue.md` stands, for a repo that has one (none, no cell; nothing is ever an error). Band: `queue 44 = 30r 6b 3d 2e 3x` (ready, blocked, decision, external, epic), squeezed to `queue 30/44` and dropped early when the row is tight. `/hud details` line 4 spells it out: `queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic`. Add or remove it with `fields` (`queue`).
+- Shows where `dev/TODO/queue.md` stands, for a repo that has one (none, no cell; nothing is ever an error). Band: `queue 44 = 30r 6b 3d 2e 3x` (ready, blocked, decision, external, epic), squeezed to `queue 30/44` and dropped early when the row is tight. In AP-on mode it sits right after the AP and 24h cells. `/hud details` spells it out on the AP line: `queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic`. Add or remove it with `fields` (`queue`).
 - Deterministic (no LLM): one `awk` over the queued task files plus one `jq` per poll, in `sl-queue-json` (`hud/scripts/hud-lib.sh`); helper JSON key `queue` = `{total, ready, blocked, decision, external, epic, claimed}`. `total` is the number of task lines (`- [T<id>](file.md)`; struck-through lines are not tasks).
 - Every task is counted in exactly ONE bucket, first match wins, so the buckets always add up to `total`:
   1. epic: `kind=epic` in the autopilot's needs_attention, or the title/status says `umbrella`, `epic` or `tracking task|issue`, or the frontmatter has a `children:` key. Plain members of a `dev/EPICS` epic are ordinary tasks and stay takeable.
@@ -106,7 +129,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - Installed: the running plugin's own `.claude-plugin/plugin.json` (the helper's install dir), a local read.
 - Latest: the highest plain `ccxp-skills--vX.Y.Z` tag of the public Synx-Data-Labs/ccxp-skills repo, via `git ls-remote --tags` in `hud/scripts/hud-version.sh` (no credentials, no `gh`). Prereleases are ignored. Newer/same/older is decided by numeric semver (5.10.0 > 5.9.0), never by string compare. The helper reports the highest known tag as `latest` whatever its relation to installed; the mod picks the wording.
 - Same pattern as the CI cell: answers from a cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-version/`), at most one detached refresh per 6 hours (8 s timeout, no credential prompt). Offline or git missing: the cached answer is kept, the next try is about 15 minutes later, and the cell shows the last known answer (or the installed version alone when there never was one). Only strings matching the tag pattern are ever drawn.
-- Squeezing: the plain `ccxp X` goes right after the last-input cell; the update marker is kept almost to the end. `/hud details` shows it on the last line (6 with a queue, else 5) next to `you` and never drops it: on a narrow terminal the URL goes first, then the `you` stamp shrinks, then the label narrows to `✓`/`↑`. A short terminal that caps the detail lines below the line count cuts the last line, which is this one.
+- Squeezing: the plain `ccxp X` goes right after the last-input cell; the update marker is kept almost to the end. `/hud details` shows it on the last line (6 with CI, else 5) next to `you` and never drops it: on a narrow terminal the URL goes first, then the `you` stamp shrinks, then the label narrows to `✓`/`↑`. A short terminal that caps the detail lines below the line count cuts the last line, which is this one.
 - Turn it off: `"version": false` or `/hud config`.
 - An update is picked up by `/plugin` (reinstall or update); the cell is information only and changes nothing.
 
@@ -123,7 +146,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## Fill
 
-- Always on: the band is padded with spaces to the band's width and drawn on a background, so it reads as a solid bar apart from the rest of the output. Still one row (or the detail lines under `/hud details`).
+- Always on: the band is padded with spaces to the band's width and drawn on a background, so it reads as a solid bar apart from the rest of the output. One row, two with CI (or the detail lines under `/hud details`). A red CI row ignores the fill colour and is drawn in reverse video.
 - Width: the engine's `bodyColumns` for the band (the terminal, or the transcript's column beside a docked pane, less the five columns the engine keeps for its `[-]` mark), so the bar ends just before that mark. The band is redrawn by the engine when the width changes.
 - Measured in display columns (`hud/fill.ts`): emoji and CJK count 2, combining marks and joiners 0, ANSI codes 0. Content wider than the bar is cut with an ellipsis before padding, so a row never exceeds the width.
 - Colour (`fillColor`, default gray) follows the `/config` theme: each named colour has a muted dark tint for `dark*` themes and a pale tint for `light*`, so the cell colours (CI, AP, jobs) stay readable on both. Any other theme (auto, unreadable) uses reverse video. A custom `#rrggbb` is drawn as given on every theme (pick one that suits your terminal). An invalid value means gray.
@@ -131,18 +154,18 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 
 ## `/hud details`
 
-Toggles the band between the one-row view and up to six detail lines (this session only; a new session starts collapsed). It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
+Toggles the band between the compact view and up to six detail lines (this session only; a new session starts collapsed). It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
 
 | Line | Shows |
 |---|---|
+| 0 CI | `CI (workflow) ✓ passing 10-28 (2h ago)` first and alone (only when `ci` is set); a failing run is drawn as the red bold reverse-video row, as in the band (`✗ FAILING` with `NO_COLOR`) |
 | 1 where | `owner/name @ branch*` plus worktree, account and `(root: X)` as in the repo cell, then the claimed task `T<id> title` |
 | 2 usage | spelled out: `context 64% left ▓▓▓▓▓▓░░░░` (same colours as the band; the band's `ctx` is context LEFT), `5-hour limit 4% used` (share of your Claude subscription's rolling 5-hour usage window, from the engine's `rate_limits`; hidden when the engine reports none, e.g. API-key use), `API-equivalent cost $693.75` (the engine's running estimate of this session's token usage at API list prices, `cost.total_cost_usd`; NOT what a subscription bills) |
 | 3 jobs | `READY` / `WORKING (N)`, `parked N`, `total jobs N` (from the ledger; no ledger, no line). The running jobs are not listed: the status already shows them. `parked N` is the length of the ledger's `parked` array (contexts are not shown here) |
-| 4 queue | `queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic` (`\| 2 claimed` appended when above 0); see "Queue cell"; no `dev/TODO/queue.md`, no line |
-| 5 autopilot and CI | `AP 2h ⚠1 3 loops ✓2 merged` in the band, `AP on 2h …` in the details (`AP idle 2h …` in the band and `AP on idle 2h …` in the details when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due` when the time has passed between cycles, nothing when absent; while a cycle runs (the state file's `busy_since` is set) it shows `running r596` instead, the highest-numbered running ledger row flagged `autopilot` (the dispatcher starts the cycle with `ledger.sh start <n> "autopilot cycle" --flags autopilot`), or plain `running` when no such row exists), `CI (workflow) ✓ passing 10-28 (2h ago)` (only when `ci` is set) |
-| 6 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook) |
+| 4 autopilot and queue | `AP on 2h …` (`AP idle 2h …` when idle, `AP ⏸ paused 2h …` when paused, `AP off` when off or none), the 24h cell, `queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic` (`\| 2 claimed` appended when above 0; see "Queue cell"; no `dev/TODO/queue.md`, no queue part), then `next loop 14:32 (in 12m)` from the state file's `next_wake_at` (`next loop paused` when paused, `next loop due` when the time has passed between cycles, nothing when absent; while a cycle runs (the state file's `busy_since` is set) it shows `running r596` instead, the highest-numbered running ledger row flagged `autopilot` (the dispatcher starts the cycle with `ledger.sh start <n> "autopilot cycle" --flags autopilot`), or plain `running` when no such row exists) |
+| 5 you | `you HH:MM (5m ago)`, the last prompt (needs the last-input hook), then the version label and plugin URL |
 
-- Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than six. The height is capped at the engine's `maxRows`.
+- Every line is cut to the terminal width with the band's shrinking idea: ages and labels shorten first, then labels shorten (`5h limit 4%`, `cost $693.75`, `ctx 88%`, `total 82`, `next loop in 12m`) and lower-value cells drop (`total`, parked, cost, rate limit), and only then is text cut. Lines with nothing to say are left out, so you may see fewer than six (never more: CI and queue no longer have lines of their own). The height is capped at the engine's `maxRows`.
 - The VS Code compact status line stays one line.
 - The retired `/hud pane` is not an alias: it prints the usage line.
 
