@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -46,6 +46,14 @@ function num(x: unknown): number {
   return typeof x === 'number' && Number.isFinite(x) ? x : 0
 }
 
+/** The helper's autopilot `stats` object; null when absent or malformed. */
+function parseStats(x: unknown): ApStats | null {
+  if (typeof x !== 'object' || x === null || Array.isArray(x)) return null
+  const o = x as Record<string, unknown>
+  const trend = o.trend === 'up' || o.trend === 'down' ? o.trend : 'flat'
+  return { has_history: o.has_history === true, merged_24h: num(o.merged_24h), cycles_24h: num(o.cycles_24h), avg_merged_24h: num(o.avg_merged_24h), trend }
+}
+
 /** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
 export function parseHelper(stdout: string): HelperData | null {
   let raw: unknown
@@ -77,6 +85,7 @@ export function parseHelper(stdout: string): HelperData | null {
       next_wake_at: num(a.next_wake_at),
       busy: a.busy === true,
       current_task: str(a.current_task),
+      stats: parseStats(a.stats),
     }
   }
   const led = r.ledger
@@ -305,6 +314,25 @@ function apVariants(ap: Autopilot): Variants {
 }
 
 /**
+ * The autopilot's progress cell, most to least detail (with history; without it only the average shows):
+ * `24h 8 merged/26 loops ▲ avg 5.2/day`, `24h ✓8/26L ▲ avg 5.2/d`, `24h ✓8 ▲`. The marker compares the
+ * last 24 h merged with the lifetime average per 24 h (▲ above, ▼ below, = equal).
+ */
+function apStatsVariants(ap: Autopilot): Variants | null {
+  const st = ap.stats
+  if (!st) return null
+  const avg = st.avg_merged_24h.toFixed(1)
+  const mark: Seg = st.trend === 'up' ? { text: '▲', color: 'success' } : st.trend === 'down' ? { text: '▼', color: 'warning' } : { text: '=', dim: true }
+  if (!st.has_history) return [[{ text: `avg ${avg}/day`, dim: true }], [{ text: `avg ${avg}/d`, dim: true }]]
+  const mk = (head: string, tail: string): Seg[] => [{ text: head }, mark, ...(tail ? [{ text: tail, dim: true }] : [])]
+  return [
+    mk(`24h ${st.merged_24h} merged/${st.cycles_24h} loops `, ` avg ${avg}/day`),
+    mk(`24h ✓${st.merged_24h}/${st.cycles_24h}L `, ` avg ${avg}/d`),
+    mk(`24h ✓${st.merged_24h} `, ''),
+  ]
+}
+
+/**
  * The repo cell, most to least detail:
  * `[→ ]owner/name @ branch* (wt X) (account) (root: X)`. It follows the session cwd (the helper is
  * run for it). `→` leads for a couple of refreshes after the working repo changed; `(root: X)` shows
@@ -428,7 +456,7 @@ const ORDER = {
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
   off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:apstats', 'step:apstats', 'drop:apstats', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:ctx', 'step:ap', 'step:ap', 'drop:ctx', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -458,6 +486,11 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
     const it = itemFor(f, snap, cfg)
     // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
+    // The 24h progress cell rides with the AP cell (same switch) and is the first thing to shrink.
+    if (f === 'ap' && it) {
+      const sv = apStatsVariants(snap.helper!.autopilot!)
+      if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(start, sv.length - 1) })
+    }
   }
   // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
   if (items.some(it => it.field === 'repo')) items = items.filter(it => it.field !== 'branch')
@@ -523,7 +556,7 @@ const DETAIL_STEPS = {
   usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
   jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
   queue: ['step:queue', 'step:queue'],
-  ap: ['step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
+  ap: ['step:apstats', 'step:apstats', 'drop:apstats', 'step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
   // The version label is never dropped here (the link goes first, then the stamp shrinks, then the label narrows to ✓/↑).
   you: ['drop:url', 'step:lastat', 'step:lastat', 'step:ver', 'step:ver', 'step:ver0'],
 } as const
@@ -628,7 +661,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
         ? one('wake', [{ text: 'next loop due', dim: true }])
         : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
   }
-  add([apItem, wakeItem, ciItem], DETAIL_STEPS.ap)
+  const apStats = ap ? apStatsVariants(ap) : null
+  add([apItem, apStats ? one('apstats', ...apStats) : null, wakeItem, ciItem], DETAIL_STEPS.ap)
 
   // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at

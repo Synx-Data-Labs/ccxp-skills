@@ -322,6 +322,20 @@ sl-autopilot-fields() {
   printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}${sep}${next_wake_epoch}${sep}${busy}${sep}${current_task}"
 }
 
+# $1 repo_root -> compact JSON of the autopilot's rolling-24h and lifetime progress
+# {has_history, merged_24h, cycles_24h, avg_merged_24h, trend (up|down|flat)}, or
+# nothing when there is nothing to show (no counters and no history) or anything
+# fails. The math lives in `autopilot-state.sh stats` (one jq pass, no network,
+# read-only); this only points it at the repo's files. Never fails the prompt.
+sl-autopilot-stats() {
+  local repo_root="$1" script="$_SL_DIR/../../autopilot/scripts/autopilot-state.sh" out
+  [ -f "$script" ] || return 0
+  out=$(AUTOPILOT_STATE_FILE="$repo_root/dev/.autopilot-state.json" AUTOPILOT_HISTORY_FILE="$repo_root/dev/.autopilot-history.jsonl" \
+    bash "$script" stats --json 2>/dev/null) || return 0
+  printf '%s' "$out" | jq -c 'select(type == "object" and (.has_history or ((.lifetime_cycles // 0) > 0)))
+    | {has_history, merged_24h, cycles_24h, avg_merged_24h, trend}' 2>/dev/null || true
+}
+
 # Job ledger (written by ledger.sh). Same default path convention as the other
 # state files: CLAUDE_CONFIG_DIR, else ~/.claude. CCXP_LEDGER_FILE overrides.
 sl-ledger-file() {

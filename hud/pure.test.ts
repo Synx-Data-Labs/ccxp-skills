@@ -1003,3 +1003,42 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
   const tight = text(bandRows(withHelper({ ...SHORT, task_title: '', queue: QUEUE, ledger: null, ci: null }) as any, CI, 34))
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
+
+// --- autopilot 24h progress and lifetime average -------------------------------------------------
+const STATS = { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' }
+const apStats = (over = {}) => withHelper({ autopilot: { ...AP, stats: { ...STATS, ...over } } })
+
+test('AP stats: parseHelper keeps a valid stats object; absent or malformed is null', async () => {
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: STATS } }))?.autopilot?.stats).toEqual(STATS)
+  expect(parseHelper(HELPER_AP)?.autopilot?.stats).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: [1] } }))?.autopilot?.stats).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: { trend: 'sideways', merged_24h: 'x' } } }))?.autopilot?.stats).toEqual({ has_history: false, merged_24h: 0, cycles_24h: 0, avg_merged_24h: 0, trend: 'flat' })
+})
+
+test('AP stats: the wide band shows 24h merged/loops, the marker and the lifetime average per day', async () => {
+  const wide = text(bandRows(apStats(), CI, 200))
+  expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ 24h 8 merged/26 loops ▲ avg 5.2/day │ ctx')
+  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), CI, 200))).toContain('24h 3 merged/26 loops ▼ avg 5.2/day')
+  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), CI, 200))).toContain('24h 5 merged/26 loops = avg 5.2/day')
+})
+
+test('AP stats: no history shows only the average; no stats shows nothing extra', async () => {
+  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), CI, 200))).toContain('│ avg 5.2/day │')
+  expect(text(bandRows(withHelper({ autopilot: AP }), CI, 200))).not.toMatch(/24h|avg/)
+})
+
+test('AP stats: narrow rows shrink the stats first, then drop them; the row always fits', async () => {
+  const at = (cols: number) => text(bandRows(apStats(), CI, cols))
+  expect(at(110)).toContain('24h ✓8/26L ▲ avg 5.2/d')
+  expect(at(100)).toContain('24h ✓8 ▲')
+  expect(at(75)).not.toContain('avg')
+  for (const cols of [30, 50, 70, 90, 110, 140, 200]) expect(at(cols).length).toBeLessThanOrEqual(cols)
+  expect(at(48)).toContain('AP')
+  expect(at(48)).not.toContain('24h')
+})
+
+test('AP stats: `ap` switched off hides the stats too; details show them on the AP line', async () => {
+  expect(text(bandRows(apStats(), { ...CI, fields: ['ci'] }, 200))).not.toContain('24h')
+  const line = detailRows(apStats() as any, DEFAULTS, 200).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))
+  expect(line).toContain('24h 8 merged/26 loops ▲ avg 5.2/day')
+})
