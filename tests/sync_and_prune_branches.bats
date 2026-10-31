@@ -189,3 +189,72 @@ mk_project_repo() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Phase 0:"* ]]
 }
+
+# --- cwd / --repo targeting (plugin-cache install: script dir has no .git) ---
+
+# mk_plugin_copy -> copies the script into a layout with NO .git anywhere
+# above it (like an installed plugin cache) and prints the script path.
+mk_plugin_copy() {
+  local dir="$BATS_TEST_TMPDIR/plugin-cache/ccxp-skills"
+  mkdir -p "$dir/ccxp/scripts"
+  cp "$SCRIPT_SRC" "$dir/ccxp/scripts/sync-and-prune-branches.sh"
+  echo "$dir/ccxp/scripts/sync-and-prune-branches.sh"
+}
+
+@test "script copy outside any repo syncs the cwd repo and skips the skills refresh" {
+  SCRIPT="$(mk_plugin_copy)"
+  PROJECT_REPO="$(mk_project_repo)"
+  push_commit "$BATS_TEST_TMPDIR/remotes/project.git"
+  want_head="$(git -C "$BATS_TEST_TMPDIR/remotes/project.git" rev-parse main)"
+
+  cd "$PROJECT_REPO"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$PROJECT_REPO" rev-parse HEAD)" = "$want_head" ]
+  [[ "$output" == *"skipping skills repo refresh"* ]]
+  [[ "$output" == *"Phase 0:"* ]]
+}
+
+@test "--repo DIR targets that repo regardless of cwd" {
+  SCRIPT="$(mk_plugin_copy)"
+  PROJECT_REPO="$(mk_project_repo)"
+  push_commit "$BATS_TEST_TMPDIR/remotes/project.git"
+  want_head="$(git -C "$BATS_TEST_TMPDIR/remotes/project.git" rev-parse main)"
+
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$SCRIPT" --repo "$PROJECT_REPO"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$PROJECT_REPO" rev-parse HEAD)" = "$want_head" ]
+}
+
+@test "cwd that is not a git repo exits 1 with a clear message" {
+  SCRIPT="$(mk_plugin_copy)"
+  NOT_A_REPO="$BATS_TEST_TMPDIR/plain-dir"
+  mkdir -p "$NOT_A_REPO"
+
+  cd "$NOT_A_REPO"
+  run bash "$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is not a git repo"* ]]
+  [[ "$output" == *"--repo"* ]]
+}
+
+@test "--repo pointing at a non-repo exits 1 with a clear message" {
+  SCRIPT="$(mk_plugin_copy)"
+  mkdir -p "$BATS_TEST_TMPDIR/plain-dir"
+
+  run bash "$SCRIPT" --repo "$BATS_TEST_TMPDIR/plain-dir"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is not a git repo"* ]]
+}
+
+@test "explicit --skills-dir is still enforced when the script copy has no .git" {
+  SCRIPT="$(mk_plugin_copy)"
+  PROJECT_REPO="$(mk_project_repo)"
+  mkdir -p "$BATS_TEST_TMPDIR/not-a-repo"
+
+  cd "$PROJECT_REPO"
+  run bash "$SCRIPT" --skills-dir "$BATS_TEST_TMPDIR/not-a-repo"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"doesn't look like the ccxp-skills checkout"* ]]
+}
