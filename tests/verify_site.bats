@@ -175,6 +175,15 @@ match() { run bash "$SCR/match-testplan.sh" "$BODY" "$RES" "$OUT"; }
   if grep -q '\[x\]' "$OUT"; then return 1; fi
 }
 
+@test "match: a final fail record without a trailing newline is not dropped" {
+  printf '%s\n' '- [ ] Every route returns 200' > "$BODY"
+  res routes pass
+  printf '%s' '{"check":"routes","status":"fail"}' >> "$RES"
+  match
+  [ "${lines[-1]}" = 0 ]
+  if grep -q '\[x\]' "$OUT"; then return 1; fi
+}
+
 @test "match: the build item ticks when the script runs at all" {
   printf '%s\n' '- [ ] `npm run build` exits 0' '- [ ] Build green' > "$BODY"
   : > "$RES"

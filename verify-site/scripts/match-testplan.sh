@@ -14,7 +14,7 @@ BODY="$1"; RESULTS="$2"; OUT="$3"
 # is "none", which never ticks.
 fam_pass() {
   local fam="$1" passed=0 failed=0 line c s
-  while IFS= read -r line; do
+  while IFS= read -r line || [ -n "$line" ]; do
     [ -z "$line" ] && continue
     # An unparseable record cannot be trusted either way: fail closed.
     c=$(echo "$line" | jq -r '.check // empty') || { echo "fail"; return; }
