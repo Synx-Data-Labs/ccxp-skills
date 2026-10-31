@@ -98,7 +98,7 @@ _ap_update() {
 _ap_fresh() {
   local f carry=""; f=$(ap-state-file); mkdir -p "$(dirname "$f")"
   [ -f "$f" ] && carry=$(jq -c 'select(type == "object") | {
-      lifetime_started_at: (.lifetime_started_at // .started_at),
+      lifetime_started_at: (((.lifetime_started_at // .started_at) | strings | select(test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))) // null),
       lifetime_cycles: ((.lifetime_cycles // .cycle_count) | numbers // 0),
       lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0)}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
@@ -246,7 +246,8 @@ ap-history-append() {
 #     baseline from before the log existed, kept across off/start), or the log when larger;
 #   - lifetime days = max(1, (now - earliest of lifetime_started_at, first log ts) / 86400);
 #   - trend compares merged_24h with the average rounded to 1 decimal: up|down|flat.
-# Malformed history lines are skipped. Never fails on missing files (all zero).
+# Timestamps must be strict UTC (YYYY-MM-DDTHH:MM:SSZ, what `record` writes); future-dated
+# or malformed history lines are skipped. Never fails on missing files (all zero).
 ap-stats() {
   local json=0 sf hf now_e out
   case "${1:-}" in --json) json=1 ;; '') ;; *) echo "stats [--json]" >&2; return 2 ;; esac
@@ -262,11 +263,11 @@ ap-stats() {
     | [inputs | fromjson? | select(type == "object")
        | select((.ts | strings | ep) != null) | {t: (.ts | ep), o: (.outcome | strings // ""), m: (.merged | n)}] as $h
     | ($now - 86400) as $cut
-    | ($h | map(select(.t > $cut))) as $w
+    | ($h | map(select(.t > $cut and .t <= $now))) as $w
     | def cyc: map(select(.o != "capped")) | length;
       def cnt($k): map(select(.o == $k)) | length;
-      ([$s.lifetime_cycles // $s.cycle_count | n, ($h | cyc)] | max) as $lc
-    | ([$s.lifetime_merged // $s.merged_count | n, ($h | map(.m) | add // 0)] | max) as $lm
+      ([(($s.lifetime_cycles // $s.cycle_count) | n), ($h | cyc)] | max) as $lc
+    | ([(($s.lifetime_merged // $s.merged_count) | n), ($h | map(.m) | add // 0)] | max) as $lm
     | ([($s.lifetime_started_at // $s.started_at | strings | ep), ($h | map(.t) | min)] | map(select(. != null)) | min // $now) as $start
     | ((($now - $start) / 86400) | if . < 1 then 1 else . end) as $days
     | ($lm / $days | r2) as $am | ($lc / $days | r2) as $ac
@@ -583,7 +584,7 @@ autopilot-state() {
     remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; unskip) ap-unskip "$@" ;; notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
-    *) sed -n '2,56p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    *) sed -n '2,52p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 

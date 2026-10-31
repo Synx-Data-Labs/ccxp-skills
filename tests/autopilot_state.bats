@@ -770,3 +770,24 @@ _stat() { _ap stats --json | jq -r "$1"; }
   grep -q 'autopilot-state.sh stats' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q '.autopilot-history.jsonl' "$REPO_ROOT/autopilot/SKILL.md"
 }
+
+@test "stats: a future-dated history line is not in the 24h window" {
+  _hline 2026-10-28T10:00:01Z progress 4
+  _hline 2026-10-28T09:00:00Z progress 1
+  [ "$(_stat .merged_24h)" = 1 ]
+}
+
+@test "lifetime baseline: a corrupt started_at is not carried, counters still are" {
+  printf '%s' '{"schema":2,"status":"off","started_at":"yesterday","cycle_count":7,"merged_count":3}' > "$AUTOPILOT_STATE_FILE"
+  _ap start >/dev/null
+  [ "$(_j .lifetime_started_at)" = "$AUTOPILOT_NOW" ]
+  [ "$(_j .lifetime_cycles)" = 7 ]
+  [ "$(_j .lifetime_merged)" = 3 ]
+}
+
+@test "usage text lists stats and stops before the code" {
+  run bash "$SCRIPT"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"stats [--json]"* ]]
+  [[ "$output" != *"set -euo pipefail"* ]]
+}
