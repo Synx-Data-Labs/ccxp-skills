@@ -18,6 +18,9 @@
 #                               updates counters + next_wake_at, prints the
 #                               notice kind to send (idle|resumed|stuck|waiting|
 #                               capped) or "none"
+#                               every record also appends one line to the history log
+#   stats [--json]              rolling-24h and lifetime progress from the history
+#                               log + state counters (see ap-stats)
 #   delay <outcome>             seconds until the next wake
 #   remaining                   seconds until next_wake_at (0 when due)
 #   eligible <task-file>        exit 0 when the status line allows auto-driving
@@ -45,8 +48,8 @@
 #   final-report [--stopped <why>]
 #                               the Phase 5 bullet report (elapsed, Done,
 #                               Needs your attention) from the state file
-# Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_NOW,
-#   AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND.
+# Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
+#   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND.
 
 set -euo pipefail
 
@@ -54,6 +57,7 @@ _ap_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 _ap_dir() { dirname "${BASH_SOURCE[0]}"; }
 ap-state-file() { printf '%s' "${AUTOPILOT_STATE_FILE:-$(_ap_root)/dev/.autopilot-state.json}"; }
 ap-config-file() { printf '%s' "${AUTOPILOT_CONFIG_FILE:-$(_ap_root)/dev/.autopilot-config.json}"; }
+ap-history-file() { printf '%s' "${AUTOPILOT_HISTORY_FILE:-$(dirname "$(ap-state-file)")/.autopilot-history.jsonl}"; }
 ap-now() { printf '%s' "${AUTOPILOT_NOW:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; }
 ap-today() { printf '%s' "${AUTOPILOT_TODAY:-$(date +%F)}"; }
 
@@ -88,10 +92,20 @@ _ap_update() {
   jq "$@" "$f" > "$tmp" && mv "$tmp" "$f"
 }
 
+# A fresh run zeroes the run counters but never the lifetime baseline: the
+# lifetime_* fields are carried over from the previous state file (seeded from its
+# run counters when it predates them), so `off` then `start` keeps the average.
 _ap_fresh() {
-  local f; f=$(ap-state-file); mkdir -p "$(dirname "$f")"
-  jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" '{
+  local f carry=""; f=$(ap-state-file); mkdir -p "$(dirname "$f")"
+  [ -f "$f" ] && carry=$(jq -c 'select(type == "object") | {
+      lifetime_started_at: (.lifetime_started_at // .started_at),
+      lifetime_cycles: ((.lifetime_cycles // .cycle_count) | numbers // 0),
+      lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0)}' "$f" 2>/dev/null) || carry=""
+  [ -n "$carry" ] || carry=null
+  jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" --argjson carry "$carry" '{
     schema: 2, status: "on", started_at: $now, paused_at: null,
+    lifetime_started_at: (($carry.lifetime_started_at | strings) // $now),
+    lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
     dispatch_clone_path: null, idle_notified: false, stuck_notified: false,
@@ -208,6 +222,70 @@ ap-delay() {
   esac
 }
 
+# Appends one JSON line {ts, outcome, merged, task} to the history log. One
+# small O_APPEND write, so concurrent writers cannot interleave; failure-tolerant
+# by design: a history problem must never break `record` (always returns 0).
+# Only the task id is kept (anything else becomes ""), never free text.
+ap-history-append() {
+  local outcome="$1" merged="$2" task="$3" h line
+  [[ "$task" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || task=""
+  {
+    h=$(ap-history-file)
+    mkdir -p "$(dirname "$h")" &&
+      line=$(jq -nc --arg ts "$(ap-now)" --arg o "$outcome" --argjson m "$merged" --arg t "$task" '{ts: $ts, outcome: $o, merged: $m, task: $t}') &&
+      printf '%s\n' "$line" >> "$h"
+  } 2>/dev/null || true
+  return 0
+}
+
+# stats [--json]: progress over the rolling last 24 h (now-86400 < ts <= now) and lifetime
+# averages per 24 h. One jq pass over the state file and the history log.
+#   - window counts come from the history log only (cycles exclude `capped` ticks,
+#     which dispatch nothing), so they are exact from the first logged cycle;
+#   - lifetime totals come from the state's lifetime_cycles/lifetime_merged (the
+#     baseline from before the log existed, kept across off/start), or the log when larger;
+#   - lifetime days = max(1, (now - earliest of lifetime_started_at, first log ts) / 86400);
+#   - trend compares merged_24h with the average rounded to 1 decimal: up|down|flat.
+# Malformed history lines are skipped. Never fails on missing files (all zero).
+ap-stats() {
+  local json=0 sf hf now_e out
+  case "${1:-}" in --json) json=1 ;; '') ;; *) echo "stats [--json]" >&2; return 2 ;; esac
+  sf=$(ap-state-file); hf=$(ap-history-file)
+  [ -f "$sf" ] || sf=/dev/null
+  [ -f "$hf" ] || hf=/dev/null
+  now_e=$(_ap_epoch "$(ap-now)"); [[ "$now_e" =~ ^[0-9]+$ ]] || now_e=$(date -u +%s)
+  out=$(jq -n -R -c --argjson now "$now_e" --slurpfile st "$sf" '
+    def ep: try fromdateiso8601 catch null;
+    def n: if type == "number" and . >= 0 then . else 0 end;
+    def r2: (. * 100 | round) / 100;
+    ($st[0] | if type == "object" then . else {} end) as $s
+    | [inputs | fromjson? | select(type == "object")
+       | select((.ts | strings | ep) != null) | {t: (.ts | ep), o: (.outcome | strings // ""), m: (.merged | n)}] as $h
+    | ($now - 86400) as $cut
+    | ($h | map(select(.t > $cut))) as $w
+    | def cyc: map(select(.o != "capped")) | length;
+      def cnt($k): map(select(.o == $k)) | length;
+      ([$s.lifetime_cycles // $s.cycle_count | n, ($h | cyc)] | max) as $lc
+    | ([$s.lifetime_merged // $s.merged_count | n, ($h | map(.m) | add // 0)] | max) as $lm
+    | ([($s.lifetime_started_at // $s.started_at | strings | ep), ($h | map(.t) | min)] | map(select(. != null)) | min // $now) as $start
+    | ((($now - $start) / 86400) | if . < 1 then 1 else . end) as $days
+    | ($lm / $days | r2) as $am | ($lc / $days | r2) as $ac
+    | ($w | map(.m) | add // 0) as $m24
+    | {has_history: (($h | length) > 0), window_hours: 24,
+       cycles_24h: ($w | cyc), merged_24h: $m24,
+       stuck_24h: ($w | cnt("stuck")), waiting_24h: ($w | cnt("waiting")), idle_24h: ($w | cnt("idle")),
+       lifetime_cycles: $lc, lifetime_merged: $lm, lifetime_days: ($days | r2),
+       avg_cycles_24h: $ac, avg_merged_24h: $am,
+       trend: (($am * 10 | round) / 10 | if $m24 > . then "up" elif $m24 < . then "down" else "flat" end)}' "$hf" 2>/dev/null) || out=""
+  [ -n "$out" ] || { echo "stats: could not read state/history" >&2; return 1; }
+  if [ "$json" = 1 ]; then printf '%s\n' "$out"; return 0; fi
+  printf '%s' "$out" | jq -r '
+    (if .trend == "up" then "▲" elif .trend == "down" then "▼" else "=" end) as $m
+    | (if .has_history then "24h: \(.merged_24h) merged/\(.cycles_24h) cycles (\(.stuck_24h) stuck, \(.waiting_24h) waiting, \(.idle_24h) idle) \($m)"
+       else "24h: no history logged yet" end),
+      "lifetime: \(.lifetime_merged) merged/\(.lifetime_cycles) cycles over \(.lifetime_days) days · avg \(.avg_merged_24h) merged/\(.avg_cycles_24h) cycles per 24h"'
+}
+
 # record <outcome> [merged] [task-id] [reason] -> notice kind (or none)
 ap-record() {
   local outcome="${1:?outcome}" merged="${2:-0}" task="${3:-}" reason="${4:-}" f notice=none
@@ -221,13 +299,16 @@ ap-record() {
   was_wait=$(jq -r '.waiting_notified' "$f"); was_capped=$(jq -r '.capped_notified' "$f")
   [ "$outcome" = capped ] && cycle=0   # a capped tick dispatched nothing
   _ap_update --arg o "$outcome" --arg now "$(ap-now)" --arg t "$task" --arg r "$reason" --argjson m "$merged" --argjson c "$cycle" '
-    .cycle_count += $c | .cycles_today += $c | .merged_count += $m | .merges_today += $m
+    (.lifetime_started_at //= .started_at) | (.lifetime_cycles //= .cycle_count) | (.lifetime_merged //= .merged_count)
+    | .lifetime_cycles += $c | .lifetime_merged += $m
+    | .cycle_count += $c | .cycles_today += $c | .merged_count += $m | .merges_today += $m
     | .last_cycle_at = (if $c == 1 then $now else .last_cycle_at end) | .last_outcome = $o
     | .last_task = (if $t == "" then null else $t end)
     | .last_stuck_reason = (if $o == "stuck" and $r != "" then $r else null end)
     | .stuck_count = (if $o == "stuck" then .stuck_count + 1 elif $o == "waiting" then .stuck_count else 0 end)
     | .waiting_count = (if $o == "waiting" then .waiting_count + 1 else 0 end)
     | .busy_since = null | .current_task = null'
+  ap-history-append "$outcome" "$merged" "$task"
   case "$outcome" in
     progress)
       [ "$was_idle" = true ] && notice=resumed
@@ -498,11 +579,11 @@ autopilot-state() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
-    off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; delay) ap-delay "$@" ;;
+    off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; unskip) ap-unskip "$@" ;; notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
-    *) sed -n '2,50p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    *) sed -n '2,56p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 

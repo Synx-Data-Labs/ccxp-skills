@@ -3,3 +3,4 @@ __pycache__/
 dev/.autopilot-state.json
 _gh/bin/
 dev/.autopilot-config.json
+dev/.autopilot-history.jsonl

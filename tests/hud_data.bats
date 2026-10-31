@@ -526,3 +526,40 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   run _hud "$repo" --json
   [ "$(jq -c .queue <<<"$output")" = '{"total":2,"ready":1,"blocked":0,"decision":1,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
 }
+
+# ---------------------------------------------------------------------------
+# autopilot 24h progress + lifetime average (autopilot.stats)
+# ---------------------------------------------------------------------------
+
+@test "--json: autopilot.stats carries the rolling 24h counts, the average and the trend" {
+  local repo; repo=$(_make_repo r-stats)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"lifetime_started_at\":\"$(date -u -d '4 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-4d +%Y-%m-%dT%H:%M:%SZ)\",\"lifetime_cycles\":20,\"lifetime_merged\":8,\"stuck_count\":0,\"cycle_count\":3}"
+  printf '{"ts":"%s","outcome":"progress","merged":3,"task":""}\n{"ts":"%s","outcome":"idle","merged":0,"task":""}\n' "$(_iso_ago 30)" "$(_iso_ago 10)" > "$repo/dev/.autopilot-history.jsonl"
+  run _hud "$repo" --json
+  [ "$(jq -r '.autopilot.stats | [.has_history, .merged_24h, .cycles_24h, .avg_merged_24h, .trend] | join(",")' <<<"$output")" = "true,3,2,2,up" ]
+}
+
+@test "--json: autopilot.stats is baseline-only (no history yet) and null with nothing to show" {
+  local repo; repo=$(_make_repo r-stats-base)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":0,\"cycle_count\":10,\"merged_count\":4}"
+  run _hud "$repo" --json
+  [ "$(jq -r '.autopilot.stats.has_history' <<<"$output")" = false ]
+  [ "$(jq -r '.autopilot.stats.avg_merged_24h' <<<"$output")" = 4 ]
+  local repo2; repo2=$(_make_repo r-stats-none)
+  _state "$repo2" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 5)\",\"stuck_count\":0,\"cycle_count\":0}"
+  run _hud "$repo2" --json
+  [ "$(jq -r '.autopilot.stats' <<<"$output")" = null ]
+}
+
+@test "--json: a malformed history file or an AP-off repo never breaks the helper" {
+  local repo; repo=$(_make_repo r-stats-bad)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":0,\"cycle_count\":2,\"merged_count\":1}"
+  printf 'garbage\n{{{\n' > "$repo/dev/.autopilot-history.jsonl"
+  run _hud "$repo" --json
+  [ "$(jq -r '.autopilot.status' <<<"$output")" = on ]
+  [ "$(jq -r '.autopilot.stats.has_history' <<<"$output")" = false ]
+  local off; off=$(_make_repo r-stats-off)
+  printf '{"ts":"%s","outcome":"progress","merged":1,"task":""}\n' "$(_iso_ago 5)" > "$off/dev/.autopilot-history.jsonl"
+  run _hud "$off" --json
+  [ "$(jq -r '.autopilot' <<<"$output")" = null ]
+}

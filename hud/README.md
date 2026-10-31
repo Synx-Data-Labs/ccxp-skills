@@ -43,7 +43,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 | Mode | Row |
 |---|---|
 | AP off | `acme/widgets @ main* \| T<id> <task slug> \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no AP cell, no ctx) |
-| AP on | `AP 2/6h 3 loops ✓2 merged \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
+| AP on | `AP 2/6h 3 loops ✓2 merged \| 24h 8 merged/26 loops ▲ avg 5.2/day \| ctx 64% ▓▓▓▓▓▓░░░░ \| WORKING (2) \| CI ✗ failing 10-26 \| you 09:05` (no repo or task); paused reads `AP ⏸ paused 2/6h ...` |
 
 | Width | Tier | CI | AP | ctx |
 |---|---|---|---|---|
@@ -54,6 +54,7 @@ The mode is picked automatically: **AP on** while autopilot is on (working, back
 - Tiers only set how detailed the AP, ctx and CI cells start. When the row is still wider than the terminal, cells shrink or go in this order: last input (`you`), CI detail (word, then date), `WORKING (N)` loses its count, task slug (the task ID stays), repo cell detail (worktree, account, then owner and long names), task ID, then the repo cell loses its branch. AP on: last input, CI detail, jobs count, ctx meter, AP words, then ctx. Repo (or AP), jobs and CI stay longest.
 - `READY` has one form; `WORKING (N)` becomes `WORKING` when narrow.
 - The AP elapsed/requested pair keeps its `h` so `2/6h` cannot read as loops.
+- **24h progress cell** (AP on, next to the AP cell, switched by the `ap` field): the last 24 hours as a rolling window (not a calendar day) against the lifetime average per 24 h, so you can see whether productivity trends up. `24h 8 merged/26 loops ▲ avg 5.2/day` shrinks to `24h ✓8/26L ▲ avg 5.2/d`, then `24h ✓8 ▲`, then drops, before the CI and ctx cells shrink. `▲` = 24 h merged above the average (green), `▼` below (yellow), `=` equal; the average is compared at one decimal. Before any cycle is logged only `avg 5.2/day` shows; with no counters and no history the cell is absent. Data: `autopilot-state.sh stats --json` over `dev/.autopilot-history.jsonl` and the state file's lifetime counters (one jq pass, no network). The 24 h part is exact from the first logged cycle; earlier work reaches the average through the state counters, and `off`/`start` keeps the baseline. The details view repeats the cell on its AP line.
 - `stale` (the helper failed) is a dim tail cell that goes first.
 
 ## Repo cell (AP off)

@@ -601,3 +601,172 @@ MD
   run grep -n 'autopilot-state.sh unskip' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
   run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
 }
+
+# ---------------------------------------------------------------------------
+# History log + stats: rolling 24 h, lifetime average, off/start persistence
+# ---------------------------------------------------------------------------
+
+_hist() { printf '%s' "$AUTOPILOT_STATE_FILE" | sed 's#[^/]*$#.autopilot-history.jsonl#'; }
+# $1 ts, $2 outcome, $3 merged: append one history line by hand
+_hline() { printf '{"ts":"%s","outcome":"%s","merged":%s,"task":""}\n' "$1" "$2" "$3" >> "$(_hist)"; }
+_stat() { _ap stats --json | jq -r "$1"; }
+
+@test "record appends one {ts,outcome,merged,task} line to the history log" {
+  _ap start >/dev/null
+  _ap record progress 2 T20261028-111111 "free text must not be logged" >/dev/null
+  _ap record idle >/dev/null
+  [ "$(wc -l < "$(_hist)" | tr -d ' ')" = 2 ]
+  run jq -c . "$(_hist)"
+  [ "${lines[0]}" = '{"ts":"2026-10-28T10:00:00Z","outcome":"progress","merged":2,"task":"T20261028-111111"}' ]
+  [ "${lines[1]}" = '{"ts":"2026-10-28T10:00:00Z","outcome":"idle","merged":0,"task":""}' ]
+  ! grep -q "free text" "$(_hist)"
+}
+
+@test "record logs a non-task id as an empty task and nothing when autopilot is off" {
+  _ap start >/dev/null
+  _ap record stuck 0 "not an id" >/dev/null
+  [ "$(jq -r .task "$(_hist)")" = "" ]
+  _ap off >/dev/null
+  _ap record progress 1 >/dev/null
+  [ "$(wc -l < "$(_hist)" | tr -d ' ')" = 1 ]
+}
+
+@test "record survives a history write failure (unwritable path) and still counts" {
+  _ap start >/dev/null
+  export AUTOPILOT_HISTORY_FILE="$BATS_TEST_TMPDIR/blocker/sub/h.jsonl"
+  : > "$BATS_TEST_TMPDIR/blocker"   # a file where a directory is needed
+  run _ap record progress 1 T20261028-111111 x
+  [ "$status" -eq 0 ]
+  [ "$(_j .merged_count)" = 1 ]
+  [ "$(_j .lifetime_merged)" = 1 ]
+}
+
+@test "stats: missing state and history is all zero, never an error" {
+  run _ap stats --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.has_history, .merged_24h, .lifetime_cycles, .lifetime_days, .avg_merged_24h, .trend' <<<"$output" | paste -sd' ')" = "false 0 0 1 0 flat" ]
+  run _ap stats
+  [ "${lines[0]}" = "24h: no history logged yet" ]
+}
+
+@test "stats: window boundary is exclusive at exactly 24 h and includes 23h59m59s" {
+  _hline 2026-10-27T10:00:00Z progress 5   # exactly 24 h old: out
+  _hline 2026-10-27T10:00:01Z progress 2   # 23:59:59 old: in
+  _hline 2026-10-28T09:00:00Z progress 1
+  [ "$(_stat .merged_24h)" = 3 ]
+  [ "$(_stat .cycles_24h)" = 2 ]
+  [ "$(_stat .has_history)" = true ]
+}
+
+@test "stats: counts stuck, waiting, idle in the window; capped is not a cycle" {
+  _hline 2026-10-28T01:00:00Z stuck 0
+  _hline 2026-10-28T02:00:00Z waiting 0
+  _hline 2026-10-28T03:00:00Z idle 0
+  _hline 2026-10-28T04:00:00Z idle 0
+  _hline 2026-10-28T05:00:00Z capped 0
+  _hline 2026-10-28T06:00:00Z progress 3
+  run _ap stats --json
+  [ "$(jq -r '[.cycles_24h,.stuck_24h,.waiting_24h,.idle_24h,.merged_24h]|join(",")' <<<"$output")" = "5,1,1,2,3" ]
+}
+
+@test "stats: malformed history lines are skipped" {
+  printf 'not json\n[1]\n{"ts":"bad","outcome":"progress","merged":9}\n' > "$(_hist)"
+  _hline 2026-10-28T09:00:00Z progress 1
+  [ "$(_stat .merged_24h)" = 1 ]
+}
+
+@test "stats: lifetime average uses the state baseline and started_at span" {
+  # 8 days, 40 cycles, 16 merged before the log existed; today's log adds 2 merged/2 cycles
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":40,"merged_count":16}' > "$AUTOPILOT_STATE_FILE"
+  _hline 2026-10-28T09:00:00Z progress 0
+  [ "$(_stat .lifetime_merged)" = 16 ]
+  [ "$(_stat .lifetime_cycles)" = 40 ]
+  [ "$(_stat .lifetime_days)" = 8 ]
+  [ "$(_stat .avg_merged_24h)" = 2 ]
+  [ "$(_stat .avg_cycles_24h)" = 5 ]
+}
+
+@test "stats: lifetime days are fractional above one day and floored at one day" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-27T04:00:00Z","cycle_count":10,"merged_count":6}' > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .lifetime_days)" = 1.25 ]   # 30 h
+  [ "$(_stat .avg_merged_24h)" = 4.8 ]
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":2,"merged_count":3}' > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .lifetime_days)" = 1 ]
+  [ "$(_stat .avg_merged_24h)" = 3 ]
+}
+
+@test "stats: an older first log line stretches the span; log totals win when larger" {
+  _hline 2026-10-18T10:00:00Z progress 4
+  _hline 2026-10-28T09:00:00Z progress 4
+  [ "$(_stat .lifetime_days)" = 10 ]
+  [ "$(_stat .lifetime_merged)" = 8 ]
+  [ "$(_stat .lifetime_cycles)" = 2 ]
+}
+
+@test "stats: trend compares merged_24h with the one-decimal average" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-18T10:00:00Z","cycle_count":10,"merged_count":20}' > "$AUTOPILOT_STATE_FILE"   # avg 2.0/day
+  _hline 2026-10-28T09:00:00Z progress 3
+  [ "$(_stat .trend)" = up ]
+  : > "$(_hist)"; _hline 2026-10-28T09:00:00Z progress 2
+  [ "$(_stat .trend)" = flat ]
+  : > "$(_hist)"; _hline 2026-10-28T09:00:00Z progress 1
+  [ "$(_stat .trend)" = down ]
+  run _ap stats
+  [[ "${lines[0]}" == "24h: 1 merged/1 cycles (0 stuck, 0 waiting, 0 idle) ▼" ]]
+  [[ "${lines[1]}" == "lifetime: 20 merged/10 cycles over 10 days · avg 2 merged/1 cycles per 24h" ]]
+}
+
+@test "stats: bad argument is a usage error" {
+  run _ap stats --bogus
+  [ "$status" -eq 2 ]
+}
+
+@test "lifetime baseline: a pre-existing state is carried through record, off and start" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":40,"merged_count":16,"stuck_count":0,"waiting_count":0,"cycles_today":0,"merges_today":0,"day":"2026-10-28","notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"capped_notified":false}' > "$AUTOPILOT_STATE_FILE"
+  _ap record progress 2 T20261028-111111 >/dev/null
+  [ "$(_j .lifetime_cycles)" = 41 ]
+  [ "$(_j .lifetime_merged)" = 18 ]
+  [ "$(_j .lifetime_started_at)" = 2026-10-20T10:00:00Z ]
+  _ap off >/dev/null
+  AUTOPILOT_NOW="2026-10-29T10:00:00Z" run _ap start
+  [ "$output" = started ]
+  [ "$(_j .started_at)" = 2026-10-29T10:00:00Z ]
+  [ "$(_j .cycle_count)" = 0 ]
+  [ "$(_j .lifetime_cycles)" = 41 ]
+  [ "$(_j .lifetime_merged)" = 18 ]
+  [ "$(_j .lifetime_started_at)" = 2026-10-20T10:00:00Z ]
+  _ap record progress 1 >/dev/null
+  [ "$(_j .lifetime_merged)" = 19 ]
+  [ "$(wc -l < "$(_hist)" | tr -d ' ')" = 2 ]   # the log was not reset either
+}
+
+@test "lifetime baseline: off then start on a pre-upgrade state seeds it from the old counters" {
+  printf '%s' '{"schema":2,"status":"off","started_at":"2026-10-20T10:00:00Z","cycle_count":40,"merged_count":16}' > "$AUTOPILOT_STATE_FILE"
+  _ap start >/dev/null
+  [ "$(_j .lifetime_cycles)" = 40 ]
+  [ "$(_j .lifetime_merged)" = 16 ]
+  [ "$(_j .lifetime_started_at)" = 2026-10-20T10:00:00Z ]
+}
+
+@test "lifetime baseline: a first-ever start begins now and a legacy file does not poison it" {
+  _ap start >/dev/null
+  [ "$(_j .lifetime_started_at)" = "$AUTOPILOT_NOW" ]
+  [ "$(_j .lifetime_cycles)" = 0 ]
+  _ap off >/dev/null
+  printf '%s' '{"status":"running","end_time":"x"}' > "$AUTOPILOT_STATE_FILE"
+  _ap start >/dev/null
+  [ "$(_j .lifetime_started_at)" = "$AUTOPILOT_NOW" ]
+  [ "$(_j .lifetime_merged)" = 0 ]
+}
+
+@test "lifetime baseline: a capped tick is logged but adds no lifetime cycle" {
+  _ap start >/dev/null
+  _ap record capped >/dev/null
+  [ "$(_j .lifetime_cycles)" = 0 ]
+  [ "$(_stat .cycles_24h)" = 0 ]
+}
+
+@test "SKILL.md documents the stats subcommand and the history file" {
+  grep -q 'autopilot-state.sh stats' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q '.autopilot-history.jsonl' "$REPO_ROOT/autopilot/SKILL.md"
+}

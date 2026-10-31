@@ -17,7 +17,8 @@
 #                         "stuck","cycle","last_outcome","last_task",
 #                         "stuck_reason","stop_reason","merged",
 #                         "next_wake_at",   # epoch secs of the next loop, 0 = none/unknown
-#                         "busy","current_task"},   # busy: a cycle is running; current_task: its task id ("" = unknown)
+#                         "busy","current_task",   # busy: a cycle is running; current_task: its task id ("" = unknown)
+#                         "stats"},   # null | {"has_history","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
 #    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},
@@ -66,6 +67,9 @@ hud-data() {
   cd_=$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || cd_=""
   if [ -n "$gd" ] && [ -n "$cd_" ] && [ "$gd" != "$cd_" ]; then worktree=$(basename "$repo_root"); fi
   rec=$(sl-autopilot-fields "$repo_root")
+  local ap_stats=""
+  [ -z "$rec" ] || ap_stats=$(sl-autopilot-stats "$repo_root" 2>/dev/null) || ap_stats=""
+  [ -n "$ap_stats" ] || ap_stats="null"
 
   # Repo identity: only when cwd is really inside a git work tree. Outside one
   # these stay empty and become JSON null (`repo` still names the folder).
@@ -101,7 +105,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -115,7 +119,7 @@ hud-data() {
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
-         busy: (($f[12] // "") == "1"), current_task: ($f[13] // "")} end),
+         busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), stats: $apstats} end),
        ledger: $ledger, queue: $queue, ci: $ci, plugin: $plugin,
        last_input_at: $last_input_at}'
 }

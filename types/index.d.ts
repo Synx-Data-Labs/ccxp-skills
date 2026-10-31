@@ -32,6 +32,18 @@ export type HudConfig = {
   ci?: CiConfig
 }
 
+/** Rolling-24h and lifetime autopilot progress (`autopilot-state.sh stats`); absent when there is nothing to show. */
+export type ApStats = {
+  /** The history log has at least one entry; false = only the lifetime average is known. */
+  has_history: boolean
+  merged_24h: number
+  cycles_24h: number
+  /** Lifetime merged tasks per 24 h. */
+  avg_merged_24h: number
+  /** merged_24h against the average (1 decimal). */
+  trend: 'up' | 'down' | 'flat'
+}
+
 export type Autopilot = {
   status: string
   prefix: string
@@ -51,6 +63,7 @@ export type Autopilot = {
   busy: boolean
   /** Task id the running cycle drives (`current_task`); "" when idle or not recorded. */
   current_task: string
+  stats: ApStats | null
 }
 
 export type Ledger = {
