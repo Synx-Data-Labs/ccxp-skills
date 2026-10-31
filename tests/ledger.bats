@@ -488,3 +488,10 @@ allow: pr-merge" >> "$f"
   [ "$status" -eq 1 ]
   [[ "$output" == *"NO-CONTEXT r8"* && "$output" == *"NO-CONTEXT n1"* && "$output" != *"NO-CONTEXT n2"* ]]
 }
+
+@test "check only counts lowercase refs that open a line (prose like R2 is ignored)" {
+  bash "$LEDGER" start 8 "j" --context /c/8.md
+  printf 'R2 is a prose line\nr8 [10:00] j\n' > "$BATS_TEST_TMPDIR/p.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/p.txt"
+  [ "$status" -eq 0 ]
+}
