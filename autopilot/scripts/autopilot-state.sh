@@ -23,7 +23,11 @@
 #   eligible <task-file>        exit 0 when the status line allows auto-driving
 #   skip <task-id> [reason] [--kind blocked|decision|external|epic]
 #                               needs-attention list (kind: what the HUD queue
-#                               breakdown counts it as); prints "attention" when new
+#                               breakdown counts it as; `epic` is legacy, task size
+#                               is never a reason to skip); prints "attention" when new
+#   unskip <task-id>|--all      remove the id (or every id) from skip_ids and
+#                               needs_attention; prints "unskipped <id>" (or
+#                               "unskipped all") or "noop" when nothing was listed
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -275,6 +279,25 @@ ap-skip() {
   echo attention
 }
 
+ap-unskip() {
+  local id="${1:-}" f; f=$(ap-state-file)
+  [ -n "$id" ] || { echo "unskip <task-id>|--all" >&2; return 2; }
+  [ -f "$f" ] || { echo noop; return 0; }
+  if [ "$id" = --all ]; then
+    if jq -e '((.skip_ids // []) | length) + ((.needs_attention // []) | length) > 0' "$f" >/dev/null 2>&1; then
+      _ap_update '.skip_ids = [] | .needs_attention = []'
+      echo "unskipped all"
+    else echo noop; fi
+    return 0
+  fi
+  if jq -e --arg id "$id" '((.skip_ids // []) | index($id)) != null or ((.needs_attention // []) | any(.id == $id))' "$f" >/dev/null 2>&1; then
+    _ap_update --arg id "$id" '
+      .skip_ids = ((.skip_ids // []) | map(select(. != $id)))
+      | .needs_attention = ((.needs_attention // []) | map(select(.id != $id)))'
+    echo "unskipped $id"
+  else echo noop; fi
+}
+
 # Never errors: Slack when it works, else only the state file. Every notice is
 # appended to .notices (last 20) with via: slack|fallback.
 ap-notify() {
@@ -476,7 +499,7 @@ autopilot-state() {
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; delay) ap-delay "$@" ;;
-    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; notify) ap-notify "$@" ;;
+    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; unskip) ap-unskip "$@" ;; notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
     *) sed -n '2,50p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
