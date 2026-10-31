@@ -274,8 +274,8 @@ ledger-check() {
   [[ -n "$src" ]] || { echo "usage: ledger.sh check <replyfile|->" >&2; return 2; }
   if [[ "$src" == "-" ]]; then draft=$(cat); else [[ -r "$src" ]] || { echo "ledger: cannot read $src" >&2; return 2; }; draft=$(<"$src"); fi
   want=$(ledger-read | jq -r '[(.running[] | "r\(.job)"), (.next[] | .ref), (.parked[] | .id)] | .[]' | sort -u)
-  got=$(printf '%s\n' "$draft" | sed -nE 's/^[[:space:]]*([-*+]|[0-9]+[.)])?[[:space:]]*[*_]*([rRnNkK][0-9]{1,9})([^0-9A-Za-z].*)?$/\2/p' \
-    | tr 'RNK' 'rnk' | sed -E 's/^([rnk])0+([0-9])/\1\2/' | sort -u)
+  got=$(printf '%s\n' "$draft" | sed -nE 's/^[[:space:]]*([-*+]|[0-9]+[.)])?[[:space:]]*[*_]*([rnk][0-9]{1,9})([^0-9A-Za-z].*)?$/\2/p' \
+    | sed -E 's/^([rnk])0+([0-9])/\1\2/' | sort -u)
   missing=$(comm -23 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed '/^$/d')
   extra=$(comm -13 <(printf '%s\n' "$want") <(printf '%s\n' "$got") | sed '/^$/d')
   [[ -z "$missing" ]] || { while read -r r; do echo "MISSING $r (in ledger, not in reply)"; done <<<"$missing"; rc=1; }
