@@ -1140,11 +1140,64 @@ test('details: CI first and alone, then where/usage/jobs, AP with queue on ONE l
   expect(lines[1]).toContain('acme/widgets')
   const ap = lines.find(l => l.startsWith('AP '))!
   expect(ap).toContain('queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
-  expect(ap.indexOf('queue')).toBeGreaterThan(ap.indexOf('merged'))
-  expect(ap.indexOf('queue')).toBeLessThan(ap.indexOf('next loop'))
+  expect(ap.indexOf('next loop')).toBeGreaterThan(ap.indexOf('merged'))
+  expect(ap.indexOf('queue')).toBeGreaterThan(ap.indexOf('next loop'))
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   expect(lines.filter(l => l.includes('CI')).length).toBe(1)
   for (let cols = 200; cols >= 22; cols--) for (const l of detail(withHelper({ ...fullSnap().helper, queue: q }), cols, CI)) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+})
+
+// --- details AP line order: AP, next loop, 24h (average), `||`, queue ---
+
+const AP_Q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+const apLineOf = (helper: object, cols = 240) => detailRows(withHelper({ ci: null, ...helper }) as any, DEFAULTS, cols, DETAIL_NOW).map(r => r.map(x => x.text).join('')).find(l => /^AP /.test(l))
+const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
+
+test('details: AP line reads AP, next loop, 24h average, `||`, then queue (full line)', async () => {
+  const line = apLineOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q })!
+  expect(line).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged \/ 26 loops ▲ average 5\.2\/day \|\| queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic$/)
+  const due = apLineOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q })!
+  expect(due).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged / 26 loops ▲ average 5.2/day || queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  // the separator is a dim segment with single spaces around it
+  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }) as any, DEFAULTS, 240, DETAIL_NOW)
+  const seg = rows.flat().find(x => x.text.includes('||'))!
+  expect(seg).toEqual({ text: ' || ', dim: true })
+  expect(rows.flat().filter(x => x.text.includes('||')).length).toBe(1)
+})
+
+test('details: the `||` shows only between the AP group and the queue (no dangling separator)', async () => {
+  const noQueue = apLineOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS } })!
+  expect(noQueue).not.toContain('||')
+  expect(noQueue).toMatch(/average 5\.2\/day$/)
+  // no stats and no wake time: AP then queue only
+  expect(apLineOf({ autopilot: AP, queue: AP_Q })).toBe('AP on 2/6h 3 loops ✓2 merged || queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  // paused: next loop paused still sits next to AP, before the queue
+  expect(apLineOf({ autopilot: { ...AP, status: 'paused', prefix: '[p]', next_wake_at: WAKE }, queue: AP_Q })).toMatch(/^AP ⏸ paused 2\/6h 3 loops ✓2 merged │ next loop paused \|\| queue 44 = /)
+  // a running cycle: `running r..` takes the next-loop slot
+  expect(apLineOf({ autopilot: { ...AP, busy: true, next_wake_at: WAKE }, queue: AP_Q })).toMatch(/merged │ running \|\| queue 44 = /)
+})
+
+test('details: no AP data (autopilot null) keeps the `AP off` cell and still separates the queue; no helper means no line', async () => {
+  const off = apLineOf({ autopilot: null, queue: AP_Q })!
+  expect(off).toBe('AP off || queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  expect(apLineOf({ autopilot: null })).toBe('AP off')
+  expect(detailRows(EMPTY as any, DEFAULTS, 240, DETAIL_NOW).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('||')
+})
+
+test('details: AP line narrows without a dangling `||` and always fits; the queue keeps its separator', async () => {
+  const helper = { autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }
+  for (let cols = 240; cols >= 22; cols--) {
+    const line = apLineOf(helper, cols)
+    if (!line) continue
+    expect(line.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    expect(line).not.toMatch(/\|\|$|\|\| $/)
+    if (line.includes('queue')) expect(line).toContain(' || queue')
+  }
+  // what goes first as the line narrows: the queue words, then the 24h cell, then the next-loop clock
+  const at = (cols: number) => apLineOf(helper, cols)!
+  expect(at(130)).toContain('queue 44 = 30r 6b 3d 2e 3x')
+  expect(at(100)).not.toContain('last 24h')
+  expect(at(100)).toContain('|| queue')
 })
 
 test('details: a red CI line is flagged for highlight; a green one is not; no `ci` means no CI line', async () => {

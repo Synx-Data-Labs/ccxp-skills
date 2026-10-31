@@ -223,11 +223,13 @@ export function truncateWords(text: string, max: number): string {
 }
 
 type Variants = Seg[][]
-type Item = { field: string; variants: Variants; at: number }
+/** `sep`: the separator drawn before this item instead of the default SEP (used for the AP | queue group break). */
+type Item = { field: string; variants: Variants; at: number; sep?: string }
 
 const joinText = (segs: Seg[]) => segs.map(s => s.text).join('')
 const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
 const SEP = ' │ '
+const GROUP_SEP = ' || ' // between the AP group and the queue group on the details AP line
 const CI_LOOK: Record<CiState, { glyph: string; word: string; color: string }> = {
   passing: { glyph: '✓', word: 'passing', color: 'success' },
   failing: { glyph: '✗', word: 'failing', color: 'error' },
@@ -491,7 +493,7 @@ const STEPS = {
 function render(items: Item[]): Seg[] {
   const out: Seg[] = []
   items.forEach((it, i) => {
-    if (i > 0) out.push({ text: SEP, dim: true })
+    if (i > 0) out.push({ text: it.sep ?? SEP, dim: true })
     out.push(...it.variants[it.at])
   })
   return out
@@ -599,7 +601,7 @@ const DETAIL_STEPS = {
  *   0 CI (first, alone; highlighted when red)
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
- *   4 autopilot, 24h cell, queue breakdown (dev/TODO/queue.md) and next loop time, on one line
+ *   4 autopilot, next loop time, 24h cell, `||`, then the queue breakdown (dev/TODO/queue.md), on one line
  *   5 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
  * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
  * It ignores `fields`: the lines are the view. [] when there is no data at all.
@@ -658,7 +660,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     )
   }
 
-  // 4. autopilot, 24h, queue breakdown (labels in full) and the next loop, on one line
+  // 4. autopilot, the next loop, 24h, then `||` and the queue breakdown (labels in full), on one line
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
@@ -685,7 +687,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
         : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
   }
   const apStats = ap ? apStatsVariants(ap) : null
-  add([apItem, apStats ? one('apstats', ...apStats) : null, h?.queue ? one('queue', ...queueVariants(h.queue, true)) : null, wakeItem], DETAIL_STEPS.ap)
+  // Order: AP, next loop, 24h cell (ends in the average), then `||` and the queue group. The `||` rides on the queue
+  // item, so it shows only when an AP cell precedes the queue and goes with the queue if that is ever dropped.
+  const queueItem = h?.queue ? { ...one('queue', ...queueVariants(h.queue, true)), sep: apItem ? GROUP_SEP : undefined } : null
+  add([apItem, wakeItem, apStats ? one('apstats', ...apStats) : null, queueItem], DETAIL_STEPS.ap)
 
   // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
