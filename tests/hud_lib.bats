@@ -385,6 +385,32 @@ _ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 m
   [ -z "$(awk -F$'\x1f' '{print $12}' <<<"$output")" ]
 }
 
+@test "sl-autopilot-fields: fields 13/14 are busy and current_task, only for a fresh busy mark" {
+  local repo; repo=$(_make_repo repo-ap-busy)
+  _f() { awk -F$'\x1f' -v n="$1" '{print $n}' <<<"$output"; }
+  local base="\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 300)\", \"stuck_count\": 0, \"cycle_count\": 1"
+  # busy with a task id
+  _ap_state "$repo" "{$base, \"busy_since\": \"$(_ap_ago 5)\", \"current_task\": \"T20261028-151063\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(_f 13)" = 1 ]; [ "$(_f 14)" = "T20261028-151063" ]
+  # busy, older caller: no id
+  _ap_state "$repo" "{$base, \"busy_since\": \"$(_ap_ago 5)\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(_f 13)" = 1 ]; [ -z "$(_f 14)" ]
+  # idle (null busy_since) with a leftover id: neither
+  _ap_state "$repo" "{$base, \"busy_since\": null, \"current_task\": \"T20261028-151063\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$(_f 13)" ]; [ -z "$(_f 14)" ]
+  # stale mark (over 3 h): not busy
+  _ap_state "$repo" "{$base, \"busy_since\": \"$(_ap_ago 200)\", \"current_task\": \"T20261028-151063\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$(_f 13)" ]; [ -z "$(_f 14)" ]
+  # malformed id: busy, id dropped
+  _ap_state "$repo" "{$base, \"busy_since\": \"$(_ap_ago 5)\", \"current_task\": \"x y\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(_f 13)" = 1 ]; [ -z "$(_f 14)" ]
+}
+
 # --- sl-queue-json: the queue breakdown (every queued task in exactly one bucket) ---
 
 # _task <repo> <n> <status> [extra frontmatter line] [title]: dev/TODO/T20260101-00000<n>-t.md

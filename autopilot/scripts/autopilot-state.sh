@@ -9,7 +9,9 @@
 #   start                       print started|busy|dispatch|already-on|paused
 #   pause | off                 transitions; print paused | "off <clone-path>" | noop
 #   resume                      print dispatch|busy (a cycle is still finishing: do nothing)|noop
-#   busy <on|off>               mark a dispatched cycle running / finished
+#   busy on [<task-id>]|off     mark a dispatched cycle running (optionally which
+#                               task it drives, T<yyyymmdd>-<6 digits>; an invalid
+#                               id is ignored; the HUD shows "loop on T<id>") / finished
 #   cap                         print ok | capped:<cycles|merges>  (rolls the day)
 #   record <outcome> [merged] [task-id] [reason]
 #                               outcome: progress|idle|stuck|waiting|capped;
@@ -91,7 +93,7 @@ _ap_fresh() {
     dispatch_clone_path: null, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false, skip_ids: [], needs_attention: [],
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
-    next_wake_at: null, busy_since: null}' > "$f.tmp.$$" && mv "$f.tmp.$$" "$f"
+    next_wake_at: null, busy_since: null, current_task: null}' > "$f.tmp.$$" && mv "$f.tmp.$$" "$f"
 }
 
 # 0 when a cycle is marked busy and the mark is under 3 h old (else crashed/stale).
@@ -122,10 +124,12 @@ ap-start() {
     on) _ap_due ;;
     paused) echo paused ;;
     off)
-      local busy=""
-      if [ -f "$(ap-state-file)" ] && _ap_is_busy; then busy=$(jq -r '.busy_since' "$(ap-state-file)"); fi
+      local busy="" ctask=""
+      if [ -f "$(ap-state-file)" ] && _ap_is_busy; then
+        busy=$(jq -r '.busy_since' "$(ap-state-file)"); ctask=$(jq -r '.current_task // empty' "$(ap-state-file)")
+      fi
       _ap_fresh
-      if [ -n "$busy" ]; then _ap_update --arg b "$busy" '.busy_since = $b'; echo busy; else echo started; fi ;;
+      if [ -n "$busy" ]; then _ap_update --arg b "$busy" --arg t "$ctask" '.busy_since = $b | .current_task = (if $t == "" then null else $t end)'; echo busy; else echo started; fi ;;
   esac
 }
 
@@ -160,9 +164,12 @@ ap-off() {
 ap-busy() {
   [ -f "$(ap-state-file)" ] || return 0
   case "${1:-}" in
-    on) [ "$(ap-status)" = off ] || _ap_update --arg now "$(ap-now)" '.busy_since = $now' ;;
-    off) _ap_update '.busy_since = null' ;;
-    *) echo "busy <on|off>" >&2; return 2 ;;
+    on)
+      # An id that is not a task id is ignored (the cycle is still marked busy), never an error.
+      local t="${2:-}"; [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || t=""
+      [ "$(ap-status)" = off ] || _ap_update --arg now "$(ap-now)" --arg t "$t" '.busy_since = $now | .current_task = (if $t == "" then null else $t end)' ;;
+    off) _ap_update '.busy_since = null | .current_task = null' ;;
+    *) echo "busy on [<task-id>]|off" >&2; return 2 ;;
   esac
 }
 
@@ -216,7 +223,7 @@ ap-record() {
     | .last_stuck_reason = (if $o == "stuck" and $r != "" then $r else null end)
     | .stuck_count = (if $o == "stuck" then .stuck_count + 1 elif $o == "waiting" then .stuck_count else 0 end)
     | .waiting_count = (if $o == "waiting" then .waiting_count + 1 else 0 end)
-    | .busy_since = null'
+    | .busy_since = null | .current_task = null'
   case "$outcome" in
     progress)
       [ "$was_idle" = true ] && notice=resumed

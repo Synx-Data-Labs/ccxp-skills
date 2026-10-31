@@ -106,6 +106,22 @@ EOT
   [ "$(jq -r .autopilot.next_wake_at <<<"$output")" = "0" ]
 }
 
+@test "--json: autopilot.busy and current_task follow the state file" {
+  local repo; repo=$(_make_repo r-busy)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":\"$(_iso_ago 5)\",\"current_task\":\"T20261028-151063\"}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy <<<"$output")" = "true" ]
+  [ "$(jq -r .autopilot.current_task <<<"$output")" = "T20261028-151063" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":\"$(_iso_ago 5)\"}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy <<<"$output")" = "true" ]
+  [ "$(jq -r .autopilot.current_task <<<"$output")" = "" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":null,\"current_task\":null}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy <<<"$output")" = "false" ]
+  [ "$(jq -r .autopilot.current_task <<<"$output")" = "" ]
+}
+
 @test "--json: autopilot backing off is [b]" {
   local repo; repo=$(_make_repo r-backoff)
   _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":2,\"cycle_count\":4,\"last_outcome\":\"stuck\",\"last_stuck_reason\":\"ci red\"}"

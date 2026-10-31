@@ -75,6 +75,8 @@ export function parseHelper(stdout: string): HelperData | null {
       stop_reason: str(a.stop_reason),
       merged: num(a.merged),
       next_wake_at: num(a.next_wake_at),
+      busy: a.busy === true,
+      current_task: str(a.current_task),
     }
   }
   const led = r.ledger
@@ -615,12 +617,15 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   let wakeItem: Item | null = null
   if (ap?.prefix === '[p]') {
     wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
+  } else if (ap?.busy) {
+    // A cycle is running: name its task rather than a due time that is stale until the cycle ends.
+    wakeItem = one('wake', [{ text: ap.current_task ? `loop on ${ap.current_task}` : 'loop running' }])
   } else if (ap && ap.next_wake_at > 0) {
     const wait = formatIn(ap.next_wake_at, nowMs)
     const clock = formatStamp(ap.next_wake_at, nowMs)
     wakeItem =
       wait === 'now'
-        ? one('wake', [{ text: 'next loop due', dim: true }]) // also true while a long cycle runs: the stored time is only re-armed when it ends
+        ? one('wake', [{ text: 'next loop due', dim: true }])
         : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
   }
   add([apItem, wakeItem, ciItem], DETAIL_STEPS.ap)

@@ -16,7 +16,8 @@
 #    "autopilot": null | {"status","prefix","elapsed_hr","requested_hr",
 #                         "stuck","cycle","last_outcome","last_task",
 #                         "stuck_reason","stop_reason","merged",
-#                         "next_wake_at"},   # epoch secs of the next loop, 0 = none/unknown
+#                         "next_wake_at",   # epoch secs of the next loop, 0 = none/unknown
+#                         "busy","current_task"},   # busy: a cycle is running; current_task: its task id ("" = unknown)
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
 #    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},
@@ -113,7 +114,8 @@ hud-data() {
          stuck: ($f[4] | tonumber), cycle: ($f[5] | tonumber),
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
-         next_wake_at: (($f[11] // "") | tonumber? // 0)} end),
+         next_wake_at: (($f[11] // "") | tonumber? // 0),
+         busy: (($f[12] // "") == "1"), current_task: ($f[13] // "")} end),
        ledger: $ledger, queue: $queue, ci: $ci, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
