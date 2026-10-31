@@ -258,3 +258,32 @@ mk_plugin_copy() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"doesn't look like the ccxp-skills checkout"* ]]
 }
+
+@test "relative --skills-dir resolves against the caller's cwd, not --repo" {
+  SKILLS_REPO="$(mk_skills_repo ccxp-skills)"
+  SCRIPT="$(mk_plugin_copy)"
+  PROJECT_REPO="$(mk_project_repo)"
+  push_commit "$BATS_TEST_TMPDIR/remotes/ccxp-skills.git"
+  want_head="$(git -C "$BATS_TEST_TMPDIR/remotes/ccxp-skills.git" rev-parse main)"
+
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$SCRIPT" --repo "$PROJECT_REPO" --skills-dir "./$(basename "$SKILLS_REPO")"
+  [ "$status" -eq 0 ]
+  [ "$(git -C "$SKILLS_REPO" rev-parse HEAD)" = "$want_head" ]
+}
+
+@test "a flag with no value exits 2 with a prefixed message" {
+  SCRIPT="$(mk_plugin_copy)"
+  run bash "$SCRIPT" --repo
+  [ "$status" -eq 2 ]
+  [[ "$output" == "sync-and-prune-branches: --repo needs a value"* ]]
+}
+
+@test "a .git directory is not accepted as a work tree" {
+  SCRIPT="$(mk_plugin_copy)"
+  PROJECT_REPO="$(mk_project_repo)"
+  cd "$PROJECT_REPO/.git"
+  run bash "$SCRIPT"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"is not a git repo"* ]]
+}
