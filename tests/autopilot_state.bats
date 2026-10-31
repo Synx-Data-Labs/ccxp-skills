@@ -713,7 +713,7 @@ _stat() { _ap stats --json | jq -r "$1"; }
   [ "$(_stat .trend)" = down ]
   run _ap stats
   [[ "${lines[0]}" == "24h: 1 merged/1 cycles (0 stuck, 0 waiting, 0 idle) ▼" ]]
-  [[ "${lines[1]}" == "lifetime: 20 merged/10 cycles over 10 days · avg 2 merged/1 cycles per 24h" ]]
+  [[ "${lines[1]}" == "lifetime: 20 merged/10 cycles over 10 days · average 2 merged/1 cycles per 24h" ]]
 }
 
 @test "stats: bad argument is a usage error" {

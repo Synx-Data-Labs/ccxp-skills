@@ -1015,30 +1015,42 @@ test('AP stats: parseHelper keeps a valid stats object; absent or malformed is n
   expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: { trend: 'sideways', merged_24h: 'x' } } }))?.autopilot?.stats).toEqual({ has_history: false, merged_24h: 0, cycles_24h: 0, avg_merged_24h: 0, trend: 'flat' })
 })
 
-test('AP stats: the wide band shows 24h merged/loops, the marker and the lifetime average per day', async () => {
+test('AP stats: the wide band shows a labeled last-24h merged/loops, the marker and the spelled-out average', async () => {
   const wide = text(bandRows(apStats(), CI, 200))
-  expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ 24h 8 merged/26 loops ▲ avg 5.2/day │ ctx')
-  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), CI, 200))).toContain('24h 3 merged/26 loops ▼ avg 5.2/day')
-  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), CI, 200))).toContain('24h 5 merged/26 loops = avg 5.2/day')
+  expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged / 26 loops ▲ average 5.2/day │ ctx')
+  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), CI, 200))).toContain('last 24h: 3 merged / 26 loops ▼ average 5.2/day')
+  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), CI, 200))).toContain('last 24h: 5 merged / 26 loops = average 5.2/day')
 })
 
-test('AP stats: no history shows only the average; no stats shows nothing extra', async () => {
-  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), CI, 200))).toContain('│ avg 5.2/day │')
-  expect(text(bandRows(withHelper({ autopilot: AP }), CI, 200))).not.toMatch(/24h|avg/)
+test('AP stats: no history shows only the average, spelled out; no stats shows nothing extra', async () => {
+  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), CI, 200))).toContain('│ average 5.2/day │')
+  expect(text(bandRows(withHelper({ autopilot: AP }), CI, 200))).not.toMatch(/24h|avg|average/)
 })
 
-test('AP stats: narrow rows shrink the stats first, then drop them; the row always fits', async () => {
+test('AP stats: the 24h merged count and the average survive 100-140 columns; the ctx bar shrinks first', async () => {
   const at = (cols: number) => text(bandRows(apStats(), CI, cols))
-  expect(at(110)).toContain('24h ✓8/26L ▲ avg 5.2/d')
-  expect(at(100)).toContain('24h ✓8 ▲')
-  expect(at(75)).not.toContain('avg')
+  for (const cols of [100, 110, 120, 130, 140]) {
+    expect(at(cols)).toMatch(/24h: 8 merged/)
+    expect(at(cols)).toContain('average 5.2/day')
+  }
+  expect(at(120)).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
+  expect(at(120)).not.toContain('▓')
+  expect(at(100)).toContain('│ 24h: 8 merged/26 loops ▲ average 5.2/day │')
+})
+
+test('AP stats: narrow rows shrink the stats late and keep `avg` only in the narrowest forms; the row always fits', async () => {
+  const at = (cols: number) => text(bandRows(apStats(), CI, cols))
+  expect(at(80)).toContain('24h: ✓8/26L ▲ average 5.2/d')
+  expect(at(60)).toContain('24h ✓8 ▲')
+  expect(at(60)).not.toContain('average')
   for (const cols of [30, 50, 70, 90, 110, 140, 200]) expect(at(cols).length).toBeLessThanOrEqual(cols)
   expect(at(48)).toContain('AP')
-  expect(at(48)).not.toContain('24h')
+  expect(at(48)).toContain('24h ✓8 ▲')
+  expect(text(bandRows(apStats(), { ...CI, fields: ['ap'] }, 69))).toContain('24h ✓8/26L ▲ avg 5.2/d')
 })
 
 test('AP stats: `ap` switched off hides the stats too; details show them on the AP line', async () => {
   expect(text(bandRows(apStats(), { ...CI, fields: ['ci'] }, 200))).not.toContain('24h')
   const line = detailRows(apStats() as any, DEFAULTS, 200).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))
-  expect(line).toContain('24h 8 merged/26 loops ▲ avg 5.2/day')
+  expect(line).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
 })

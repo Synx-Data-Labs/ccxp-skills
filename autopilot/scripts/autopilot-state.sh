@@ -284,7 +284,7 @@ ap-stats() {
     (if .trend == "up" then "▲" elif .trend == "down" then "▼" else "=" end) as $m
     | (if .has_history then "24h: \(.merged_24h) merged/\(.cycles_24h) cycles (\(.stuck_24h) stuck, \(.waiting_24h) waiting, \(.idle_24h) idle) \($m)"
        else "24h: no history logged yet" end),
-      "lifetime: \(.lifetime_merged) merged/\(.lifetime_cycles) cycles over \(.lifetime_days) days · avg \(.avg_merged_24h) merged/\(.avg_cycles_24h) cycles per 24h"'
+      "lifetime: \(.lifetime_merged) merged/\(.lifetime_cycles) cycles over \(.lifetime_days) days · average \(.avg_merged_24h) merged/\(.avg_cycles_24h) cycles per 24h"'
 }
 
 # record <outcome> [merged] [task-id] [reason] -> notice kind (or none)
