@@ -559,3 +559,45 @@ MD
   _ap start >/dev/null
   [ "$(_j .current_task)" = null ]
 }
+
+@test "unskip: removes a listed id from skip_ids and needs_attention, noop when absent" {
+  _ap start >/dev/null
+  _ap skip T1 "a" --kind decision >/dev/null; _ap skip T2 "b" >/dev/null
+  run _ap unskip T1; [ "$status" -eq 0 ]; [ "$output" = "unskipped T1" ]
+  [ "$(_j '.skip_ids|index("T1")')" = null ]; [ "$(_j '.skip_ids|index("T2")')" = 0 ]
+  [ "$(_j '.needs_attention|length')" = 1 ]; [ "$(_j '.needs_attention[0].id')" = T2 ]
+  run _ap unskip T1; [ "$output" = noop ]
+  run _ap unskip T99; [ "$output" = noop ]
+  run _ap unskip; [ "$status" -eq 2 ]
+  # skipping again after an unskip notifies again
+  run _ap skip T1 "again"; [ "$output" = attention ]
+}
+
+@test "unskip --all: clears every skip, noop when there are none" {
+  _ap start >/dev/null
+  run _ap unskip --all; [ "$output" = noop ]
+  _ap skip T1 "a" >/dev/null; _ap skip T2 "b" >/dev/null
+  run _ap unskip --all; [ "$output" = "unskipped all" ]
+  [ "$(_j '.skip_ids|length')" = 0 ]; [ "$(_j '.needs_attention|length')" = 0 ]
+}
+
+@test "unskip: a state file without the fields, or no file, is a noop and stays valid" {
+  run _ap unskip T1; [ "$output" = noop ]
+  printf '{"schema":2,"status":"on"}' > "$AUTOPILOT_STATE_FILE"
+  run _ap unskip T1; [ "$status" -eq 0 ]; [ "$output" = noop ]
+  run _ap unskip --all; [ "$output" = noop ]
+  [ "$(_j .status)" = on ]
+}
+
+@test "eligible: task size, estimation and umbrella wording never refuse a task" {
+  t="$BATS_TEST_TMPDIR/big.md"
+  printf -- '---\nestimation: 8\nstatus: Open\ndescription: umbrella epic for many things\n---\n# T1: Umbrella epic\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -eq 0 ]
+}
+
+@test "SKILL.md: big tasks are split, not skipped, and unskip is documented" {
+  run grep -n 'Big tasks' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n -- '--before <original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh unskip' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
+}
