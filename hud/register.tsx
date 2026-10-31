@@ -18,7 +18,7 @@ import type { CiConfig, HudConfig, Snapshot } from '../types'
 import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { fillStyleFor } from './fill'
 import { EMPTY, compactLine, countJobs, parseHelper } from './model'
-import { bandTree, userMessageTree } from './render'
+import { bandTree, noColorValue, userMessageTree } from './render'
 import { configureHud } from './configure'
 
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
@@ -63,6 +63,15 @@ async function readWhere($: any): Promise<{ cwd: string; root: string | null }> 
     root = null
   }
   return { cwd: cwd || root || '', root }
+}
+
+/** NO_COLOR is set (and non-empty) in the session's environment; false when it cannot be read. */
+async function noColorOf($: any): Promise<boolean> {
+  try {
+    return noColorValue(await $.env.get('NO_COLOR'))
+  } catch {
+    return false
+  }
 }
 
 async function envPaths($: any) {
@@ -378,7 +387,7 @@ export const register: Register = on => {
     if (!cfg.enabled || !cfg.band || e.props.hasSurvey) return next(e)
     const expanded = await read($, detailsAtom)
     const fill = fillStyleFor(await themeOf($), cfg.fillColor)
-    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows, fill)
+    const tree = bandTree($.ui.resolve(e), await read($, snapshotAtom), cfg, e.props.bodyColumns, expanded, e.props.maxRows, fill, await noColorOf($))
     mem.bandSurface = tree ? e.surface : null
     return tree ?? next(e)
   }).catch(($, e, next) => next(e))

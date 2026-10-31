@@ -30,11 +30,12 @@ type World = {
   stdins: string[]
   statuses: (string | undefined)[]
   theme?: string
+  noColor?: boolean
 }
 
 // Stands for the engine beneath the mod: every hook here answers `{ value }`.
 function world($: any, on: any, w: World) {
-  on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/u' : undefined }))
+  on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/u' : e.name === 'NO_COLOR' && w.noColor ? '1' : undefined }))
   on('session.root', () => ({ value: w.root ?? '/proj' }))
   on('session.cwd', () => ({ value: w.cwd ?? '/proj' }))
   on('session.id', () => ({ value: 'sess1' }))
@@ -603,5 +604,50 @@ test('no ledger: the band has neither READY nor WORKING', async ($: any, on: any
   await $.session.start(START)
   const band = await $.ui.mount(BAND(160))
   expect(await band.find({ type: 'Text', text: /READY|WORKING/ })).toBeUndefined()
+  await band.unmount()
+})
+
+// --- CI top row: red highlight ---
+
+test('CI red: the whole CI row is bold reverse video in red; the other rows keep the fill', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
+  w.theme = 'dark'
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(100))
+  for (const re of [/^CI $/, /failing/]) {
+    const t = await band.find({ type: 'Text', text: re })
+    expect(t.props.inverse).toBe(true)
+    expect(t.props.bold).toBe(true)
+  }
+  expect((await band.find({ type: 'Text', text: /failing/ })).props.color).toBe('error')
+  expect(await hasProps(band, { backgroundColor: FILL_BG.dark })).toBe(true) // the main row
+  await band.unmount()
+})
+
+test('CI red with NO_COLOR: no colour, still bold reverse video, and the marker reads ✗ FAILING', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
+  w.theme = 'dark'
+  w.noColor = true
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(100))
+  expect(await band.find({ type: 'Text', text: /✗ FAILING/ })).toBeDefined()
+  const texts = await band.findAll({ type: 'Text' })
+  expect(texts.some((t: any) => t.props.inverse === true && t.props.bold === true && t.props.color === undefined)).toBe(true)
+  expect(texts.some((t: any) => t.props.color === 'error')).toBe(false)
+  await band.unmount()
+})
+
+test('no ci configured: the band is one row and nothing is highlighted', async ($: any, on: any) => {
+  const w = fresh()
+  w.theme = 'dark'
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(100))
+  expect(await band.find({ type: 'Text', text: /failing|FAILING/ })).toBeUndefined()
+  expect((await band.findAll({ type: 'Box' })).length).toBe(2) // the column and its one row
   await band.unmount()
 })

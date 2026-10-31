@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
+import { alertSegs, isAlertRow } from './render'
 import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
@@ -32,6 +33,8 @@ const snapAp = (over = {}) => snap(over, HELPER_AP)
 const withHelper = (h: object, base = HELPER) => ({ ...EMPTY, ctxLeft: 64, helper: { ...parseHelper(base)!, ...h } })
 const text = (rows: { text: string }[][]) => rows.map(r => r.map(s => s.text).join('')).join('\n')
 const CI = { ...DEFAULTS, ci: { workflow: 'nightly.yml' } }
+/** No `ci` configured: the band is the one main row. */
+const NOCI = { ...DEFAULTS }
 
 test('config: missing, empty, malformed or non-object input means the defaults (on)', async () => {
   for (const input of [undefined, null, '', '   ', '{not json', '[]', '"str"', '42', 'null']) {
@@ -201,13 +204,13 @@ test('band ctx cell carries the tone at every boundary, in the wide and the narr
   const want: Record<number, string> = { 100: 'success', 76: 'success', 75: 'warning', 51: 'warning', 50: 'error', 0: 'error' }
   for (const [left, color] of Object.entries(want)) {
     for (const cols of [140, 60]) {
-      const cell = bandRows(snapAp({ ctxLeft: Number(left) }), CI, cols)[0].find(s => s.text.startsWith('ctx '))
+      const cell = bandRows(snapAp({ ctxLeft: Number(left) }), NOCI, cols)[0].find(s => s.text.startsWith('ctx '))
       expect(cell?.text).toContain(`ctx ${left}%`)
       expect(cell?.color).toBe(color)
     }
   }
   // The colour follows the percentage shown: 75.4 is displayed as 75, which is yellow.
-  expect(bandRows(snapAp({ ctxLeft: 75.4 }), CI, 140)[0].find(s => s.text.startsWith('ctx '))?.color).toBe('warning')
+  expect(bandRows(snapAp({ ctxLeft: 75.4 }), NOCI, 140)[0].find(s => s.text.startsWith('ctx '))?.color).toBe('warning')
 })
 
 test('jobState: READY green at 0, WORKING (N) yellow from 1; narrow form drops the count', async () => {
@@ -230,34 +233,50 @@ test('mode: AP ON while working, backing off, idle or paused; OFF when off, abse
   expect([isApOn(mk('[s]')), isApOn(snap()), isApOn(EMPTY)]).toEqual([false, false, false])
 })
 
-test('AP OFF row: repo @ branch | task ID + slug | jobs | CI | you HH:MM; no AP, no ctx', async () => {
-  const rows = bandRows(snap(), CI, 160)
-  expect(rows.length).toBe(1)
-  expect(text(rows)).toMatch(/^synxdb-build-pipeline @ t20261021-354035-decouple │ T20261021-354035 Decouple the nightly orchestrator │ WORKING \(1\) │ CI ✗ failing 10-26 │ you \d\d:\d\d$/)
+test('AP OFF row: repo @ branch | task ID + slug | jobs | you HH:MM (CI is its own top row); no AP, no ctx', async () => {
+  const both = bandRows(snap(), CI, 160)
+  expect(both.length).toBe(2)
+  expect(text(both.slice(0, 1))).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26 \(\d+[dh] ago\)$/)
+  const rows = both.slice(1)
+  expect(text(rows)).toMatch(/^synxdb-build-pipeline @ t20261021-354035-decouple │ T20261021-354035 Decouple the nightly orchestrator │ WORKING \(1\) │ you \d\d:\d\d$/)
   for (const gone of ['AP', 'ctx']) expect(text(rows)).not.toContain(gone)
   // The repo cell carries the branch, so there is no separate branch cell.
   expect(text(rows).split('t20261021-354035-decouple').length).toBe(2)
 })
 
-test('AP ON row: AP elapsed/duration loops n done | ctx % | jobs | CI | you HH:MM; no repo, branch or task', async () => {
-  const rows = bandRows(snapAp(), CI, 160)
-  expect(rows.length).toBe(1)
-  expect(text(rows)).toMatch(/^AP 2\/6h 3 loops ✓2 merged │ ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING \(1\) │ CI ✗ failing 10-26 │ you \d\d:\d\d$/)
+test('AP ON row: AP elapsed/duration loops n done | ctx % | jobs | you HH:MM (CI is its own top row); no repo, branch or task', async () => {
+  const both = bandRows(snapAp(), CI, 160)
+  expect(both.length).toBe(2)
+  expect(text(both.slice(0, 1))).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26/)
+  const rows = both.slice(1)
+  expect(text(rows)).toMatch(/^AP 2\/6h 3 loops ✓2 merged │ ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING \(1\) │ you \d\d:\d\d$/)
   for (const gone of ['synxdb', 't20261021', 'T20261021']) expect(text(rows)).not.toContain(gone)
 })
 
 test('AP ON: paused is marked and stuck shows; a stopped autopilot gets the OFF row', async () => {
-  const paused = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[p]', status: 'paused', stuck: 2 } }), CI, 160))
+  const paused = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[p]', status: 'paused', stuck: 2 } }), NOCI, 160))
   expect(paused).toContain('AP ⏸ paused 2/6h ⚠2 3 loops')
-  const stopped = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[s]', status: 'stopped' } }), CI, 160))
+  const stopped = text(bandRows(withHelper({ autopilot: { ...AP, prefix: '[s]', status: 'stopped' } }), NOCI, 160))
   expect(stopped).not.toContain('AP')
   expect(stopped).toContain('synxdb-build-pipeline')
 })
 
-test('always ONE row at every width, in both modes, never wider than the terminal', async () => {
+test('with `ci` the band is never more than TWO rows, CI always the first, every row fits the terminal', async () => {
   for (const s of [snap(), snapAp()]) {
     for (const cols of [10, 20, 30, 40, 50, 60, 69, 70, 80, 99, 100, 120, 160, 300]) {
       const rows = bandRows(s, CI, cols)
+      expect(rows.length).toBe(2)
+      expect(rows[0].some(x => x.text.startsWith('CI'))).toBe(true)
+      expect(rows[1].some(x => x.text.startsWith('CI'))).toBe(false)
+      for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    }
+  }
+})
+
+test('with no `ci`: always ONE row at every width, in both modes, never wider than the terminal', async () => {
+  for (const s of [snap(), snapAp()]) {
+    for (const cols of [10, 20, 30, 40, 50, 60, 69, 70, 80, 99, 100, 120, 160, 300]) {
+      const rows = bandRows(s, NOCI, cols)
       expect(rows.length).toBe(1)
       const line = rows[0].map(x => x.text).join('')
       expect(line.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
@@ -268,44 +287,90 @@ test('always ONE row at every width, in both modes, never wider than the termina
 })
 
 test('tiers only change abbreviation: wide full labels, compact short, tiny minimal', async () => {
-  expect(text(bandRows(snapAp(), CI, 140))).toContain('CI ✗ failing 10-26')
-  expect(text(bandRows(snapAp(), CI, 140))).toContain('✓2 merged')
-  const compact = text(bandRows(snapAp(), CI, 80))
-  expect(compact).toContain('CI ✗ 10-26')
+  expect(text(bandRows(snapAp(), CI, 140))).toContain('CI (nightly.yml) ✗ failing 10-26')
+  expect(text(bandRows(snapAp(), NOCI, 140))).toContain('✓2 merged')
+  const compact = text(bandRows(snapAp(), NOCI, 80))
   expect(compact).toContain('AP 2/6h 3 loops ✓2')
   expect(compact).not.toContain('merged')
   expect(compact).not.toContain('▓')
-  const tiny = text(bandRows(snapAp(), CI, 60))
+  const tiny = text(bandRows(snapAp(), NOCI, 60))
   expect(tiny).toContain('AP 2/6h 3L ✓2')
   expect(tiny).toContain('ctx 64%')
 })
 
 test('CI states: symbol, word, colour; the date shows when known', async () => {
   const cell = (state: string, at = RUN_AT) => bandRows(withHelper({ ci: { state, at } }), { ...CI, fields: ['ci'] }, 140)[0]
-  const look = (state: string) => [cell(state)[1].text, cell(state)[1].color]
-  expect(look('passing')).toEqual(['✓ passing 10-26', 'success'])
-  expect(look('failing')).toEqual(['✗ failing 10-26', 'error'])
-  expect(look('running')).toEqual(['◐ running 10-26', 'warning'])
-  expect(look('unknown')).toEqual(['? unknown 10-26', 'inactive'])
-  expect(cell('passing', 0)[1].text).toBe('✓ passing')
+  const state = (st: string, at = RUN_AT) => cell(st, at).find(x => x.text.includes(st === 'unknown' ? '?' : '✓') || x.text.length > 1 && /[✓✗◐?] /.test(x.text))!
+  expect([state('passing').text, state('passing').color]).toEqual(['✓ passing', 'success'])
+  expect([state('failing').text, state('failing').color]).toEqual(['✗ failing', 'error'])
+  expect([state('running').text, state('running').color]).toEqual(['◐ running', 'warning'])
+  expect([state('unknown').text, state('unknown').color]).toEqual(['? unknown', 'inactive'])
+  expect(text([cell('passing')])).toMatch(/^CI \(nightly\.yml\) ✓ passing 10-26 \(\d+[dh] ago\)$/)
+  expect(text([cell('passing', 0)])).toBe('CI (nightly.yml) ✓ passing')
 })
 
-test('CI missing (no data from the helper): the segment is dropped silently, nothing else changes', async () => {
-  const t = text(bandRows(withHelper({ ci: null }), CI, 160))
-  expect(t).not.toContain('CI')
-  expect(t).not.toMatch(/│\s*│/)
-  expect(t).toContain('synxdb-build-pipeline')
-  expect(text(bandRows(withHelper({ ci: null }, HELPER_AP), CI, 160))).toBe(text(bandRows(snapAp(), CI, 160)).replace(' │ CI ✗ failing 10-26', ''))
-  expect(text(bandRows(withHelper({ ci: null }, HELPER_AP), CI, 160))).toContain('WORKING (1)')
+test('CI layout: configured and answered -> two rows, CI alone on top; no `ci` -> exactly one row', async () => {
+  for (const s of [snap(), snapAp()]) {
+    const two = bandRows(s, CI, 140)
+    expect(two.length).toBe(2)
+    expect(text(two.slice(0, 1))).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26/)
+    expect(text(two.slice(1))).not.toContain('CI')
+    expect(text(two.slice(1))).not.toContain('failing')
+    expect(bandRows(s, NOCI, 140).length).toBe(1)
+    expect(bandRows(s, { ...CI, fields: ['repo', 'ap', 'ctx', 'jobs'] }, 140).length).toBe(1) // switched off in fields
+  }
+  expect(text(bandRows(withHelper({ ci: null }, HELPER_AP), CI, 160))).toBe(text(bandRows(snapAp(), NOCI, 160))) // no answer yet: one row
+  expect(bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT }, ledger: null, last_input_at: 0 }), { ...CI, fields: ['ci'] }, 140).length).toBe(1) // CI alone
 })
 
-test('fields can switch a member off; retired names have no effect', async () => {
-  expect(text(bandRows(snapAp(), { ...CI, fields: ['ap', 'ci'] }, 160))).toBe('AP 2/6h 3 loops ✓2 merged │ CI ✗ failing 10-26')
-  expect(bandRows(snap(), { ...DEFAULTS, fields: ['ctx'] }, 160)).toEqual([]) // ctx is not part of the OFF row
+test('CI row shrinks by width: workflow, then the state word, then the age, then the date; always fits', async () => {
+  const at = (cols: number) => text(bandRows(snapAp(), { ...CI, fields: ['ci'] }, cols))
+  expect(at(140)).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26 \(\d+[dh] ago\)$/)
+  expect(at(40)).toMatch(/^CI ✗ failing 10-26 \(\d+[dh] ago\)$/)
+  expect(at(24)).toMatch(/^CI ✗ 10-26 \(\d+[dh] ago\)$/)
+  expect(at(20)).toMatch(/^CI ✗ 10-26( \(\d+[dh] ago\))?$/)
+  for (let cols = 10; cols <= 160; cols++) expect(at(cols).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
 })
 
-test('narrow drop order, AP OFF: last input first, then task slug, then task ID, then the repo cell loses its branch; repo and CI stay longest', async () => {
-  const at = (cols: number) => text(bandRows(snap(), CI, cols))
+test('CI colours: green passing, yellow running, grey unknown get no highlight; red (failing) flags every segment of the row', async () => {
+  const row = (st: string) => bandRows(withHelper({ ci: { state: st, at: RUN_AT } }), { ...CI, fields: ['ci'] }, 140)[0]
+  for (const st of ['passing', 'running', 'unknown']) expect(row(st).some(x => x.alert)).toBe(false)
+  expect(row('failing').every(x => x.alert === true && x.bold === true)).toBe(true)
+  expect(row('failing').some(x => x.marker && x.text === '✗ failing')).toBe(true)
+  // the main row is never highlighted
+  expect(bandRows(snapAp(), CI, 140)[1].some(x => x.alert)).toBe(false)
+})
+
+test('AP and queue share the second row, queue right after the AP and 24h cells, at wide and narrow widths', async () => {
+  const q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+  const s = withHelper({ autopilot: { ...AP, stats: { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' } }, queue: q }, HELPER_AP)
+  for (const cols of [200, 140]) {
+    const rows = bandRows(s, CI, cols)
+    expect(rows.length).toBe(2)
+    expect(text(rows.slice(0, 1))).not.toContain('queue')
+    expect(text(rows.slice(0, 1))).not.toContain('AP')
+    const main = text(rows.slice(1))
+    expect(main).toMatch(/^AP /)
+    expect(main).toContain('queue')
+    expect(main.indexOf('queue')).toBeGreaterThan(main.indexOf('24h'))
+    expect(main.indexOf('queue')).toBeLessThan(main.indexOf('ctx'))
+  }
+  // narrow (no 24h cell): queue still right behind AP, still on the second row
+  const plain = withHelper({ queue: q }, HELPER_AP)
+  for (const cols of [100, 90, 80, 70]) {
+    const rows = bandRows(plain, CI, cols)
+    expect(rows.length).toBe(2)
+    expect(text(rows.slice(0, 1))).not.toContain('queue')
+    expect(text(rows.slice(1))).toMatch(/^AP [^│]*│ queue \d+/)
+  }
+  // AP off: queue still on the main row, never on the CI row
+  const off = bandRows(withHelper({ queue: q }), CI, 140)
+  expect(text(off.slice(0, 1))).not.toContain('queue')
+  expect(text(off.slice(1))).toContain('queue ')
+})
+
+test('narrow drop order, AP OFF: last input first, then task slug, then task ID, then the repo cell loses its branch; repo and jobs stay longest', async () => {
+  const at = (cols: number) => text(bandRows(snap(), NOCI, cols))
   const flags = (t: string): Record<string, boolean> => ({
     lastat: /you \d\d:\d\d/.test(t) || /│ \d\d:\d\d/.test(t),
     slug: t.includes('Decou'),
@@ -325,23 +390,23 @@ test('narrow drop order, AP OFF: last input first, then task slug, then task ID,
   }
   expect(flags(at(200)).lastat).toBe(true)
   expect(flags(at(130)).slug).toBe(true)
-  expect(at(40)).toContain('CI')
+  expect(at(40)).toContain('WORKING')
   expect(at(40)).toContain('synxdb')
   expect(at(40)).not.toMatch(/you |\d\d:\d\d/)
 })
 
-test('narrow drop order, AP ON: last input and CI detail first, ctx meter, then ctx; AP and CI stay', async () => {
-  const at = (cols: number) => text(bandRows(snapAp(), CI, cols))
+test('narrow drop order, AP ON: last input first, ctx meter, then ctx; AP and jobs stay', async () => {
+  const at = (cols: number) => text(bandRows(snapAp(), NOCI, cols))
   expect(at(100)).toContain('you ')
   const tight = at(30)
   expect(tight).toContain('AP')
-  expect(tight).toContain('CI')
+  expect(tight).toContain('WORKING')
   expect(tight).not.toContain('you ')
   expect(tight).not.toContain('▓')
 })
 
 test('last input: you HH:MM today, date when older, hidden when absent', async () => {
-  const f = { ...CI, fields: ['lastat' as const] }
+  const f = { ...NOCI, fields: ['lastat' as const] }
   expect(text(bandRows(withHelper({ last_input_at: NOW }), f, 140))).toMatch(/^you \d\d:\d\d$/)
   expect(text(bandRows(withHelper({ last_input_at: RUN_AT }), f, 140))).toMatch(/^you Oct 26 03:00$/)
   expect(bandRows(withHelper({ last_input_at: 0 }), f, 140)).toEqual([])
@@ -353,12 +418,12 @@ test('last input: you HH:MM today, date when older, hidden when absent', async (
 test('band: empty when there is no data; the stale tag shows when the helper failed', async () => {
   expect(bandRows(EMPTY, DEFAULTS, 140)).toEqual([])
   expect(text(bandRows({ ...EMPTY, stale: true }, DEFAULTS, 140))).toBe('stale')
-  expect(text(bandRows(snap({ stale: true }), CI, 160))).toContain('stale')
+  expect(text(bandRows(snap({ stale: true }), NOCI, 160))).toContain('stale')
 })
 
 test('band: an unclaimed task or empty branch leaves no cell at all', async () => {
-  const t = text(bandRows(withHelper({ task_id: '', task_title: '', branch: '' }), CI, 160))
-  expect(t).toMatch(/^synxdb-build-pipeline │ WORKING \(1\) │ CI /)
+  const t = text(bandRows(withHelper({ task_id: '', task_title: '', branch: '' }), NOCI, 160))
+  expect(t).toMatch(/^synxdb-build-pipeline │ WORKING \(1\) │ you /)
   expect(t).not.toContain('no claimed')
 })
 
@@ -382,7 +447,7 @@ test('compactLine is one plain line within the 2,000 character limit', async () 
 
 // --- repo cell: follows the session cwd (owner/name @ branch* (wt X) (account), arrow, root marker) ---
 
-const repoCell = (h: object, extra = {}, cols = 200) => text(bandRows({ ...withHelper(h), ...extra }, { ...CI, fields: ['repo'] }, cols))
+const repoCell = (h: object, extra = {}, cols = 200) => text(bandRows({ ...withHelper(h), ...extra }, { ...NOCI, fields: ['repo'] }, cols))
 
 test('parseHelper: repo identity fields; main\'s `repo` string is untouched, missing fields are null', async () => {
   const h = parseHelper(JSON.stringify({ ...BASE, repo_slug: 'acme/widgets', repo_root: '/w/widgets', head: 'abc1234', dirty: 3, gh_account: 'work-user' }))!
@@ -402,7 +467,7 @@ test('repo cell: * marks a dirty tree (1 and 99 alike), a clean or unknown tree 
   expect(repoCell({ repo_slug: 'a/b', branch: 'main', dirty: 99 })).toBe('a/b @ main*')
   expect(repoCell({ repo_slug: 'a/b', branch: 'main', dirty: 0 })).toBe('a/b @ main')
   expect(repoCell({ repo_slug: 'a/b', branch: 'main', dirty: null })).toBe('a/b @ main')
-  const star = bandRows(withHelper({ repo_slug: 'a/b', branch: 'main', dirty: 2 }), { ...CI, fields: ['repo'] }, 200)[0].find(s => s.text === '*')
+  const star = bandRows(withHelper({ repo_slug: 'a/b', branch: 'main', dirty: 2 }), { ...NOCI, fields: ['repo'] }, 200)[0].find(s => s.text === '*')
   expect(star?.color).toBe('warning')
 })
 
@@ -422,7 +487,7 @@ test('repo cell: the arrow shows while the repo just changed, and only then', as
   const h = { repo_slug: 'a/b', branch: 'main' }
   expect(repoCell(h, { moved: true })).toBe('→ a/b @ main')
   expect(repoCell(h, { moved: false })).toBe('a/b @ main')
-  const arrow = bandRows({ ...withHelper(h), moved: true }, { ...CI, fields: ['repo'] }, 200)[0][0]
+  const arrow = bandRows({ ...withHelper(h), moved: true }, { ...NOCI, fields: ['repo'] }, 200)[0][0]
   expect([arrow.text, arrow.bold]).toEqual(['→ ', true])
 })
 
@@ -434,14 +499,14 @@ test('repo cell: (root: X) only when the cwd is outside the session root', async
   expect(repoCell({ ...h, cwd: '/proj/launch-two' }, { sessionRoot: '/proj/launch' })).toBe('a/b @ main (root: launch)') // not a path-prefix match
   expect(repoCell(h, { sessionRoot: null })).toBe('a/b @ main')
   expect(repoCell({ ...h, cwd: '' }, { sessionRoot: '/proj/launch' })).toBe('a/b @ main')
-  const root = bandRows({ ...withHelper(h), sessionRoot: '/proj/launch' }, { ...CI, fields: ['repo'] }, 200)[0].find(s => s.text.includes('root:'))
+  const root = bandRows({ ...withHelper(h), sessionRoot: '/proj/launch' }, { ...NOCI, fields: ['repo'] }, 200)[0].find(s => s.text.includes('root:'))
   expect(root?.color).toBe('warning')
   expect([baseName('/a/b/'), baseName(''), isWithin('/a/b', '/a/b'), isWithin('/a/bc', '/a/b')]).toEqual(['b', '', true, false])
 })
 
 test('repo cell shrinks by width: worktree, then account, then names; the marker survives longest and the row never overflows', async () => {
   const full = { repo_slug: 'synx-data-labs/ccxp-skills', branch: 'feat/a-rather-long-branch-name', dirty: 2, worktree: 'wt-one', gh_account: 'shine-work', cwd: '/other/ccxp-skills' }
-  const at = (cols: number) => text(bandRows({ ...withHelper(full), moved: true, sessionRoot: '/proj/launch' }, { ...CI, fields: ['repo'] }, cols))
+  const at = (cols: number) => text(bandRows({ ...withHelper(full), moved: true, sessionRoot: '/proj/launch' }, { ...NOCI, fields: ['repo'] }, cols))
   expect(at(200)).toBe('→ synx-data-labs/ccxp-skills @ feat/a-rather-long-branch-name* (wt wt-one) (shine-work) (root: launch)')
   const seen: string[] = []
   for (let cols = 200; cols >= 22; cols--) {
@@ -455,23 +520,23 @@ test('repo cell shrinks by width: worktree, then account, then names; the marker
   expect(seen[seen.length - 1]).toContain('ccxp-skills')
 })
 
-test('repo cell with the other cells: a narrow row keeps repo and CI, and the repo cell also fits the compact line', async () => {
+test('repo cell with the other cells: a narrow row keeps repo and jobs, and the repo cell also fits the compact line', async () => {
   const s = withHelper({ repo_slug: 'acme/widgets', branch: 'main', dirty: 1 })
-  expect(text(bandRows(s, CI, 160))).toMatch(/^acme\/widgets @ main\* │ T20261021-354035 Decouple the nightly orchestrator │ WORKING \(1\) │ CI ✗ failing 10-26 │ you \d\d:\d\d$/)
+  expect(text(bandRows(s, NOCI, 160))).toMatch(/^acme\/widgets @ main\* │ T20261021-354035 Decouple the nightly orchestrator │ WORKING \(1\) │ you \d\d:\d\d$/)
   expect(compactLine(s, CI)).toContain('acme/widgets @ main*')
-  expect(text(bandRows(s, CI, 45))).toMatch(/^widgets\*/)
-  expect(text(bandRows(s, CI, 45))).toContain('CI')
+  expect(text(bandRows(s, NOCI, 45))).toMatch(/^widgets\*/)
+  expect(text(bandRows(s, NOCI, 45))).toContain('WORKING')
 })
 
 test('branch cell: shown on its own when `repo` is not a field; the repo cell otherwise says it once', async () => {
-  expect(text(bandRows(snap(), { ...CI, fields: ['branch'] }, 200))).toBe(' t20261021-354035-decouple')
-  expect(text(bandRows(snap(), { ...CI, fields: ['repo', 'branch'] }, 200))).toBe('synxdb-build-pipeline @ t20261021-354035-decouple')
+  expect(text(bandRows(snap(), { ...NOCI, fields: ['branch'] }, 200))).toBe(' t20261021-354035-decouple')
+  expect(text(bandRows(snap(), { ...NOCI, fields: ['repo', 'branch'] }, 200))).toBe('synxdb-build-pipeline @ t20261021-354035-decouple')
 })
 
 // --- jobs cell: green READY when no job runs, yellow WORKING (N) otherwise; hidden without a ledger ---
 
 const ledgerOf = (n: number) => ({ ledger: { running: Array.from({ length: n }, (_, i) => ({ job: 230 + i, title: `job ${i}` })), lifetime_jobs: 230 + n, parked: [], next_job: 231 + n, updated_at: '' } })
-const jobsCell = (n: number, base = HELPER, cols = 200) => bandRows(withHelper(ledgerOf(n), base), { ...CI, fields: ['jobs'] }, cols)[0]
+const jobsCell = (n: number, base = HELPER, cols = 200) => bandRows(withHelper(ledgerOf(n), base), { ...NOCI, fields: ['jobs'] }, cols)[0]
 
 test('jobs cell: READY green at 0, WORKING (N) yellow at 1 and 5', async () => {
   expect(jobsCell(0).map(s => [s.text, s.color])).toEqual([['READY', 'success']])
@@ -480,38 +545,38 @@ test('jobs cell: READY green at 0, WORKING (N) yellow at 1 and 5', async () => {
 })
 
 test('jobs cell: no ledger means no cell at all (no READY without a source)', async () => {
-  expect(bandRows(withHelper({ ledger: null }), { ...CI, fields: ['jobs'] }, 200)).toEqual([])
-  expect(text(bandRows(withHelper({ ledger: null }), CI, 160))).not.toMatch(/READY|WORKING/)
-  expect(text(bandRows(withHelper({ ledger: null }, HELPER_AP), CI, 160))).not.toMatch(/READY|WORKING/)
+  expect(bandRows(withHelper({ ledger: null }), { ...NOCI, fields: ['jobs'] }, 200)).toEqual([])
+  expect(text(bandRows(withHelper({ ledger: null }), NOCI, 160))).not.toMatch(/READY|WORKING/)
+  expect(text(bandRows(withHelper({ ledger: null }, HELPER_AP), NOCI, 160))).not.toMatch(/READY|WORKING/)
 })
 
-test('jobs cell sits before CI in both orderings; `fields` can switch it off', async () => {
+test('jobs cell sits before the last-input cell in both orderings; `fields` can switch it off', async () => {
   const idle = { ...ledgerOf(0) }
-  expect(text(bandRows(withHelper(idle), CI, 160))).toMatch(/ │ READY │ CI ✗ failing/)
-  expect(text(bandRows(withHelper(idle, HELPER_AP), CI, 160))).toMatch(/ctx 64% ▓▓▓▓▓▓░░░░ │ READY │ CI ✗ failing/)
-  expect(text(bandRows(withHelper(idle), { ...CI, fields: ['repo', 'ci'] }, 160))).not.toContain('READY')
+  expect(text(bandRows(withHelper(idle), NOCI, 160))).toMatch(/ │ READY │ you /)
+  expect(text(bandRows(withHelper(idle, HELPER_AP), NOCI, 160))).toMatch(/ctx 64% ▓▓▓▓▓▓░░░░ │ READY │ you /)
+  expect(text(bandRows(withHelper(idle), { ...NOCI, fields: ['repo', 'ci'] }, 160))).not.toContain('READY')
 })
 
 test('jobs cell narrow: the count goes before the word, READY keeps its word; the row stays one line', async () => {
   const work = withHelper(ledgerOf(3), HELPER_AP)
   const idle = withHelper(ledgerOf(0), HELPER_AP)
-  expect(text(bandRows(work, CI, 140))).toContain('WORKING (3)')
+  expect(text(bandRows(work, NOCI, 140))).toContain('WORKING (3)')
   let seenBare = false
   for (let cols = 140; cols >= 22; cols--) {
-    const t = text(bandRows(work, CI, cols))
+    const t = text(bandRows(work, NOCI, cols))
     if (t.includes('WORKING') && !t.includes('WORKING (3)')) seenBare = true
     expect(t.includes('WORKING (3)') && seenBare).toBe(false) // never back to the count once dropped
-    expect(bandRows(work, CI, cols).length).toBe(1)
+    expect(bandRows(work, NOCI, cols).length).toBe(1)
   }
   expect(seenBare).toBe(true)
-  expect(text(bandRows(idle, CI, 60))).toContain('READY')
-  expect(text(bandRows(withHelper(ledgerOf(2)), CI, 60))).toMatch(/WORKING/)
+  expect(text(bandRows(idle, NOCI, 60))).toContain('READY')
+  expect(text(bandRows(withHelper(ledgerOf(2)), NOCI, 60))).toMatch(/WORKING/)
 })
 
 // --- /hud details: the band expanded to five live lines ---
 
 const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
-const detail = (s: object, cols = 140, cfg = CI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
+const detail = (s: object, cols = 140, cfg: typeof CI | typeof NOCI = NOCI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
 const fullSnap = (over = {}) => ({
   ...withHelper({
     repo_slug: 'acme/widgets',
@@ -532,32 +597,31 @@ test('formatAge: just now, minutes, hours, days; a future stamp is just now', as
 })
 
 test('AP ON (no duration): elapsed shows without a requested window; idle names its state', async () => {
-  const on = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', requested_hr: 0 } }), CI, 160))
+  const on = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', requested_hr: 0 } }), NOCI, 160))
   expect(on).toContain('AP 2h 3 loops ✓2 merged')
   expect(on).not.toContain('/0h')
-  const idle = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', prefix: '[i]', last_outcome: 'idle', requested_hr: 0 } }), CI, 160))
+  const idle = text(bandRows(withHelper({ autopilot: { ...AP, status: 'on', prefix: '[i]', last_outcome: 'idle', requested_hr: 0 } }), NOCI, 160))
   expect(idle).toContain('AP idle 2h')
-  const paused = text(bandRows(withHelper({ autopilot: { ...AP, status: 'paused', prefix: '[p]', requested_hr: 0 } }), CI, 160))
+  const paused = text(bandRows(withHelper({ autopilot: { ...AP, status: 'paused', prefix: '[p]', requested_hr: 0 } }), NOCI, 160))
   expect(paused).toContain('AP ⏸ paused 2h')
 })
 
-test('details: five lines in order: where, usage, jobs, autopilot with CI, last prompt', async () => {
+test('details: five lines in order: where, usage, jobs, autopilot, last prompt (no `ci`: no CI line)', async () => {
   const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
   expect(lines.length).toBe(5)
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 42% used │ API-equivalent cost $1.50')
   expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
-  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
 
-test('details: colours match the band (ctx tone, READY/WORKING, CI state) and the dirty mark is yellow', async () => {
-  const rows = detailRows(fullSnap({ ctxLeft: 40 }) as any, CI, 140, DETAIL_NOW)
+test('details: colours match the band (ctx tone, READY/WORKING) and the dirty mark is yellow', async () => {
+  const rows = detailRows(fullSnap({ ctxLeft: 40 }) as any, NOCI, 140, DETAIL_NOW)
   expect(rows[1].find(s => s.text.startsWith('context '))?.color).toBe('error')
   expect(rows[2][0]).toEqual({ text: 'WORKING (2)', color: 'warning' })
   expect(rows[0].find(s => s.text === '*')?.color).toBe('warning')
-  expect(rows[3].find(s => s.text.includes('passing'))?.color).toBe('success')
-  const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: [], next_job: 83, updated_at: '' } }) as any, CI, 140, DETAIL_NOW)
+  const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: [], next_job: 83, updated_at: '' } }) as any, NOCI, 140, DETAIL_NOW)
   expect(idle[2][0]).toEqual({ text: 'READY', color: 'success' })
 })
 
@@ -582,7 +646,7 @@ test('details: every line fits the terminal at every width and the band row is u
       for (const line of detail(s, cols)) expect(line.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
     }
   }
-  expect(bandRows(fullSnap() as any, CI, 140).length).toBe(1)
+  expect(bandRows(fullSnap() as any, NOCI, 140).length).toBe(1)
 })
 
 test('details: a narrow terminal shortens the labels and ages before it cuts', async () => {
@@ -604,7 +668,7 @@ test('details: the jobs line never lists the running jobs (the band already show
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
   expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
   // ...but the one-row band keeps its short forms
-  expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...CI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
+  expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...NOCI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
 })
 
 test('formatIn: under a minute, minutes, hours with minutes, days; due or past is now', async () => {
@@ -862,14 +926,14 @@ test('version: in AP mode it shows too; narrow rows shrink it, the update outliv
   expect(text(bandRows({ ...snapAp(), helper: { ...parseHelper(HELPER_AP)!, plugin: PLUGIN_NEW } }, DEFAULTS, 160))).toContain('ccxp 5.0.0 (5.1.0 available)')
   for (const cols of [40, 60, 80, 100, 120]) {
     for (const plugin of [PLUGIN_NEW, { installed: '5.0.0', latest: null }, { installed: '5.0.0', latest: '5.0.0' }]) {
-      const row = bandRows(verSnap(plugin), CI, cols)
+      const row = bandRows(verSnap(plugin), NOCI, cols)
       expect(text(row).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
     }
   }
   // Squeezed: the plain version is dropped before CI, the update arrow survives longer.
-  const plainRow = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), CI, 70))
+  const plainRow = text(bandRows(verSnap({ installed: '5.0.0', latest: null }), NOCI, 70))
   expect(plainRow).not.toContain('ccxp')
-  const upd = text(bandRows(verSnap(PLUGIN_NEW), CI, 100))
+  const upd = text(bandRows(verSnap(PLUGIN_NEW), NOCI, 100))
   expect(upd).toMatch(/↑|available/)
 })
 
@@ -907,7 +971,7 @@ test('version: narrow details drop the link first and keep the version label', a
     expect(last).toContain('ccxp 5.2.0')
   }
   // with every line present the version line is still the last line
-  const full = detailRows(fullSnap({ helper: { ...fullSnap().helper, plugin: PLUGIN_LATEST } }) as any, CI, 120, DETAIL_NOW)
+  const full = detailRows(fullSnap({ helper: { ...fullSnap().helper, plugin: PLUGIN_LATEST } }) as any, NOCI, 120, DETAIL_NOW)
   expect(full.length).toBe(5)
   expect(text(full.slice(-1))).toContain('(latest)')
 })
@@ -1001,16 +1065,16 @@ test('queue: parseHelper clamps the counts and a missing or malformed queue is n
 
 test('queue: the band shows the compact form, details spell the labels out, claimed only when above 0', async () => {
   const s = withHelper({ ...SHORT, queue: QUEUE })
-  expect(text(bandRows(s as any, CI, 140))).toContain('queue 44 = 30r 6b 3d 2e 3x')
-  expect(detail(s as any, 140)).toContain('queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
-  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 140).join('\n')).toContain('3 epic | 2 claimed')
-  expect(text(bandRows(s as any, CI, 140))).not.toContain('claimed')
+  expect(text(bandRows(s as any, NOCI, 140))).toContain('queue 44 = 30r 6b 3d 2e 3x')
+  expect(detail(s as any, 140).join('\n')).toContain('queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 160).join('\n')).toContain('3 epic | 2 claimed')
+  expect(text(bandRows(s as any, NOCI, 140))).not.toContain('claimed')
 })
 
 test('queue: no queue, no cell and no line; a tight band shrinks it to ready/total before dropping it', async () => {
-  expect(text(bandRows(withHelper({ queue: null }) as any, CI, 140))).not.toContain('queue')
+  expect(text(bandRows(withHelper({ queue: null }) as any, NOCI, 140))).not.toContain('queue')
   expect(detail(withHelper({ queue: null }) as any, 140).join('\n')).not.toContain('queue')
-  const tight = text(bandRows(withHelper({ ...SHORT, task_title: '', queue: QUEUE, ledger: null, ci: null }) as any, CI, 34))
+  const tight = text(bandRows(withHelper({ ...SHORT, task_title: '', queue: QUEUE, ledger: null, ci: null }) as any, NOCI, 34))
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
 
@@ -1026,41 +1090,80 @@ test('AP stats: parseHelper keeps a valid stats object; absent or malformed is n
 })
 
 test('AP stats: the wide band shows a labeled last-24h merged/loops, the marker and the spelled-out average', async () => {
-  const wide = text(bandRows(apStats(), CI, 200))
+  const wide = text(bandRows(apStats(), NOCI, 200))
   expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged / 26 loops ▲ average 5.2/day │ ctx')
-  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), CI, 200))).toContain('last 24h: 3 merged / 26 loops ▼ average 5.2/day')
-  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), CI, 200))).toContain('last 24h: 5 merged / 26 loops = average 5.2/day')
+  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), NOCI, 200))).toContain('last 24h: 3 merged / 26 loops ▼ average 5.2/day')
+  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), NOCI, 200))).toContain('last 24h: 5 merged / 26 loops = average 5.2/day')
 })
 
 test('AP stats: no history shows only the average, spelled out; no stats shows nothing extra', async () => {
-  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), CI, 200))).toContain('│ average 5.2/day │')
-  expect(text(bandRows(withHelper({ autopilot: AP }), CI, 200))).not.toMatch(/24h|avg|average/)
+  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), NOCI, 200))).toContain('│ average 5.2/day │')
+  expect(text(bandRows(withHelper({ autopilot: AP }), NOCI, 200))).not.toMatch(/24h|avg|average/)
 })
 
 test('AP stats: the 24h merged count and the average survive 100-140 columns; the ctx bar shrinks first', async () => {
-  const at = (cols: number) => text(bandRows(apStats(), CI, cols))
+  const at = (cols: number) => text(bandRows(apStats(), NOCI, cols))
   for (const cols of [100, 110, 120, 130, 140]) {
     expect(at(cols)).toMatch(/24h: 8 merged/)
     expect(at(cols)).toContain('average 5.2/day')
   }
   expect(at(120)).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
-  expect(at(120)).not.toContain('▓')
-  expect(at(100)).toContain('│ 24h: 8 merged/26 loops ▲ average 5.2/day │')
+  expect(at(110)).not.toContain('▓')
+  expect(at(100)).toContain('│ last 24h: 8 merged / 26 loops ▲ average 5.2/day │')
+  expect(at(90)).toContain('│ 24h: 8 merged/26 loops ▲ average 5.2/day │')
 })
 
 test('AP stats: narrow rows shrink the stats late and keep `avg` only in the narrowest forms; the row always fits', async () => {
-  const at = (cols: number) => text(bandRows(apStats(), CI, cols))
+  const at = (cols: number) => text(bandRows(apStats(), NOCI, cols))
   expect(at(80)).toContain('24h: ✓8/26L ▲ average 5.2/d')
-  expect(at(60)).toContain('24h ✓8 ▲')
+  expect(at(60)).toContain('24h ✓8/26L ▲ avg 5.2/d')
   expect(at(60)).not.toContain('average')
   for (const cols of [30, 50, 70, 90, 110, 140, 200]) expect(at(cols).length).toBeLessThanOrEqual(cols)
   expect(at(48)).toContain('AP')
   expect(at(48)).toContain('24h ✓8 ▲')
-  expect(text(bandRows(apStats(), { ...CI, fields: ['ap'] }, 69))).toContain('24h ✓8/26L ▲ avg 5.2/d')
+  expect(text(bandRows(apStats(), { ...NOCI, fields: ['ap'] }, 69))).toContain('24h ✓8/26L ▲ avg 5.2/d')
 })
 
 test('AP stats: `ap` switched off hides the stats too; details show them on the AP line', async () => {
-  expect(text(bandRows(apStats(), { ...CI, fields: ['ci'] }, 200))).not.toContain('24h')
+  expect(text(bandRows(apStats(), { ...NOCI, fields: ['ci'] }, 200))).not.toContain('24h')
   const line = detailRows(apStats() as any, DEFAULTS, 200).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))
   expect(line).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
+})
+
+// --- CI top row: detail view, highlight, NO_COLOR ---
+
+test('details: CI first and alone, then where/usage/jobs, AP with queue on ONE line, last prompt', async () => {
+  const q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+  const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 200, CI)
+  expect(lines.length).toBe(6)
+  expect(lines[0]).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(lines[1]).toContain('acme/widgets')
+  const ap = lines.find(l => l.startsWith('AP '))!
+  expect(ap).toContain('queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  expect(ap.indexOf('queue')).toBeGreaterThan(ap.indexOf('merged'))
+  expect(ap.indexOf('queue')).toBeLessThan(ap.indexOf('next loop'))
+  expect(lines.filter(l => l.includes('queue')).length).toBe(1)
+  expect(lines.filter(l => l.includes('CI')).length).toBe(1)
+  for (let cols = 200; cols >= 22; cols--) for (const l of detail(withHelper({ ...fullSnap().helper, queue: q }), cols, CI)) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+})
+
+test('details: a red CI line is flagged for highlight; a green one is not; no `ci` means no CI line', async () => {
+  const red = detailRows(withHelper({ ...fullSnap().helper, ci: { state: 'failing', at: RUN_AT } }) as any, CI, 140, DETAIL_NOW)
+  expect(red[0].every(x => x.alert)).toBe(true)
+  expect(red.slice(1).some(r => r.some(x => x.alert))).toBe(false)
+  expect(detailRows(fullSnap() as any, CI, 140, DETAIL_NOW)[0].some(x => x.alert)).toBe(false)
+  expect(detail(fullSnap(), 140, NOCI).join('\n')).not.toContain('CI')
+})
+
+test('alertSegs: red row is bold, red, undimmed; NO_COLOR drops the colour and shouts ✗ FAILING', async () => {
+  const row = bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT } }), { ...CI, fields: ['ci'] }, 140)[0]
+  expect(isAlertRow(row)).toBe(true)
+  const color = alertSegs(row, false)
+  expect(color.every(x => x.bold === true && x.color === 'error' && !x.dim)).toBe(true)
+  expect(text([color])).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26/)
+  const plain = alertSegs(row, true)
+  expect(plain.every(x => x.bold === true && x.color === undefined)).toBe(true)
+  expect(text([plain])).toMatch(/^CI \(nightly\.yml\) ✗ FAILING 10-26 \(\d+[dh] ago\)$/)
+  const green = bandRows(withHelper({ ci: { state: 'passing', at: RUN_AT } }), { ...CI, fields: ['ci'] }, 140)[0]
+  expect(isAlertRow(green)).toBe(false)
 })

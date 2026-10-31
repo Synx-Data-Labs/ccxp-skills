@@ -186,7 +186,8 @@ export function meter(left: number, width = 10): string {
   return '▓'.repeat(filled) + '░'.repeat(width - filled)
 }
 
-export type Seg = { text: string; color?: string; dim?: boolean; bold?: boolean }
+/** `alert`: part of a RED CI row (the renderer highlights the whole row); `marker`: the state word, shouted (`FAILING`) when colour is off. */
+export type Seg = { text: string; color?: string; dim?: boolean; bold?: boolean; alert?: boolean; marker?: boolean }
 
 /** Timestamp format of the last-input field, in one place: local HH:MM, plus "Mon D" when not today. */
 export function formatStamp(epochSec: number, nowMs: number = Date.now()): string {
@@ -258,11 +259,36 @@ function shortDate(epochSec: number): string {
   return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function ciVariants(ci: Ci): Variants {
+/** A CI that must be unmissable: failing (also timed out). Yellow and green rows get no extra highlight. */
+export const isCiRed = (ci: Ci): boolean => ci.state === 'failing'
+
+/**
+ * The CI row, alone on the top line: `CI (workflow) ✗ failing 10-28 (2h ago)`, shrinking to `CI ✗ failing 10-28 (2h ago)`,
+ * `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗`. Red rows flag every segment `alert` (the renderer draws the row in reverse
+ * video, bold) and the state word `marker`.
+ */
+function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
   const look = CI_LOOK[ci.state]
+  const red = isCiRed(ci)
   const date = ci.at > 0 ? ` ${shortDate(ci.at)}` : ''
-  const mk = (text: string): Seg[] => [{ text: 'CI ', bold: true }, { text, color: look.color }]
-  return [mk(`${look.glyph} ${look.word}${date}`), mk(`${look.glyph}${date}`), mk(look.glyph)]
+  const mk = (wf: boolean, word: boolean, age: boolean, dateOn: boolean): Seg[] => {
+    const segs: Seg[] = [
+      { text: 'CI ', bold: true },
+      ...(wf ? [{ text: `(${truncate(workflow, 30)}) `, dim: true }] : []),
+      { text: look.glyph + (word ? ` ${look.word}` : ''), color: look.color, marker: word },
+      ...(dateOn && date ? [{ text: date, color: look.color }] : []),
+      ...(age ? ageSegs(ci.at, nowMs) : []),
+    ]
+    return red ? segs.map(x => ({ ...x, alert: true, bold: true, dim: false })) : segs
+  }
+  return [mk(true, true, true, true), mk(false, true, true, true), mk(false, false, true, true), mk(false, false, false, true), mk(false, false, false, false)]
+}
+
+/** The top CI row, or null (no `ci` configured, switched off in `fields`, or no answer yet). Starts full at every width. */
+function ciRow(snap: Snapshot, cfg: HudConfig, width: number, nowMs: number): Seg[] | null {
+  const ci = snap.helper?.ci
+  if (!cfg.ci || !ci) return null
+  return fitRow([{ field: 'ci', variants: ciRowVariants(ci, cfg.ci.workflow, nowMs), at: 0 }], ['step:ci', 'step:ci', 'step:ci', 'step:ci'], width)
 }
 
 /**
@@ -417,7 +443,7 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
       return q ? one(...queueVariants(q, false)) : null
     }
     case 'ci':
-      return cfg.ci && h?.ci ? one(...ciVariants(h.ci)) : null
+      return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
       return snap.rateUsed === null ? null : one([{ text: `5h ${Math.round(snap.rateUsed)}%` }])
     case 'cost':
@@ -452,14 +478,14 @@ export function queueVariants(q: Queue, full: boolean): Variants {
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'ci', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'ctx', 'jobs', 'queue', 'ci', 'rate', 'cost', 'lastat', 'ver'],
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ci', 'step:ci', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:ci', 'step:ci', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -472,12 +498,13 @@ function render(items: Item[]): Seg[] {
 }
 
 /**
- * The band: ALWAYS one row (or none). Two modes: autopilot ON (AP, ctx, CI, last input)
- * and OFF (repo, branch, task, CI, last input). The tier only picks how abbreviated each
- * field starts; when the row is still too wide the steps in STEPS shrink or drop fields.
+ * The band: up to TWO rows. With `ci` configured (and an answer) the CI cell is alone on the TOP row; the
+ * second row has the rest. Two modes: autopilot ON (AP, 24h, queue, ctx, jobs, last input) and OFF (repo,
+ * branch, task, jobs, queue, last input). The tier only picks how abbreviated each field starts; when the
+ * row is still too wide the steps in STEPS shrink or drop fields. No `ci`: one row, as ever.
  * Returns [] when there is nothing to show (the caller then yields to the engine).
  */
-export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[][] {
+export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const tier = tierOf(columns)
   const width = Math.max(20, columns - 2) // the band has one column of padding each side
   const mode = isApOn(snap) ? 'on' : 'off'
@@ -487,8 +514,8 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
     // The version segment is switched by its own `version` key, not by `fields`.
     if (f !== 'ver' && !cfg.fields.includes(f)) continue
     const it = itemFor(f, snap, cfg)
-    // The tier sets how detailed the AP, ctx and CI cells start; the rest start full and shrink only to fit.
-    if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' || f === 'ci' ? Math.min(start, it.variants.length - 1) : 0 })
+    // The tier sets how detailed the AP and ctx cells start; the rest start full and shrink only to fit.
+    if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' ? Math.min(start, it.variants.length - 1) : 0 })
     // The 24h progress cell rides with the AP cell (same switch); it shrinks after the ctx bar, CI and jobs cells, so the 24h merged count and the average survive common widths.
     if (f === 'ap' && it) {
       const sv = apStatsVariants(snap.helper!.autopilot!)
@@ -498,10 +525,13 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number): Seg[]
   // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
   if (items.some(it => it.field === 'repo')) items = items.filter(it => it.field !== 'branch')
   if (snap.stale) items.push({ field: 'stale', variants: [[{ text: 'stale', dim: true }]], at: 0 })
-  if (items.length === 0) return []
-
-  const row = fitRow(items, STEPS[mode], width)
-  return row.length === 0 ? [] : [row]
+  const rows: Seg[][] = []
+  // CI is its own top row; `fields` switches it like any other cell.
+  const top = cfg.fields.includes('ci') ? ciRow(snap, cfg, width, nowMs) : null
+  if (top && top.length > 0) rows.push(top)
+  const row = items.length === 0 ? [] : fitRow(items, STEPS[mode], width)
+  if (row.length > 0) rows.push(row)
+  return rows
 }
 
 /**
@@ -558,19 +588,19 @@ const DETAIL_STEPS = {
   where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
   usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
   jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
-  queue: ['step:queue', 'step:queue'],
-  ap: ['step:apstats', 'step:apstats', 'drop:apstats', 'step:wake', 'step:wake', 'step:ci', 'step:ci', 'step:ci', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
+  ap: ['step:queue', 'step:apstats', 'step:apstats', 'drop:apstats', 'step:wake', 'step:wake', 'step:queue', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
   // The version label is never dropped here (the link goes first, then the stamp shrinks, then the label narrows to ✓/↑).
   you: ['drop:url', 'step:lastat', 'step:lastat', 'step:ver', 'step:ver', 'step:ver0'],
 } as const
 
 /**
- * `/hud details`: the one-row band expanded to up to six live lines, each cut to the terminal
+ * `/hud details`: the band expanded to up to six live lines, each cut to the terminal
  * width with the same variant shrinking as the band. Lines with nothing to say are left out.
+ *   0 CI (first, alone; highlighted when red)
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
- *   4 queue breakdown (dev/TODO/queue.md; no queue, no line)
- *   5 autopilot, next loop time, and CI   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
+ *   4 autopilot, 24h cell, queue breakdown (dev/TODO/queue.md) and next loop time, on one line
+ *   5 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
  * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
  * It ignores `fields`: the lines are the view. [] when there is no data at all.
  */
@@ -584,6 +614,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     const row = fitRow(items.filter((x): x is Item => x !== null), steps, width)
     if (row.length > 0) lines.push(row)
   }
+
+  // 0. CI first, alone (highlighted when red); only when `ci` is set and answered
+  const top = ciRow(snap, cfg, width, nowMs)
+  if (top && top.length > 0) lines.push(top)
 
   // 1. where you are
   add(
@@ -624,10 +658,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     )
   }
 
-  // 4. the queue breakdown, labels in full
-  if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
-
-  // 5. autopilot and CI
+  // 4. autopilot, 24h, queue breakdown (labels in full) and the next loop, on one line
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
@@ -636,18 +667,6 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     apItem = one('ap', withStatus, ...full)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
-  }
-  let ciItem: Item | null = null
-  if (cfg.ci && h?.ci) {
-    const look = CI_LOOK[h.ci.state]
-    const date = h.ci.at > 0 ? ` ${shortDate(h.ci.at)}` : ''
-    const mk = (workflow: boolean, word: boolean): Seg[] => [
-      { text: 'CI ', bold: true },
-      ...(workflow ? [{ text: `(${truncate(cfg.ci!.workflow, 30)}) `, dim: true }] : []),
-      { text: `${look.glyph}${word ? ` ${look.word}` : ''}${date}`, color: look.color },
-      ...ageSegs(h.ci.at, nowMs),
-    ]
-    ciItem = one('ci', mk(true, true), mk(false, true), mk(false, false), ...ciVariants(h.ci).slice(2))
   }
   // The next loop: the clock time and the wait; paused says so (the stored time is stale then); nothing when unknown.
   let wakeItem: Item | null = null
@@ -666,7 +685,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
         : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
   }
   const apStats = ap ? apStatsVariants(ap) : null
-  add([apItem, apStats ? one('apstats', ...apStats) : null, wakeItem, ciItem], DETAIL_STEPS.ap)
+  add([apItem, apStats ? one('apstats', ...apStats) : null, h?.queue ? one('queue', ...queueVariants(h.queue, true)) : null, wakeItem], DETAIL_STEPS.ap)
 
   // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
