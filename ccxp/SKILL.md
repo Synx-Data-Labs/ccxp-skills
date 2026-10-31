@@ -67,7 +67,7 @@ skill/argument surface.
 Pull the latest code and skills, prune stale refs, and clean up local branches whose remote is gone. This ensures the TODO backlog, guidelines, and skill definitions are current — and `git branch` doesn't accumulate stale `t<id>-…` branches from merged PRs.
 
 ```bash
-bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh
+bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh   # acts on the cwd repo (or --repo DIR)
 ```
 
 - Fast-forwards the working repo and the shared skills repo, then deletes local branches whose remote tracking ref is gone (PRs already merged + remote branch auto-deleted by `gh pr merge --delete-branch`) — inlining the `/cleanup-branches` skill workflow so the cron-driven ccxp run stays self-contained, no nested skill dispatch needed.
