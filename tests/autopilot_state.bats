@@ -597,7 +597,7 @@ MD
 
 @test "SKILL.md: big tasks are split, not skipped, and unskip is documented" {
   run grep -n 'Big tasks' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n -- '--before <original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n -- 'blocks: T<original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
   run grep -n 'autopilot-state.sh unskip' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
   run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
 }
