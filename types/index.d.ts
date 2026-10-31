@@ -47,6 +47,10 @@ export type Autopilot = {
   merged: number
   /** Epoch seconds of the next loop wake (`next_wake_at`); 0 when absent or unparseable. */
   next_wake_at: number
+  /** A cycle is running (`busy_since` set and under 3 h old). */
+  busy: boolean
+  /** Task id the running cycle drives (`current_task`); "" when idle or not recorded. */
+  current_task: string
 }
 
 export type Ledger = {

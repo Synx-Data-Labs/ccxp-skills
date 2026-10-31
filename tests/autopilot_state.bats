@@ -505,3 +505,57 @@ MD
   rm "$AUTOPILOT_STATE_FILE"
   run _ap final-report; [ "$status" -eq 2 ]
 }
+
+@test "busy on <id> stores current_task; busy off clears it" {
+  _ap start >/dev/null
+  _ap busy on T20261028-151063
+  [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .current_task)" = T20261028-151063 ]
+  _ap busy off
+  [ "$(_j .busy_since)" = null ]; [ "$(_j .current_task)" = null ]
+}
+
+@test "busy on without an id marks busy and clears a stale current_task" {
+  _ap start >/dev/null
+  _ap busy on T20261028-151063
+  _ap busy on
+  [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .current_task)" = null ]
+}
+
+@test "busy on with an invalid id is ignored: still busy, no error, no task" {
+  _ap start >/dev/null
+  local bad
+  for bad in "" nope T123 "T20261028-15106" "T20261028-1510633" 't20261028-151063' 'T20261028-151063;x'; do
+    run _ap busy on "$bad"; [ "$status" -eq 0 ]
+    [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .current_task)" = null ]
+    _ap busy off
+  done
+}
+
+@test "record clears current_task along with busy_since" {
+  _ap start >/dev/null; _ap busy on T20261028-151063
+  _ap record progress 1 T20261028-151063 >/dev/null
+  [ "$(_j .busy_since)" = null ]; [ "$(_j .current_task)" = null ]
+}
+
+@test "a state file without current_task (5.4.0) still works: busy on/off, record, start" {
+  _ap start >/dev/null
+  jq 'del(.current_task)' "$AUTOPILOT_STATE_FILE" > "$BATS_TEST_TMPDIR/s" && mv "$BATS_TEST_TMPDIR/s" "$AUTOPILOT_STATE_FILE"
+  run _ap busy off; [ "$status" -eq 0 ]
+  _ap busy on; [ "$(_j .current_task)" = null ]
+  _ap busy on T20261028-151063; [ "$(_j .current_task)" = T20261028-151063 ]
+  run _ap record idle 0; [ "$status" -eq 0 ]
+  [ "$(_j .current_task)" = null ]
+}
+
+@test "off keeps current_task with busy_since; a later on carries both until the cycle reports" {
+  _ap start >/dev/null; _ap busy on T20261028-151063; _ap off >/dev/null
+  run _ap start; [ "$output" = busy ]
+  [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .current_task)" = T20261028-151063 ]
+  _ap busy off
+  [ "$(_j .current_task)" = null ]
+}
+
+@test "start writes a fresh state with current_task null" {
+  _ap start >/dev/null
+  [ "$(_j .current_task)" = null ]
+}

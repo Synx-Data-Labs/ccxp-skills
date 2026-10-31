@@ -246,7 +246,10 @@ sl-iso-to-epoch() {
 # so an empty field survives `read`):
 #   <status> <prefix> <elapsed_hr> <requested_hr> <stuck> <cycle> <last_outcome>
 #   <last_task_id> <stuck_reason> <stop_reason> <merged_count> <next_wake_epoch>
-# (next_wake_epoch: next_wake_at as epoch seconds, empty when absent or unparseable)
+#   <busy> <current_task>
+# (next_wake_epoch: next_wake_at as epoch seconds, empty when absent or unparseable;
+# busy: 1 while a cycle is marked running (busy_since set and under 3 h old, else
+# empty); current_task: the task id that cycle drives, only when busy, else empty)
 # when /autopilot's dev/.autopilot-state.json (schema 2) has status "on" or
 # "paused", else nothing (off, a legacy pre-redesign file, missing or malformed:
 # the band then shows AP off). prefix: [p] paused (clock frozen at paused_at),
@@ -264,12 +267,12 @@ sl-autopilot-fields() {
 
   # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
-  line=$(jq -r 'select(.schema == 2) | [.status, .started_at, .stuck_count, .cycle_count, .last_outcome, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .merged_count, .next_wake_at] | map(. // "" | tostring) | join("\u001f")' \
+  line=$(jq -r 'select(.schema == 2) | [.status, .started_at, .stuck_count, .cycle_count, .last_outcome, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .merged_count, .next_wake_at, .busy_since, .current_task] | map(. // "" | tostring) | join("\u001f")' \
     "$state_file" 2>/dev/null) || return 0
   [ -n "$line" ] || return 0
 
-  local ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at
-  IFS=$'\x1f' read -r ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at <<<"$line"
+  local ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task
+  IFS=$'\x1f' read -r ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task <<<"$line"
   case "$ap_status" in on|paused) ;; *) return 0 ;; esac
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
@@ -308,7 +311,15 @@ sl-autopilot-fields() {
   local next_wake_epoch=""
   [ -z "$next_wake_at" ] || next_wake_epoch=$(sl-iso-to-epoch "$next_wake_at")
 
-  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}${sep}${next_wake_epoch}"
+  # A busy mark older than 3 h is a crashed cycle (same rule as autopilot-state.sh): not busy.
+  local busy="" busy_epoch
+  if [ -n "$busy_since" ]; then
+    busy_epoch=$(sl-iso-to-epoch "$busy_since")
+    if [ -n "$busy_epoch" ] && [ "$busy_epoch" -le "$now_epoch" ] && [ $(( now_epoch - busy_epoch )) -lt 10800 ]; then busy=1; fi
+  fi
+  [[ "$current_task" =~ ^T[0-9]{8}-[0-9]{6}$ ]] && [ -n "$busy" ] || current_task=""
+
+  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}${sep}${next_wake_epoch}${sep}${busy}${sep}${current_task}"
 }
 
 # Job ledger (written by ledger.sh). Same default path convention as the other

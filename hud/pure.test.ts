@@ -6,7 +6,7 @@ import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows,
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
-const AP = { status: 'on', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2, next_wake_at: 0 }
+const AP = { status: 'on', prefix: '[r]', elapsed_hr: 2, requested_hr: 6, stuck: 0, cycle: 3, last_outcome: '', last_task: '', stuck_reason: '', stop_reason: '', merged: 2, next_wake_at: 0, busy: false, current_task: '' }
 const BASE = {
   repo: 'synxdb-build-pipeline',
   task_id: 'T20261021-354035',
@@ -627,10 +627,21 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
   expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
+  // a running cycle names its task instead of a due time; without an id: loop running; paused still wins
+  expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063' })).toBe('AP on 2/6h 3 loops ✓2 merged │ loop on T20261028-151063')
+  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5, busy: true, current_task: 'T20261028-151063' })).toMatch(/loop on T20261028-151063$/)
+  expect(apLine({ next_wake_at: wake, busy: true, current_task: '' })).toMatch(/loop running$/)
+  expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063', status: 'paused', prefix: '[p]' })).toMatch(/next loop paused$/)
   // AP off or no record: no schedule
   expect(detailRows(withHelper({ autopilot: null }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('next')
   // narrow: the clock goes first, the wait stays, then the cell
   expect(apLine({ next_wake_at: wake }, 52)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop in 12m')
+})
+
+test('parseHelper: autopilot busy is a boolean and current_task a string, false and empty when missing', async () => {
+  const ap = (o: object) => parseHelper(JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: 'on', prefix: '[r]', ...o } }))!.autopilot!
+  expect([ap({ busy: true, current_task: 'T20261028-151063' }).busy, ap({ busy: true, current_task: 'T20261028-151063' }).current_task]).toEqual([true, 'T20261028-151063'])
+  expect([ap({}).busy, ap({}).current_task, ap({ busy: 'yes' }).busy]).toEqual([false, '', false])
 })
 
 test('parseHelper: autopilot next_wake_at is a number, 0 when missing or not a number', async () => {
