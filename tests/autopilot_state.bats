@@ -726,7 +726,7 @@ _stat() { _ap stats --json | jq -r "$1"; }
   [ "$(_stat .trend)" = down ]   # 0 against a non-zero average
 }
 
-@test "stats: no history log but a cycle inside the window uses the calendar-day counters as a lower bound (approx true)" {
+@test "stats: no history log but a cycle inside the window uses the calendar-day counters as an estimate (approx true)" {
   printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"last_cycle_at":"2026-10-28T08:00:00Z","cycles_today":4,"merges_today":3}' > "$AUTOPILOT_STATE_FILE"
   [ "$(_stat .has_history)" = false ]
   [ "$(_stat .approx)" = true ]
@@ -750,6 +750,30 @@ _stat() { _ap stats --json | jq -r "$1"; }
   _hline 2026-10-28T09:00:00Z progress 2
   [ "$(_stat .approx)" = false ]
   [ "$(_stat .merged_24h)" = 2 ]
+}
+
+@test "stats: approx is off when last_cycle_at is missing, null, malformed or in the future, and exact at the 24 h boundary" {
+  local base='"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"cycles_today":4,"merges_today":3'
+  printf '{%s}' "$base" > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .approx)" = false ]; [ "$(_stat .merged_24h)" = 0 ]
+  printf '{%s,"last_cycle_at":null}' "$base" > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .approx)" = false ]
+  printf '{%s,"last_cycle_at":"garbage"}' "$base" > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .approx)" = false ]
+  printf '{%s,"last_cycle_at":"2026-10-29T10:00:00Z"}' "$base" > "$AUTOPILOT_STATE_FILE"   # in the future
+  [ "$(_stat .approx)" = false ]
+  printf '{%s,"last_cycle_at":"2026-10-27T10:00:00Z"}' "$base" > "$AUTOPILOT_STATE_FILE"   # exactly 24 h old: out
+  [ "$(_stat .approx)" = false ]
+  printf '{%s,"last_cycle_at":"2026-10-27T10:00:01Z"}' "$base" > "$AUTOPILOT_STATE_FILE"   # 23:59:59 old: in
+  [ "$(_stat .approx)" = true ]
+}
+
+@test "stats: an estimate is spelled out in the text form and the trend stays one-decimal flat/up/down" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-18T10:00:00Z","cycle_count":10,"merged_count":20,"last_cycle_at":"2026-10-28T08:00:00Z","cycles_today":2,"merges_today":2}' > "$AUTOPILOT_STATE_FILE"   # avg 2.0/day
+  [ "$(_stat .approx)" = true ]
+  [ "$(_stat .trend)" = flat ]
+  run _ap stats
+  [[ "${lines[0]}" == "24h: ~2 merged/~2 cycles (estimate"* ]]
 }
 
 @test "stats: bad argument is a usage error" {

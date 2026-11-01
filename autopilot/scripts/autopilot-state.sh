@@ -252,8 +252,10 @@ ap-history-append() {
 #     yet, or its first line is newer than now-24h) while the state shows a cycle inside
 #     the window: the work the log lacks is then estimated from the state's calendar-day
 #     counters (cycles_today/merges_today, the day of the last cycle), and merged_24h and
-#     cycles_24h are the larger of log and counters, a lower bound (the part of the
-#     rolling window that falls on an earlier calendar day is unknown). With no log and
+#     cycles_24h are the larger of log and counters. That is an ESTIMATE, not a bound: the
+#     counters cover a local calendar day, so they can include work older than the window
+#     (over-count) or miss the earlier-day part of it, or have just been rolled to zero
+#     (under-count). Consumers must label it, and the HUD draws no trend arrow for it. With no log and
 #     no cycle inside the window the 24h figures are an exact zero (approx false).
 # Timestamps must be strict UTC (YYYY-MM-DDTHH:MM:SSZ, what `record` writes); future-dated
 # or malformed history lines are skipped. Never fails on missing files (all zero).
@@ -295,7 +297,8 @@ ap-stats() {
   if [ "$json" = 1 ]; then printf '%s\n' "$out"; return 0; fi
   printf '%s' "$out" | jq -r '
     (if .trend == "up" then "▲" elif .trend == "down" then "▼" else "=" end) as $m
-    | (if .has_history then "24h: \(.merged_24h) merged/\(.cycles_24h) cycles (\(.stuck_24h) stuck, \(.waiting_24h) waiting, \(.idle_24h) idle) \($m)"
+    | (if .approx then "24h: ~\(.merged_24h) merged/~\(.cycles_24h) cycles (estimate from the calendar-day counters, the log does not cover 24h yet)"
+       elif .has_history then "24h: \(.merged_24h) merged/\(.cycles_24h) cycles (\(.stuck_24h) stuck, \(.waiting_24h) waiting, \(.idle_24h) idle) \($m)"
        else "24h: no history logged yet" end),
       "lifetime: \(.lifetime_merged) merged/\(.lifetime_cycles) cycles over \(.lifetime_days) days · average \(.avg_merged_24h) merged/\(.avg_cycles_24h) cycles per 24h"'
 }

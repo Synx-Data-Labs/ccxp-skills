@@ -1133,13 +1133,16 @@ test('AP stats: the arrow is a theme token plus a glyph, so NO_COLOR drops only 
   expect(arrowSeg(bandRows(apStats({ trend: 'down' }), NOCI, 48))).toMatchObject({ color: 'error' })
 })
 
-test('AP stats: with no history the 24h count still shows; `~` marks a lower bound from the calendar-day counters, none marks an exact zero', async () => {
+test('AP stats: with no history the 24h count still shows; `~` marks an estimate from the calendar-day counters (no arrow), none marks an exact zero', async () => {
   const noHist = { has_history: false, cycles_24h: 0, merged_24h: 0, trend: 'down' }
   const exact = text(bandRows(apStats(noHist), NOCI, 200))
   expect(exact).toContain('last 24h: 0 merged ▼ / 0 loops · average 5.2/day')
   const approx = bandRows(apStats({ ...noHist, approx: true, merged_24h: 3, cycles_24h: 4 }), NOCI, 200)
-  expect(text(approx)).toContain('last 24h: ~3 merged ▼ / 4 loops · average 5.2/day')
-  expect(text(bandRows(apStats({ ...noHist, approx: true, merged_24h: 9, trend: 'up' }), NOCI, 60))).toContain('24h ✓~9▲/0L avg 5.2/d')
+  expect(text(approx)).toContain('last 24h: ~3 merged / 4 loops · average 5.2/day')
+  expect(text(bandRows(apStats({ ...noHist, approx: true, merged_24h: 9, trend: 'up' }), NOCI, 60))).toContain('24h ✓~9/0L avg 5.2/d')
+  // an estimate carries no arrow whatever the trend says
+  expect(arrowSeg(bandRows(apStats({ ...noHist, approx: true, merged_24h: 9, trend: 'up' }), NOCI, 200))).toBeUndefined()
+  expect(arrowSeg(approx)).toBeUndefined()
 })
 
 test('AP stats: the 24h merged count and the average survive 100-140 columns; the ctx bar shrinks first', async () => {
