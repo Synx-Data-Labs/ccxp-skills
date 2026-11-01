@@ -409,7 +409,7 @@ sl-queue-json() {
       END { flush() }' "${files[@]}" 2>/dev/null) || info=""
   fi
   local parents; parents=$(cat "$repo_root"/dev/EPICS/E*.md 2>/dev/null \
-    | grep -iE '^[*_ ]*parent( design task)?[*_ ]*:' | grep -oE 'T[0-9]+-[0-9]+' || true)
+    | grep -iE '^[*_ ]*parent( design task)?[*_ ]*:' | sed -E 's/^[^T]*(T[0-9]+-[0-9]+).*/\1/' | grep -E '^T[0-9]+-[0-9]+$' || true)
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"skip":[],"att":{},"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then

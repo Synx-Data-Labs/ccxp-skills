@@ -484,7 +484,7 @@ _queue_fixture() {
   _task "$repo" 9 Open                                                    # kind=epic via autopilot
   _task "$repo" 10 Open                                                   # member of the epic: ready
   mkdir -p "$repo/dev/EPICS"
-  printf '### E1 — Thing\n\nParent design task: [T20260101-000008](../TODO/T20260101-000008-t.md)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
+  printf '### E1 — Thing\n\n**Parent design task:** [T20260101-000008](../TODO/T20260101-000008-t.md) (supersedes T20260101-000001)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
   local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
   printf '{"schema":2,"status":"on","skip_ids":[],"needs_attention":[{"id":"T20260101-000009","reason":"r","kind":"epic"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
