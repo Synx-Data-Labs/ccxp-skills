@@ -245,7 +245,16 @@ ap-history-append() {
 #   - lifetime totals come from the state's lifetime_cycles/lifetime_merged (the
 #     baseline from before the log existed, kept across off/start), or the log when larger;
 #   - lifetime days = max(1, (now - earliest of lifetime_started_at, first log ts) / 86400);
-#   - trend compares merged_24h with the average rounded to 1 decimal: up|down|flat.
+#   - trend compares merged_24h with the average rounded to 1 decimal: up|down|flat
+#     ("same" = equal at that one displayed decimal, so an integer count is flat only
+#     against an average that rounds to a whole number such as 5.0);
+#   - `approx` is true when the log does not reach back over the whole window (no log
+#     yet, or its first line is newer than now-24h) while the state shows a cycle inside
+#     the window: the work the log lacks is then estimated from the state's calendar-day
+#     counters (cycles_today/merges_today, the day of the last cycle), and merged_24h and
+#     cycles_24h are the larger of log and counters, a lower bound (the part of the
+#     rolling window that falls on an earlier calendar day is unknown). With no log and
+#     no cycle inside the window the 24h figures are an exact zero (approx false).
 # Timestamps must be strict UTC (YYYY-MM-DDTHH:MM:SSZ, what `record` writes); future-dated
 # or malformed history lines are skipped. Never fails on missing files (all zero).
 ap-stats() {
@@ -271,9 +280,13 @@ ap-stats() {
     | ([($s.lifetime_started_at // $s.started_at | strings | ep), ($h | map(.t) | min)] | map(select(. != null)) | min // $now) as $start
     | ((($now - $start) / 86400) | if . < 1 then 1 else . end) as $days
     | ($lm / $days | r2) as $am | ($lc / $days | r2) as $ac
-    | ($w | map(.m) | add // 0) as $m24
-    | {has_history: (($h | length) > 0), window_hours: 24,
-       cycles_24h: ($w | cyc), merged_24h: $m24,
+    | ($s.last_cycle_at | if type == "string" then ep else null end) as $lct
+    | ((($h | map(.t) | min) as $hmin | $hmin == null or $hmin > $cut) and $lct != null and $lct > $cut and $lct <= $now) as $approx
+    | (if $approx then ($s.merges_today | n) else 0 end) as $est_m
+    | (if $approx then ($s.cycles_today | n) else 0 end) as $est_c
+    | ([($w | map(.m) | add // 0), $est_m] | max) as $m24
+    | {has_history: (($h | length) > 0), window_hours: 24, approx: $approx,
+       cycles_24h: ([($w | cyc), $est_c] | max), merged_24h: $m24,
        stuck_24h: ($w | cnt("stuck")), waiting_24h: ($w | cnt("waiting")), idle_24h: ($w | cnt("idle")),
        lifetime_cycles: $lc, lifetime_merged: $lm, lifetime_days: ($days | r2),
        avg_cycles_24h: $ac, avg_merged_24h: $am,

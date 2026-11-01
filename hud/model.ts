@@ -51,7 +51,7 @@ function parseStats(x: unknown): ApStats | null {
   if (typeof x !== 'object' || x === null || Array.isArray(x)) return null
   const o = x as Record<string, unknown>
   const trend = o.trend === 'up' || o.trend === 'down' ? o.trend : 'flat'
-  return { has_history: o.has_history === true, merged_24h: num(o.merged_24h), cycles_24h: num(o.cycles_24h), avg_merged_24h: num(o.avg_merged_24h), trend }
+  return { has_history: o.has_history === true, approx: o.approx === true, merged_24h: num(o.merged_24h), cycles_24h: num(o.cycles_24h), avg_merged_24h: num(o.avg_merged_24h), trend }
 }
 
 /** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
@@ -342,24 +342,36 @@ function apVariants(ap: Autopilot): Variants {
 }
 
 /**
- * The autopilot's progress cell, most to least detail (with history; without it only the average shows):
- * `last 24h: 8 merged / 26 loops ▲ average 5.2/day`, `24h: 8 merged/26 loops ▲ average 5.2/day`,
- * `24h: ✓8/26L ▲ average 5.2/d`, then (narrowest only) `24h ✓8/26L ▲ avg 5.2/d`, `24h ✓8 ▲`. The marker compares the
- * last 24 h merged with the lifetime average per 24 h (▲ above, ▼ below, = equal).
+ * The autopilot's progress cell, most to least detail:
+ * `last 24h: 8 merged ▲ / 26 loops · average 5.2/day`, `24h: 8 merged ▲/26 loops · average 5.2/day`,
+ * `24h: ✓8▲/26L average 5.2/d`, then (narrowest only) `24h ✓8▲/26L avg 5.2/d`, `24h ✓8▲`.
+ * The arrow sits right after the 24h merged count and compares it with the lifetime average per 24 h:
+ * green `▲` above, red `▼` below, NO arrow when equal (both compared at the displayed one decimal, which
+ * the helper's `trend` already is) and none either when the helper reports no trend. The colour is a theme
+ * token (`success` / `error`), so under NO_COLOR the glyph stays and only the colour drops.
+ * `~8` = the 24h count is a lower bound from the state's calendar-day counters (the history log does not
+ * yet cover the whole window, see `autopilot-state.sh stats`); no mark = exact. The cell always shows the
+ * 24h number: with no history it is an exact 0 (no cycle in the window) or the `~` estimate.
  */
 function apStatsVariants(ap: Autopilot): Variants | null {
   const st = ap.stats
   if (!st) return null
   const avg = st.avg_merged_24h.toFixed(1)
-  const mark: Seg = st.trend === 'up' ? { text: '▲', color: 'success' } : st.trend === 'down' ? { text: '▼', color: 'warning' } : { text: '=', dim: true }
-  if (!st.has_history) return [[{ text: `average ${avg}/day`, dim: true }], [{ text: `average ${avg}/d`, dim: true }], [{ text: `avg ${avg}/d`, dim: true }]]
-  const mk = (head: string, tail: string): Seg[] => [{ text: head }, mark, ...(tail ? [{ text: tail, dim: true }] : [])]
+  const n = `${st.approx ? '~' : ''}${st.merged_24h}`
+  const glyph = st.trend === 'up' ? '▲' : st.trend === 'down' ? '▼' : ''
+  const mk = (head: string, gap: string, rest: string, tail: string): Seg[] => [
+    { text: head },
+    ...(glyph ? [{ text: `${gap}${glyph}`, color: st.trend === 'up' ? ('success' as const) : ('error' as const) }] : []),
+    ...(rest ? [{ text: rest }] : []),
+    ...(tail ? [{ text: tail, dim: true }] : []),
+  ]
+  const c = st.cycles_24h
   return [
-    mk(`last 24h: ${st.merged_24h} merged / ${st.cycles_24h} loops `, ` average ${avg}/day`),
-    mk(`24h: ${st.merged_24h} merged/${st.cycles_24h} loops `, ` average ${avg}/day`),
-    mk(`24h: ✓${st.merged_24h}/${st.cycles_24h}L `, ` average ${avg}/d`),
-    mk(`24h ✓${st.merged_24h}/${st.cycles_24h}L `, ` avg ${avg}/d`),
-    mk(`24h ✓${st.merged_24h} `, ''),
+    mk(`last 24h: ${n} merged`, ' ', ` / ${c} loops`, ` · average ${avg}/day`),
+    mk(`24h: ${n} merged`, ' ', `/${c} loops`, ` · average ${avg}/day`),
+    mk(`24h: ✓${n}`, '', `/${c}L`, ` average ${avg}/d`),
+    mk(`24h ✓${n}`, '', `/${c}L`, ` avg ${avg}/d`),
+    mk(`24h ✓${n}`, '', '', ''),
   ]
 }
 
@@ -590,7 +602,8 @@ const DETAIL_STEPS = {
   where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
   usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
   jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
-  ap: ['step:queue', 'step:apstats', 'step:apstats', 'drop:apstats', 'step:wake', 'step:wake', 'step:queue', 'step:ap', 'step:ap', 'step:ap', 'drop:wake'],
+  // The 24h cell (the throughput-vs-average comparison) shrinks after the next-loop and queue cells and is dropped last.
+  ap: ['step:queue', 'step:wake', 'step:wake', 'step:queue', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'step:ap', 'step:apstats', 'step:apstats', 'drop:wake', 'drop:apstats'],
   // The version label is never dropped here (the link goes first, then the stamp shrinks, then the label narrows to ✓/↑).
   you: ['drop:url', 'step:lastat', 'step:lastat', 'step:ver', 'step:ver', 'step:ver0'],
 } as const

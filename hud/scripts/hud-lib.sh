@@ -323,7 +323,7 @@ sl-autopilot-fields() {
 }
 
 # $1 repo_root -> compact JSON of the autopilot's rolling-24h and lifetime progress
-# {has_history, merged_24h, cycles_24h, avg_merged_24h, trend (up|down|flat)}, or
+# {has_history, approx, merged_24h, cycles_24h, avg_merged_24h, trend (up|down|flat)}, or
 # nothing when there is nothing to show (no counters and no history) or anything
 # fails. The math lives in `autopilot-state.sh stats` (one jq pass, no network,
 # read-only); this only points it at the repo's files. Never fails the prompt.
@@ -333,7 +333,7 @@ sl-autopilot-stats() {
   out=$(AUTOPILOT_STATE_FILE="$repo_root/dev/.autopilot-state.json" AUTOPILOT_HISTORY_FILE="$repo_root/dev/.autopilot-history.jsonl" \
     bash "$script" stats --json 2>/dev/null) || return 0
   printf '%s' "$out" | jq -c 'select(type == "object" and (.has_history or ((.lifetime_cycles // 0) > 0)))
-    | {has_history, merged_24h, cycles_24h, avg_merged_24h, trend}' 2>/dev/null || true
+    | {has_history, approx, merged_24h, cycles_24h, avg_merged_24h, trend}' 2>/dev/null || true
 }
 
 # Job ledger (written by ledger.sh). Same default path convention as the other

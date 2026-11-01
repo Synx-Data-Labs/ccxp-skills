@@ -716,6 +716,42 @@ _stat() { _ap stats --json | jq -r "$1"; }
   [[ "${lines[1]}" == "lifetime: 20 merged/10 cycles over 10 days · average 2 merged/1 cycles per 24h" ]]
 }
 
+@test "stats: no history log and no cycle in the window is an exact zero (approx false)" {
+  # last cycle two days ago, calendar-day counters of that day: nothing can be inside the window
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"last_cycle_at":"2026-10-26T10:00:00Z","cycles_today":19,"merges_today":5}' > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .has_history)" = false ]
+  [ "$(_stat .approx)" = false ]
+  [ "$(_stat .merged_24h)" = 0 ]
+  [ "$(_stat .cycles_24h)" = 0 ]
+  [ "$(_stat .trend)" = down ]   # 0 against a non-zero average
+}
+
+@test "stats: no history log but a cycle inside the window uses the calendar-day counters as a lower bound (approx true)" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"last_cycle_at":"2026-10-28T08:00:00Z","cycles_today":4,"merges_today":3}' > "$AUTOPILOT_STATE_FILE"
+  [ "$(_stat .has_history)" = false ]
+  [ "$(_stat .approx)" = true ]
+  [ "$(_stat .merged_24h)" = 3 ]
+  [ "$(_stat .cycles_24h)" = 4 ]
+}
+
+@test "stats: a log that starts inside the window is incomplete, so the larger of log and counters wins (approx true)" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"last_cycle_at":"2026-10-28T09:00:00Z","cycles_today":4,"merges_today":3}' > "$AUTOPILOT_STATE_FILE"
+  _hline 2026-10-28T09:00:00Z progress 1
+  [ "$(_stat .approx)" = true ]
+  [ "$(_stat .merged_24h)" = 3 ]
+  # logged work larger than the counters is kept
+  : > "$(_hist)"; _hline 2026-10-28T08:00:00Z progress 2; _hline 2026-10-28T09:00:00Z progress 2
+  [ "$(_stat .merged_24h)" = 4 ]
+}
+
+@test "stats: a log reaching back over the whole window is exact (approx false) whatever the counters say" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-20T10:00:00Z","cycle_count":35,"merged_count":17,"last_cycle_at":"2026-10-28T09:00:00Z","cycles_today":9,"merges_today":9}' > "$AUTOPILOT_STATE_FILE"
+  _hline 2026-10-20T10:00:00Z progress 1
+  _hline 2026-10-28T09:00:00Z progress 2
+  [ "$(_stat .approx)" = false ]
+  [ "$(_stat .merged_24h)" = 2 ]
+}
+
 @test "stats: bad argument is a usage error" {
   run _ap stats --bogus
   [ "$status" -eq 2 ]

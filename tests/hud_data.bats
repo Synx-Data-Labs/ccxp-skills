@@ -554,10 +554,19 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   run _hud "$repo" --json
   [ "$(jq -r '.autopilot.stats.has_history' <<<"$output")" = false ]
   [ "$(jq -r '.autopilot.stats.avg_merged_24h' <<<"$output")" = 4 ]
+  # no log and no recorded cycle inside the window: the 24h number is an exact zero, never absent
+  [ "$(jq -r '.autopilot.stats | [.approx, .merged_24h, .cycles_24h] | join(",")' <<<"$output")" = "false,0,0" ]
   local repo2; repo2=$(_make_repo r-stats-none)
   _state "$repo2" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 5)\",\"stuck_count\":0,\"cycle_count\":0}"
   run _hud "$repo2" --json
   [ "$(jq -r '.autopilot.stats' <<<"$output")" = null ]
+}
+
+@test "--json: autopilot.stats without a log but with a recent cycle carries the calendar-day counters as approx" {
+  local repo; repo=$(_make_repo r-stats-approx)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 90)\",\"stuck_count\":0,\"cycle_count\":10,\"merged_count\":4,\"last_cycle_at\":\"$(_iso_ago 30)\",\"cycles_today\":2,\"merges_today\":1}"
+  run _hud "$repo" --json
+  [ "$(jq -r '.autopilot.stats | [.has_history, .approx, .merged_24h, .cycles_24h] | join(",")' <<<"$output")" = "false,true,1,2" ]
 }
 
 @test "--json: a malformed history file or an AP-off repo never breaks the helper" {
