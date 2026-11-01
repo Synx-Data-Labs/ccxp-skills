@@ -430,12 +430,12 @@ _queue_fixture() {
   _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # blocked
   _task "$repo" 6 "Open — waiting on HashData review"    # external
   _task "$repo" 7 "Open — needs owner decision"          # decision
-  _task "$repo" 8 Open "" "Umbrella: the big thing"      # epic
+  _task "$repo" 8 Open "" "EPIC: the big thing"          # epic (uppercase marker)
   _task "$repo" 9 Open "claimed_by: other-box:/x"        # claimed
   _task "$repo" 10 Open "claimed_by: $(_clone_id "$repo")"  # ours: ready
   _task "$repo" 11 Open                                  # skip kind external
   _task "$repo" 12 Open                                  # skip, no kind: decision
-  _task "$repo" 14 "BLOCKED on infra" "" "Epic: tracking"  # epic beats blocked
+  _task "$repo" 14 "BLOCKED on infra" "" "Tracking — EPIC"  # epic beats blocked
   _task "$repo" 15 Open "children: [T20260101-000001]"   # epic by structure
   local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do _qline "$i" "$repo"; done   # 13 has no file
   printf -- '- ~~[T20260101-000020](T20260101-000020-t.md)~~: closed\n' >> "$repo/dev/TODO/queue.md"
@@ -468,6 +468,27 @@ _queue_fixture() {
   printf 'not json' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -r .total <<<"$output")" = 15 ]
+}
+
+@test "sl-queue-json: epic needs a deliberate signal; umbrella/epic prose is not one" {
+  local repo; repo=$(_make_repo q-epic)
+  printf '# Q\n' > "$repo/dev/TODO/queue.md"
+  _task "$repo" 1 "Open — mentions the umbrella repo"                     # false positive: ready
+  _task "$repo" 2 Open "" "Dry-run the enterprise-umbrella tag"           # false positive: ready
+  _task "$repo" 3 "Open — an epic cleanup of strings" "" "Epic strings tracking task"  # ready
+  _task "$repo" 4 "Blocked by T20260101-000001 — umbrella"                # blocked per other rules
+  _task "$repo" 5 Open "children: [T20260101-000001]"                     # children: epic
+  _task "$repo" 6 Open "" "Design — EPIC (Design)"                        # uppercase marker in title
+  _task "$repo" 7 "Design — EPIC (Design)"                                # uppercase marker in status
+  _task "$repo" 8 Open "" "Parent design"                                 # parent of a dev/EPICS epic
+  _task "$repo" 9 Open                                                    # kind=epic via autopilot
+  _task "$repo" 10 Open                                                   # member of the epic: ready
+  mkdir -p "$repo/dev/EPICS"
+  printf '### E1 — Thing\n\nParent design task: [T20260101-000008](../TODO/T20260101-000008-t.md)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
+  local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
+  printf '{"schema":2,"status":"on","skip_ids":[],"needs_attention":[{"id":"T20260101-000009","reason":"r","kind":"epic"}]}' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$output" = '{"total":10,"ready":4,"blocked":1,"decision":0,"external":0,"epic":5,"claimed":0}' ] || { echo "$output"; false; }
 }
 
 @test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {

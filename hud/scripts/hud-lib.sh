@@ -364,9 +364,12 @@ sl-ledger-json() {
 #   {"total","ready","blocked","decision","external","epic","claimed"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
 # lands in EXACTLY ONE bucket, first match wins, so the buckets always sum to total:
-#   epic      kind=epic in autopilot's needs_attention, or the title/status says umbrella,
-#             epic or "tracking task|issue", or the frontmatter has a `children:` key.
-#             (Plain members of a dev/EPICS epic are ordinary work and stay takeable.)
+#   epic      kind=epic in autopilot's needs_attention, or the frontmatter has a `children:`
+#             key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
+#             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
+#             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
+#             standalone word EPIC. Free-text "umbrella"/"epic" is NOT a signal (product
+#             terms and prose misfire). Plain members of a dev/EPICS epic stay takeable.
 #   blocked   kind=blocked, or status `Blocked by T<id>` while that blocker is still in
 #             dev/TODO/, or the status contains BLOCKED or SUPERVISED (case-sensitive,
 #             so a resolved "Blocked by" is not blocked)
@@ -405,6 +408,8 @@ sl-queue-json() {
       n >= 2 && title == "" && /^# / { title = $0; gsub(/\t/, " ", title) }
       END { flush() }' "${files[@]}" 2>/dev/null) || info=""
   fi
+  local parents; parents=$(cat "$repo_root"/dev/EPICS/E*.md 2>/dev/null \
+    | grep -iE '^[*_ ]*parent( design task)?[*_ ]*:' | grep -oE 'T[0-9]+-[0-9]+' || true)
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"skip":[],"att":{},"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
@@ -418,14 +423,15 @@ sl-queue-json() {
   me1=$(sl-clone-id "$repo_root")
   ap_clone=$(printf '%s' "$state" | jq -r '.clone' 2>/dev/null) || ap_clone=""
   [ -z "$ap_clone" ] || [ ! -d "$ap_clone" ] || me2=$(sl-clone-id "$ap_clone")
-  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" '
+  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --arg parents "$parents" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" '
     ($info | split("\n") | map(select(. != "") | split("\t") | {key: .[0], value: {status: (.[1] // ""), claimed: (.[2] // ""), title: (.[3] // ""), kids: ((.[4] // "0") == "1")}}) | from_entries) as $meta
     | ($open | split("\n") | map(select(. != ""))) as $openIds
+    | ($parents | split("\n") | map(select(. != ""))) as $epicParents
     | ($rows | split("\n") | map(select(. != ""))) as $ids
     | [$ids[] | . as $id | ($meta[$id] // {status: "", claimed: "", title: "", kids: false}) as $m
         | ($st.att[$id] // "") as $kind
         | ($m.status) as $s
-        | (if $kind == "epic" or $m.kids or ($m.title + " " + $s | test("umbrella|\\bepic\\b|tracking (task|issue)"; "i")) then "epic"
+        | (if $kind == "epic" or $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
            elif $kind == "blocked" or ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
            elif $kind == "external" or ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
            elif $kind == "decision" or ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
