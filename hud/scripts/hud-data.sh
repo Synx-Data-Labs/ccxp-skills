@@ -18,7 +18,7 @@
 #                         "stuck_reason","stop_reason","merged",
 #                         "next_wake_at",   # epoch secs of the next loop, 0 = none/unknown
 #                         "busy","current_task",   # busy: a cycle is running; current_task: its task id ("" = unknown)
-#                         "stats"},   # null | {"has_history","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
+#                         "stats"},   # null | {"has_history","approx","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
 #    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},

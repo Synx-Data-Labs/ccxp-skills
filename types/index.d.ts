@@ -36,7 +36,7 @@ export type HudConfig = {
 export type ApStats = {
   /** The history log has at least one entry. */
   has_history: boolean
-  /** merged_24h/cycles_24h are a lower bound from the state's calendar-day counters (the log does not cover the whole window); false = exact. */
+  /** merged_24h/cycles_24h are an estimate from the state's calendar-day counters (the log does not cover the whole window; can be too high or too low); false = exact. No trend arrow is drawn for an estimate. */
   approx: boolean
   merged_24h: number
   cycles_24h: number

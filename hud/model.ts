@@ -347,18 +347,19 @@ function apVariants(ap: Autopilot): Variants {
  * `24h: ✓8▲/26L average 5.2/d`, then (narrowest only) `24h ✓8▲/26L avg 5.2/d`, `24h ✓8▲`.
  * The arrow sits right after the 24h merged count and compares it with the lifetime average per 24 h:
  * green `▲` above, red `▼` below, NO arrow when equal (both compared at the displayed one decimal, which
- * the helper's `trend` already is) and none either when the helper reports no trend. The colour is a theme
+ * the helper's `trend` already is), none for an estimate (`~`) and none when the helper reports no trend. The colour is a theme
  * token (`success` / `error`), so under NO_COLOR the glyph stays and only the colour drops.
- * `~8` = the 24h count is a lower bound from the state's calendar-day counters (the history log does not
- * yet cover the whole window, see `autopilot-state.sh stats`); no mark = exact. The cell always shows the
- * 24h number: with no history it is an exact 0 (no cycle in the window) or the `~` estimate.
+ * `~8` = the 24h count is an ESTIMATE from the state's calendar-day counters (the history log does not yet
+ * cover the whole window, see `autopilot-state.sh stats`): it can be too high or too low, so an estimate gets
+ * no arrow. No mark = exact. The cell always shows the 24h number: with no history it is an exact 0 (no cycle
+ * in the window) or the `~` estimate.
  */
 function apStatsVariants(ap: Autopilot): Variants | null {
   const st = ap.stats
   if (!st) return null
   const avg = st.avg_merged_24h.toFixed(1)
   const n = `${st.approx ? '~' : ''}${st.merged_24h}`
-  const glyph = st.trend === 'up' ? '▲' : st.trend === 'down' ? '▼' : ''
+  const glyph = st.approx ? '' : st.trend === 'up' ? '▲' : st.trend === 'down' ? '▼' : ''
   const mk = (head: string, gap: string, rest: string, tail: string): Seg[] => [
     { text: head },
     ...(glyph ? [{ text: `${gap}${glyph}`, color: st.trend === 'up' ? ('success' as const) : ('error' as const) }] : []),
