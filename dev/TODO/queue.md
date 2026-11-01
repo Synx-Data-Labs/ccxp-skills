@@ -51,3 +51,4 @@ reprioritize.
 - [T20261030-716636](T20261030-716636-hud-queue-cell-counts-stale-checkout-as-ready.md): HUD queue cell counts a stale local checkout as ready
 - [T20261031-134435](T20261031-134435-hud-details-ap-line-order.md): Reorder the HUD details AP line (AP, next loop, average || queue)
 - [T20261031-139856](T20261031-139856-repo-skill-scan-list-switch-multi-repo-awareness.md): /repo skill: scan, list and switch (multi-repo awareness, phases 3-4)
+- [T20261101-830008](T20261101-830008-hud-24h-throughput-and-trend-arrow.md): HUD shows last-24h throughput with a trend arrow against the average
