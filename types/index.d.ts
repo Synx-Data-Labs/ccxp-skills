@@ -34,13 +34,15 @@ export type HudConfig = {
 
 /** Rolling-24h and lifetime autopilot progress (`autopilot-state.sh stats`); absent when there is nothing to show. */
 export type ApStats = {
-  /** The history log has at least one entry; false = only the lifetime average is known. */
+  /** The history log has at least one entry. */
   has_history: boolean
+  /** merged_24h/cycles_24h are a lower bound from the state's calendar-day counters (the log does not cover the whole window); false = exact. */
+  approx: boolean
   merged_24h: number
   cycles_24h: number
   /** Lifetime merged tasks per 24 h. */
   avg_merged_24h: number
-  /** merged_24h against the average (1 decimal). */
+  /** merged_24h against the average at one decimal: up = better (green arrow), down = slower (red arrow), flat = same (no arrow). */
   trend: 'up' | 'down' | 'flat'
 }
 

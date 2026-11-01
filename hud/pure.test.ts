@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -1079,26 +1079,67 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
 })
 
 // --- autopilot 24h progress and lifetime average -------------------------------------------------
-const STATS = { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' }
+const STATS = { has_history: true, approx: false, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' }
 const apStats = (over = {}) => withHelper({ autopilot: { ...AP, stats: { ...STATS, ...over } } })
 
 test('AP stats: parseHelper keeps a valid stats object; absent or malformed is null', async () => {
   expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: STATS } }))?.autopilot?.stats).toEqual(STATS)
   expect(parseHelper(HELPER_AP)?.autopilot?.stats).toBeNull()
   expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: [1] } }))?.autopilot?.stats).toBeNull()
-  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: { trend: 'sideways', merged_24h: 'x' } } }))?.autopilot?.stats).toEqual({ has_history: false, merged_24h: 0, cycles_24h: 0, avg_merged_24h: 0, trend: 'flat' })
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, stats: { trend: 'sideways', merged_24h: 'x' } } }))?.autopilot?.stats).toEqual({ has_history: false, approx: false, merged_24h: 0, cycles_24h: 0, avg_merged_24h: 0, trend: 'flat' })
 })
 
-test('AP stats: the wide band shows a labeled last-24h merged/loops, the marker and the spelled-out average', async () => {
+test('AP stats: the wide band shows a labeled last-24h merged/loops, the arrow right after the 24h count, and the spelled-out average', async () => {
   const wide = text(bandRows(apStats(), NOCI, 200))
-  expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged / 26 loops ▲ average 5.2/day │ ctx')
-  expect(text(bandRows(apStats({ trend: 'down', merged_24h: 3 }), NOCI, 200))).toContain('last 24h: 3 merged / 26 loops ▼ average 5.2/day')
-  expect(text(bandRows(apStats({ trend: 'flat', merged_24h: 5 }), NOCI, 200))).toContain('last 24h: 5 merged / 26 loops = average 5.2/day')
+  expect(wide).toContain('AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day │ ctx')
 })
 
-test('AP stats: no history shows only the average, spelled out; no stats shows nothing extra', async () => {
-  expect(text(bandRows(apStats({ has_history: false, merged_24h: 0, cycles_24h: 0, trend: 'down' }), NOCI, 200))).toContain('│ average 5.2/day │')
-  expect(text(bandRows(withHelper({ autopilot: AP }), NOCI, 200))).not.toMatch(/24h|avg|average/)
+// The arrow: green up when the last 24 h beat the average, red down when slower, none when equal or when there is nothing to compare.
+const arrowSeg = (rows: Seg[][]) => rows.flat().find(x => x.text.includes('▲') || x.text.includes('▼'))
+
+test('AP stats: 24h above the average shows a green up arrow next to the 24h count', async () => {
+  const rows = bandRows(apStats({ merged_24h: 8, avg_merged_24h: 5.2, trend: 'up' }), NOCI, 200)
+  expect(arrowSeg(rows)).toMatchObject({ text: ' ▲', color: 'success' })
+  expect(text(rows)).toContain('last 24h: 8 merged ▲ / 26 loops')
+})
+
+test('AP stats: 24h below the average shows a red down arrow (the error token, not yellow)', async () => {
+  const rows = bandRows(apStats({ merged_24h: 3, avg_merged_24h: 5.2, trend: 'down' }), NOCI, 200)
+  expect(arrowSeg(rows)).toMatchObject({ text: ' ▼', color: 'error' })
+  expect(text(rows)).toContain('last 24h: 3 merged ▼ / 26 loops · average 5.2/day')
+})
+
+test('AP stats: 24h equal to the average (flat) shows no arrow and no `=`', async () => {
+  const rows = bandRows(apStats({ merged_24h: 5, avg_merged_24h: 5.0, trend: 'flat' }), NOCI, 200)
+  expect(arrowSeg(rows)).toBeUndefined()
+  expect(text(rows)).toContain('last 24h: 5 merged / 26 loops · average 5.0/day')
+  expect(text(rows)).not.toMatch(/[▲▼=]/)
+})
+
+test('AP stats: no stats object (no average / no history anywhere) shows no cell and no arrow', async () => {
+  const rows = bandRows(withHelper({ autopilot: AP }), NOCI, 200)
+  expect(arrowSeg(rows)).toBeUndefined()
+  expect(text(rows)).not.toMatch(/24h|avg|average/)
+})
+
+test('AP stats: the arrow is a theme token plus a glyph, so NO_COLOR drops only the colour and the glyph stays in every width form', async () => {
+  for (const cols of [200, 100, 90, 80, 60, 48]) {
+    const rows = bandRows(apStats({ trend: 'up' }), NOCI, cols)
+    const seg = arrowSeg(rows)!
+    expect(['success', 'error']).toContain(seg.color)
+    // What a colour-less terminal draws: the text without any colour, the glyph intact.
+    expect(rows.flat().map(x => x.text).join('')).toContain('▲')
+  }
+  expect(arrowSeg(bandRows(apStats({ trend: 'down' }), NOCI, 48))).toMatchObject({ color: 'error' })
+})
+
+test('AP stats: with no history the 24h count still shows; `~` marks a lower bound from the calendar-day counters, none marks an exact zero', async () => {
+  const noHist = { has_history: false, cycles_24h: 0, merged_24h: 0, trend: 'down' }
+  const exact = text(bandRows(apStats(noHist), NOCI, 200))
+  expect(exact).toContain('last 24h: 0 merged ▼ / 0 loops · average 5.2/day')
+  const approx = bandRows(apStats({ ...noHist, approx: true, merged_24h: 3, cycles_24h: 4 }), NOCI, 200)
+  expect(text(approx)).toContain('last 24h: ~3 merged ▼ / 4 loops · average 5.2/day')
+  expect(text(bandRows(apStats({ ...noHist, approx: true, merged_24h: 9, trend: 'up' }), NOCI, 60))).toContain('24h ✓~9▲/0L avg 5.2/d')
 })
 
 test('AP stats: the 24h merged count and the average survive 100-140 columns; the ctx bar shrinks first', async () => {
@@ -1107,27 +1148,39 @@ test('AP stats: the 24h merged count and the average survive 100-140 columns; th
     expect(at(cols)).toMatch(/24h: 8 merged/)
     expect(at(cols)).toContain('average 5.2/day')
   }
-  expect(at(120)).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
+  expect(at(120)).toContain('last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
   expect(at(110)).not.toContain('▓')
-  expect(at(100)).toContain('│ last 24h: 8 merged / 26 loops ▲ average 5.2/day │')
-  expect(at(90)).toContain('│ 24h: 8 merged/26 loops ▲ average 5.2/day │')
+  expect(at(100)).toContain('│ last 24h: 8 merged ▲ / 26 loops · average 5.2/day │')
+  expect(at(90)).toContain('│ 24h: 8 merged ▲/26 loops · average 5.2/day │')
 })
 
 test('AP stats: narrow rows shrink the stats late and keep `avg` only in the narrowest forms; the row always fits', async () => {
   const at = (cols: number) => text(bandRows(apStats(), NOCI, cols))
-  expect(at(80)).toContain('24h: ✓8/26L ▲ average 5.2/d')
-  expect(at(60)).toContain('24h ✓8/26L ▲ avg 5.2/d')
+  expect(at(80)).toContain('24h: ✓8▲/26L average 5.2/d')
+  expect(at(60)).toContain('24h ✓8▲/26L avg 5.2/d')
   expect(at(60)).not.toContain('average')
   for (const cols of [30, 50, 70, 90, 110, 140, 200]) expect(at(cols).length).toBeLessThanOrEqual(cols)
   expect(at(48)).toContain('AP')
-  expect(at(48)).toContain('24h ✓8 ▲')
-  expect(text(bandRows(apStats(), { ...NOCI, fields: ['ap'] }, 69))).toContain('24h ✓8/26L ▲ avg 5.2/d')
+  expect(at(48)).toContain('24h ✓8▲')
+  expect(text(bandRows(apStats(), { ...NOCI, fields: ['ap'] }, 69))).toContain('24h ✓8▲/26L avg 5.2/d')
 })
 
 test('AP stats: `ap` switched off hides the stats too; details show them on the AP line', async () => {
   expect(text(bandRows(apStats(), { ...NOCI, fields: ['ci'] }, 200))).not.toContain('24h')
   const line = detailRows(apStats() as any, DEFAULTS, 200).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))
-  expect(line).toContain('last 24h: 8 merged / 26 loops ▲ average 5.2/day')
+  expect(line).toContain('last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
+})
+
+test('AP stats: the details AP line keeps the 24h number, arrow and average after the queue and next-loop cells shrink; the cell is dropped last', async () => {
+  const full = { ...AP, next_wake_at: NOW + 720, stats: STATS }
+  const q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+  const line = (cols: number) => detailRows(withHelper({ autopilot: full, queue: q }) as any, DEFAULTS, cols, NOW * 1000).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))!
+  for (const cols of [200, 140, 120, 110, 100, 90, 80]) {
+    expect(line(cols)).toMatch(/24h/)
+    expect(line(cols)).toContain('▲')
+    expect(line(cols).length).toBeLessThanOrEqual(cols - 2)
+  }
+  expect(line(120)).toContain('average 5.2/')
 })
 
 // --- CI top row: detail view, highlight, NO_COLOR ---
@@ -1155,9 +1208,9 @@ const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
 
 test('details: AP line reads AP, next loop, 24h average, `||`, then queue (full line)', async () => {
   const line = apLineOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q })!
-  expect(line).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged \/ 26 loops ▲ average 5\.2\/day \|\| queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic$/)
+  expect(line).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day \|\| queue 44 = 30 ready \| 6 blocked \| 3 decision \| 2 external \| 3 epic$/)
   const due = apLineOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q })!
-  expect(due).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged / 26 loops ▲ average 5.2/day || queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
+  expect(due).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day || queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic')
   // the separator is a dim segment with single spaces around it
   const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }) as any, DEFAULTS, 240, DETAIL_NOW)
   const seg = rows.flat().find(x => x.text.includes('||'))!
