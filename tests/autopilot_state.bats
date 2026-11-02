@@ -825,6 +825,22 @@ _nh_task() {
   [ "${lines[1]}" = $'T20260101-000003\tdecision\tA or B' ]
 }
 
+@test "attention-list reads the dispatch clone named in the state, not the user's own tree" {
+  local clone="$BATS_TEST_TMPDIR/clone" own="$BATS_TEST_TMPDIR/own"
+  mkdir -p "$clone/dev/TODO" "$own/dev/TODO"
+  printf -- '---\nstatus: Open — needs a human [blocked]: marked on main\n---\n' > "$clone/dev/TODO/T20260101-000007-x.md"
+  printf -- '---\nstatus: Open\n---\n' > "$own/dev/TODO/T20260101-000007-x.md"
+  _ap start >/dev/null
+  _ap_update_clone() { jq --arg c "$1" '.dispatch_clone_path = $c' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
+  cd "$own" && git init -q .
+  _ap_update_clone "$clone"
+  run _ap attention-list
+  [ "$output" = $'T20260101-000007\tblocked\tmarked on main' ]
+  _ap_update_clone "$BATS_TEST_TMPDIR/gone"      # a vanished clone falls back to the repo
+  run _ap attention-list
+  [ -z "$output" ]
+}
+
 @test "report: lists marked tasks from the files; removing the marker removes the line" {
   _nh_repo
   _nh_task T20260101-000001 "Open — needs a human [decision]: pick one"

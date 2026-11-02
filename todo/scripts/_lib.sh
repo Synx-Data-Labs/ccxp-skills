@@ -54,11 +54,12 @@ function todo-needs-human-kind() {
   return 1
 }
 
-# Exit 0 when a status value is not auto-pickable: the marker above, or any legacy
-# human-only word autopilot's `eligible` always refused (case-insensitive substring,
-# so "Blocked by T<id>" and "UNBLOCKED" both match).
+# Exit 0 when a status value is not auto-pickable: the marker above, or a legacy
+# human-only word (case-insensitive): SUPERVISED and BLOCKED as whole words, so
+# "Blocked by T<id>" is gated but "UNBLOCKED now" (a real status convention) is not;
+# plus "needs a human", "needs manual" and "sign-off".
 function todo-gated() {
-  printf '%s' "${1:-}" | grep -qiE 'SUPERVISED|BLOCKED|needs a human|needs manual|sign-off'
+  printf '%s' "${1:-}" | grep -qiE '(^|[^[:alpha:]])(supervised|blocked)([^[:alpha:]]|$)|needs a human|needs manual|sign-off'
 }
 
 # Claim-state verdict for one task id: mine|peer:<claimant>|reclaimable:<claimant>|unclaimed

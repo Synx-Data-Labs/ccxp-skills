@@ -40,7 +40,7 @@ _status() { awk 'NR==1&&$0=="---"{n=1;next} n==1&&/^status:/{sub(/^status: ?/,""
            "Review — BLOCKED on infra" "Open — needs manual QA" "Review — awaiting sign-off"; do
     todo-gated "$s"
   done
-  for s in "Open" "Design" "In Progress" "Review"; do
+  for s in "Open" "Design" "In Progress" "Review" "In Progress — UNBLOCKED now"; do
     run todo-gated "$s"; [ "$status" -ne 0 ]
   done
 }
@@ -88,6 +88,23 @@ _status() { awk 'NR==1&&$0=="---"{n=1;next} n==1&&/^status:/{sub(/^status: ?/,""
   [ "$(_status)" = "$(todo-fm-get "$F" status)" ]
 }
 
+@test "mark keeps backslashes in the reason intact (awk -v would otherwise expand them)" {
+  _task "Open"
+  bash "$NH" mark "$F" decision 'path C:\new\dir and a \n literal' >/dev/null
+  [ "$(_status)" = 'Open — needs a human [decision]: path C:\new\dir and a \n literal' ]
+  [ "$(grep -c '^' "$F")" -eq 8 ]
+}
+
+@test "clear and mark handle a marker written in another letter case" {
+  _task "Design — NEEDS A HUMAN [Decision]: x"
+  run bash "$NH" kind "$F"; [ "$output" = decision ]
+  run bash "$NH" clear "$F"; [ "$status" -eq 0 ]
+  [ "$(_status)" = "Design" ]
+  _task "Design — NEEDS A HUMAN [Decision]: x"
+  bash "$NH" mark "$F" blocked "y" >/dev/null
+  [ "$(_status)" = "Design — needs a human [blocked]: y" ]
+}
+
 @test "mark replaces a folded multi-line status instead of leaving orphan lines" {
   printf -- '---\nstatus: Open — old note that\n  folds onto a second line\nestimation: 1\n---\n# T\n' > "$F"
   bash "$NH" mark "$F" blocked "reason" >/dev/null
@@ -103,14 +120,14 @@ _status() { awk 'NR==1&&$0=="---"{n=1;next} n==1&&/^status:/{sub(/^status: ?/,""
   run bash "$NH" clear "$F"; [ "$status" -eq 1 ]; [ "$output" = noop ]
 }
 
-@test "the marked status passes the repo's task-frontmatter lint" {
-  _task "Open — needs a human [decision]: pick one: A or B"
-  run python3 "$REPO_ROOT/repo-conventions/scripts/lint_tasks.py" --help
-  [ "$status" -eq 0 ] || skip "lint_tasks.py has no --help"
+@test "the marked status (an unquoted ': ' inside) still parses in the repo's task lint, list keys included" {
   run python3 -c "
 import sys; sys.path.insert(0, '$REPO_ROOT/repo-conventions/scripts')
 import lint_tasks as L
-assert L.status_head('Open — needs a human [decision]: pick one: A or B') == 'open'
+blk = 'status: Open — needs a human [decision]: pick one: A or B\nestimation: 1\nrelated: [T1, T2]\n'
+k = L.parse_keys(blk)
+assert L.status_head(k['status']) == 'open', k
+assert k['related'] == '[T1, T2]', k
 assert L.status_head('Design — needs a human [blocked]: x') == 'design'
 "
   [ "$status" -eq 0 ]

@@ -605,6 +605,27 @@ class GetFrontmatterTests(unittest.TestCase):
         finally:
             os.unlink(path)
 
+    def test_needs_a_human_marker_keeps_status_and_blocked_by(self):
+        # T20261102-261809: the marker suffix "... [decision]: reason" has an
+        # unquoted ": " (invalid YAML). The lenient fallback must still recover
+        # the status and the free-text blocked-by line, so a gated task keeps its
+        # board stage and blocker link.
+        content = (
+            "---\n"
+            "status: Design — needs a human [decision]: pick A or B\n"
+            "blocked-by: T20260101-000001\n"
+            "related: [T20260101-000002]\n"
+            "---\n# Task\n"
+        )
+        path = self._write_tmp(content)
+        try:
+            meta = sync.get_frontmatter(path)
+            self.assertEqual(meta.get("status"),
+                             "Design — needs a human [decision]: pick A or B")
+            self.assertEqual(meta.get("blocked-by"), "T20260101-000001")
+        finally:
+            os.unlink(path)
+
     def test_unparseable_frontmatter_logs_warning(self):
         # A YAML parse failure must no longer be swallowed silently — log a
         # warning so future drift is visible in the workflow run.

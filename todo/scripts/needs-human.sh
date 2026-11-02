@@ -40,15 +40,18 @@ function nh-resolve() {
 
 # The status value with any bracketed marker suffix removed.
 function nh-base-status() {
-  local s="$1"
-  printf '%s' "${s%%"$NH_SEP"[Nn]eeds a human \[*}"
+  local s="$1" lc prefix
+  lc="$(printf '%s' "$s" | tr 'A-Z' 'a-z')"
+  prefix="${lc%%"${NH_SEP}needs a human ["*}"
+  if [ "$prefix" = "$lc" ]; then printf '%s' "$s"; else printf '%s' "${s:0:${#prefix}}"; fi
 }
 
 function nh-set-status() {
   local file="$1" value="$2"
   # shellcheck source=../../_session/task_claim.sh
   source "$NH_DIR/../../_session/task_claim.sh"
-  _tc_fm_set "$file" status "$value"
+  # _tc_fm_set hands the value to awk -v, which expands backslash escapes: double them.
+  _tc_fm_set "$file" status "${value//\\/\\\\}"
 }
 
 function nh-kind() {

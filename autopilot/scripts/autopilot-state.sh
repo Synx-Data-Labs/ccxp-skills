@@ -31,7 +31,8 @@
 #                               findings (a /drive sweep would fix them), none = idle
 #   attention-list [repo-root]  one "<id><TAB><kind><TAB><reason>" per task whose status
 #                               carries the "needs a human" marker (derived from the task
-#                               files; there is no skip list in the state file)
+#                               files of the dispatch clone when the state names one, else
+#                               the repo; there is no skip list in the state file)
 #   marked <task-id> [repo-root] exit 0 (and print the kind) when that task's file is
 #                               marked, 1 when not: the dispatcher's check that a
 #                               NEEDS-ATTENTION driver really landed its marker
@@ -386,20 +387,30 @@ ap-eligible() {
 
 # --- needs-a-human tasks, derived from the task files -------------------------
 
+# Where marker PRs land first: the dispatch clone (pulled every cycle) when the state names a
+# live one, else the repo root. AUTOPILOT_REPO_ROOT overrides both (tests, the final report).
+ap-attention-root() {
+  local f c
+  if [ -n "${AUTOPILOT_REPO_ROOT:-}" ]; then printf '%s' "$AUTOPILOT_REPO_ROOT"; return 0; fi
+  f=$(ap-state-file)
+  c=$(jq -r '.dispatch_clone_path // empty' "$f" 2>/dev/null || true)
+  if [ -n "$c" ] && [ -d "$c/dev/TODO" ]; then printf '%s' "$c"; else _ap_root; fi
+}
+
 ap-attention-list() {
-  bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" list "${1:-$(ap-repo-root)}"
+  bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" list "${1:-$(ap-attention-root)}"
 }
 
 # marked <task-id> [repo-root]: prints the kind, exit 0 when marked; 1 when not (or no file).
 ap-marked() {
   local id="${1:-}"
   [ -n "$id" ] || { echo "marked <task-id> [repo-root]" >&2; return 2; }
-  NEEDS_HUMAN_ROOT="${2:-$(ap-repo-root)}" bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" kind "$id" 2>/dev/null
+  NEEDS_HUMAN_ROOT="${2:-$(ap-attention-root)}" bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" kind "$id" 2>/dev/null
 }
 
 # pickable [repo-root]: pick | drift | none (see the usage header).
 ap-pickable() {
-  local root="${1:-$(ap-repo-root)}" scripts plan
+  local root="${1:-$(ap-attention-root)}" scripts plan
   scripts="$(_ap_dir)/../../todo/scripts"
   if (cd "$root" && bash "$scripts/todo-next.sh" --skip-needs-human --check) 2>/dev/null; then echo pick; return 0; fi
   plan=$(bash "$scripts/todo-sweep.sh" plan --root "$root" 2>/dev/null || true)
