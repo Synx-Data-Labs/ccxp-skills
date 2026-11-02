@@ -114,11 +114,13 @@ scheduled: 2026-11-02
   - `autopilot-state.sh`: `skip`/`unskip` and the state's `skip_ids`/`needs_attention` removed (one-time `migrated` notice), `pickable`, `attention-list`, `marked`, `eligible` on the shared parser, report/final-report derived from the dispatch clone's task files.
   - HUD queue buckets by marker kind and ignores state-file lists; `sync.py` lenient fallback also recovers `blocked-by`.
   - `autopilot`, `drive`, `todo` SKILL.md and `hud/README.md` updated.
-- Deviations from the design, both from independent review:
-  - `todo-gated` matches `supervised`/`blocked` as whole words, so `UNBLOCKED` (a real status convention) is not gated; the design had kept the old substring wart.
+- Deviations from the design (all from independent review of #547):
+  - `todo-gated` matches `supervised`/`blocked` as whole words, so `UNBLOCKED` (a real status convention) is no longer gated. This amends the design's "no previously refused task becomes pickable" and its "kept unchanged" note: the only newly pickable statuses are the `UNBLOCKED` ones, deliberately.
   - `mark` writes backslashes safely and `clear` is case-insensitive.
+  - `sync.py`'s lenient fallback now also recovers `blocked-by`/`blocked_by` (the marker's unquoted `: ` triggers that fallback); not in the design's file table.
+  - The Docs test-plan item was met by the autopilot SKILL.md bats case plus the skill-quality ratchet and `lint-docs.sh` instead of dedicated drive/todo bats cases.
 - Not verified here: a live `/autopilot` cycle against a real repo (the dispatcher text is prose; its scripts are unit-tested). The pointer repo's own marking is already done (pointer PR #284).
-- Known, untouched: `todo-next.sh` on an empty `queue.md` errors under bash 3.2 (`lines[@]` unbound); `pickable` is unaffected.
+- Known, untouched: `todo-next.sh` on an empty `queue.md` errors under bash 3.2 (`lines[@]` unbound). The dispatcher's `--check` then exits non-zero, which `pickable` reads as "nothing pickable" and falls through to the sweep check, the correct outcome; the plain listing on an empty queue still errors. Not filed (pre-existing, no behavior impact).
 - Follow-up tasks filed: none.
 
 ## Skills invoked
