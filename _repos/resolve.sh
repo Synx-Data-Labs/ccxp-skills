@@ -83,7 +83,7 @@ function repo-resolve() {
   if [ -n "$q" ]; then
     # shellcheck disable=SC2088
     case "$q" in
-      /*|./*|../*|"~"|"~/"*|.|..) repo-resolve-path "$q" "$any"; return $? ;;
+      /*|./*|../*|"~"*|.|..) repo-resolve-path "$q" "$any"; return $? ;;
     esac
     local hits n rc=0
     hits="$(repo-match-name "$q")" || rc=$?
