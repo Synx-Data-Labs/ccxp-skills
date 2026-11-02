@@ -11,53 +11,82 @@ scheduled: 2026-11-02
 
 # T20261102-261809: autopilot: dispatcher only calls /drive; owner-gated tasks carry a "needs a human" marker in the task file (no skip list)
 
-## Problem
+## TLDR
 
 - **Type**: feature
-- **Owner's words (2026-11-02)**: autopilot should not scan every task each time; each cycle it should just call `/drive`. The state exists to explain why autopilot could not finish a task, not to skip tasks before choosing.
-- **Facts observed 2026-11-02 in the owner's pointer repo**:
-  - Autopilot keeps `skip_ids` / `needs_attention` in `dev/.autopilot-state.json`: per clone, gitignored, invisible to other sessions.
-  - `ap-cap` wipes `skip_ids` at each day rollover (`autopilot/scripts/autopilot-state.sh`, the `.day != $d` branch, about line 195). The next day the dispatcher would re-dispatch a `/drive` agent for each of about 51 owner-gated tasks: about 50k tokens each, hours of cycles, the same answer every time.
-  - The owner's loop sat dead for 2 days 16 hours while the HUD said `next loop due` (the HUD part is already fixed: T20261102-902081, shipped in #541; a dead loop now shows as stalled).
-  - The dispatcher in the main session walks `/todo next`'s ranking and filters the whole queue itself each cycle (`autopilot/SKILL.md`, Phase 3 "Resolve the pick").
+- **Problem**: autopilot gates owner-only tasks with a per-clone, daily-wiped `skip_ids` list, so every rollover re-dispatches a ~50k-token `/drive` agent per gated task (`autopilot/scripts/autopilot-state.sh:195`, `autopilot/SKILL.md` Phase 3).
+- **Solution**: the gate moves into the task file as a status suffix, em dash then `needs a human [<kind>]: <reason>`; `todo-next.sh --skip-needs-human` and `eligible` share one parser; the dispatcher only runs `/drive --auto-selected`; HUD and "needs attention" are derived from task files.
+- **Scope**: one implementation PR (about 10 files, mostly docs and bats); not split (estimation stays 1 because every slice is a few lines of shell).
 
-## Design (proposed; settle the open points in `/incept` or the design PR)
+## Problem
 
-- **Durable marker in the task file**: a task a driver cannot proceed on for owner-only reasons carries the marker on main, in its own file.
-  - The frontmatter `status:` keeps its leading token and gains the suffix `— needs a human [<kind>]: <short reason>` (after a space), with kind one of `blocked|decision|external`. The grammar is fixed so it can be scanned.
-  - `autopilot-state.sh eligible` already refuses the substring "needs a human".
-- **Driver writes it, not the dispatcher**: the `/drive` sub-agent that ends with `NEEDS-ATTENTION` lands the marker as a tiny docs-only status-change PR through the normal gates (like the claim PR, auto-merge tier).
-- **Owner un-gates by editing**: removing the suffix (or answering the decision) returns the task to the pool, with no manual `unskip`.
-- **Dispatcher simplification**: it stops using `skip_ids` as a gate and stops pre-walking the queue. Each cycle it runs `/drive --auto-selected` once.
-  - OPEN POINT: `todo-next.sh` today skips only Done/Revisit/Parked and peer-claimed tasks, so a bare `/drive` would pick the same gated task #1 forever. Recommend a `--skip-needs-human` behaviour used when `--auto-selected`.
-  - Check `todo-next.sh`, `/drive` Phase 1 and `autopilot-state.sh eligible` and keep a single shared definition of "needs a human".
-- **State file shrinks**: it keeps only run counters, last outcome and wake time. `needs_attention` and the HUD queue breakdown (blocked / decision / external counts) are derived by scanning task-file statuses (cheap, no agents).
-- **Cheap pre-check stays in the dispatcher**: if nothing is pickable it records `idle` without dispatching an agent.
+- **Evidence (verified 2026-11-02)**:
+  - `_ap_roll_day` wipes the list at each day change: `autopilot/scripts/autopilot-state.sh:195` (`.skip_ids = []`).
+  - `ap-off` wipes it too: `autopilot-state.sh:178`.
+  - The list lives in the gitignored `dev/.autopilot-state.json`, so no other session or clone sees it; `todo-next.sh:48-50` skips only `Done|Revisit|Parked`, so a bare `/drive` re-picks the same gated #1 forever.
+  - The dispatcher walks the queue itself each cycle (`autopilot/SKILL.md` Phase 3, "Resolve the pick").
+- **Impact**: after each rollover about 50 owner-gated tasks in the owner's pointer repo would each get a full sub-agent that ends `NEEDS-ATTENTION` again.
 
-## Migration
+## Context
 
-- The owner's pointer repo has 51 queued tasks that are currently owner-gated. A separate one-time job marks them with the new suffix in pointer; it is not part of this task's code.
+- `autopilot-state.sh eligible` (`:348-354`) already refuses the substring "needs a human"; `hud-lib.sh:437` already buckets it as `decision`; so the substring is the established signal, only its durability and its structure are missing.
+- The owner's pointer repo already carries the grammar on its ~47 gated tasks (pointer PR #284, merged), so the grammar below is fixed, not up for redesign.
+- `lint_tasks.py:68-116` takes only the leading token of `status:` (hand-rolled parser, not a YAML library), so the suffix passes the lint (verified in the test plan).
 
-## Slices and tests (bats)
+## Solution
 
-- Marker grammar and parser.
-- `eligible` and `todo-next` behaviour with the marker.
-- Driver-side marking step in the autopilot prompt and the `/drive` escalation path.
-- Dispatcher simplification (one `/drive --auto-selected` per cycle).
-- HUD counts derived from task files.
-- State-file schema and doc updates.
-- README / SKILL.md updates for autopilot, drive and todo.
+- **Marker grammar (fixed)**: `status: <leading status token(s)> — needs a human [<kind>]: <reason>`, kind one of `blocked|decision|external`.
+  - The leading token is kept (`Open`, `Design`, ...), so lint, `sync-tasks` and `task_claim.sh` keep working.
+  - Legacy free text containing "needs a human" with no brackets still counts as marked, kind `decision` (matches `hud-lib.sh:437`).
+- **One shared parser**: `todo/scripts/_lib.sh` gets `todo-needs-human-kind <status>` (prints the kind, exit 1 when unmarked). Everything else calls it.
+  - `todo/scripts/needs-human.sh` is the CLI around it: `kind <file>`, `mark <file> <kind> <reason>`, `clear <file>`, `list [repo-root]` (id, kind, reason per marked task in `dev/TODO`).
+  - `mark` replaces the `status:` line (and folded continuation lines, same rule as `_tc_fm_set`) with `<old leading text> — needs a human [<kind>]: <reason>`, replacing an older marker; `clear` strips the suffix.
+- **`todo-next.sh --skip-needs-human`** (settles the open point): marked tasks are skipped like Done/Parked; `--check` prints nothing and exits 0 when at least one task is pickable, 1 when none.
+  - Default output is unchanged, so `/todo next` for a human still shows gated tasks (their status line says why).
+  - `/drive` auto-pick (bare, or `--auto-selected`) passes `--skip-needs-human`; an explicit task id is never filtered (a human's deliberate request).
+- **Driver writes the marker**: `/drive`'s escalation path and the autopilot prompt tell the sub-agent that ends `NEEDS-ATTENTION` to run `needs-human.sh mark` and land it as a docs-only status PR (same tier as the claim PR). The owner un-gates with `needs-human.sh clear` or by hand.
+- **Dispatcher**: Phase 3 drops the sweep and queue walk: pull the clone, `todo-next.sh --skip-needs-human --check` (idle without a dispatch when none), then dispatch `/drive --auto-selected` (no id).
+- **State file**: stays `schema: 2`. `skip`/`unskip` and the `skip_ids`/`needs_attention` fields go away; `attention-list` (via `needs-human.sh list`) feeds `report`, `final-report` and the HUD from task files.
+  - Migration: `start`/`record` delete legacy `skip_ids`/`needs_attention` from an existing file and add one `migrated` notice naming the count; old files still load.
+- **HUD**: `sl-queue-json` buckets a marked task by its kind first, and no longer reads `skip_ids`/`needs_attention` (it still reads `dispatch_clone_path`).
+- **Alternatives rejected**:
+  - Keep `skip_ids` but stop wiping it: still per-clone and invisible to other sessions and the owner.
+  - Dispatcher writes the marker: it would need to parse sub-agent prose and edit task files; the driver has the reason and the claim already.
+  - A new frontmatter key (e.g. `needs_human:`): needs a `lint_tasks.py` allowlist change and breaks the pointer repo's already-merged grammar.
+  - Make `todo-next.sh` skip marked tasks by default: hides gated work from the owner's own `/todo next`.
 
-## Done when
+## Test plan
 
-- A day rollover causes zero extra agent dispatches for gated tasks.
-- A gated task is never picked by autopilot until its marker is removed.
-- The owner can see why from the task file itself.
-- The HUD counts come from task files.
-- Tests green.
+- [ ] Unit (bats): parser kinds incl. legacy, unmarked, `Blocked by` untouched; `mark`/`clear` round trip incl. folded status; `list`.
+- [ ] Unit (bats): `todo-next.sh` default output unchanged; `--skip-needs-human` skips marked; `--check` exit codes.
+- [ ] Unit (bats): `eligible` refuses the marker and still refuses legacy markers; `skip`/`unskip` removed; legacy state with `skip_ids` loads, is migrated once, day rollover causes no list state.
+- [ ] Unit (bats): HUD buckets by marker kind and ignores state-file lists; `report`/`final-report` list marked tasks from files.
+- [ ] Docs: SKILL.md bats cases for autopilot/drive/todo; `bats tests/` and `claude plugin validate` equivalents run by CI.
+- [ ] Lint: `lint_tasks.py` accepts a marked status (run on a sample file).
+
+## Done criteria
+
+- [ ] A day rollover leaves no gating state and dispatches nothing extra: `tests/autopilot_state.bats` (rollover test).
+- [ ] A marked task is never picked by auto-pick until the marker is removed: `tests/todo-next.bats` (`--skip-needs-human`), `drive/SKILL.md` Phase 1.
+- [ ] The owner sees why from the task file: `needs-human.sh list`, `tests/needs_human.bats`.
+- [ ] HUD counts come from task files: `tests/hud_lib.bats` (marker bucket test).
+- [ ] Tests green: CI `bats` job.
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `autopilot/scripts/autopilot-state.sh` | 178, 195, 348-397 | skip wipe, `eligible`, `skip`/`unskip` to remove or rewire |
+| `autopilot/SKILL.md` | 26, 79-85, 102-104 | dispatcher, state fields, classify rules |
+| `todo/scripts/todo-next.sh` | 47-50 | add `--skip-needs-human`, `--check` |
+| `todo/scripts/_lib.sh` | 22-31 | add the shared parser |
+| `hud/scripts/hud-lib.sh` | 386-441 | queue buckets |
+| `drive/SKILL.md` | Phase 1, Phase 3 escalation | auto-pick filter, marking step |
 
 ## Related
 
+- Owner's words (2026-11-02): autopilot should not scan every task each time; each cycle it should just call `/drive`. The state exists to explain why autopilot could not finish a task, not to skip tasks before choosing.
+- The owner's pointer repo already marks its gated tasks with this grammar (pointer PR #284); that job is not part of this task's code.
 - T20261102-902081: HUD `next loop due` fix (shipped in #541; a dead loop shows as stalled).
 - T20261028-151063: /autopilot on/off redesign (journal).
 - T20260922-195629: autopilot waiting-outcome ambiguity (journal).
