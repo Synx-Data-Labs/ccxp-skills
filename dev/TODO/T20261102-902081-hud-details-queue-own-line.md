@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request, this conversation, 2026-11-02
 description: /hud details puts the queue on its own line right after the AP line
+claimed_by: cc1-ecc09c93:c82925f26e708c76
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261102-902081: HUD details: queue on its own line after AP (6 lines)
