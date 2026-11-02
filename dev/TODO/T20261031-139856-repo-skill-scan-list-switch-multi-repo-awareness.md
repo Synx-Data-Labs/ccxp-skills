@@ -106,26 +106,27 @@ scheduled: 2026-10-26
 - **`scan [path] [--depth N] [--all] [--roots a:b]`**
   - A child folder is a repo when it has `.git` AND `dev/TODO/`; `--all` drops the marker and is display-only (prints the table, writes nothing, so the registry stays "ccxp repos").
   - Descent: never into a git folder, a symlink (counted in the output as "K symlink(s) skipped"), a dot folder or `node_modules`; plain folders only while depth allows. Default cap 2 (children plus the `owner/repo` level); `--depth 1` is children only; explicit `--depth N` is a hard cap. A root that is itself a repo counts as one repo; outside any git repo with no path and no remembered root it errors with a hint.
-  - Classification reads the `.git` entry: dir = main; file whose `gitdir:` matches `*/.git/worktrees/*` = linked worktree; `*/.git/modules/*` = submodule (skipped; reachable when a submodule folder is given as the root); anything else skipped. A worktree resolves to its main via `--git-common-dir` (must end in `.git`, so bare repos are skipped); main is added when it qualifies, even from outside the root.
+  - Classification reads the `.git` entry: dir = main; file whose `gitdir:` matches `*/.git/worktrees/*` = linked worktree; `*/.git/modules/*` = submodule, always skipped (it can only be met when a submodule folder is itself given as the root, since scans never descend into repos); a root that is a main repo counts as one repo; anything else skipped. A worktree resolves to its main via `--git-common-dir` (its basename must equal `.git`; the main path is its dirname, so bare and `--separate-git-dir` layouts are skipped); main is added when it qualifies, even from outside the root.
   - Registry: `{roots, exclude, repos:[{path,name,slug,aliases}]}`; `exclude` is a list of basename globs; slug is `owner/repo` from `origin` (any URL form, ssh aliases included). Aliases are keyed by path (a moved clone loses them: documented). Repos under a scanned root are replaced, others kept while their folder exists; roots are remembered for path and zero-arg scans only, not for `--roots`/`CCXP_REPO_ROOTS`.
-  - A malformed registry aborts (exit 4) and is never overwritten. Writes are atomic (temp + `mv`), last writer wins, no lock.
+  - A malformed registry aborts (exit 6) and is never overwritten. Writes are atomic (temp + `mv`), last writer wins, no lock.
+  - Depth values: a path scan stores its effective cap (default 2); the zero-arg sibling root is stored with depth 1; stored depths are reused as given on later zero-arg scans (tested).
   - Output: rows `+`/`-`/`=` with `repo (wt X)` rows for linked worktrees (from `git worktree list --porcelain`, missing folders dropped each run), then "N added, M removed, K unchanged".
 - **`list [--json] [--fresh]`**
   - Never writes into any repo: it uses `git --no-optional-locks status --porcelain -uno`, so no `index.lock`; it may refresh the cache file.
   - Fields: branch, dirty, open tasks (`dev/TODO/T*.md` count), top queue line (first `- [T` item of `queue.md`, struck-through items skipped); worktrees listed as their own rows with their own branch and dirty state (claims are per path).
   - Cache is reused for 10 minutes while the registry and every scanned dir (roots and `owner/` containers) are unchanged; branch, dirty and task changes are NOT detected before the TTL, so a row can lag up to 10 minutes and `--fresh` forces a recompute. Changed scanned dirs print a "run /repo scan" hint.
   - The current repo (physical toplevel of `$PWD`) is marked `*` on the exact row; an unregistered current repo is shown on its own line. Stale paths are omitted with a hint and left in the registry.
-- **`paths`**: registered repo roots that exist plus a live depth-1 sibling scan of the current repo; main repo paths only (never worktrees), deduped, no writes. `in-this-repo--sibling-path` iterates the deduped union of that and its old glob (zero-config keeps working, a second root is found) and falls back to the old glob alone when `jq` or `repos.sh` is unavailable.
+- **`paths`**: registered repo roots that exist plus a live depth-1 sibling scan of the current repo; main repo paths only (never worktrees), deduped, no writes. `in-this-repo--sibling-path` skips both `$PWD` and the main-worktree toplevel of `$PWD` (a linked worktree must not report its own main as another clone), then iterates the deduped union of that and its old glob (zero-config keeps working, a second root is found) and falls back to the old glob alone when `jq` or `repos.sh` is unavailable.
 - **PR 2 resolve**: `repo-resolve [--repo X] [--any]`, order `--repo` > `$CCXP_REPO` > toplevel of `$PWD` > error.
 
   | Input | Meaning | Rule |
   |---|---|---|
-  | `--repo`/`$CCXP_REPO` containing `/` or an existing folder | path | must be a registered repo or worktree path, else exit 5 unless `--any` |
-  | `--repo`/`$CCXP_REPO` otherwise | name | tier matcher over the registry |
+  | `--repo`/`$CCXP_REPO` starting with `/`, `./`, `../` or `~` | path | must be a registered repo, or a linked worktree of one (checked with `git worktree list` of the registered mains), else exit 5 unless `--any` |
+  | `--repo`/`$CCXP_REPO` otherwise (`name`, `owner/name`, alias) | name | tier matcher over the registry; never read as a folder, so `--repo todo` cannot hit a skill folder |
   | `$PWD` toplevel fallback | path | needs `dev/TODO/` (registration not required, so a dispatcher in an unscanned repo works), else exit 5 unless `--any` |
 
-  - Tiers exact, prefix, substring, subsequence over `name`, `owner/name`, `aliases` (case-insensitive, deduped by path). Exit 0 one hit (path on stdout), 3 ambiguous (tab-separated candidates), 4 none, 5 refused, 2 usage.
-  - `repos.sh switch <query>` prints the `/cd` line (shell-quoted with `%q`, `pbcopy` when present) or the fallback; the version gate compares dot-separated integers in bash (no `sort -V`) against the first `N.N.N` in `claude --version`.
+  - Tiers exact, prefix, substring, subsequence over `name`, `owner/name`, `aliases` (case-insensitive, deduped by path). Exit 0 one hit (path on stdout), 3 ambiguous (tab-separated candidates, sorted by name then path so the picker order is deterministic), 4 none, 5 refused, 6 malformed registry (also from `scan` and `list`), 2 usage.
+  - `repos.sh switch <query>` prints the `/cd` line (shell-quoted with `%q`, `pbcopy` when present) or the fallback; the `/cd` line prints the path verbatim, in double quotes only when it contains whitespace (the quoting `/cd` accepts is assumed, not verified, so a path with whitespace also gets the `cd '<path>' && claude` line); the version gate compares dot-separated integers in bash (no `sort -V`) against the first `N.N.N` in `claude --version`.
 - **Skill `repo/SKILL.md`** holds only judgment: which verb, the picker on ambiguity (`AskUserQuestion`), the reminder after `/cd`, never claiming a switch, never `cd`/`git checkout`. PR 1 ships `scan` and `list` (the `switch` verb is added in PR 2 so the argument-hint never promises an unbuilt verb).
 - **Docs**: "Multi-repo" section in `dev/guidelines.md` and `repo-conventions/templates/guidelines.md`; README skill row + count 51 to 52 (PR 1); `tests.yml` path filters gain `_repos/**`.
 - **Alternatives rejected**:
@@ -136,6 +137,7 @@ scheduled: 2026-10-26
 
 ## Decisions
 
+- **Repo marker**: `.git` AND `dev/TODO/` (a plain folder with `dev/TODO/` but no git is not a repo for worktree/slug/branch purposes; the owner's rule names the marker, `.git` is only needed to classify worktrees and submodules).
 - **`--any`**: only on `resolve`/`repo-resolve` (table in Solution). It lets a caller (dispatcher, scripts) resolve a path that is a git work tree but not registered or lacks `dev/TODO/`. Without it such a path is refused (exit 5). `/repo switch` never passes it, so an unscanned clone yields "run /repo scan". `scan --all` is the separate, display-only flag for listing any git repo (nothing persisted, so a later plain scan cannot silently prune it).
 - **`list` pruning**: `list` never edits the registry (it may refresh the cache) and never writes into a repo; stale paths are omitted from output with a "N stale, run /repo scan" hint. Only `scan` prunes (counted in "M removed").
 - **Non-unique prefix**: the first tier with any hit wins and is reported as ambiguous if it has several (picker over that tier's candidates); it never falls through to a wider tier, which would silently widen the guess. Same for a non-unique exact name (two orgs, same folder name).
@@ -144,8 +146,8 @@ scheduled: 2026-10-26
 
 ## Test plan
 
-- [ ] Unit: `tests/repos.bats` (hermetic temp roots, real linked worktree, a real submodule given as a root, `CLAUDE_CONFIG_DIR` pointed at a temp dir, macOS-run locally and on Linux CI) with titled cases: "guidelines-only folder is not listed", "depth 1 vs owner/repo depth 2", "never descends into a repo or symlink", "linked worktree collapses under main", "submodule root is skipped", "--all is display-only", "aliases survive rescan", "stale path pruned by scan, omitted by list", "malformed registry is not overwritten", "cache reused then invalidated (registry, dir mtime, --fresh)", "list does not change .git (snapshot)".
-- [ ] Unit: `tests/repo_resolve.bats` (PR 2): "tier exact/prefix/substring/subsequence", "ambiguous prefix exits 3 with candidates", "--repo then CCXP_REPO then PWD order", "unregistered path refused, --any accepts", "version gate below/at/unknown".
+- [ ] Unit: `tests/repos.bats` (hermetic temp roots, real linked worktree, a real submodule given as a root, `CLAUDE_CONFIG_DIR` pointed at a temp dir, macOS-run locally and on Linux CI; mtimes are set explicitly with `touch -t`, the form BSD and GNU share, and read through `repos-mtime`, `stat -c %Y` then `stat -f %m`) with titled cases: "guidelines-only folder is not listed", "depth 1 vs owner/repo depth 2", "never descends into a repo or symlink", "linked worktree collapses under main", "submodule root is skipped", "--all is display-only", "aliases survive rescan", "stale path pruned by scan, omitted by list", "malformed registry is not overwritten", "cache reused then invalidated (registry, dir mtime, --fresh)", "zero-arg scan stores the sibling root with depth 1", "path with spaces", "list does not change .git (snapshot)".
+- [ ] Unit: `tests/repo_resolve.bats` (PR 2): "tier exact/prefix/substring/subsequence", "owner/name is a name, not a path", "bare name never read as a folder", "malformed registry exits 6", "worktree path accepted via git worktree list", "ambiguous prefix exits 3 with candidates", "--repo then CCXP_REPO then PWD order", "unregistered path refused, --any accepts", "version gate below/at/unknown".
 - [ ] `tests/taskid_in_this_repo.bats` gains "finds a repo under a second root" and "falls back to the glob without jq"; existing cases stay green (their setup isolates `CLAUDE_CONFIG_DIR`).
 - [ ] Gates: `bats tests/`, `lint_tasks.py`, `lint-docs.sh`, `readme_skill_count.bats`, `skill_score.py --check` and coverage check, `lint_identifiers.py`; new bats files must pass on macOS locally, older failures from BSD tools are trusted to Linux CI.
 - [ ] Post-merge, not verifiable now: the skill reaches users only via a release plus `/ccxp-skills:update`; evals (`skill_eval.py repo --record`) need a live `claude -p` and are run by the maintainer.
@@ -155,10 +157,12 @@ scheduled: 2026-10-26
 - [ ] Scan rule is `dev/TODO/` only: `tests/repos.bats` "guidelines-only folder is not listed".
 - [ ] Depth and owner/repo descent, worktree collapse, submodule skip: `tests/repos.bats` "depth 1 vs owner/repo depth 2", "linked worktree collapses under main", "submodule root is skipped".
 - [ ] Registry round-trip keeps aliases; cache reuse/invalidation; stale prune: `tests/repos.bats` "aliases survive rescan", "cache reused then invalidated", "stale path pruned by scan, omitted by list", "list does not change .git".
+- [ ] Scan never descends into a repo or symlink, `--all` writes nothing, a malformed registry is not overwritten: `tests/repos.bats` "never descends into a repo or symlink", "--all is display-only", "malformed registry is not overwritten".
 - [ ] `/repo scan` and `/repo list` skill merged (PR 1): `repo/SKILL.md`, `repo/evals/evals.json` (3+ cases incl. `tool_not_called` / `command_not_ran` for `cd` and `git checkout`; the spec's `command_succeeded` wording is read as the section-10 `command_not_ran` form).
 - [ ] Skill score at least 70 and ratchet updated: `dev/quality/skill-scores.json` entry `repo`.
 - [ ] Guidelines "Multi-repo" sections, README row and count: `dev/guidelines.md`, `repo-conventions/templates/guidelines.md`, `README.md`, `tests/readme_skill_count.bats`.
 - [ ] `in-this-repo.sh` finds repos under a second root: `tests/taskid_in_this_repo.bats` "finds a repo under a second root".
+- [ ] `resolve` exit codes (0/3/4/5/6), `--any` and deterministic ambiguity order (PR 2): `tests/repo_resolve.bats` "ambiguous prefix exits 3 with candidates", "unregistered path refused, --any accepts", "malformed registry exits 6".
 - [ ] `/repo switch` (PR 2) incl. the 2.1.246 gate: `tests/repo_resolve.bats` "version gate below/at/unknown", SKILL.md switch workflow.
 - [ ] Version bump and `claude plugin validate .` left to the maintainer's bump PR (external, unchecked on purpose).
 
