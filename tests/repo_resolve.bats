@@ -279,6 +279,7 @@ fixture() {
   fixture
   run bash "$REPOS" resolve "~nosuchuser/x"
   [ "$status" -eq 4 ]
+  [[ "$output" == *"not a folder"* ]]
 }
 
 @test "registry with a non-array repos field exits 6" {
