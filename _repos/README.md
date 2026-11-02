@@ -1,6 +1,6 @@
 # `_repos/` — repo registry lib
 
-Multi-repo awareness for the ccxp suite: find the repos on this machine, list them, and (phase 4) resolve a name to a path. Backs the `/repo` skill.
+Multi-repo awareness for the ccxp suite: find the repos on this machine, list them, and resolve a name to a path. Backs the `/repo` skill.
 
 Commands are shown relative to the plugin root; skills call them as `<skills-root>/_repos/repos.sh`.
 
@@ -19,6 +19,17 @@ Commands are shown relative to the plugin root; skills call them as `<skills-roo
   - Live fields come from the cache while it is under 10 minutes old and unchanged; `--fresh` recomputes.
 - `bash _repos/repos.sh paths`
   - Registered repo roots plus a live depth-1 sibling scan of the current repo; unique, no writes. Used by `_taskid/in-this-repo.sh`.
+
+- `bash _repos/repos.sh resolve [query] [--any]`
+  - Prints the absolute path of one repo; sourceable as `repo-resolve [--repo X] [--any]` from `_repos/resolve.sh`.
+  - Order: `--repo` > `$CCXP_REPO` > git toplevel of `$PWD` > error. A value starting with `/`, `./`, `../` or `~` is a path; anything else is a name.
+  - Names match `name`, `owner/name` and `aliases` case-insensitively; the first tier with a hit wins and is never widened (exact, prefix, substring, subsequence).
+  - Paths must be a registered repo (or one of its worktrees or subfolders); `--any` accepts any git work tree. The `$PWD` fallback needs `dev/TODO/` unless `--any`.
+  - Exit: 0 one repo | 2 usage or not in a git repo | 3 ambiguous (candidate lines on stdout) | 4 no match | 5 refused | 6 malformed registry.
+  - Never mutates and never `cd`s.
+- `bash _repos/repos.sh switch <query>`
+  - Resolves like above and prints the line for the user to type: `/cd <path>` when Claude Code is 2.1.246 or newer (`claude --version`), otherwise `cd <path> && claude`; copies it with `pbcopy` when present.
+  - It cannot switch for the user (`/cd` is not model-invocable) and never changes directory itself.
 
 ## Files
 

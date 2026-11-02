@@ -97,7 +97,7 @@ Rules: wrap logic in functions, make scripts sourceable, keep operations idempot
 
 ## Multi-repo
 
-- **Which repos exist**: `/repo scan` writes a registry of the repos on this machine (a git repo with a `dev/TODO/` directory); `/repo list` reads it. See `_repos/README.md`.
+- **Which repos exist**: `/repo scan` writes a registry of the repos on this machine (a git repo with a `dev/TODO/` directory); `/repo list` reads it; `/repo switch <name>` prints the `/cd` line to type (a skill cannot run `/cd`). See `_repos/README.md`.
 - **Mutating work stays in the launch repo**: a session never claims, branches or commits in a repo other than the one it started in. Work in another repo uses a fresh clone or a detached job (today's rule lives in `drive/SKILL.md` Phase 1.5; T20261010-274793 moves it into this conventions layer).
 - **One GitHub account**: sibling repos are assumed to share the current repo's org and account; no per-repo account probing.
 

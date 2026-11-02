@@ -127,7 +127,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `quality-probe` | Measure code quality on a task's touched files, record to `dev/quality/metrics.jsonl` |
 | `journal-compact` | Compact a month of `dev/JOURNAL/` into a digest |
 | `repo-conventions` | CLAUDE.md/guidelines.md structure, `dev/` TODO lifecycle, conventions lint, branch-policy switch, and `setup` — bring a repo fully online in one pass |
-| `repo` | List or scan for the repos on this machine (registry of git repos with a `dev/TODO/`), with branch, dirty state and top queue line |
+| `repo` | List or scan for the repos on this machine (git repos with a `dev/TODO/`), or `switch <name>` to print the `/cd` line for a sibling repo |
 | `skill-conventions` | Conventions for authoring a SKILL.md in this suite |
 
 ### Notification & integration
@@ -342,7 +342,7 @@ stay invisible as skills). Current set:
 - `_journal/` — journal-move helpers for closing a task.
 - `_docs/` — the shared markdown-lint wrapper (`lint-docs.sh`) and
   doc-impact/freshness checks.
-- `_repos/` — repo registry behind `/repo` (`repos.sh scan|list|paths`);
+- `_repos/` — repo registry and matcher behind `/repo` (`repos.sh scan|list|paths|resolve|switch`);
   user-specific paths live only in the user's config dir. See
   `_repos/README.md`.
 

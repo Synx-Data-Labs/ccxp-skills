@@ -8,6 +8,8 @@
 #   repos.sh scan [path] [--depth N] [--all] [--roots a:b]
 #   repos.sh list [--json] [--fresh]
 #   repos.sh paths
+#   repos.sh resolve [query] [--any]    (exit 0 one | 2 usage | 3 ambiguous | 4 none | 5 refused | 6 malformed)
+#   repos.sh switch <query>             prints the /cd line to type; never changes directory
 #
 # Files (both honour CLAUDE_CONFIG_DIR, default ~/.claude):
 #   ccxp-repos.json         registry {roots, exclude, repos}; hand-edit `aliases`
@@ -21,6 +23,9 @@
 
 REPOS_CACHE_TTL="${REPOS_CACHE_TTL:-600}"
 REPOS_DEFAULT_DEPTH=2   # 1 level of children + the owner/repo container level
+
+# shellcheck source=/dev/null
+source "$(dirname -- "${BASH_SOURCE[0]}")/resolve.sh"
 
 function repos-die() { printf 'repos: %s\n' "$*" >&2; return "${REPOS_RC:-2}"; }
 
@@ -538,12 +543,103 @@ function repos-paths() {
   printf '%s' "$out" | grep . | LC_ALL=C sort -u || true
 }
 
+# --- resolve / switch (PR 2) ----------------------------------------------
+
+# repos-claude-version — first N.N.N of $CCXP_CLAUDE_VERSION (tests) or
+# `claude --version`; empty when it cannot be determined.
+function repos-claude-version() {
+  local raw="${CCXP_CLAUDE_VERSION:-}"
+  if [ -z "$raw" ] && command -v claude >/dev/null 2>&1; then
+    raw="$(claude --version 2>/dev/null || true)"
+  fi
+  printf '%s\n' "$raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true
+}
+
+# repos-version-ge <a> <b> — 0 when dotted version a >= b (integer compare).
+function repos-version-ge() {
+  local IFS=. i x y
+  local -a a b
+  read -r -a a <<<"$1"
+  read -r -a b <<<"$2"
+  for i in 0 1 2; do
+    x="${a[$i]:-0}"; y="${b[$i]:-0}"
+    if [ "$x" -gt "$y" ]; then return 0; fi
+    if [ "$x" -lt "$y" ]; then return 1; fi
+  done
+  return 0
+}
+
+# repos-cd-capable — 0 when the running Claude Code is known to have /cd.
+function repos-cd-capable() {
+  local v
+  v="$(repos-claude-version)"
+  [ -n "$v" ] && repos-version-ge "$v" "2.1.246"
+}
+
+# repos-switch <query> — resolve and print the line the user types. It never
+# changes directory itself (/cd is not model-invocable).
+function repos-switch() {
+  local q="$*" out rc=0 path primary fallback copied=""
+  if [ -z "$q" ]; then repos-die "switch: give a repo name"; return 2; fi
+  out="$(repo-resolve --repo "$q")" || rc=$?
+  if [ "$rc" -eq 3 ]; then
+    local cp cn cs f
+    while IFS="$(printf '\t')" read -r cp cn cs; do
+      [ -n "$cp" ] || continue
+      f="$(repos-live-fields "$cp")"
+      printf '%s\t%s\t%s\t%s\n' "$cp" "$cn" "${cs:--}" "$(printf '%s' "$f" | cut -f1,3 | tr '\t' ' ')"
+    done <<<"$out"
+    return 3
+  fi
+  if [ "$rc" -ne 0 ]; then return "$rc"; fi
+  path="$out"
+  if [ "$path" = "$(repos-toplevel)" ]; then
+    printf 'Already in %s.\n' "$path"
+    return 0
+  fi
+  fallback="$(printf 'cd %q && claude' "$path")"
+  case "$path" in
+    *[[:space:]]*) primary="/cd \"$path\"" ;;
+    *) primary="/cd $path" ;;
+  esac
+  local capable=0
+  if repos-cd-capable; then capable=1; else primary="$fallback"; fi
+  printf '%s\n' "$primary"
+  if [ "$capable" = 1 ]; then
+    case "$path" in *[[:space:]]*) printf '%s\n' "$fallback" ;; esac
+  fi
+  if [ -z "${CCXP_NO_CLIPBOARD:-}" ] && command -v pbcopy >/dev/null 2>&1; then
+    if printf '%s' "$primary" | pbcopy 2>/dev/null; then copied=1; fi
+  fi
+  if [ -n "$copied" ]; then printf '(copied to the clipboard)\n'; fi
+  if [ "$capable" = 1 ]; then
+    printf 'Type it yourself; I cannot run /cd. Earlier assumptions in this conversation may be about the other repo.\n'
+  else
+    printf 'Claude Code below 2.1.246 or version unknown: run this in a new shell (the conversation is not kept).\n'
+  fi
+}
+
+# repos-resolve-cmd [query] [--any] — CLI over repo-resolve (query = --repo).
+function repos-resolve-cmd() {
+  local args=() q=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --any) args+=(--any); shift ;;
+      *) q="$1"; shift ;;
+    esac
+  done
+  if [ -n "$q" ]; then args+=(--repo "$q"); fi
+  repo-resolve "${args[@]+"${args[@]}"}"
+}
+
 function repos-usage() {
   cat <<'EOF'
 Usage:
   repos.sh scan [path] [--depth N] [--all] [--roots a:b]
   repos.sh list [--json] [--fresh]
   repos.sh paths
+  repos.sh resolve [query] [--any]
+  repos.sh switch <query>
 EOF
 }
 
@@ -555,6 +651,8 @@ function repos-main() {
     scan) repos-scan "$@" ;;
     list) repos-list "$@" ;;
     paths) repos-paths "$@" ;;
+    resolve) repos-resolve-cmd "$@" ;;
+    switch) repos-switch "$@" ;;
     ""|-h|--help|help) repos-usage ;;
     *) repos-usage >&2; return 2 ;;
   esac
