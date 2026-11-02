@@ -38,7 +38,7 @@ export function userMessageTree(
 
 /**
  * The status band, or null when there is nothing to draw. `expanded` (`/hud details`) draws up to
- * six detail lines instead of the one row, capped at `maxRows`; with no detail data it falls back
+ * up to seven detail lines (six without a CI row) instead of the one row, capped at `maxRows`; with no detail data it falls back
  * to the one row. With a `fill` style (always passed by the register; null only in tests) and a known width of at least FILL_MIN_COLUMNS) every row is padded
  * to `columns` and drawn on a background (or reverse video); otherwise the plain row.
  */
@@ -48,7 +48,7 @@ export function bandTree(
   cfg: HudConfig,
   columns: number,
   expanded = false,
-  maxRows = 6,
+  maxRows = 7,
   fill: FillStyle | null = null,
   noColor = false,
 ) {

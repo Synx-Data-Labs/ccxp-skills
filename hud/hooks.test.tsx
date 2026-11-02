@@ -334,7 +334,7 @@ test('/hud details is a toggle: the first run expands the band to detail lines, 
   expect(await expanded()).toBe(true)
 })
 
-test('/hud details: the five lines carry repo, ctx, jobs, autopilot with CI, and the last prompt, and follow new data live', async ($: any, on: any) => {
+test('/hud details: the detail lines carry repo, ctx, jobs, autopilot with CI, and the last prompt, and follow new data live', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"ci": {"workflow": "nightly.yml"}}'
   w.helper = { exitCode: 0, stdout: HELPER_FULL }

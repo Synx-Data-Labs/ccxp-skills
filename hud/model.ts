@@ -223,13 +223,11 @@ export function truncateWords(text: string, max: number): string {
 }
 
 type Variants = Seg[][]
-/** `sep`: the separator drawn before this item instead of the default SEP (used for the AP | queue group break). */
-type Item = { field: string; variants: Variants; at: number; sep?: string }
+type Item = { field: string; variants: Variants; at: number }
 
 const joinText = (segs: Seg[]) => segs.map(s => s.text).join('')
 const widthOf = (segs: Seg[]) => segs.reduce((n, s) => n + s.text.length, 0)
 const SEP = ' │ '
-const GROUP_SEP = ' || ' // between the AP group and the queue group on the details AP line
 const CI_LOOK: Record<CiState, { glyph: string; word: string; color: string }> = {
   passing: { glyph: '✓', word: 'passing', color: 'success' },
   failing: { glyph: '✗', word: 'failing', color: 'error' },
@@ -474,21 +472,31 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
 }
 
 /**
- * `queue 44 = 30 ready | 6 blocked | 3 decision | 2 external | 3 epic` (the labels in full, used by details),
- * shrinking to `queue 44 = 30r 6b 3d 2e 3x`, then `queue 30/44`. `claimed` (held by another session) shows only above 0.
- * `full` starts at the spelled-out form; the band starts at the compact one.
+ * Details (`full`): `queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics`, the labels always in full
+ * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); the plural labels read
+ * singular at a count of 1 (`1 decision`, `1 epic`). The one-row band (`!full`) starts at `queue 44 = 30r 6b 3d 2e 3x`
+ * and shrinks to `queue 30/44`. `claimed` (held by another session) shows only above 0.
  */
 export function queueVariants(q: Queue, full: boolean): Variants {
-  const parts: Array<[string, string, number]> = [['ready', 'r', q.ready], ['blocked', 'b', q.blocked], ['decision', 'd', q.decision], ['external', 'e', q.external], ['epic', 'x', q.epic]]
-  if (q.claimed > 0) parts.push(['claimed', 'c', q.claimed])
-  const long: Seg[] = [{ text: `queue ${q.total} = ` }]
-  parts.forEach(([word, , n], i) => {
-    if (i > 0) long.push({ text: ' | ', dim: true })
-    long.push({ text: `${n} ${word}`, dim: n === 0 && word !== 'ready', color: word === 'ready' && n > 0 ? 'success' : undefined })
-  })
-  const short: Seg[] = [{ text: `queue ${q.total} = ` }, ...parts.flatMap(([, ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
+  const parts: Array<[string, string, string, number]> = [
+    ['ready', 'ready', 'r', q.ready],
+    ['blocked', 'blocked', 'b', q.blocked],
+    ['decision', 'decisions', 'd', q.decision],
+    ['external', 'external', 'e', q.external],
+    ['epic', 'epics', 'x', q.epic],
+  ]
+  if (q.claimed > 0) parts.push(['claimed', 'claimed', 'c', q.claimed])
+  if (full) {
+    const long: Seg[] = [{ text: `queue ${q.total} = ` }]
+    parts.forEach(([one, many, , n], i) => {
+      if (i > 0) long.push({ text: ' | ', dim: true })
+      long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
+    })
+    return [long]
+  }
+  const short: Seg[] = [{ text: `queue ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
   const tiny: Seg[] = [{ text: `queue ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
-  return full ? [long, short, tiny] : [short, tiny]
+  return [short, tiny]
 }
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
@@ -500,13 +508,13 @@ const ORDER = {
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
   off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
   const out: Seg[] = []
   items.forEach((it, i) => {
-    if (i > 0) out.push({ text: it.sep ?? SEP, dim: true })
+    if (i > 0) out.push({ text: SEP, dim: true })
     out.push(...it.variants[it.at])
   })
   return out
@@ -535,6 +543,9 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
     if (f === 'ap' && it) {
       const sv = apStatsVariants(snap.helper!.autopilot!)
       if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(tier === 'wide' ? 0 : tier === 'compact' ? 1 : 3, sv.length - 1) })
+      // A loop days late is dead, not "due": the band says so (warn colour) right after the AP cells. Not shown while paused or busy.
+      const late = stalledFor(snap.helper!.autopilot!, nowMs)
+      if (late > 0) items.push({ field: 'stall', variants: [[{ text: `stalled ${formatSpan(late, false)}`, color: 'warning' }]], at: 0 })
     }
   }
   // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
@@ -553,7 +564,7 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
  * Applies the shrink and drop steps one at a time until the row fits `width`, then, as a last
  * resort on absurdly narrow terminals, cuts the text (never wraps). [] when nothing is left.
  */
-function fitRow(all: Item[], steps: readonly string[], width: number): Seg[] {
+function fitRow(all: Item[], steps: readonly string[], width: number, ellipsis = false): Seg[] {
   let items = all
   const total = () => widthOf(render(items))
   for (const step of steps) {
@@ -565,11 +576,17 @@ function fitRow(all: Item[], steps: readonly string[], width: number): Seg[] {
   if (items.length === 0) return []
   const row = render(items)
   if (widthOf(row) > width) {
-    let over = widthOf(row) - width
+    // `ellipsis` (details): the cut ends in `…` so a clipped line says so; it takes one extra column.
+    let over = widthOf(row) - width + (ellipsis ? 1 : 0)
     for (let i = row.length - 1; i >= 0 && over > 0; i--) {
       const cut = Math.min(over, row[i].text.length)
       row[i] = { ...row[i], text: row[i].text.slice(0, row[i].text.length - cut) }
       over -= cut
+    }
+    if (ellipsis) {
+      let j = row.length - 1
+      while (j > 0 && row[j].text === '') j--
+      row[j] = { ...row[j], text: row[j].text + '…' }
     }
   }
   return row
@@ -598,27 +615,59 @@ export function formatIn(epochSec: number, nowMs: number = Date.now()): string {
   return `in ${Math.floor(h / 24)}d`
 }
 
-/** Detail lines, drop and shrink order per line (see README "Details"). */
+/**
+ * How late a wake may be before the loop counts as stalled: 10 minutes. A wake time is when the loop is DUE; the
+ * autopilot's own tick, a slow cycle or a laptop wake-up can run a few minutes behind, so "due" holds up to the grace
+ * and "overdue" (details) / "stalled" (band) only beyond it. A loop that is days late is dead, not due.
+ */
+export const STALL_GRACE_SEC = 600
+
+/** A span of seconds as `2d 16h`, `3h 5m`, `45m` (`long`), or only the largest unit `2d`, `3h`, `45m` (the one-row band). */
+export function formatSpan(sec: number, long: boolean): string {
+  const s = Math.max(0, Math.floor(sec))
+  const d = Math.floor(s / 86400)
+  const h = Math.floor((s % 86400) / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (d > 0) return long && h > 0 ? `${d}d ${h}h` : `${d}d`
+  if (h > 0) return long && m > 0 ? `${h}h ${m}m` : `${h}h`
+  return `${m}m`
+}
+
+/**
+ * Seconds the autopilot's next loop is overdue beyond the grace, or 0 when it is not stalled: not paused, no cycle
+ * running (a busy loop is working, its stored wake time is stale by design) and a known wake time well in the past.
+ */
+export function stalledFor(ap: Autopilot, nowMs: number): number {
+  if (ap.prefix === '[p]' || ap.busy || ap.next_wake_at <= 0) return 0
+  const late = Math.floor(nowMs / 1000 - ap.next_wake_at)
+  return late > STALL_GRACE_SEC ? late : 0
+}
+
+/**
+ * Details never abbreviate a label: every cell is drawn in its full form and a line that is still too wide is cut
+ * at the terminal width with an ellipsis. The only step left is dropping the plugin URL whole (a half-cut link is
+ * useless) before the version line is cut. The shrink and abbreviation forms belong to the one-row band.
+ */
 const DETAIL_STEPS = {
-  where: ['drop:stale', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo'],
-  usage: ['step:cost', 'step:rate', 'step:ctx', 'step:ctx', 'drop:cost', 'drop:rate', 'drop:ctx'],
-  jobs: ['step:total', 'drop:total', 'drop:parked', 'drop:state'],
-  // The 24h cell (the throughput-vs-average comparison) shrinks after the next-loop and queue cells and is dropped last.
-  ap: ['step:queue', 'step:wake', 'step:wake', 'step:queue', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'step:ap', 'step:apstats', 'step:apstats', 'drop:wake', 'drop:apstats'],
-  // The version label is never dropped here (the link goes first, then the stamp shrinks, then the label narrows to ✓/↑).
-  you: ['drop:url', 'step:lastat', 'step:lastat', 'step:ver', 'step:ver', 'step:ver0'],
+  where: [],
+  usage: [],
+  jobs: [],
+  ap: [],
+  queue: [],
+  you: ['drop:url'],
 } as const
 
 /**
- * `/hud details`: the band expanded to up to six live lines, each cut to the terminal
- * width with the same variant shrinking as the band. Lines with nothing to say are left out.
+ * `/hud details`: the band expanded to up to seven live lines, each cut to the terminal width (with an ellipsis,
+ * never abbreviated). Lines with nothing to say are left out, none is reserved.
  *   0 CI (first, alone; highlighted when red)
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
- *   4 autopilot, next loop time, 24h cell, `||`, then the queue breakdown (dev/TODO/queue.md), on one line
- *   5 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
- * Labels are spelled out in full here; the one-row band keeps the short forms (ctx, 5h, $).
- * It ignores `fields`: the lines are the view. [] when there is no data at all.
+ *   4 autopilot, next loop time (or overdue), 24h cell
+ *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
+ *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
+ * Without `ci` that is six lines at most, with `ci` seven. Labels are spelled out in full here; the one-row band
+ * keeps the short forms (ctx, 5h, $, queue 30r 6b). It ignores `fields`: the lines are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const h = snap.helper
@@ -627,7 +676,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const pick = (f: Field) => itemFor(f, snap, cfg)
   const lines: Seg[][] = []
   const add = (items: Array<Item | null>, steps: readonly string[]) => {
-    const row = fitRow(items.filter((x): x is Item => x !== null), steps, width)
+    const row = fitRow(items.filter((x): x is Item => x !== null), steps, width, true)
     if (row.length > 0) lines.push(row)
   }
 
@@ -646,17 +695,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
-    const color = ctxTone(left, cfg)
-    usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color }], [{ text: `context ${left}% left`, color }], [{ text: `ctx ${left}%`, color }]))
+    usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color: ctxTone(left, cfg) }]))
   }
-  if (snap.rateUsed !== null) {
-    const used = Math.round(snap.rateUsed)
-    usage.push(one('rate', [{ text: `5-hour limit ${used}% used` }], [{ text: `5h limit ${used}%` }]))
-  }
-  if (snap.costUsd !== null) {
-    const usd = `$${snap.costUsd.toFixed(2)}`
-    usage.push(one('cost', [{ text: `API-equivalent cost ${usd}` }], [{ text: `cost ${usd}` }]))
-  }
+  if (snap.rateUsed !== null) usage.push(one('rate', [{ text: `5-hour limit ${Math.round(snap.rateUsed)}% used` }]))
+  if (snap.costUsd !== null) usage.push(one('cost', [{ text: `API-equivalent cost $${snap.costUsd.toFixed(2)}` }]))
   add(usage, DETAIL_STEPS.usage)
 
   // 3. jobs, from the ledger (no ledger: no line)
@@ -668,23 +710,24 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
       [
         one('state', [{ text: state.text, color: state.color }]),
         one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]),
-        one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }], [{ text: `total ${led.lifetime_jobs}`, dim: true }]),
+        one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }]),
       ],
       DETAIL_STEPS.jobs,
     )
   }
 
-  // 4. autopilot, the next loop, 24h, then `||` and the queue breakdown (labels in full), on one line
+  // 4. autopilot, the next loop, 24h (full forms only)
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
     const full = apVariants(ap)
     const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0] : [full[0][0], { text: `${truncate(ap.status, 14)} ` }, ...full[0].slice(1)]
-    apItem = one('ap', withStatus, ...full)
+    apItem = one('ap', withStatus)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
   }
   // The next loop: the clock time and the wait; paused says so (the stored time is stale then); nothing when unknown.
+  // A wake time that passed by more than the grace is not "due" but a stalled loop: warn-coloured, with how late it is.
   let wakeItem: Item | null = null
   if (ap?.prefix === '[p]') {
     wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
@@ -693,18 +736,20 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     const cycle = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).reduce((m, j) => Math.max(m, j.job), 0)
     wakeItem = one('wake', [{ text: cycle > 0 ? `running r${cycle}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
-    const wait = formatIn(ap.next_wake_at, nowMs)
-    const clock = formatStamp(ap.next_wake_at, nowMs)
-    wakeItem =
-      wait === 'now'
-        ? one('wake', [{ text: 'next loop due', dim: true }])
-        : one('wake', [{ text: `next loop ${clock} (${wait})` }], [{ text: `next loop ${wait}` }], [{ text: `next ${wait}` }])
+    const late = Math.floor(nowMs / 1000 - ap.next_wake_at)
+    if (stalledFor(ap, nowMs) > 0) {
+      wakeItem = one('wake', [{ text: `next loop overdue ${formatSpan(late, true)}`, color: 'warning' }])
+    } else if (late >= 0) {
+      wakeItem = one('wake', [{ text: 'next loop due', dim: true }])
+    } else {
+      wakeItem = one('wake', [{ text: `next loop ${formatStamp(ap.next_wake_at, nowMs)} (${formatIn(ap.next_wake_at, nowMs)})` }])
+    }
   }
   const apStats = ap ? apStatsVariants(ap) : null
-  // Order: AP, next loop, 24h cell (ends in the average), then `||` and the queue group. The `||` rides on the queue
-  // item, so it shows only when an AP cell precedes the queue and goes with the queue if that is ever dropped.
-  const queueItem = h?.queue ? { ...one('queue', ...queueVariants(h.queue, true)), sep: apItem ? GROUP_SEP : undefined } : null
-  add([apItem, wakeItem, apStats ? one('apstats', ...apStats) : null, queueItem], DETAIL_STEPS.ap)
+  add([apItem, wakeItem, apStats ? one('apstats', apStats[0]) : null], DETAIL_STEPS.ap)
+
+  // 5. the queue breakdown on its own line right after the AP line (labels in full)
+  if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
 
   // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
@@ -714,7 +759,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const urlItem = verItem && h?.plugin ? one('url', [{ text: h.plugin.url ?? PLUGIN_URL_DEFAULT, dim: true }]) : null
   if (at || verItem) {
     add(
-      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)], [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }], [{ text: formatStamp(at, nowMs), dim: true }]) : null, verItem, urlItem],
+      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)]) : null, verItem, urlItem],
       DETAIL_STEPS.you,
     )
   }
