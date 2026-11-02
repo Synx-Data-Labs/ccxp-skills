@@ -69,13 +69,6 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap start; [ "$output" = already-on ]
 }
 
-@test "off clears next_wake_at and skip_ids but keeps busy_since until the cycle reports" {
-  _ap start >/dev/null; _ap skip T9 "needs build" >/dev/null
-  _ap record progress 0 T1 >/dev/null; _ap busy on
-  _ap off >/dev/null
-  [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .next_wake_at)" = null ]; [ "$(_j '.skip_ids|length')" = 0 ]
-}
-
 @test "on right after off while the old cycle is busy does nothing (busy)" {
   _ap start >/dev/null; _ap busy on; _ap off >/dev/null
   run _ap start; [ "$output" = busy ]
@@ -94,17 +87,6 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap resume; [ "$output" = busy ]
 }
 
-@test "status report: shows needs-attention, notices and overdue" {
-  _ap start >/dev/null
-  _ap skip T9 "needs a real build" >/dev/null
-  _ap notify idle "nothing drivable" >/dev/null
-  _ap record idle >/dev/null
-  AUTOPILOT_NOW="2026-10-28T20:00:00Z" run _ap report
-  [[ "$output" == *"needs attention: T9"* ]]
-  [[ "$output" == *"notice [fallback] idle"* ]]
-  [[ "$output" == *"overdue"* ]]
-}
-
 @test "waiting: notice once when it repeats, cleared by progress" {
   _ap start >/dev/null
   run _ap record waiting 0 T1; [ "$output" = none ]
@@ -112,15 +94,6 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap record waiting 0 T1; [ "$output" = none ]
   _ap record progress 1 T1 >/dev/null
   [ "$(_j .waiting_notified)" = false ]
-}
-
-@test "skip: a new task notifies once with its reason; skip_ids clear at the daily rollover" {
-  _ap start >/dev/null
-  run _ap skip T1 "publishes a tag"; [ "$output" = attention ]
-  run _ap skip T1 "publishes a tag"; [ "$output" = none ]
-  [ "$(_j '.needs_attention[0].reason')" = "publishes a tag" ]
-  AUTOPILOT_TODAY=2026-10-29 _ap cap >/dev/null
-  [ "$(_j '.skip_ids|length')" = 0 ]
 }
 
 @test "pause/resume/off transitions and no-ops" {
@@ -271,21 +244,6 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   _ap start >/dev/null
   AUTOPILOT_NOW="2026-10-28T10:20:00Z" run _ap report
   [[ "$output" != *overdue* ]]
-}
-
-@test "skip --kind: stores the category, validates it, backfills on a repeat, stays backward compatible" {
-  _ap start >/dev/null
-  run _ap skip T1 "waits on HashData" --kind external; [ "$output" = attention ]
-  [ "$(_j '.needs_attention[0].kind')" = external ]
-  [ "$(_j '.needs_attention[0].reason')" = "waits on HashData" ]
-  run _ap skip T2 --kind=decision; [ "$output" = attention ]
-  [ "$(_j '.needs_attention[1].kind')" = decision ]; [ "$(_j '.needs_attention[1].reason')" = "needs attention" ]
-  _ap skip T3 "plain" >/dev/null
-  [ "$(_j '.needs_attention[2]|has("kind")')" = false ]
-  run _ap skip T3 "plain" --kind blocked; [ "$output" = none ]
-  [ "$(_j '.needs_attention[2].kind')" = blocked ]
-  run _ap skip T4 "x" --kind nonsense; [ "$status" -eq 2 ]
-  [ "$(_j '.skip_ids|index("T4")')" = null ]
 }
 
 # --- classify / attention / clone-path / done / final-report -----------------
@@ -473,39 +431,6 @@ MD
   [ "$output" = "- No tasks merged this run" ]
 }
 
-@test "final-report: needs_attention and a stuck last task are listed once each, with slugs" {
-  _final_fixture
-  cat > dev/TODO/T9555555-big-decision.md <<'MD'
----
-status: Open
----
-MD
-  cat > dev/TODO/T9666666-flaky.md <<'MD'
----
-status: Open
----
-MD
-  _ap skip T9555555 "needs an owner decision" >/dev/null
-  _ap record stuck 0 T9666666 "CI keeps failing" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [[ "$output" == *"- T9555555 (big-decision) — needs an owner decision"* ]]
-  [[ "$output" == *"- Stuck: T9666666 (flaky) — CI keeps failing"* ]]
-  [[ "$output" != *"Nothing outstanding"* ]]
-  # a stuck task already in needs_attention is not listed twice
-  _ap skip T9666666 "also blocked" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [ "$(grep -c 'T9666666' <<<"$output")" = 1 ]
-}
-
-@test "final-report: an id with no task file stays bare; missing state file is exit 2" {
-  _final_fixture
-  _ap skip T9777777 "gone" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [[ "$output" == *"- T9777777 — gone"* ]]
-  rm "$AUTOPILOT_STATE_FILE"
-  run _ap final-report; [ "$status" -eq 2 ]
-}
-
 @test "busy on <id> stores current_task; busy off clears it" {
   _ap start >/dev/null
   _ap busy on T20261028-151063
@@ -560,46 +485,10 @@ MD
   [ "$(_j .current_task)" = null ]
 }
 
-@test "unskip: removes a listed id from skip_ids and needs_attention, noop when absent" {
-  _ap start >/dev/null
-  _ap skip T1 "a" --kind decision >/dev/null; _ap skip T2 "b" >/dev/null
-  run _ap unskip T1; [ "$status" -eq 0 ]; [ "$output" = "unskipped T1" ]
-  [ "$(_j '.skip_ids|index("T1")')" = null ]; [ "$(_j '.skip_ids|index("T2")')" = 0 ]
-  [ "$(_j '.needs_attention|length')" = 1 ]; [ "$(_j '.needs_attention[0].id')" = T2 ]
-  run _ap unskip T1; [ "$output" = noop ]
-  run _ap unskip T99; [ "$output" = noop ]
-  run _ap unskip; [ "$status" -eq 2 ]
-  # skipping again after an unskip notifies again
-  run _ap skip T1 "again"; [ "$output" = attention ]
-}
-
-@test "unskip --all: clears every skip, noop when there are none" {
-  _ap start >/dev/null
-  run _ap unskip --all; [ "$output" = noop ]
-  _ap skip T1 "a" >/dev/null; _ap skip T2 "b" >/dev/null
-  run _ap unskip --all; [ "$output" = "unskipped all" ]
-  [ "$(_j '.skip_ids|length')" = 0 ]; [ "$(_j '.needs_attention|length')" = 0 ]
-}
-
-@test "unskip: a state file without the fields, or no file, is a noop and stays valid" {
-  run _ap unskip T1; [ "$output" = noop ]
-  printf '{"schema":2,"status":"on"}' > "$AUTOPILOT_STATE_FILE"
-  run _ap unskip T1; [ "$status" -eq 0 ]; [ "$output" = noop ]
-  run _ap unskip --all; [ "$output" = noop ]
-  [ "$(_j .status)" = on ]
-}
-
 @test "eligible: task size, estimation and umbrella wording never refuse a task" {
   t="$BATS_TEST_TMPDIR/big.md"
   printf -- '---\nestimation: 8\nstatus: Open\ndescription: umbrella epic for many things\n---\n# T1: Umbrella epic\n' > "$t"
   run _ap eligible "$t"; [ "$status" -eq 0 ]
-}
-
-@test "SKILL.md: big tasks are split, not skipped, and unskip is documented" {
-  run grep -n 'Big tasks' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n -- 'blocks: T<original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh unskip' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
 }
 
 # ---------------------------------------------------------------------------
@@ -850,4 +739,170 @@ _stat() { _ap stats --json | jq -r "$1"; }
   [ "$status" -eq 2 ]
   [[ "$output" == *"stats [--json]"* ]]
   [[ "$output" != *"set -euo pipefail"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# T20261102-261809: no skip list; "needs a human" marker in the task files
+# ---------------------------------------------------------------------------
+
+_nh_repo() {
+  export AUTOPILOT_REPO_ROOT="$BATS_TEST_TMPDIR/repo"
+  mkdir -p "$AUTOPILOT_REPO_ROOT/dev/TODO" "$AUTOPILOT_REPO_ROOT/dev/JOURNAL"
+}
+# $1 id, $2 status, $3 slug (default slug)
+_nh_task() {
+  printf -- '---\nstatus: %s\nestimation: 1\n---\n# %s\n' "$2" "$1" > "$AUTOPILOT_REPO_ROOT/dev/TODO/$1-${3:-slug}.md"
+  printf -- '- [%s](%s-%s.md): t\n' "$1" "$1" "${3:-slug}" >> "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+}
+
+@test "off clears next_wake_at but keeps busy_since until the cycle reports" {
+  _ap start >/dev/null
+  _ap record progress 0 T1 >/dev/null; _ap busy on
+  _ap off >/dev/null
+  [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .next_wake_at)" = null ]
+}
+
+@test "a fresh state has no skip_ids or needs_attention" {
+  _ap start >/dev/null
+  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
+}
+
+@test "the skip and unskip commands are gone" {
+  _ap start >/dev/null
+  run _ap skip T1 "x"; [ "$status" -eq 2 ]
+  run _ap unskip T1; [ "$status" -eq 2 ]
+}
+
+@test "day rollover leaves no gating state and a marked task stays marked in its file" {
+  _nh_repo; _nh_task T20260101-000001 "Open — needs a human [decision]: pick"
+  _ap start >/dev/null
+  AUTOPILOT_TODAY=2026-10-29 _ap cap >/dev/null
+  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
+  run _ap marked T20260101-000001; [ "$status" -eq 0 ]; [ "$output" = decision ]
+}
+
+@test "migration: a state file with skip_ids and needs_attention loads, drops them once and leaves a notice" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":1,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"next_wake_at":null,"skip_ids":["T1","T2"],"needs_attention":[{"id":"T1","reason":"owner decision","kind":"decision"}]}' > "$AUTOPILOT_STATE_FILE"
+  run _ap start; [ "$status" -eq 0 ]; [ "$output" = dispatch ]
+  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
+  [ "$(_j '.notices|length')" = 1 ]; [ "$(_j '.notices[0].kind')" = migrated ]
+  [[ "$(_j '.notices[0].text')" == *"T1 (owner decision)"* ]]
+  [[ "$(_j '.notices[0].text')" == *"T2"* ]]
+  _ap start >/dev/null
+  [ "$(_j '.notices|length')" = 1 ]   # idempotent: no second notice
+}
+
+@test "migration: record also drops the legacy fields; an empty legacy list adds no notice" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","lifetime_cycles":0,"lifetime_merged":0,"cycle_count":0,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"skip_ids":[],"needs_attention":[]}' > "$AUTOPILOT_STATE_FILE"
+  _ap record progress 0 "" >/dev/null
+  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
+  [ "$(_j '.notices|length')" = 0 ]
+}
+
+@test "eligible: the needs-a-human marker, any kind, and every legacy marker are refused" {
+  local t="$BATS_TEST_TMPDIR/t.md" k
+  for k in blocked decision external; do
+    printf -- '---\nstatus: Open — needs a human [%s]: because\n---\n# T\n' "$k" > "$t"
+    run _ap eligible "$t"; [ "$status" -ne 0 ]
+  done
+  printf -- '---\nstatus: Open — Needs A Human: legacy wording\n---\n# T\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -ne 0 ]
+  printf -- '---\nstatus: Review — needs manual QA\n---\n# T\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -ne 0 ]
+  printf -- '---\nstatus: Open\n---\n# T\nneeds a human in the body only\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -eq 0 ]
+}
+
+@test "attention-list: one line per marked task, derived from the task files" {
+  _nh_repo
+  _nh_task T20260101-000001 "Open — needs a human [external]: waits on HashData" a
+  _nh_task T20260101-000002 "Open" b
+  _nh_task T20260101-000003 "Design — needs a human [decision]: A or B" c
+  run _ap attention-list
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = $'T20260101-000001\texternal\twaits on HashData' ]
+  [ "${lines[1]}" = $'T20260101-000003\tdecision\tA or B' ]
+}
+
+@test "report: lists marked tasks from the files; removing the marker removes the line" {
+  _nh_repo
+  _nh_task T20260101-000001 "Open — needs a human [decision]: pick one"
+  _ap start >/dev/null
+  run _ap report
+  [[ "$output" == *"needs a human: T20260101-000001 [decision] — pick one"* ]]
+  bash "$REPO_ROOT/todo/scripts/needs-human.sh" clear "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000001-slug.md" >/dev/null
+  run _ap report
+  [[ "$output" != *"needs a human:"* ]]
+}
+
+@test "report: shows notices and overdue" {
+  _ap start >/dev/null
+  _ap notify idle "nothing drivable" >/dev/null
+  _ap record idle >/dev/null
+  AUTOPILOT_NOW="2026-10-28T20:00:00Z" run _ap report
+  [[ "$output" == *"notice [fallback] idle"* ]]
+  [[ "$output" == *"overdue"* ]]
+}
+
+@test "final-report: marked tasks and a stuck last task are listed once each, with slugs" {
+  _final_fixture
+  mkdir -p dev/TODO
+  printf -- '---\nstatus: Open — needs a human [decision]: needs an owner decision\n---\n' > dev/TODO/T20261001-555555-big-decision.md
+  printf -- '---\nstatus: Open\n---\n' > dev/TODO/T20261001-666666-flaky.md
+  _ap record stuck 0 T20261001-666666 "CI keeps failing" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [[ "$output" == *"- T20261001-555555 (big-decision) — needs an owner decision"* ]]
+  [[ "$output" == *"- Stuck: T20261001-666666 (flaky) — CI keeps failing"* ]]
+  [[ "$output" != *"Nothing outstanding"* ]]
+  # a stuck task that is also marked is not listed twice
+  printf -- '---\nstatus: Open — needs a human [blocked]: also blocked\n---\n' > dev/TODO/T20261001-666666-flaky.md
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [ "$(grep -c 'T20261001-666666' <<<"$output")" = 1 ]
+}
+
+@test "final-report: missing state file is exit 2" {
+  _final_fixture
+  rm "$AUTOPILOT_STATE_FILE"
+  run _ap final-report; [ "$status" -eq 2 ]
+}
+
+@test "marked: exit 1 for an unmarked task or a missing file, prints the kind otherwise" {
+  _nh_repo; _nh_task T20260101-000001 "Open"
+  run _ap marked T20260101-000001; [ "$status" -eq 1 ]
+  run _ap marked T20260101-000009; [ "$status" -ne 0 ]
+  run _ap marked; [ "$status" -eq 2 ]
+}
+
+@test "pickable: pick, drift and none" {
+  _nh_repo
+  echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+  _nh_task T20260101-000001 "Open — needs a human [decision]: wait" a
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
+  _nh_task T20260101-000002 "Open" b
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
+  # nothing pickable but a task file is missing from the queue: a sweep would fix it
+  sed -i.bak '/000002/d' "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = drift ]
+}
+
+@test "pickable: a marked task never counts as pickable until the marker is removed" {
+  _nh_repo
+  echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+  _nh_task T20260101-000001 "Open — needs a human [external]: upstream" a
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
+  bash "$REPO_ROOT/todo/scripts/needs-human.sh" clear "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000001-a.md" >/dev/null
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
+}
+
+@test "SKILL.md: big tasks are split, the dispatcher only runs /drive, no skip list" {
+  run grep -n 'Big tasks' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n -- 'blocks: T<original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
+  run grep -n -E 'autopilot-state.sh (skip|unskip)|skip_ids' "$REPO_ROOT/autopilot/SKILL.md"
+  # the only mention left is the one-line migration note
+  [ "$(grep -c 'skip_ids' "$REPO_ROOT/autopilot/SKILL.md")" -le 1 ]
+  run grep -n -- '/drive --auto-selected' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh pickable' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh marked' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
 }

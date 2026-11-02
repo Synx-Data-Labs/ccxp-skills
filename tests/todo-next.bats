@@ -186,3 +186,60 @@ append_queue_line() {
   [[ "$output" == *"T1"* ]]
   [[ "$output" == *"reclaimable"* ]]
 }
+
+# --- --skip-needs-human / --check (T20261102-261809) --------------------------
+
+@test "default output still lists a gated task, with its status" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "gated" "Open — needs a human [decision]: pick"
+  write_task T2 "free" "Open"
+  append_queue_line T1 "gated"; append_queue_line T2 "free"
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T1"* ]]; [[ "$output" == *"needs a human [decision]"* ]]
+}
+
+@test "--skip-needs-human skips the marker and every legacy gated status" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "marked" "Open — needs a human [external]: upstream"
+  write_task T2 "supervised" "In Progress — SUPERVISED (needs VPN)"
+  write_task T3 "blocked-by" "Blocked by T9"
+  write_task T4 "signoff" "Review — sign-off pending"
+  write_task T5 "free" "Open"
+  local t; for t in T1 T2 T3 T4 T5; do append_queue_line $t "x"; done
+  run bash "$SCRIPT" --skip-needs-human
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T5"* ]]
+  [[ "$output" == *"#5 of 5"* ]]   # position in the queue is kept
+  [[ "$output" != *"T1 "* && "$output" != *"T2 "* && "$output" != *"T3 "* && "$output" != *"T4 "* ]]
+}
+
+@test "--skip-needs-human with only gated tasks reports none, and removing the marker brings the task back" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "marked" "Open — needs a human [decision]: pick"
+  append_queue_line T1 "marked"
+  run bash "$SCRIPT" --skip-needs-human
+  [[ "$output" == *"No actionable tasks"* ]]
+  write_task T1 "marked" "Open"
+  run bash "$SCRIPT" --skip-needs-human
+  [[ "$output" == *"T1"* ]]
+}
+
+@test "--check is silent: exit 0 when a task is pickable, 1 when none, also without a queue file" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "marked" "Open — needs a human [decision]: pick"
+  append_queue_line T1 "marked"
+  run bash "$SCRIPT" --skip-needs-human --check
+  [ "$status" -eq 1 ]; [ -z "$output" ]
+  write_task T2 "free" "Open"; append_queue_line T2 "free"
+  run bash "$SCRIPT" --skip-needs-human --check
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+  rm dev/TODO/queue.md
+  run bash "$SCRIPT" --check
+  [ "$status" -eq 1 ]; [ -z "$output" ]
+}
+
+@test "an unknown flag is a usage error" {
+  run bash "$SCRIPT" --nope
+  [ "$status" -eq 2 ]
+}

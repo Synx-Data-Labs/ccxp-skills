@@ -23,14 +23,18 @@
 #                               log + state counters (see ap-stats)
 #   delay <outcome>             seconds until the next wake
 #   remaining                   seconds until next_wake_at (0 when due)
-#   eligible <task-file>        exit 0 when the status line allows auto-driving
-#   skip <task-id> [reason] [--kind blocked|decision|external|epic]
-#                               needs-attention list (kind: what the HUD queue
-#                               breakdown counts it as; `epic` is legacy, task size
-#                               is never a reason to skip); prints "attention" when new
-#   unskip <task-id>|--all      remove the id (or every id) from skip_ids and
-#                               needs_attention; prints "unskipped <id>" (or
-#                               "unskipped all") or "noop" when nothing was listed
+#   eligible <task-file>        exit 0 when the status line allows auto-driving (not
+#                               gated: see todo-gated in todo/scripts/_lib.sh)
+#   pickable [repo-root]        pick | drift | none: pick = /drive could take a task
+#                               (todo-next.sh --skip-needs-human --check), drift =
+#                               nothing pickable but `todo-sweep.sh plan` has mechanical
+#                               findings (a /drive sweep would fix them), none = idle
+#   attention-list [repo-root]  one "<id><TAB><kind><TAB><reason>" per task whose status
+#                               carries the "needs a human" marker (derived from the task
+#                               files; there is no skip list in the state file)
+#   marked <task-id> [repo-root] exit 0 (and print the kind) when that task's file is
+#                               marked, 1 when not: the dispatcher's check that a
+#                               NEEDS-ATTENTION driver really landed its marker
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -40,7 +44,7 @@
 #                               `record`; exit 2 (and a stuck line) when no
 #                               report line is recognized
 #   attention <file|->          one "<task-id><TAB><reason>" line per
-#                               NEEDS-ATTENTION entry of a report (for `skip`)
+#                               NEEDS-ATTENTION entry of a report
 #   clone-path [repo-root]      deterministic dispatch-clone path for a repo
 #   done                        "- Merged T<id> (<slug>)[ — PR #<n>]" per journal
 #                               file added since started_at ("- No tasks merged
@@ -49,12 +53,13 @@
 #                               the Phase 5 bullet report (elapsed, Done,
 #                               Needs your attention) from the state file
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
-#   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND.
+#   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 
 set -euo pipefail
 
 _ap_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 _ap_dir() { dirname "${BASH_SOURCE[0]}"; }
+ap-repo-root() { printf '%s' "${AUTOPILOT_REPO_ROOT:-$(_ap_root)}"; }
 ap-state-file() { printf '%s' "${AUTOPILOT_STATE_FILE:-$(_ap_root)/dev/.autopilot-state.json}"; }
 ap-config-file() { printf '%s' "${AUTOPILOT_CONFIG_FILE:-$(_ap_root)/dev/.autopilot-config.json}"; }
 ap-history-file() { printf '%s' "${AUTOPILOT_HISTORY_FILE:-$(dirname "$(ap-state-file)")/.autopilot-history.jsonl}"; }
@@ -109,7 +114,7 @@ _ap_fresh() {
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
     dispatch_clone_path: null, idle_notified: false, stuck_notified: false,
-    waiting_notified: false, capped_notified: false, skip_ids: [], needs_attention: [],
+    waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
     next_wake_at: null, busy_since: null, current_task: null}' > "$f.tmp.$$" && mv "$f.tmp.$$" "$f"
 }
@@ -137,7 +142,29 @@ _ap_due() {
   if [ "$(ap-remaining)" -gt 30 ]; then echo already-on; else echo dispatch; fi  # 30 s tolerance: a wake may fire slightly early
 }
 
+# One-time migration (T20261102-261809): the per-clone skip list is gone, the gate is the
+# "needs a human" marker in the task files. A state file written by an older version may
+# still carry skip_ids/needs_attention; drop them (they were already wiped daily) and, when
+# there was something in them, leave one `migrated` notice naming the ids and reasons so
+# the owner can mark those tasks. Idempotent; a missing or non-object file is a no-op.
+_ap_migrate() {
+  local f text; f=$(ap-state-file)
+  [ -f "$f" ] || return 0
+  jq -e 'type == "object" and (has("skip_ids") or has("needs_attention"))' "$f" >/dev/null 2>&1 || return 0
+  text=$(jq -r '[ (.needs_attention // [])[] | select(type == "object") | "\(.id // "?") (\(.reason // "needs attention"))" ] as $a
+    | [ (.skip_ids // [])[] | strings ] as $s
+    | ($a | map(split(" (")[0])) as $aid
+    | ($a + [ $s[] | select(. as $i | $aid | index($i) | not) ]) | join("; ")' "$f" 2>/dev/null || true)
+  if [ -n "$text" ]; then
+    _ap_update --arg t "dropped the old skip list, mark these tasks with needs-human.sh if they still need a human: $text" --arg now "$(ap-now)" \
+      'del(.skip_ids, .needs_attention) | .notices = (((.notices // []) + [{kind: "migrated", text: $t, via: "fallback", at: $now}]) | .[-20:])'
+  else
+    _ap_update 'del(.skip_ids, .needs_attention)'
+  fi
+}
+
 ap-start() {
+  _ap_migrate
   case "$(ap-status)" in
     on) _ap_due ;;
     paused) echo paused ;;
@@ -175,7 +202,7 @@ ap-off() {
   local f clone=""; f=$(ap-state-file)
   [ "$(ap-status)" = off ] && { echo noop; return 0; }
   clone=$(jq -r '.dispatch_clone_path // empty' "$f" 2>/dev/null || true)
-  _ap_update '.status = "off" | .paused_at = null | .dispatch_clone_path = null | .next_wake_at = null | .skip_ids = []'
+  _ap_update '.status = "off" | .paused_at = null | .dispatch_clone_path = null | .next_wake_at = null'
   printf 'off %s\n' "$clone"
 }
 
@@ -192,7 +219,7 @@ ap-busy() {
 }
 
 _ap_roll_day() {
-  _ap_update --arg d "$(ap-today)" 'if .day != $d then .day = $d | .cycles_today = 0 | .merges_today = 0 | .capped_notified = false | .skip_ids = [] else . end'
+  _ap_update --arg d "$(ap-today)" 'if .day != $d then .day = $d | .cycles_today = 0 | .merges_today = 0 | .capped_notified = false else . end'
 }
 
 ap-cap() {
@@ -310,6 +337,7 @@ ap-record() {
   [[ "$merged" =~ ^[0-9]+$ ]] || merged=0
   [ "$(ap-status)" = on ] || { echo none; return 0; }
   f=$(ap-state-file)
+  _ap_migrate
   _ap_roll_day
   local was_idle was_stuck was_wait was_capped cycle=1 d nw
   was_idle=$(jq -r '.idle_notified' "$f"); was_stuck=$(jq -r '.stuck_notified' "$f")
@@ -344,56 +372,38 @@ ap-record() {
   echo "$notice"
 }
 
-# Status-line markers that need a human (or are blocked): not auto-driven.
+# Status-line markers that need a human (or are blocked): not auto-driven. The
+# definition is shared with todo-next.sh --skip-needs-human (todo-gated, _lib.sh).
 ap-eligible() {
   local file="${1:?task file}" line
   [ -f "$file" ] || return 1
+  # shellcheck source=../../todo/scripts/_lib.sh
+  source "$(_ap_dir)/../../todo/scripts/_lib.sh"
   line=$(awk 'NR==1&&$0!="---"{exit} /^---$/{n++; if(n==2)exit} n==1&&/^status:/{print; exit}' "$file")
-  if printf '%s' "$line" | grep -qiE 'SUPERVISED|BLOCKED|needs a human|needs manual|sign-off'; then return 1; fi
+  if todo-gated "$line"; then return 1; fi
   return 0
 }
 
-ap-skip() {
-  local id="" reason="" kind="" f; f=$(ap-state-file)
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --kind) kind="${2:-}"; [ $# -ge 2 ] && shift; shift || true ;;
-      --kind=*) kind="${1#--kind=}"; shift ;;
-      *) if [ -z "$id" ]; then id="$1"; elif [ -z "$reason" ]; then reason="$1"; fi; shift ;;
-    esac
-  done
-  [ -n "$id" ] || { echo "skip <task-id> [reason] [--kind blocked|decision|external|epic]" >&2; return 2; }
-  case "$kind" in ''|blocked|decision|external|epic) ;; *) echo "bad kind: $kind (blocked|decision|external|epic)" >&2; return 2 ;; esac
-  [ -n "$reason" ] || reason="needs attention"
-  [ "$(ap-status)" = off ] && return 0
-  if jq -e --arg id "$id" '.skip_ids // [] | index($id)' "$f" >/dev/null 2>&1; then
-    # Already skipped: stay quiet, but a kind given now is stored (the HUD reads it).
-    [ -z "$kind" ] || _ap_update --arg id "$id" --arg k "$kind" '.needs_attention = ((.needs_attention // []) | map(if .id == $id then . + {kind: $k} else . end))'
-    echo none; return 0
-  fi
-  _ap_update --arg id "$id" --arg r "$reason" --arg k "$kind" '
-    .skip_ids = ((.skip_ids // []) + [$id])
-    | .needs_attention = ((.needs_attention // []) | map(select(.id != $id)) + [{id: $id, reason: $r} + (if $k == "" then {} else {kind: $k} end)])'
-  echo attention
+# --- needs-a-human tasks, derived from the task files -------------------------
+
+ap-attention-list() {
+  bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" list "${1:-$(ap-repo-root)}"
 }
 
-ap-unskip() {
-  local id="${1:-}" f; f=$(ap-state-file)
-  [ -n "$id" ] || { echo "unskip <task-id>|--all" >&2; return 2; }
-  [ -f "$f" ] || { echo noop; return 0; }
-  if [ "$id" = --all ]; then
-    if jq -e '((.skip_ids // []) | length) + ((.needs_attention // []) | length) > 0' "$f" >/dev/null 2>&1; then
-      _ap_update '.skip_ids = [] | .needs_attention = []'
-      echo "unskipped all"
-    else echo noop; fi
-    return 0
-  fi
-  if jq -e --arg id "$id" '((.skip_ids // []) | index($id)) != null or ((.needs_attention // []) | any(.id == $id))' "$f" >/dev/null 2>&1; then
-    _ap_update --arg id "$id" '
-      .skip_ids = ((.skip_ids // []) | map(select(. != $id)))
-      | .needs_attention = ((.needs_attention // []) | map(select(.id != $id)))'
-    echo "unskipped $id"
-  else echo noop; fi
+# marked <task-id> [repo-root]: prints the kind, exit 0 when marked; 1 when not (or no file).
+ap-marked() {
+  local id="${1:-}"
+  [ -n "$id" ] || { echo "marked <task-id> [repo-root]" >&2; return 2; }
+  NEEDS_HUMAN_ROOT="${2:-$(ap-repo-root)}" bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" kind "$id" 2>/dev/null
+}
+
+# pickable [repo-root]: pick | drift | none (see the usage header).
+ap-pickable() {
+  local root="${1:-$(ap-repo-root)}" scripts plan
+  scripts="$(_ap_dir)/../../todo/scripts"
+  if (cd "$root" && bash "$scripts/todo-next.sh" --skip-needs-human --check) 2>/dev/null; then echo pick; return 0; fi
+  plan=$(bash "$scripts/todo-sweep.sh" plan --root "$root" 2>/dev/null || true)
+  if printf '%s\n' "$plan" | grep -qE $'^(ADD|REMOVE|UNBLOCK|CLOSE_DONE|ORDER_VIOLATION)\t'; then echo drift; else echo none; fi
 }
 
 # Never errors: Slack when it works, else only the state file. Every notice is
@@ -416,8 +426,11 @@ ap-report() {
   [ "$st" = off ] && return 0
   jq -r '"cycles \(.cycle_count) (today \(.cycles_today)), merged \(.merged_count) (today \(.merges_today)), stuck \(.stuck_count), last \(.last_outcome // "none")",
          (if .next_wake_at then "next cycle \(.next_wake_at)" else empty end),
-         (.needs_attention[]? | "needs attention: \(.id) — \(.reason)"),
          (.notices[-3:][]? | "notice [\(.via)] \(.kind): \(.text)")' "$f"
+  local aid akind areason
+  while IFS=$'\t' read -r aid akind areason; do
+    if [ -n "$aid" ]; then printf 'needs a human: %s [%s] — %s\n' "$aid" "$akind" "$areason"; fi
+  done < <(ap-attention-list 2>/dev/null || true)
   if [ "$st" = on ] && ! _ap_is_busy; then
     local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
     if [ -n "$we" ] && [ -n "$now" ] && [ $(( now - we )) -gt 600 ]; then echo "overdue: no wake fired since $w — type /autopilot on to recover"; fi
@@ -579,8 +592,8 @@ ap-final-report() {
   while IFS=$'\t' read -r id reason; do
     [ -n "$id" ] || continue
     out="${out}- $(_ap_label "$id") — ${reason}"$'\n'
-  done < <(jq -r '.needs_attention[]? | [.id, .reason] | @tsv' "$f")
-  ids=$(jq -r '.needs_attention[]?.id' "$f")
+  done < <(ap-attention-list | cut -f1,3)
+  ids=$(ap-attention-list | cut -f1)
   if [ "$(jq -r '.last_outcome // empty' "$f")" = stuck ]; then
     id=$(jq -r '.last_task // empty' "$f"); reason=$(jq -r '.last_stuck_reason // "stuck"' "$f")
     if [ -n "$id" ] && ! printf '%s\n' "$ids" | grep -qxF "$id"; then
@@ -597,10 +610,11 @@ autopilot-state() {
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
-    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; skip) ap-skip "$@" ;; unskip) ap-unskip "$@" ;; notify) ap-notify "$@" ;;
+    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;; attention-list) ap-attention-list "$@" ;;
+    marked) ap-marked "$@" ;; notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
-    *) sed -n '2,52p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    *) sed -n '2,56p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 
