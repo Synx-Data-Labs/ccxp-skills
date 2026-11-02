@@ -51,3 +51,4 @@ reprioritize.
 - [T20261030-716636](T20261030-716636-hud-queue-cell-counts-stale-checkout-as-ready.md): HUD queue cell counts a stale local checkout as ready
 - [T20261019-187676](T20261019-187676-claim-id-pid-orphan-reclaim.md): Change claim-id from host-hash:path-hash to host-hash:PID so orphaned claims can be reclaimed
 - [T20261028-273649](T20261028-273649-ledger-inputs-actions-refs.md): Ledger persists inputs, actions and ref counters
+- [T20261102-261809](T20261102-261809-autopilot-dispatcher-only-drive-needs-a-human-marker.md): autopilot: dispatcher only calls /drive; owner-gated tasks carry a "needs a human" marker in the task file (no skip list)
