@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: conversation 2026-11-02 (owner approved the redesign proposal, "n83 yes")
 related: [T20261102-902081, T20261028-151063, T20260922-195629, T20261006-391349, T20260930-132964]
 description: autopilot only calls /drive each cycle; owner-gated tasks carry a "needs a human" marker in their own file instead of a per-clone skip list
+claimed_by: cc1-ecc09c93:9285c59f3189ba8b
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261102-261809: autopilot: dispatcher only calls /drive; owner-gated tasks carry a "needs a human" marker in the task file (no skip list)
