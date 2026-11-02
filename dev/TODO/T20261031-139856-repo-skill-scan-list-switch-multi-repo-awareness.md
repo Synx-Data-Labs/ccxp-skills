@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 3
 source: owner request 2026-10-27 (multi-repo awareness); open design questions answered by the owner 2026-10-31
 related: [T20261019-174788, T20261010-274793]
