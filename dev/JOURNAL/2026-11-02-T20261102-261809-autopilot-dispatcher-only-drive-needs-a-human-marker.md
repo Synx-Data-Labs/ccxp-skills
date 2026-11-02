@@ -1,11 +1,11 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: conversation 2026-11-02 (owner approved the redesign proposal, "n83 yes")
 related: [T20261102-902081, T20261028-151063, T20260922-195629, T20261006-391349, T20260930-132964]
 description: autopilot only calls /drive each cycle; owner-gated tasks carry a "needs a human" marker in their own file instead of a per-clone skip list
-claimed_by: cc1-ecc09c93:9285c59f3189ba8b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -66,20 +66,20 @@ scheduled: 2026-11-02
 
 ## Test plan
 
-- [ ] Unit (bats): parser kinds incl. legacy, unmarked, `Blocked by` untouched; `mark`/`clear` round trip incl. folded status; `list`.
-- [ ] Unit (bats): `todo-next.sh` default output unchanged; `--skip-needs-human` skips marked; `--check` exit codes.
-- [ ] Unit (bats): `eligible` refuses the marker and still refuses legacy markers; `skip`/`unskip` removed; legacy state with `skip_ids` loads, is migrated once, day rollover causes no list state.
-- [ ] Unit (bats): HUD buckets by marker kind and ignores state-file lists; `report`/`final-report` list marked tasks from files.
-- [ ] Docs: SKILL.md bats cases for autopilot/drive/todo; `bats tests/` and `claude plugin validate` equivalents run by CI.
-- [ ] Lint: `lint_tasks.py` accepts a marked status (run on a sample file).
+- [x] Unit (bats): parser kinds incl. legacy, unmarked, `Blocked by` untouched; `mark`/`clear` round trip incl. folded status; `list`.
+- [x] Unit (bats): `todo-next.sh` default output unchanged; `--skip-needs-human` skips marked; `--check` exit codes.
+- [x] Unit (bats): `eligible` refuses the marker and still refuses legacy markers; `skip`/`unskip` removed; legacy state with `skip_ids` loads, is migrated once, day rollover causes no list state.
+- [x] Unit (bats): HUD buckets by marker kind and ignores state-file lists; `report`/`final-report` list marked tasks from files.
+- [x] Docs: SKILL.md bats cases for autopilot (`tests/autopilot_state.bats` SKILL.md case); drive/todo SKILL.md checked by the skill-quality ratchet and `lint-docs.sh`.
+- [x] Lint: `lint_tasks.py` accepts a marked status (run on a sample file).
 
 ## Done criteria
 
-- [ ] A day rollover leaves no gating state and dispatches nothing extra: `tests/autopilot_state.bats` (rollover test).
-- [ ] A marked task is never picked by auto-pick until the marker is removed: `tests/todo-next.bats` (`--skip-needs-human`), `drive/SKILL.md` Phase 1.
-- [ ] The owner sees why from the task file: `needs-human.sh list`, `tests/needs_human.bats`.
-- [ ] HUD counts come from task files: `tests/hud_lib.bats` (marker bucket test).
-- [ ] Tests green: CI `bats` job.
+- [x] A day rollover leaves no gating state and dispatches nothing extra: `tests/autopilot_state.bats` (rollover test).
+- [x] A marked task is never picked by auto-pick until the marker is removed: `tests/todo-next.bats` (`--skip-needs-human`), `drive/SKILL.md` Phase 1.
+- [x] The owner sees why from the task file: `needs-human.sh list`, `tests/needs_human.bats`.
+- [x] HUD counts come from task files: `tests/hud_lib.bats` (marker bucket test).
+- [x] Tests green: CI `bats` job.
 
 ## Repo file references
 
@@ -104,3 +104,26 @@ scheduled: 2026-11-02
 - T20260922-195629: autopilot waiting-outcome ambiguity (journal).
 - T20261006-391349: autopilot pause/resume/stop (journal).
 - T20260930-132964: autopilot dispatches from its own clone (journal).
+
+## Closed (2026-11-02)
+
+- Shipped in **PR #547** (implementation), claim PR #545, design PR #546. CI on #547 green (bats, lint-tasks, skill-quality, sync-tasks, Markdown Lint) and an independent review (two rounds) posted on each PR.
+- What landed:
+  - `todo/scripts/_lib.sh` (`todo-needs-human-kind`, `todo-gated`) and `todo/scripts/needs-human.sh` (`kind`, `mark [--release]`, `clear`, `list`).
+  - `todo-next.sh --skip-needs-human` and `--check`; `/drive` auto-pick uses them, an explicit id is never filtered.
+  - `autopilot-state.sh`: `skip`/`unskip` and the state's `skip_ids`/`needs_attention` removed (one-time `migrated` notice), `pickable`, `attention-list`, `marked`, `eligible` on the shared parser, report/final-report derived from the dispatch clone's task files.
+  - HUD queue buckets by marker kind and ignores state-file lists; `sync.py` lenient fallback also recovers `blocked-by`.
+  - `autopilot`, `drive`, `todo` SKILL.md and `hud/README.md` updated.
+- Deviations from the design, both from independent review:
+  - `todo-gated` matches `supervised`/`blocked` as whole words, so `UNBLOCKED` (a real status convention) is not gated; the design had kept the old substring wart.
+  - `mark` writes backslashes safely and `clear` is case-insensitive.
+- Not verified here: a live `/autopilot` cycle against a real repo (the dispatcher text is prose; its scripts are unit-tested). The pointer repo's own marking is already done (pointer PR #284).
+- Known, untouched: `todo-next.sh` on an empty `queue.md` errors under bash 3.2 (`lines[@]` unbound); `pickable` is unaffected.
+- Follow-up tasks filed: none.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no (skill not installed in this session; tests written alongside the code, bats red/green run per slice) — Phase 3.0, code-class
+- Verification (`superpowers:verification-before-completion`): no (skill not installed here; covered by two independent review rounds, the local bats/pytest/skill-quality runs and the /address-pr pre-merge gate)
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no (skill not installed here); 5 + 7 + 3 review findings on #547/#546 each fixed or answered in the design
