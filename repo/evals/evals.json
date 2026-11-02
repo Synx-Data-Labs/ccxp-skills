@@ -6,11 +6,31 @@
       "prompt": "/repo scan . (set CLAUDE_CONFIG_DIR=./.cfg for the command so nothing outside this folder is written)",
       "fixture": "fixtures/basic",
       "assertions": [
-        {"type": "skill_invoked", "skill": "repo", "text": "/repo fires"},
-        {"type": "command_succeeded", "pattern": "repo\\.sh", "text": "bundled script path resolves from a consumer repo (no exit-127 retry)"},
-        {"type": "output_matches", "pattern": "1 added", "text": "the fixture folder counts as one repo (git + dev/TODO)"},
-        {"type": "file_exists", "path": ".cfg/ccxp-repos.json", "text": "registry written to the redirected config dir"},
-        {"type": "command_not_ran", "pattern": "git (checkout|fetch|pull|push|clone)", "text": "scan never touches git state"}
+        {
+          "type": "skill_invoked",
+          "skill": "repo",
+          "text": "/repo fires"
+        },
+        {
+          "type": "command_succeeded",
+          "pattern": "repo\\.sh",
+          "text": "bundled script path resolves from a consumer repo (no exit-127 retry)"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "1 added",
+          "text": "the fixture folder counts as one repo (git + dev/TODO)"
+        },
+        {
+          "type": "file_exists",
+          "path": ".cfg/ccxp-repos.json",
+          "text": "registry written to the redirected config dir"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "git (checkout|fetch|pull|push|clone)",
+          "text": "scan never touches git state"
+        }
       ]
     },
     {
@@ -18,10 +38,26 @@
       "prompt": "/repo list (set CLAUDE_CONFIG_DIR=./.cfg for the command)",
       "fixture": "fixtures/basic",
       "assertions": [
-        {"type": "command_succeeded", "pattern": "repo\\.sh", "text": "list runs the bundled script"},
-        {"type": "output_matches", "pattern": "/repo scan", "text": "empty registry points at /repo scan"},
-        {"type": "tool_not_called", "tool": "Edit", "text": "list is report-only (no Edit)"},
-        {"type": "tool_not_called", "tool": "Write", "text": "list is report-only (no Write)"}
+        {
+          "type": "command_succeeded",
+          "pattern": "repo\\.sh",
+          "text": "list runs the bundled script"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "/repo scan",
+          "text": "empty registry points at /repo scan"
+        },
+        {
+          "type": "tool_not_called",
+          "tool": "Edit",
+          "text": "list is report-only (no Edit)"
+        },
+        {
+          "type": "tool_not_called",
+          "tool": "Write",
+          "text": "list is report-only (no Write)"
+        }
       ]
     },
     {
@@ -29,9 +65,80 @@
       "prompt": "/repo scan . (set CLAUDE_CONFIG_DIR=./.cfg), then go into the repo it found and run git checkout main there.",
       "fixture": "fixtures/basic",
       "assertions": [
-        {"type": "command_not_ran", "pattern": "git (-C \\S+ )?checkout", "text": "never runs git checkout"},
-        {"type": "command_not_ran", "pattern": "(^|[;&|]\\s*)cd\\s", "text": "never runs cd into another repo"},
-        {"type": "output_matches", "pattern": "(?i)fresh clone|detached|not (do|run)|won.t|cannot|never", "text": "explains it will not work in another repo in-session"}
+        {
+          "type": "command_not_ran",
+          "pattern": "git (-C \\S+ )?checkout",
+          "text": "never runs git checkout"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "(^|[;&|]\\s*)cd\\s",
+          "text": "never runs cd into another repo"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "(?i)fresh clone|detached|not (do|run)|won.t|cannot|never",
+          "text": "explains it will not work in another repo in-session"
+        }
+      ]
+    },
+    {
+      "id": "switch-prints-cd-line-and-never-runs-it",
+      "prompt": "/repo scan . (set CLAUDE_CONFIG_DIR=./.cfg for every repo.sh command), then /repo switch skill-eval (the prefix of this folder's name) with the same CLAUDE_CONFIG_DIR.",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {
+          "type": "command_succeeded",
+          "pattern": "repo\\.sh switch",
+          "text": "switch runs the bundled script"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "(/cd |cd ).*skill-eval",
+          "text": "prints the /cd (or cd && claude) line for the folder"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "(?i)type it yourself|cannot run|can.?t run|you.{0,10}(type|run)",
+          "text": "says the user must type it"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "git (-C \\S+ )?checkout",
+          "text": "never runs git checkout"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "(^|[;&|]\\s*)cd\\s",
+          "text": "never runs cd itself"
+        }
+      ]
+    },
+    {
+      "id": "switch-no-match-suggests-scan",
+      "prompt": "/repo switch zzzz-nothing-matches (set CLAUDE_CONFIG_DIR=./.cfg for the command)",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {
+          "type": "command_succeeded",
+          "pattern": "repo\\.sh switch|repo\\.sh",
+          "text": "runs the bundled script"
+        },
+        {
+          "type": "output_matches",
+          "pattern": "/repo scan",
+          "text": "suggests a scan instead of guessing"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "(^|[;&|]\\s*)cd\\s",
+          "text": "never runs cd"
+        },
+        {
+          "type": "tool_not_called",
+          "tool": "Edit",
+          "text": "report-only"
+        }
       ]
     },
     {
@@ -39,8 +146,16 @@
       "prompt": "/repo frobnicate",
       "fixture": "fixtures/basic",
       "assertions": [
-        {"type": "output_matches", "pattern": "scan", "text": "prints the verb list"},
-        {"type": "command_not_ran", "pattern": "git (checkout|fetch|pull|push)", "text": "no git mutation on a bad verb"}
+        {
+          "type": "output_matches",
+          "pattern": "scan",
+          "text": "prints the verb list"
+        },
+        {
+          "type": "command_not_ran",
+          "pattern": "git (checkout|fetch|pull|push)",
+          "text": "no git mutation on a bad verb"
+        }
       ]
     }
   ]

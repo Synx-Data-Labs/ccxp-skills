@@ -3,6 +3,7 @@
 #
 #   repo.sh scan [path] [--depth N] [--all] [--roots a:b]
 #   repo.sh list [--json] [--fresh]
+#   repo.sh switch <name>
 #
 # Thin dispatcher over the registry lib `_repos/repos.sh`; the skill calls this
 # so its prose never has to know the lib layout. Read-only toward every repo it
@@ -18,8 +19,8 @@ function repo-skill-main() {
   local verb="${1:-list}"
   [ $# -gt 0 ] && shift
   case "$verb" in
-    scan|list) repos-main "$verb" "$@" ;;
-    *) printf 'repo: unknown verb %s (scan [path] | list)\n' "$verb" >&2; return 2 ;;
+    scan|list|switch) repos-main "$verb" "$@" ;;
+    *) printf 'repo: unknown verb %s (switch <name> | scan [path] | list)\n' "$verb" >&2; return 2 ;;
   esac
 }
 
