@@ -70,13 +70,13 @@ function in-this-repo--sibling-path() {
   )"
   # Physical paths only, so a symlinked or /var -> /private/var path dedupes.
   cand="$(printf '%s\n' "$cand" | while IFS= read -r c; do
-    [ -n "$c" ] && (cd "$c" 2>/dev/null && pwd -P)
+    [ -n "$c" ] && (CDPATH='' cd -- "$c" >/dev/null 2>&1 && pwd -P)
   done | LC_ALL=C sort -u || true)"
   phys_pwd="$(pwd -P)"
   top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   main=""
   if [ -n "$top" ]; then
-    main="$(cd "$top" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && dirname "$(pwd -P)" || true)"
+    main="$(CDPATH='' cd -- "$top" >/dev/null 2>&1 && CDPATH='' cd -- "$(git rev-parse --git-common-dir 2>/dev/null)" >/dev/null 2>&1 && dirname "$(pwd -P)" || true)"
   fi
   while IFS= read -r c; do
     [ -n "$c" ] || continue

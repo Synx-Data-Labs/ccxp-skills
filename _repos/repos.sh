@@ -34,10 +34,11 @@ function repos-mtime() {
 }
 
 # repos-abs <dir> — physical absolute path, or nothing + rc 1.
-function repos-abs() { (cd "$1" 2>/dev/null && pwd -P) || return 1; }
+function repos-abs() { (CDPATH='' cd -- "$1" >/dev/null 2>&1 && pwd -P) || return 1; }
 
 # repos-expand <path> — leading ~ to $HOME.
 function repos-expand() {
+  # shellcheck disable=SC2088
   case "$1" in
     "~") printf '%s\n' "$HOME" ;;
     "~/"*) printf '%s/%s\n' "$HOME" "${1#\~/}" ;;
@@ -47,6 +48,7 @@ function repos-expand() {
 
 # repos-short <path> — $HOME back to ~ for display.
 function repos-short() {
+  # shellcheck disable=SC2088
   case "$1" in
     "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;;
     *) printf '%s\n' "$1" ;;
@@ -59,7 +61,7 @@ function repos-toplevel() { git -C "${1:-$PWD}" rev-parse --show-toplevel 2>/dev
 # repos-main-of <toplevel> — main worktree root for a repo or linked worktree.
 function repos-main-of() {
   local top="$1" common
-  common="$(cd "$top" 2>/dev/null && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && pwd -P)" || return 1
+  common="$(CDPATH='' cd -- "$top" >/dev/null 2>&1 && CDPATH='' cd -- "$(git rev-parse --git-common-dir 2>/dev/null)" >/dev/null 2>&1 && pwd -P)" || return 1
   [ "$(basename "$common")" = ".git" ] || return 1
   dirname "$common"
 }
@@ -207,13 +209,13 @@ function repos-live-fields() {
   if [ -z "$branch" ]; then
     branch="($(git -C "$d" rev-parse --short HEAD 2>/dev/null || echo '?'))"
   fi
-  if [ -n "$(git --no-optional-locks -C "$d" status --porcelain -uno 2>/dev/null | head -n1)" ]; then dirty="true"; fi
+  if [ -n "$(GIT_NO_LAZY_FETCH=1 git -c core.fsmonitor=false --no-optional-locks -C "$d" status --porcelain -uno 2>/dev/null | head -n1)" ]; then dirty="true"; fi
   for f in "$d"/dev/TODO/T*.md; do
     [ -f "$f" ] && open=$((open + 1))
   done
   q="$d/dev/TODO/queue.md"
   if [ -f "$q" ]; then
-    top="$(grep -m1 '^- \[T' "$q" 2>/dev/null \
+    top="$(grep '^- \[T' "$q" 2>/dev/null | grep -v '~~' | head -n1 \
       | sed -E 's/^- \[([^]]+)\]\([^)]*\):?[[:space:]]*/\1 /; s/^- //' | tr '\t' ' ' || true)"
     top="${top:0:80}"
   fi
@@ -284,7 +286,7 @@ function repos-dirs-changed() {
   while IFS="$(printf '\t')" read -r d m; do
     [ -n "$d" ] || continue
     [ "$(repos-mtime "$d")" = "$m" ] || return 0
-  done <<<"$(printf '%s' "$1" | jq -r 'to_entries[] | [.key, (.value|tostring)] | @tsv')"
+  done <<<"$(printf '%s' "$1" | jq -r 'to_entries[] | .key + "\t" + (.value | tostring)')"
   return 1
 }
 
@@ -294,10 +296,10 @@ function repos-scan() {
   local path="" depth="" all=0 roots_arg="${CCXP_REPO_ROOTS:-}"
   while [ $# -gt 0 ]; do
     case "$1" in
-      --depth) depth="${2:-}"; shift 2 ;;
+      --depth) [ $# -ge 2 ] || { repos-die "scan: --depth needs a value"; return 2; }; depth="$2"; shift 2 ;;
       --depth=*) depth="${1#--depth=}"; shift ;;
       --all) all=1; shift ;;
-      --roots) roots_arg="${2:-}"; shift 2 ;;
+      --roots) [ $# -ge 2 ] || { repos-die "scan: --roots needs a value"; return 2; }; roots_arg="$2"; shift 2 ;;
       --roots=*) roots_arg="${1#--roots=}"; shift ;;
       -*) repos-die "scan: unknown flag $1"; return 2 ;;
       *) if [ -n "$path" ]; then repos-die "scan: one path only"; return 2; fi; path="$1"; shift ;;
@@ -328,21 +330,21 @@ function repos-scan() {
     roots="${d}	${depth:-$REPOS_DEFAULT_DEPTH}
 "
   else
-    local top main
-    top="$(repos-toplevel)"
-    if [ -n "$top" ]; then
-      main="$(repos-main-of "$top" || true)"
-      [ -n "$main" ] && roots="$(dirname "$main")	${depth:-1}
-"
-    fi
-    local rp rd
+    local rp rd top main
     while IFS="$(printf '\t')" read -r rp rd; do
       [ -n "$rp" ] || continue
       rp="$(repos-abs "$(repos-expand "$rp")" || true)"
       [ -n "$rp" ] || continue
       roots="${roots}${rp}	${depth:-$rd}
 "
-    done <<<"$(printf '%s' "$reg" | jq -r '.roots // [] | .[] | [.path, (.depth // 2 | tostring)] | @tsv')"
+    done <<<"$(printf '%s' "$reg" | jq -r '.roots // [] | .[] | .path + "\t" + (.depth // 2 | tostring)')"
+    # Remembered roots come first so a stored depth beats the sibling default.
+    top="$(repos-toplevel)"
+    if [ -n "$top" ]; then
+      main="$(repos-main-of "$top" || true)"
+      if [ -n "$main" ]; then roots="${roots}$(dirname "$main")	${depth:-1}
+"; fi
+    fi
   fi
   roots="$(printf '%s' "$roots" | awk -F'\t' 'NF && !seen[$1]++')"
   if [ -z "$roots" ]; then
@@ -401,7 +403,8 @@ function repos-scan() {
 
   if [ "$all" = 0 ]; then
     printf '%s\n' "$newreg" | jq . | repos-write-atomic "$(repos-registry-file)"
-    repos-cache-write "$(repos-live-json "$newreg")" "$(repos-dir-mtimes "$REPOS_WALK_DIRS")"
+    repos-cache-write "$(repos-live-json "$newreg")" "$(repos-dir-mtimes "$REPOS_WALK_DIRS")" \
+      || printf 'repos: warning: could not write the cache (%s)\n' "$(repos-cache-file)" >&2
   fi
 
   # Report: one row per repo (+ added, - removed, = unchanged), worktrees under it.
@@ -486,11 +489,12 @@ function repos-list() {
   {
     printf ' \tREPO\tBRANCH\tDIRTY\tTASKS\tTOP\n'
     printf '%s' "$live" | jq -r --arg cur "$cur" '
+      def row: map(tostring | gsub("\t"; " ")) | join("\t");
       .[] as $r
       | ([(if $r.path == $cur then "*" else " " end), $r.name, $r.branch, (if $r.dirty then "dirty" else "clean" end),
-          ($r.open_tasks|tostring), $r.top_task] | @tsv),
+          $r.open_tasks, $r.top_task] | row),
         ($r.worktrees[] | [(if .path == $cur then "*" else " " end), ("  " + $r.name + " (wt " + .name + ")"), .branch,
-          (if .dirty then "dirty" else "clean" end), (.open_tasks|tostring), .top_task] | @tsv)'
+          (if .dirty then "dirty" else "clean" end), .open_tasks, .top_task] | row)'
   } | awk -F'\t' '
     { for (i = 1; i <= NF; i++) { c[NR, i] = $i; if (length($i) > w[i]) w[i] = length($i) } n = NR; nf = NF > nf ? NF : nf }
     END { for (r = 1; r <= n; r++) { line = ""; for (i = 1; i <= nf; i++) { v = c[r, i]; if (i < nf) { while (length(v) < w[i]) v = v " "; line = line v "  " } else line = line v } print line } }' \
@@ -514,8 +518,9 @@ function repos-list() {
 # repos-paths — registered repo roots that exist plus a live depth-1 sibling
 # scan of the current repo; unique, no writes. Used by _taskid/in-this-repo.sh.
 function repos-paths() {
-  local reg p top main out=""
+  local reg p top main out="" excl
   reg="$(repos-registry-read 2>/dev/null || printf '{}')"
+  excl="$(printf '%s' "$reg" | jq -r '.exclude // [] | .[]' 2>/dev/null || true)"
   while IFS= read -r p; do
     [ -n "$p" ] && [ -d "$p" ] && out="${out}${p}
 "
@@ -525,7 +530,7 @@ function repos-paths() {
     main="$(repos-main-of "$top" || true)"
     if [ -n "$main" ]; then
       REPOS_WALK_DIRS=""; REPOS_WALK_SKIPPED=""
-      repos-collect "$(dirname "$main")" 1 0 ""
+      repos-collect "$(dirname "$main")" 1 0 "$excl"
       out="${out}${REPOS_COLLECTED}
 "
     fi
