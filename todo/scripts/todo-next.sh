@@ -7,6 +7,14 @@
 # does NOT attempt "the next concrete action to move it forward" — that
 # requires reading and interpreting free-form task-body prose, a judgment
 # call this token-free script can't make.
+#
+#   todo-next.sh [--skip-needs-human] [--check]
+#     --skip-needs-human  also skip gated tasks (a "needs a human" marker, or the
+#                         legacy SUPERVISED/BLOCKED/needs manual/sign-off words, or
+#                         a `Blocked by` status; see todo-gated in _lib.sh). Used by
+#                         /drive's auto-pick; the default listing still shows them.
+#     --check             print nothing; exit 0 when at least one task would be
+#                         listed, 1 when none (T20261102-261809)
 set -euo pipefail
 
 TODO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +25,17 @@ TODO_QUEUE_DIR="${TODO_QUEUE_DIR:-.}"
 QUEUE_FILE="$TODO_QUEUE_DIR/dev/TODO/queue.md"
 
 function todo-next-main() {
+  local skip_gated=0 check=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --skip-needs-human) skip_gated=1 ;;
+      --check) check=1 ;;
+      *) printf 'usage: todo-next.sh [--skip-needs-human] [--check]\n' >&2; return 2 ;;
+    esac
+    shift
+  done
   if [ ! -f "$QUEUE_FILE" ]; then
+    [ "$check" = 1 ] && return 1
     printf 'No dev/TODO/queue.md found at %s\n' "$QUEUE_FILE"
     return 0
   fi
@@ -48,6 +66,7 @@ function todo-next-main() {
     case "$status" in
       Done*|Revisit*|Parked*) continue ;;
     esac
+    if [ "$skip_gated" = 1 ] && todo-gated "$status"; then continue; fi
 
     claim="$(todo-claim-state "$id" "$TODO_LIB_REPO_ROOT")"
     case "$claim" in
@@ -55,6 +74,7 @@ function todo-next-main() {
     esac
 
     picked=$((picked+1))
+    [ "$check" = 1 ] && return 0
     printf '#%d of %d: %s — %s\n' "$total" "$total_entries" "$id" "$title"
     printf '  Status: %s\n' "$status"
 
@@ -85,6 +105,7 @@ function todo-next-main() {
   done
 
   if [ "$picked" -eq 0 ]; then
+    [ "$check" = 1 ] && return 1
     printf 'No actionable tasks in the queue (all skipped: Done/Revisit/Parked/peer-claimed).\n'
   fi
 }

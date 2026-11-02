@@ -111,14 +111,15 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 
 - Shows where `dev/TODO/queue.md` stands, for a repo that has one (none, no cell; nothing is ever an error). Band: `queue 44 = 30r 6b 3d 2e 3x` (ready, blocked, decision, external, epic), squeezed to `queue 30/44` and dropped early when the row is tight. In AP-on mode it sits right after the AP and 24h cells. `/hud details` spells it out in full on its own line right after the AP line: `queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics` (it is never abbreviated there; too wide for the terminal means cut with an ellipsis). Add or remove it with `fields` (`queue`).
 - Deterministic (no LLM): one `awk` over the queued task files plus one `jq` per poll, in `sl-queue-json` (`hud/scripts/hud-lib.sh`); helper JSON key `queue` = `{total, ready, blocked, decision, external, epic, claimed}`. `total` is the number of task lines (`- [T<id>](file.md)`; struck-through lines are not tasks).
-- Every task is counted in exactly ONE bucket, first match wins, so the buckets always add up to `total`:
-  1. epic: `kind=epic` in the autopilot's needs_attention, or the frontmatter has a `children:` key, the task is the parent of a `dev/EPICS/E*.md` epic (opt-in: add a `Parent design task: [T<id>](...)` or `Parent: T<id>` line to the epic file; only the first id on that line counts), or it carries a deliberate uppercase marker (title starts with `EPIC` or contains `— EPIC`; status contains the uppercase word `EPIC`). Free-text `umbrella` / `epic` / `tracking task` is not a signal (it misfires on product terms and prose). Plain members of a `dev/EPICS` epic are ordinary tasks and stay takeable.
-  2. blocked: `kind=blocked`, or status `Blocked by T<id>` while that task is still in `dev/TODO/`, or status containing `BLOCKED` or `SUPERVISED` (case-sensitive).
-  3. external: `kind=external`, or the status mentions upstream, HashData, Apache, customer or external.
-  4. decision: `kind=decision`, or the status says needs/owner decision, "needs a human", "needs manual" or sign-off; also an id in `skip_ids` that has no kind and no hint.
+- Every task is counted in exactly ONE bucket, first match wins, so the buckets always add up to `total`. Everything is read from the task files; the autopilot keeps no skip list (T20261102-261809):
+  0. marker: a status with `— needs a human [<kind>]: <reason>` (`kind` = `blocked|decision|external`) lands in the bucket named by its kind, before every rule below. The driver writes it (`todo/scripts/needs-human.sh mark`), the owner removes it.
+  1. epic: the frontmatter has a `children:` key, the task is the parent of a `dev/EPICS/E*.md` epic (opt-in: add a `Parent design task: [T<id>](...)` or `Parent: T<id>` line to the epic file; only the first id on that line counts), or it carries a deliberate uppercase marker (title starts with `EPIC` or contains `— EPIC`; status contains the uppercase word `EPIC`). Free-text `umbrella` / `epic` / `tracking task` is not a signal (it misfires on product terms and prose). Plain members of a `dev/EPICS` epic are ordinary tasks and stay takeable.
+  2. blocked: status `Blocked by T<id>` while that task is still in `dev/TODO/`, or status containing `BLOCKED` or `SUPERVISED` (case-sensitive).
+  3. external: the status mentions upstream, HashData, Apache, customer or external.
+  4. decision: the status says needs/owner decision, "needs a human" (unbracketed older wording), "needs manual" or sign-off.
   5. claimed: `claimed_by:` is set to a clone other than this one or the autopilot's dispatch clone. It is its own bucket so ready stays honest; it is shown only when above 0.
   6. ready: the rest, what the autopilot can take. A queue line whose task file is missing counts as ready.
-- The autopilot's `dev/.autopilot-state.json` is read only while it is `on` or `paused`; its `needs_attention[].kind` (set by `autopilot-state.sh skip <id> "<reason>" --kind blocked|decision|external|epic`) wins over the frontmatter hints, and `skip_ids` (today's skips) are never ready.
+- The autopilot's `dev/.autopilot-state.json` is read only while it is `on` or `paused`, and only for the dispatch clone path (so the dispatch clone's own claims are not counted as someone else's). An older state file's `skip_ids`/`needs_attention` are ignored.
 
 ## Version cell
 

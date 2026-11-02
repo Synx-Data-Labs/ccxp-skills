@@ -456,18 +456,29 @@ _queue_fixture() {
   [ "$(jq '.ready + .blocked + .decision + .external + .epic + .claimed - .total' <<<"$output")" = 0 ]
 }
 
-@test "sl-queue-json: autopilot kind wins, a skip with no kind is a decision, off/legacy state is ignored" {
-  local repo; repo=$(_queue_fixture q-ap)
-  local own; own=$(_clone_id "$repo")
-  printf '{"schema":2,"status":"on","skip_ids":["T20260101-000011","T20260101-000012","T20260101-000001"],"needs_attention":[{"id":"T20260101-000011","reason":"r","kind":"external"},{"id":"T20260101-000001","reason":"r","kind":"decision"}],"dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
+@test "sl-queue-json: the needs-a-human marker buckets by kind, first; the state-file lists are ignored" {
+  local repo; repo=$(_make_repo q-marker)
+  printf '# Q\n' > "$repo/dev/TODO/queue.md"
+  _task "$repo" 1 "Open — needs a human [external]: waits on HashData"   # kind wins over the text hints
+  _task "$repo" 2 "Open — needs a human [blocked]: needs customer sign-off"  # blocked, not external/decision
+  _task "$repo" 3 "Design — needs a human [decision]: pick A or B"
+  _task "$repo" 4 "Open — needs a human [decision]: x" "children: [T20260101-000001]"  # marker beats the epic signal
+  _task "$repo" 5 Open
+  _task "$repo" 6 "Review — SUPERVISED (needs a human with VPN)"            # legacy wording keeps its old bucket
+  local i; for i in 1 2 3 4 5 6; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.total,.ready,.blocked,.decision,.external,.epic,.claimed]' <<<"$output")" = '[15,4,2,3,2,3,1]' ] || { echo "$output"; false; }
-  printf '{"schema":2,"status":"off","skip_ids":["T20260101-000012"],"needs_attention":[]}' > "$repo/dev/.autopilot-state.json"
+  [ "$output" = '{"total":6,"ready":1,"blocked":2,"decision":2,"external":1,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
+  # a legacy state file with skip lists changes nothing; neither does an off or malformed one
+  printf '{"schema":2,"status":"on","skip_ids":["T20260101-000005"],"needs_attention":[{"id":"T20260101-000005","reason":"r","kind":"external"}],"dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -r .ready <<<"$output")" = 7 ]
+  [ "$(jq -r .ready <<<"$output")" = 1 ]
   printf 'not json' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -r .total <<<"$output")" = 15 ]
+  [ "$(jq -r .total <<<"$output")" = 6 ]
+  # removing the marker returns the task to ready
+  _task "$repo" 1 Open
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -r .ready <<<"$output")" = 2 ]
 }
 
 @test "sl-queue-json: epic needs a deliberate signal; umbrella/epic prose is not one" {
@@ -481,14 +492,13 @@ _queue_fixture() {
   _task "$repo" 6 Open "" "Design — EPIC (Design)"                        # uppercase marker in title
   _task "$repo" 7 "Design — EPIC (Design)"                                # uppercase marker in status
   _task "$repo" 8 Open "" "Parent design"                                 # parent of a dev/EPICS epic
-  _task "$repo" 9 Open                                                    # kind=epic via autopilot
+  _task "$repo" 9 Open                                                    # no signal any more: ready
   _task "$repo" 10 Open                                                   # member of the epic: ready
   mkdir -p "$repo/dev/EPICS"
   printf '### E1 — Thing\n\n**Parent design task:** [T20260101-000008](../TODO/T20260101-000008-t.md) (supersedes T20260101-000001)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
   local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
-  printf '{"schema":2,"status":"on","skip_ids":[],"needs_attention":[{"id":"T20260101-000009","reason":"r","kind":"epic"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":10,"ready":4,"blocked":1,"decision":0,"external":0,"epic":5,"claimed":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":10,"ready":5,"blocked":1,"decision":0,"external":0,"epic":4,"claimed":0}' ] || { echo "$output"; false; }
 }
 
 @test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {
@@ -498,9 +508,9 @@ _queue_fixture() {
   _task "$repo" 1 Open "claimed_by: null"
   _task "$repo" 2 "In Progress — UNBLOCKED now"
   _task "$repo" 3 Open "claimed_by: $(_clone_id "$ap")"
-  _task "$repo" 4 Open
+  _task "$repo" 4 "Open — needs a human [blocked]: waits"
   local i; for i in 1 2 3 4; do _qline "$i" "$repo"; done
-  printf '{"schema":2,"status":"paused","skip_ids":[],"needs_attention":[{"id":"T20260101-000004","reason":"r","kind":"blocked"}],"dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
+  printf '{"schema":2,"status":"paused","dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$output" = '{"total":4,"ready":3,"blocked":1,"decision":0,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
 }

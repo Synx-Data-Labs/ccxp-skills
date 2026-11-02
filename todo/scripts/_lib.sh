@@ -30,6 +30,37 @@ function todo-fm-get() {
   ' "$file"
 }
 
+# --- "needs a human" gating (T20261102-261809) --------------------------------
+# One shared definition, used by todo-next.sh (--skip-needs-human), needs-human.sh
+# and autopilot-state.sh (eligible). Grammar of a marked status line:
+#   <leading status text> — needs a human [<kind>]: <reason>      kind = blocked|decision|external
+# The leading token is kept (Open, Design, ...), so lint and sync-tasks are unaffected.
+
+# Kind of a "needs a human" marker in a status value: prints blocked|decision|external
+# and exits 0; a legacy unbracketed "needs a human" prints decision (the HUD's bucket);
+# exits 1 (no output) when the status carries no marker.
+function todo-needs-human-kind() {
+  local lc
+  lc="$(printf '%s' "${1:-}" | tr 'A-Z' 'a-z')"
+  local pat='needs a human \[(blocked|decision|external)\]'
+  if [[ "$lc" =~ $pat ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "$lc" == *"needs a human"* ]]; then
+    printf 'decision\n'
+    return 0
+  fi
+  return 1
+}
+
+# Exit 0 when a status value is not auto-pickable: the marker above, or any legacy
+# human-only word autopilot's `eligible` always refused (case-insensitive substring,
+# so "Blocked by T<id>" and "UNBLOCKED" both match).
+function todo-gated() {
+  printf '%s' "${1:-}" | grep -qiE 'SUPERVISED|BLOCKED|needs a human|needs manual|sign-off'
+}
+
 # Claim-state verdict for one task id: mine|peer:<claimant>|reclaimable:<claimant>|unclaimed
 # $2 (optional) overrides the repo root task_claim.sh is invoked from — tests
 # pass a throwaway task file's directory; real callers omit it (defaults to

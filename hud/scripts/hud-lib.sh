@@ -364,25 +364,27 @@ sl-ledger-json() {
 #   {"total","ready","blocked","decision","external","epic","claimed"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
 # lands in EXACTLY ONE bucket, first match wins, so the buckets always sum to total:
-#   epic      kind=epic in autopilot's needs_attention, or the frontmatter has a `children:`
-#             key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
+#   marker    a status with the bracketed marker ` — needs a human [<kind>]: <reason>`
+#             (T20261102-261809) lands in the bucket named by its kind (blocked|decision|
+#             external) before anything else; the task files are the only source, the
+#             autopilot state file no longer carries a skip list
+#   epic      the frontmatter has a `children:` key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
 #             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
 #             standalone word EPIC. Free-text "umbrella"/"epic" is NOT a signal (product
 #             terms and prose misfire). Plain members of a dev/EPICS epic stay takeable.
-#   blocked   kind=blocked, or status `Blocked by T<id>` while that blocker is still in
+#   blocked   status `Blocked by T<id>` while that blocker is still in
 #             dev/TODO/, or the status contains BLOCKED or SUPERVISED (case-sensitive,
 #             so a resolved "Blocked by" is not blocked)
-#   external  kind=external, or the status mentions upstream, HashData, Apache, customer
+#   external  the status mentions upstream, HashData, Apache, customer
 #             or external (waiting on an outside party)
-#   decision  kind=decision, or the status says needs/owner decision, "needs a human",
-#             "needs manual", sign-off; also an id in autopilot's skip_ids with no kind
-#             and no hint (a skipped task needs a human look)
+#   decision  the status says needs/owner decision, "needs a human" (unbracketed legacy
+#             wording), "needs manual", sign-off
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
-# autopilot state (dev/.autopilot-state.json) is read only while status is on|paused;
-# its `needs_attention[].kind` wins over the frontmatter hints. A queue line whose task
-# file is missing has no hints and counts as ready.
+# autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, and
+# only for its dispatch clone path (so the clone's own claims count as this clone's).
+# A queue line whose task file is missing has no hints and counts as ready.
 sl-queue-json() {
   local repo_root="$1" todo q
   todo="$repo_root/dev/TODO"; q="$todo/queue.md"
@@ -411,11 +413,9 @@ sl-queue-json() {
   local parents; parents=$(cat "$repo_root"/dev/EPICS/E*.md 2>/dev/null \
     | grep -iE '^[*_ ]*parent( design task)?[*_ ]*:' | sed -E 's/^[^T]*(T[0-9]+-[0-9]+).*/\1/' | grep -E '^T[0-9]+-[0-9]+$' || true)
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
-  local state='{"skip":[],"att":{},"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
+  local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
     st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | {
-        skip: [(.skip_ids // [])[] | strings],
-        att: ([(.needs_attention // [])[] | select(type == "object" and (.id | type) == "string") | {key: .id, value: ((.kind // "") | strings)}] | from_entries),
         clone: ((.dispatch_clone_path // "") | strings)}' "$sf" 2>/dev/null) || st=""
     [ -z "$st" ] || state="$st"
   fi
@@ -429,14 +429,14 @@ sl-queue-json() {
     | ($parents | split("\n") | map(select(. != ""))) as $epicParents
     | ($rows | split("\n") | map(select(. != ""))) as $ids
     | [$ids[] | . as $id | ($meta[$id] // {status: "", claimed: "", title: "", kids: false}) as $m
-        | ($st.att[$id] // "") as $kind
         | ($m.status) as $s
-        | (if $kind == "epic" or $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
-           elif $kind == "blocked" or ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
-           elif $kind == "external" or ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
-           elif $kind == "decision" or ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
+        | (([$s | ascii_downcase | capture("needs a human \\[(?<k>blocked|decision|external)\\]")] | .[0].k) // "") as $kind
+        | (if $kind != "" then $kind
+           elif $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
+           elif ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
+           elif ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
+           elif ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
-           elif ($st.skip | index($id)) != null then "decision"
            else "ready" end)] as $b
     | {total: ($ids | length)} + (["ready", "blocked", "decision", "external", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)' 2>/dev/null || true
 }
