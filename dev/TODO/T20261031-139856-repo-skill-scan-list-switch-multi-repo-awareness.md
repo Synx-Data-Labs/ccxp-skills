@@ -13,6 +13,13 @@ scheduled: 2026-10-26
 
 > `<skills-root>` = the plugin root (this repo's top level); substitute the literal path (`skill-conventions` §9).
 
+## TLDR
+
+- **Type**: feature
+- **Problem**: no skill knows other repos exist; the owner wants `/repo scan|list|switch`.
+- **Solution**: new `_repos/` lib (`repos.sh scan|list|resolve`, sourceable `resolve.sh`) plus a thin `repo/SKILL.md`; PR 1 = scan + list + registry + guidelines/README/`in-this-repo.sh`, PR 2 = resolve + switch.
+- **Decisions on the five reviewer ambiguities**: see `## Decisions` (all conservative, recorded for review).
+
 ## Problem
 
 - **Type**: feature
@@ -83,3 +90,72 @@ scheduled: 2026-10-26
 - `tests/repos.bats`: hermetic temp roots (local `user.email`/`user.name` in fixtures) with real linked worktrees and a submodule; marker is `dev/TODO/` only (a folder with just `dev/guidelines.md` is not listed); depth 1 vs depth 2 for `owner/repo` layouts; `--all`; registry round-trip keeps `aliases`; stale path pruned; cache reuse and invalidation; no network, no writes into scanned repos.
 - `tests/repo_resolve.bats`: each matcher tier (exact, prefix, substring, fuzzy), ambiguity exits non-zero with candidates, explicit `--repo` and `$CCXP_REPO` order, a path outside the registry is refused unless `--any`.
 - Repo gates stay green: `lint_tasks.py`, `lint-docs.sh`, markdownlint, `readme_skill_count.bats`, skill-conventions lint, identifier lint.
+
+## Context
+
+- Today everything is "the repo containing cwd"; the only cross-repo lookup is the sibling glob `_taskid/in-this-repo.sh:60-78` (`$parent/*/dev/TODO/*id*.md`, one root only).
+- Bash libs live in `_<prefix>/` with a README (`skill-conventions` section 4), are sourceable and function-wrapped (`dev/guidelines.md` Script Standards), and get BATS tests (section 5); `jq` is already a hard dependency of other scripts.
+- The registry is a user file under `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`, same convention as `ccxp-hud.json`; the cache sits in the `state/` dir `claimant-id.sh` already uses. Shipped files carry no user paths (`lint_identifiers.py`).
+- `/cd` is not model-invocable, so `/repo switch` can only print the line (verified in the design doc, section 4; not re-verified here).
+
+## Solution
+
+- **Lib `_repos/`** (`README.md`, `repos.sh`, `resolve.sh`), registry `ccxp-repos.json`, cache `state/ccxp-repos.json`, shape as in the task spec above.
+  - `repos.sh scan [path] [--depth N] [--all] [--roots a:b]`: for each root, walk children; a child is a repo when it has a `.git` (dir or file) AND a `dev/TODO/` dir (`--all`: `.git` alone).
+    - Descent: never into a `.git` folder or symlink or dot folder or `node_modules`; into a plain (non-git) folder only while depth allows. Default cap 2 (= depth 1 plus the `owner/repo` container level); `--depth 1` is strict children only; an explicit `--depth N` is a hard cap.
+    - Linked worktree (`.git` file, `gitdir:` has `/worktrees/`): resolved to its main repo via `git rev-parse --git-common-dir`, attached to that record's `worktrees[]` and printed as `repo (wt X)`; main is added when it qualifies. Submodule (`/modules/`): skipped.
+    - Registry write keeps `aliases` of unchanged paths; repos under a scanned root are replaced, others kept unless their path vanished; roots remembered only for path/zero-arg scans, not for `--roots` or `CCXP_REPO_ROOTS` (one-call overrides).
+    - Prints a table and "N added, M removed, K unchanged"; the only writes are the two user files (atomic temp + `mv`). Local only, no network, no claim, scanned repos are read with `git -C` only.
+  - `repos.sh list [--json] [--fresh]`: registry repos whose path still exists, with live fields (branch, dirty via `status --porcelain -uno`, open tasks = `dev/TODO/*.md` minus `queue.md`, top line of `queue.md`); current repo marked `*` (match on repo path or any worktree path); cache reused when younger than 10 min and registry plus every scanned dir mtime unchanged, else recomputed and rewritten. Bare `/repo` = list plus a line for the current repo when it is not registered.
+  - `repos.sh paths`: registered repo paths plus a live sibling scan (no writes); `in-this-repo--sibling-path` iterates the union of that and its old glob, so zero-config and a second root both work.
+  - PR 2: `repos.sh resolve <query> [--any]` and `resolve.sh` `repo-resolve [--repo X] [--any]` (order: `--repo` > `$CCXP_REPO` > toplevel of `$PWD` > error); tiers exact, prefix, substring, subsequence over `name`, `owner/name`, `aliases` (case-insensitive, deduped by path); exit 0 one hit (path on stdout), 3 ambiguous (candidates on stdout, tab separated), 4 none, 5 refused, 2 usage. `repos.sh switch <query>` prints the `/cd` line (pbcopy when present) or the `cd <path> && claude` fallback.
+- **Skill `repo/SKILL.md`** holds only judgment: which verb, the picker on ambiguity (`AskUserQuestion`), the reminder after `/cd`, never claiming a switch, never `cd`/`git checkout`. PR 1 ships `scan` and `list` (the `switch` verb is added in PR 2 so the argument-hint never promises an unbuilt verb).
+- **Docs**: "Multi-repo" section in `dev/guidelines.md` and `repo-conventions/templates/guidelines.md`; README skill row + count 51 to 52 (PR 1); `tests.yml` path filters gain `_repos/**`.
+- **Alternatives rejected**:
+  - Python for the scanner: the suite's libs are bash, and CI/Mac both have bash+jq; rejected for consistency, not capability.
+  - Scan-on-every-list: slow with ~80 git repos; the registry plus cache keeps `list` O(registered).
+  - Pruning the registry in `list`: a read verb that silently deletes data; rejected.
+  - Aggregating tasks into the HUD, deriving per-repo gh accounts, running `/cd` from a mod: out of scope by the owner's picks.
+
+## Decisions
+
+- **`--any`**: only on `resolve`/`repo-resolve`/`repos.sh switch`'s underlying call. It lets a caller (dispatcher, scripts) resolve a path that is a git work tree but not registered or lacks `dev/TODO/`. Without it such a path is refused (exit 5). `/repo switch` never passes it, so an unscanned clone yields "run /repo scan". `scan --all` is the separate flag for listing any git repo.
+- **`list` pruning**: `list` never edits the registry; stale paths are omitted from output with a "N stale, run /repo scan" hint. Only `scan` prunes (counted in "M removed").
+- **Non-unique prefix**: the first tier with any hit wins and is reported as ambiguous if it has several (picker over that tier's candidates); it never falls through to a wider tier, which would silently widen the guess. Same for a non-unique exact name (two orgs, same folder name).
+- **T20261010-274793 overlap**: this task adds only a short "Multi-repo" section (registry, `/repo`, the fresh-clone/detached-job rule stated as a pointer to `drive/SKILL.md` Phase 1.5). It does not restate the cross-repo rule or pick that task's home; whichever lands second adjusts the link. Recorded under Closed.
+- **Version gate (Claude 2.1.246)**: `repos.sh switch` reads `claude --version` (override `CCXP_CLAUDE_VERSION` for tests), compares with `sort -V`; at or above 2.1.246 print the `/cd` line, below or undeterminable print `cd <path> && claude`, which works everywhere. Known limit: the installed binary can be newer than the running session; the hint says to use the `cd` line if `/cd` is refused.
+
+## Test plan
+
+- [ ] Unit: `tests/repos.bats` (hermetic temp roots, real linked worktree, a real submodule, `CLAUDE_CONFIG_DIR` pointed at a temp dir) covering marker, depth 1 vs 2, `--all`, aliases round-trip, stale prune, cache reuse/invalidation, no writes into scanned repos.
+- [ ] Unit: `tests/repo_resolve.bats` (PR 2): tiers, ambiguity exit, `--repo`/`$CCXP_REPO` order, `--any`, version gate.
+- [ ] `tests/taskid_in_this_repo.bats` gains a second-root case; existing cases stay green.
+- [ ] Gates: `bats tests/`, `lint_tasks.py`, `lint-docs.sh`, `readme_skill_count.bats`, `skill_score.py --check`, coverage check, `lint_identifiers.py`; some bats fail locally on macOS (BSD `paste` etc.) and are trusted to Linux CI.
+- [ ] Post-merge, not verifiable now: the skill reaches users only via a release plus `/ccxp-skills:update`; evals (`skill_eval.py repo --record`) need a live `claude -p` and are run by the maintainer.
+
+## Done criteria
+
+- [ ] Scan rule is `dev/TODO/` only: `tests/repos.bats` "guidelines-only folder is not listed".
+- [ ] Depth and owner/repo descent, worktree collapse, submodule skip: `tests/repos.bats` depth and worktree cases.
+- [ ] Registry round-trip keeps aliases; cache reuse/invalidation; stale prune: `tests/repos.bats`.
+- [ ] `/repo scan` and `/repo list` skill merged (PR 1): `repo/SKILL.md`, `repo/evals/evals.json` (3+ cases incl. `tool_not_called` / `command_not_ran` for `cd` and `git checkout`).
+- [ ] Skill score at least 70 and ratchet updated: `dev/quality/skill-scores.json` entry `repo`.
+- [ ] Guidelines "Multi-repo" sections, README row and count: `dev/guidelines.md`, `repo-conventions/templates/guidelines.md`, `README.md`, `tests/readme_skill_count.bats`.
+- [ ] `in-this-repo.sh` finds repos under a second root: `tests/taskid_in_this_repo.bats` new case.
+- [ ] `/repo switch` (PR 2): `tests/repo_resolve.bats`, SKILL.md switch workflow.
+- [ ] Version bump and `claude plugin validate .` left to the maintainer's bump PR (external, unchecked on purpose).
+
+## Root cause
+
+- Not a defect: the suite grew single-repo (verified, `_taskid/in-this-repo.sh:60-78` is the only multi-repo read, introduced for T20260626-298293 to diagnose wrong-clone picks; deliberate, scoped to diagnostics).
+
+## Repo file references
+
+| File | Lines | Purpose |
+|---|---|---|
+| `_taskid/in-this-repo.sh` | 60-78 | sibling glob to reuse `repos.sh paths` |
+| `tests/test_helper.bash` | 28-37 | `git_identity` for hermetic fixtures |
+| `tests/readme_skill_count.bats` | 6-11 | count must match `*/SKILL.md` |
+| `README.md` | 13, 118-130 | count and skill table |
+| `.github/workflows/tests.yml` | 5-30 | path filters need `_repos/**` |
+| `dev/quality/skill-scores.json`, `dev/quality/skill-coverage-baseline.txt` | whole | ratchet; no new baseline entries allowed |
