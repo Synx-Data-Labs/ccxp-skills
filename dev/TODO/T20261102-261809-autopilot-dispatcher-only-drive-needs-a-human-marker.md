@@ -38,17 +38,21 @@ scheduled: 2026-11-02
 - **Marker grammar (fixed)**: `status: <leading status token(s)> — needs a human [<kind>]: <reason>`, kind one of `blocked|decision|external`.
   - The leading token is kept (`Open`, `Design`, ...), so lint, `sync-tasks` and `task_claim.sh` keep working.
   - Legacy free text containing "needs a human" with no brackets still counts as marked, kind `decision` (matches `hud-lib.sh:437`).
-- **One shared parser**: `todo/scripts/_lib.sh` gets `todo-needs-human-kind <status>` (prints the kind, exit 1 when unmarked). Everything else calls it.
+  - "Gated" (not auto-pickable) is the full existing `eligible` set, `SUPERVISED|BLOCKED|needs a human|needs manual|sign-off` (case-insensitive, `autopilot-state.sh:352`), so no previously refused task becomes pickable. Because the match is case-insensitive, `Blocked by T<id>` statuses are gated too, so a task blocked by a marked task is never picked either.
+- **One shared parser**: `todo/scripts/_lib.sh` gets `todo-needs-human-kind <status>` (prints the kind of a bracketed or legacy "needs a human" marker, exit 1 when unmarked) and `todo-gated <status>` (the full gated set above). `eligible`, `todo-next.sh` and `needs-human.sh` all call them.
   - `todo/scripts/needs-human.sh` is the CLI around it: `kind <file>`, `mark <file> <kind> <reason>`, `clear <file>`, `list [repo-root]` (id, kind, reason per marked task in `dev/TODO`).
   - `mark` replaces the `status:` line (and folded continuation lines, same rule as `_tc_fm_set`) with `<old leading text> — needs a human [<kind>]: <reason>`, replacing an older marker; `clear` strips the suffix.
-- **`todo-next.sh --skip-needs-human`** (settles the open point): marked tasks are skipped like Done/Parked; `--check` prints nothing and exits 0 when at least one task is pickable, 1 when none.
+- **`todo-next.sh --skip-needs-human`** (settles the open point): gated tasks (`todo-gated`) are skipped like Done/Parked; `--check` prints nothing and exits 0 when at least one task is pickable, 1 when none.
   - Default output is unchanged, so `/todo next` for a human still shows gated tasks (their status line says why).
   - `/drive` auto-pick (bare, or `--auto-selected`) passes `--skip-needs-human`; an explicit task id is never filtered (a human's deliberate request).
 - **Driver writes the marker**: `/drive`'s escalation path and the autopilot prompt tell the sub-agent that ends `NEEDS-ATTENTION` to run `needs-human.sh mark` and land it as a docs-only status PR (same tier as the claim PR). The owner un-gates with `needs-human.sh clear` or by hand.
 - **Dispatcher**: Phase 3 drops the sweep and queue walk: pull the clone, `todo-next.sh --skip-needs-human --check` (idle without a dispatch when none), then dispatch `/drive --auto-selected` (no id).
+  - **Marker verified, not trusted**: after a `NEEDS-ATTENTION: T<id>` report, Phase 4 pulls the clone and runs `needs-human.sh kind` on that task. Marked: send the `attention` notice (once per task by construction, the task is never re-picked). Not marked (agent crashed, ignored the prompt, marker PR not merged): record `stuck` ("marker not landed"), which uses the existing 5/10/20/30 min back-off, so a missing marker cannot cause a 60 s redispatch loop.
+  - **Blocker recursion**: `/drive` Phase 6 does not recurse into a blocker that carries the marker; the goal task is itself marked `blocked` and the run ends `NEEDS-ATTENTION`.
 - **State file**: stays `schema: 2`. `skip`/`unskip` and the `skip_ids`/`needs_attention` fields go away; `attention-list` (via `needs-human.sh list`) feeds `report`, `final-report` and the HUD from task files.
-  - Migration: `start`/`record` delete legacy `skip_ids`/`needs_attention` from an existing file and add one `migrated` notice naming the count; old files still load.
-- **HUD**: `sl-queue-json` buckets a marked task by its kind first, and no longer reads `skip_ids`/`needs_attention` (it still reads `dispatch_clone_path`).
+  - Migration: `start`/`record` delete legacy `skip_ids`/`needs_attention` from an existing file and add one `migrated` notice naming the ids and reasons dropped (so the owner can mark them); old files still load.
+  - Accepted cost: in a repo whose gated tasks are not yet marked, each previously skipped task is dispatched once more, then its driver marks it. The old list was already wiped every day, so nothing durable is lost.
+- **HUD**: `sl-queue-json` buckets a task with a bracketed marker by its kind first, and no longer reads `skip_ids`/`needs_attention` (it still reads `dispatch_clone_path`). Legacy unbracketed statuses keep today's bucket order (`hud-lib.sh:434-439`, e.g. `SUPERVISED (needs a human ...)` stays `blocked`); the state-file `epic` kind goes away (the frontmatter and title epic signals stay).
 - **Alternatives rejected**:
   - Keep `skip_ids` but stop wiping it: still per-clone and invisible to other sessions and the owner.
   - Dispatcher writes the marker: it would need to parse sub-agent prose and edit task files; the driver has the reason and the claim already.
@@ -76,12 +80,15 @@ scheduled: 2026-11-02
 
 | File | Lines | Purpose |
 |---|---|---|
-| `autopilot/scripts/autopilot-state.sh` | 178, 195, 348-397 | skip wipe, `eligible`, `skip`/`unskip` to remove or rewire |
-| `autopilot/SKILL.md` | 26, 79-85, 102-104 | dispatcher, state fields, classify rules |
+| `autopilot/scripts/autopilot-state.sh` | 2-52, 112, 178, 195, 348-397, 419, 582-583, 600 | usage text, fresh state, wipes, `eligible`, `skip`/`unskip`, `report`, `final-report`, dispatch table |
+| `autopilot/SKILL.md` | 26, 39, 79-85, 102-104, 110, 126, 134 | dispatcher, state fields, classify rules, notices, important notes |
 | `todo/scripts/todo-next.sh` | 47-50 | add `--skip-needs-human`, `--check` |
 | `todo/scripts/_lib.sh` | 22-31 | add the shared parser |
-| `hud/scripts/hud-lib.sh` | 386-441 | queue buckets |
-| `drive/SKILL.md` | Phase 1, Phase 3 escalation | auto-pick filter, marking step |
+| `todo/scripts/needs-human.sh` (new) | n/a | `kind`, `mark`, `clear`, `list` |
+| `hud/scripts/hud-lib.sh`, `hud/README.md` | 367-441, 112-121 | queue buckets and docs |
+| `drive/SKILL.md` | Phase 1, Phase 3 escalation, Phase 6 | auto-pick filter, marking step, no recursion into a marked blocker |
+| `todo/SKILL.md` | 60, 78 | status grammar, `next` flags |
+| `tests/autopilot_state.bats`, `tests/hud_lib.bats`, `tests/todo-next.bats`, `tests/needs_human.bats` (new) | 117, 279-288, 476, 563-601 / 462-503 | rewire and add cases |
 
 ## Related
 
