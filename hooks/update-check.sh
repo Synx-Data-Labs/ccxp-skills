@@ -38,7 +38,10 @@ function update-check() {
   local latest installed loaded=""
   latest="$(latest_version)"
   [ -n "$latest" ] || return 0   # offline / failed: stay silent, do not advance lastCheck
-  auto_state_merge "$dir" "{\"lastCheck\":$now,\"lastCheckIso\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"lastSeen\":\"$latest\"}" || return 0
+  auto_state_merge "$dir" "{\"lastSeen\":\"$latest\"}" || return 0
+  # lastCheck (the throttle stamp) is written only once the decision is final; a busy skip or a failed
+  # update leaves it alone so the next session start retries.
+  checked() { auto_state_merge "$dir" "{\"lastCheck\":$now,\"lastCheckIso\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"; }
 
   installed="$(installed_version)"
   [[ "$installed" =~ $SEMVER_RE ]] || return 0
@@ -59,6 +62,7 @@ function update-check() {
 
   if ver_gt "$latest" "$installed"; then
     if [ "$hold" = true ] && [ "$major_new" != "$major_cur" ]; then
+      checked
       if [ "$(auto_state_get "$dir" '.notifiedFor')" != "$latest" ]; then
         auto_state_merge "$dir" "{\"notifiedFor\":\"$latest\"}"
         emit "ccxp-skills $latest is a MAJOR release (installed $installed), so auto-update is holding it. Review the release notes, then run /update to install it."
@@ -70,6 +74,7 @@ function update-check() {
     installed="$(installed_version)"
     [[ "$installed" =~ $SEMVER_RE ]] || return 0
   fi
+  checked
 
   # Newest installed version differs from what this session loaded: refresh persona once, tell the user once.
   [ "$installed" != "$loaded" ] || return 0
@@ -97,12 +102,19 @@ function emit() {
   jq -cn --arg m "$1" '{systemMessage: $m, hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $m}}'
 }
 
+# kill_tree PID: TERM the process and all its descendants (a hung `claude plugin update` is a grandchild).
+function kill_tree() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do kill_tree "$c"; done
+  kill -TERM "$1" 2>/dev/null
+}
+
 # Hard time limit: the check runs in the background and is killed after LIMIT_SECS.
 function update-check-limited() {
   exec 3<&0   # a background job would otherwise get /dev/null as stdin
   update-check <&3 &
   local pid=$! wd
-  ( sleep "$LIMIT_SECS"; pkill -TERM -P "$pid" 2>/dev/null; kill -TERM "$pid" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
+  ( sleep "$LIMIT_SECS"; kill_tree "$pid" ) >/dev/null 2>&1 </dev/null &
   wd=$!
   wait "$pid" 2>/dev/null
   kill "$wd" 2>/dev/null

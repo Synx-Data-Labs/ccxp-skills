@@ -40,7 +40,7 @@ function auto_state_merge() {
 
 # settings_flag DIR -> true|false|absent|noentry|nofile|invalid
 function auto_settings_flag() {
-  local s="$1/settings.json"
+  local s="$1/${2:-settings.json}"
   [ -f "$s" ] || { echo nofile; return 0; }
   jq -r --arg m "$AUTO_MARKETPLACE" '
     if (.extraKnownMarketplaces | type) != "object" or (.extraKnownMarketplaces[$m] | type) != "object" then "noentry"
@@ -51,7 +51,10 @@ function auto_settings_flag() {
 # auto_set_native DIR true|false DRY: key-level edit with backup; prints what it did.
 function auto_set_native() {
   local dir="$1" want="$2" dry="$3" s cur tmp bak
-  s="$dir/settings.json"; cur="$(auto_settings_flag "$dir")"
+  s="$dir/settings.json"
+  # follow a symlinked settings.json so the edit lands in the real file, not a replacement for the link
+  if [ -L "$s" ]; then s="$(readlink "$s")"; case "$s" in /*) ;; *) s="$dir/$s" ;; esac; fi
+  cur="$(auto_settings_flag "$(dirname "$s")" "$(basename "$s")")"
   case "$cur" in
     nofile|noentry) echo "auto: native autoUpdate: no extraKnownMarketplaces.$AUTO_MARKETPLACE entry in $s, left alone (the SessionStart hook does the updating)"; return 0 ;;
     invalid) echo "auto: native autoUpdate: $s is not valid JSON, left alone" >&2; return 0 ;;
@@ -64,7 +67,7 @@ function auto_set_native() {
   cp -p "$s" "$bak"
   tmp="$(mktemp "$s.XXXXXX")"
   if jq --arg m "$AUTO_MARKETPLACE" --argjson v "$want" '.extraKnownMarketplaces[$m].autoUpdate = $v' "$s" >"$tmp" 2>/dev/null; then
-    chmod --reference="$s" "$tmp" 2>/dev/null || chmod 600 "$tmp"
+    chmod "$(stat -c %a "$s" 2>/dev/null || stat -f %Lp "$s")" "$tmp" 2>/dev/null || chmod 600 "$tmp"
     mv "$tmp" "$s"
     echo "auto: set extraKnownMarketplaces.$AUTO_MARKETPLACE.autoUpdate=$want in $s (backup $bak)"
   else
