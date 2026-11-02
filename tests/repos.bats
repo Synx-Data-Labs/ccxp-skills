@@ -292,7 +292,7 @@ reg_paths() { jq -r '.repos[].path' "$REG" | sort; }
 
 @test "queue top skips struck-through" {
   mkrepo "$ROOT/real"
-  printf '# Q\n\n~~- [T1](a.md): done~~\n- [T20260101-000009](a.md): live one\n' >"$ROOT/real/dev/TODO/queue.md"
+  printf '# Q\n\n- [T20260101-000008](a.md): ~~already shipped~~\n- [T20260101-000009](a.md): live one\n' >"$ROOT/real/dev/TODO/queue.md"
   bash "$REPOS" scan "$ROOT" >/dev/null
   run bash "$REPOS" list --json
   [ "$(printf '%s' "$output" | jq -r '.[0].top_task')" = "T20260101-000009 live one" ]
@@ -387,4 +387,62 @@ reg_paths() { jq -r '.repos[].path' "$REG" | sort; }
   [[ "$output" == *"real"* ]]
   run bash "$RS" frobnicate
   [ "$status" -eq 2 ]
+}
+
+@test "bare scan keeps a remembered depth-2 root" {
+  mkrepo "$ROOT/me"
+  mkrepo "$ROOT/org/nested"
+  bash "$REPOS" scan "$ROOT" >/dev/null
+  [ "$(jq -r '.roots[0].depth' "$REG")" = "2" ]
+  cd "$ROOT/me"
+  run bash "$REPOS" scan
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"0 added, 0 removed, 2 unchanged"* ]]
+  [ "$(jq -r '.roots[0].depth' "$REG")" = "2" ]
+}
+
+@test "list does not invoke a configured fsmonitor" {
+  mkrepo "$ROOT/real"
+  mkdir -p "$BATS_TEST_TMPDIR/fsm-calls"
+  cat >"$BATS_TEST_TMPDIR/fsm.sh" <<HOOK
+#!/bin/sh
+touch "$BATS_TEST_TMPDIR/fsm-calls/called.\$\$"
+HOOK
+  chmod +x "$BATS_TEST_TMPDIR/fsm.sh"
+  git -C "$ROOT/real" config core.fsmonitor "$BATS_TEST_TMPDIR/fsm.sh"
+  # Precondition: a plain `git status` does call the hook, so the test can fail.
+  git -C "$ROOT/real" status --porcelain >/dev/null 2>&1 || true
+  [ "$(ls "$BATS_TEST_TMPDIR/fsm-calls" | wc -l | tr -d ' ')" -ge 1 ]
+  before="$(ls "$BATS_TEST_TMPDIR/fsm-calls" | wc -l | tr -d ' ')"
+  bash "$REPOS" scan "$ROOT" >/dev/null
+  bash "$REPOS" list --fresh >/dev/null
+  [ "$(ls "$BATS_TEST_TMPDIR/fsm-calls" | wc -l | tr -d ' ')" = "$before" ]
+}
+
+@test "CDPATH does not break a relative scan path" {
+  mkrepo "$ROOT/real"
+  cd "$BATS_TEST_TMPDIR"
+  run env CDPATH="$BATS_TEST_TMPDIR:/" bash "$REPOS" scan ws
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"1 added"* ]]
+}
+
+@test "scan --depth or --roots without a value exits 2" {
+  run bash "$REPOS" scan --depth
+  [ "$status" -eq 2 ]
+  run bash "$REPOS" scan --roots
+  [ "$status" -eq 2 ]
+}
+
+@test "paths honours the registry exclude globs" {
+  mkrepo "$ROOT/me"
+  mkrepo "$ROOT/me-wt-skipme"
+  mkrepo "$ROOT/sibling"
+  mkdir -p "$CLAUDE_CONFIG_DIR"
+  printf '{"exclude":["*-wt-*"]}' >"$REG"
+  cd "$ROOT/me"
+  run bash "$REPOS" paths
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$ROOT/sibling"* ]]
+  [[ "$output" != *"skipme"* ]]
 }

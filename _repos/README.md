@@ -30,7 +30,7 @@ Commands are shown relative to the plugin root; skills call them as `<skills-roo
 
 ## Guarantees
 
-- Scanned repos are only read (`git -C`, `--no-optional-locks`): no writes, no claims, no network.
+- Scanned repos are only read (`git -C`, `--no-optional-locks`, `core.fsmonitor=false`, `GIT_NO_LAZY_FETCH=1`): no index refresh, no fsmonitor daemon, no lazy fetch; no claims, no network.
 - Linked worktrees collapse under their main repo; submodules and symlinks are skipped; scans never descend into a repo.
 - All stored and compared paths are physical (`pwd -P`).
 - Needs `jq`; works on bash 3.2 (macOS) and Linux.
