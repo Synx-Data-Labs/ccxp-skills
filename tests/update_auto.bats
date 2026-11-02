@@ -234,3 +234,27 @@ sf() { echo "$P/ccxp-skills-auto-update.json"; }
   grep -q "claude plugin update" "$STATE/calls"
   if grep -q "pairing-" "$STATE/calls"; then false; fi
 }
+
+@test "hook: busy skip and failed update do not advance lastCheck (retried next start)" {
+  printf '{"status":"on","busy_since":"'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}\n' > "$WORK/dev/.autopilot-state.json"
+  bash "$AUTO" on >/dev/null
+  run_hook
+  [ "$(jq -r '.lastCheck // "none"' "$(sf)")" = none ]
+}
+
+@test "on keeps a symlinked settings.json a symlink and preserves its mode" {
+  mv "$P/settings.json" "$BATS_TEST_TMPDIR/real.json"; chmod 640 "$BATS_TEST_TMPDIR/real.json"
+  ln -s "$BATS_TEST_TMPDIR/real.json" "$P/settings.json"
+  run bash "$AUTO" on
+  [ "$status" -eq 0 ]; [ -L "$P/settings.json" ]
+  [ "$(jq -r '.extraKnownMarketplaces["ccxp-skills"].autoUpdate' "$BATS_TEST_TMPDIR/real.json")" = true ]
+  [ "$(stat -c %a "$BATS_TEST_TMPDIR/real.json" 2>/dev/null || stat -f %Lp "$BATS_TEST_TMPDIR/real.json")" = 640 ]
+}
+
+@test "hook: a hung update is cut off by the time limit and session start still exits 0" {
+  printf '#!/usr/bin/env bash\nif [ "$2" = update ]; then sleep 30; fi\ncase "$1 $2 $3" in "plugin list --json") printf "[{\\"id\\":\\"ccxp-skills@ccxp-skills\\",\\"version\\":\\"5.7.0\\"}]";; esac\n' > "$BIN/claude"
+  bash "$AUTO" on >/dev/null
+  start=$SECONDS
+  CCXP_UPDATE_LIMIT_SECS=2 run_hook
+  [ "$status" -eq 0 ]; [ $((SECONDS - start)) -lt 15 ]
+}
