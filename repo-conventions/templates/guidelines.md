@@ -95,6 +95,12 @@ fi
 
 Rules: wrap logic in functions, make scripts sourceable, keep operations idempotent, use `set -euo pipefail`.
 
+## Multi-repo
+
+- **Which repos exist**: `/repo scan` writes a registry of the repos on this machine (a git repo with a `dev/TODO/` directory); `/repo list` reads it. See `_repos/README.md`.
+- **Mutating work stays in the launch repo**: a session never claims, branches or commits in a repo other than the one it started in. Work in another repo uses a fresh clone or a detached job (today's rule lives in `drive/SKILL.md` Phase 1.5; T20261010-274793 moves it into this conventions layer).
+- **One GitHub account**: sibling repos are assumed to share the current repo's org and account; no per-repo account probing.
+
 ## Documentation
 
 - **Task tracking**: `dev/TODO/` (active), `dev/JOURNAL/` (completed)

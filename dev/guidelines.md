@@ -92,6 +92,12 @@ Workflow:
 4. **Bump** `plugin.json`'s `version` field accordingly, in its own small PR (through the normal Branch and Merge Policy above)
 5. **Tag**: run `claude plugin tag [--push]` from the repo root to cut (and push) the `ccxp-skills--v{version}` tag once the bump PR is merged
 
+## Multi-repo
+
+- **Which repos exist**: `/repo scan` writes a registry of the repos on this machine (a git repo with a `dev/TODO/` directory); `/repo list` reads it. See `_repos/README.md`.
+- **Mutating work stays in the launch repo**: a session never claims, branches or commits in a repo other than the one it started in. Work in another repo uses a fresh clone or a detached job (today's rule lives in `drive/SKILL.md` Phase 1.5; T20261010-274793 moves it into this conventions layer).
+- **One GitHub account**: sibling repos are assumed to share the current repo's org and account; no per-repo account probing.
+
 ## Documentation
 
 - **Task tracking**: `dev/TODO/` (active), `dev/JOURNAL/` (completed)
