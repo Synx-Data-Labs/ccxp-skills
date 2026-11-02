@@ -203,10 +203,11 @@ fixture() {
   [ "$status" -eq 2 ]
   cd "$ROOT/other"
   before="$(git rev-parse HEAD)"
+  branch="$(git symbolic-ref --short HEAD)"
   bash "$REPOS" switch sdl >/dev/null
   [ "$(pwd -P)" = "$ROOT/other" ]
   [ "$(git rev-parse HEAD)" = "$before" ]
-  [ "$(git symbolic-ref --short HEAD)" = "$(git -C "$ROOT/other" symbolic-ref --short HEAD)" ]
+  [ "$(git symbolic-ref --short HEAD)" = "$branch" ]
 }
 
 @test "switch says already here for the current repo" {
@@ -261,4 +262,30 @@ fixture() {
   run bash "$REPO_ROOT/repo/scripts/repo.sh" switch sdl
   [ "$status" -eq 0 ]
   [ "$(printf '%s\n' "$output" | sed -n 1p)" = "/cd $ROOT/synx-data-labs" ]
+}
+
+@test "a path with special characters gets only the cd form" {
+  mkrepo "$ROOT/odd \$name's repo"
+  bash "$REPOS" scan "$ROOT" >/dev/null
+  run bash "$REPOS" switch "odd"
+  [ "$status" -eq 0 ]
+  [[ "$(printf '%s\n' "$output" | sed -n 1p)" == "cd "*" && claude" ]]
+  [ "$(printf '%s\n' "$output" | grep -c '^/cd ')" = "0" ]
+  [[ "$output" == *"special characters"* ]]
+  [[ "$output" != *"Type it yourself"* ]]
+}
+
+@test "~user style values are paths, not names" {
+  fixture
+  run bash "$REPOS" resolve "~nosuchuser/x"
+  [ "$status" -eq 4 ]
+}
+
+@test "registry with a non-array repos field exits 6" {
+  mkdir -p "$CLAUDE_CONFIG_DIR"
+  printf '{"repos": "oops"}' >"$REG"
+  run bash "$REPOS" resolve anything
+  [ "$status" -eq 6 ]
+  run bash "$REPOS" list
+  [ "$status" -eq 6 ]
 }

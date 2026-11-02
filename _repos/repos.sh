@@ -110,7 +110,7 @@ function repos-registry-read() {
   local f
   f="$(repos-registry-file)"
   if [ ! -f "$f" ]; then printf '{}\n'; return 0; fi
-  if ! jq -e 'type == "object"' "$f" >/dev/null 2>&1; then
+  if ! jq -e 'type == "object" and ((.repos // []) | type == "array") and ((.roots // []) | type == "array")' "$f" >/dev/null 2>&1; then
     REPOS_RC=6 repos-die "registry $f is not valid JSON; fix or move it (not overwritten)"
     return 6
   fi
@@ -552,7 +552,7 @@ function repos-claude-version() {
   if [ -z "$raw" ] && command -v claude >/dev/null 2>&1; then
     raw="$(claude --version 2>/dev/null || true)"
   fi
-  printf '%s\n' "$raw" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true
+  printf '%s\n' "$raw" | head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true
 }
 
 # repos-version-ge <a> <b> — 0 when dotted version a >= b (integer compare).
@@ -598,22 +598,32 @@ function repos-switch() {
     return 0
   fi
   fallback="$(printf 'cd %q && claude' "$path")"
-  case "$path" in
-    *[[:space:]]*) primary="/cd \"$path\"" ;;
-    *) primary="/cd $path" ;;
-  esac
-  local capable=0
-  if repos-cd-capable; then capable=1; else primary="$fallback"; fi
+  # The /cd line is printed only for paths whose quoting is unambiguous: bare
+  # when plain, double-quoted when the only extra character is a space; any
+  # other special character gets the cd fallback alone.
+  local capable=0 slash_ok=1
+  if repos-cd-capable; then capable=1; fi
+  if [[ ! "$path" =~ ^[A-Za-z0-9._/+@:\ -]+$ ]]; then slash_ok=0; fi
+  if [ "$capable" = 1 ] && [ "$slash_ok" = 1 ]; then
+    case "$path" in
+      *" "*) primary="/cd \"$path\"" ;;
+      *) primary="/cd $path" ;;
+    esac
+  else
+    primary="$fallback"
+  fi
   printf '%s\n' "$primary"
-  if [ "$capable" = 1 ]; then
-    case "$path" in *[[:space:]]*) printf '%s\n' "$fallback" ;; esac
+  if [ "$capable" = 1 ] && [ "$slash_ok" = 1 ]; then
+    case "$path" in *" "*) printf '%s\n' "$fallback" ;; esac
   fi
   if [ -z "${CCXP_NO_CLIPBOARD:-}" ] && command -v pbcopy >/dev/null 2>&1; then
     if printf '%s' "$primary" | pbcopy 2>/dev/null; then copied=1; fi
   fi
   if [ -n "$copied" ]; then printf '(copied to the clipboard)\n'; fi
-  if [ "$capable" = 1 ]; then
+  if [ "$capable" = 1 ] && [ "$slash_ok" = 1 ]; then
     printf 'Type it yourself; I cannot run /cd. Earlier assumptions in this conversation may be about the other repo.\n'
+  elif [ "$capable" = 1 ]; then
+    printf 'The path has special characters, so only the cd form is shown (the conversation is not kept).\n'
   else
     printf 'Claude Code below 2.1.246 or version unknown: run this in a new shell (the conversation is not kept).\n'
   fi
