@@ -44,7 +44,7 @@ No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 
 1. `ScheduleWakeup(stop: true)` first, always (for `off` and `pause`).
 2. A sub-agent dispatched (mid-cycle)? `SendMessage` it to commit and push WIP (no PR needed, `/drive` resumes from a pushed branch) and report; wait up to 2 minutes, then `TaskStop`. When it has reported (or been stopped), run `autopilot-state.sh busy off`.
-3. `off`: `autopilot-state.sh off` prints `off <clone-path>`; remove that clone directory with `rm -rf` of the literal path (it is under `/tmp`, which the rm-guard hook allows), then post the final report (Phase 5) to the user. `noop` (already off, or nothing to pause): report the current state and stop.
+3. `off`: `autopilot-state.sh off` prints `off <clone-path>`. Capture the final report **before** removing the clone, from the clone's fresh `main` (the marker PRs land there first): `git -C <clone-path> pull -q`, then `AUTOPILOT_REPO_ROOT=<clone-path> autopilot-state.sh final-report > <tmp file>` (Phase 5). Then remove the clone directory with `rm -rf` of the literal path (it is under `/tmp`, which the rm-guard hook allows) and post the saved report to the user. `noop` (already off, or nothing to pause): report the current state and stop.
 4. `pause`: `autopilot-state.sh pause` (`noop` if not on: report the state); keep the clone and state; report.
 5. `resume`: `autopilot-state.sh resume` prints `dispatch` (go to Phase 2, the cap check, then one cycle now) or `busy` (the interrupted cycle is still finishing: do nothing, its Phase 4 re-reads `on` and arms the next wake) or `noop` (not paused: report).
 
@@ -119,7 +119,7 @@ Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt:
 
 ### Phase 5: Final report (on `off`)
 
-After `autopilot-state.sh off`, run `autopilot-state.sh final-report` and post its output unchanged (it also serves as the `off` notice text for `notify`). Append to "Needs your attention" any open PR stuck beyond what a skill resolves (not derivable from state). The template it prints:
+After `autopilot-state.sh off` (and before the clone is removed, see Phase 0.1), run `autopilot-state.sh final-report` (with `AUTOPILOT_REPO_ROOT=<clone-path>`) and post its output unchanged (it also serves as the `off` notice text for `notify`). Append to "Needs your attention" any open PR stuck beyond what a skill resolves (not derivable from state). The template it prints:
 
 ```
 Autopilot run: <elapsed> elapsed — stopped: user-requested

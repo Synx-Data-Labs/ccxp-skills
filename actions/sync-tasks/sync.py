@@ -611,7 +611,7 @@ def update_date(item_id, field_id, date_str):
 # recover just these fields line-by-line so a single prose value no longer
 # silently drops a task's Status + Iteration off the Project board.
 _SCALAR_FM_KEYS = ("status", "scheduled", "estimation", "priority", "deadline",
-                   "claimed_by", "claimed_role")
+                   "claimed_by", "claimed_role", "blocked-by", "blocked_by")
 _FM_SCALAR_RE = {k: re.compile(rf"^{k}:[ \t]*(.*)$", re.MULTILINE) for k in _SCALAR_FM_KEYS}
 
 
