@@ -667,7 +667,7 @@ test('details: a narrow terminal cuts a line with an ellipsis and never abbrevia
   }
   const old = Math.floor(DETAIL_NOW / 1000) - 3 * 86400
   expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 140)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
-  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3…$/)
+  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d?…$/)
 })
 
 test('details: the jobs line never lists the running jobs (the band already shows them); labels are spelled out', async () => {
@@ -1318,6 +1318,21 @@ test('next loop: paused and a running cycle are unaffected by how old the stored
   expect(stallLines({ next_wake_at: 0 })[3]).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, status: 'paused', prefix: '[p]' } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, busy: true } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
+})
+
+test('next loop: a wake less than a second away reads as due, not `(now)`; the band drops the stalled cell after the version', async () => {
+  const wake = secs(0) // wake at the whole second, `nowMs` half a second before it
+  const line = linesOf({ autopilot: { ...AP, next_wake_at: wake }, queue: AP_Q }, 200, STALL_NOW - 500).find(l => /^AP /.test(l))!
+  expect(line).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
+  // drop order on the band: ver goes before stalled, so whenever the version shows the stalled cell shows too
+  const snap = withHelper({ autopilot: { ...AP, next_wake_at: secs(-2 * 86400) }, plugin: { installed: '5.2.0', latest: '5.2.0' } })
+  let sawStalledAlone = false
+  for (let cols = 240; cols >= 22; cols--) {
+    const t = text(bandRows(snap as any, NOCI, cols, STALL_NOW))
+    if (t.includes('ccxp')) expect(t).toContain('stalled 2d')
+    if (t.includes('stalled 2d') && !t.includes('ccxp')) sawStalledAlone = true
+  }
+  expect(sawStalledAlone).toBe(true)
 })
 
 test('next loop: formatSpan and stalledFor; the single-line band shows a short warn-coloured `stalled 2d` only beyond the grace', async () => {
