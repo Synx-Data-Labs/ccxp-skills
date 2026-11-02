@@ -8,6 +8,8 @@
 load test_helper
 setup() {
   source "$REPO_ROOT/_taskid/in-this-repo.sh"
+  # Keep a developer's real repo registry out of these tests.
+  export CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/claude-config"
 
   # Hermetic sandbox: cwd repo + one sibling repo, as peer dirs.
   cd "$BATS_TEST_TMPDIR"
@@ -86,6 +88,40 @@ setup() {
   cd "$BATS_TEST_TMPDIR/cwd-repo"
 
   run in-this-repo--sibling-slug T20260928-999999
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "in-this-repo--sibling-path finds a repo under a second root via the registry" {
+  other="$(cd "$BATS_TEST_TMPDIR" && pwd -P)/second-root/hub-two"
+  mkdir -p "$other/dev/TODO"
+  git -C "$other" init -q .
+  touch "$other/dev/TODO/T20261031-777777-elsewhere.md"
+  cd "$BATS_TEST_TMPDIR/cwd-repo"
+  run bash "$REPO_ROOT/_repos/repos.sh" scan "$BATS_TEST_TMPDIR/second-root"
+  [ "$status" -eq 0 ]
+  run in-this-repo--sibling-path T20261031-777777
+  [ "$status" -eq 0 ]
+  [ "$output" = "$other" ]
+}
+
+@test "in-this-repo--sibling-path falls back to the peer-dir glob when repos.sh is broken" {
+  printf '#!/bin/sh\nexit 127\n' >"$BATS_TEST_TMPDIR/broken-repos.sh"
+  chmod +x "$BATS_TEST_TMPDIR/broken-repos.sh"
+  CCXP_REPOS_SH="$BATS_TEST_TMPDIR/broken-repos.sh" run in-this-repo--sibling-path T20260928-999999
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(cd "$BATS_TEST_TMPDIR/sibling-repo" && pwd -P)" ]
+}
+
+@test "in-this-repo--sibling-path does not report its own main repo from a linked worktree" {
+  cd "$BATS_TEST_TMPDIR/cwd-repo"
+  git config user.email t@example.com; git config user.name t; git config commit.gpgsign false
+  git commit -q --allow-empty -m init
+  touch dev/TODO/T20261031-555555-mine.md
+  git worktree add -q "$BATS_TEST_TMPDIR/cwd-wt" -b wt-branch
+  mkdir -p "$BATS_TEST_TMPDIR/cwd-wt/dev/TODO"
+  cd "$BATS_TEST_TMPDIR/cwd-wt"
+  run in-this-repo--sibling-path T20261031-555555
   [ "$status" -eq 0 ]
   [ -z "$output" ]
 }

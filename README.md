@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 51 skills in one step:
+so `/plugin` can install all 52 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -23,7 +23,7 @@ Update later with `/plugin update ccxp-skills`, and remove with
 The skills live at the repo root rather than under `skills/`, which the
 manifest declares via `"skills": "."`. That keeps each skill a sibling of
 the shared libs (`_gh/`, `_session/`, `_taskid/`, `_ipm/`, `_docs/`,
-`_journal/`), so the `../_gh/gh.sh`-style references inside the skills
+`_repos/`, `_journal/`), so the `../_gh/gh.sh`-style references inside the skills
 resolve correctly under a plugin install.
 
 `_gh/git.sh` (see [Shared helpers](#shared-helpers-_name) below) wires its
@@ -127,6 +127,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `quality-probe` | Measure code quality on a task's touched files, record to `dev/quality/metrics.jsonl` |
 | `journal-compact` | Compact a month of `dev/JOURNAL/` into a digest |
 | `repo-conventions` | CLAUDE.md/guidelines.md structure, `dev/` TODO lifecycle, conventions lint, branch-policy switch, and `setup` — bring a repo fully online in one pass |
+| `repo` | List or scan for the repos on this machine (registry of git repos with a `dev/TODO/`), with branch, dirty state and top queue line |
 | `skill-conventions` | Conventions for authoring a SKILL.md in this suite |
 
 ### Notification & integration
@@ -341,6 +342,9 @@ stay invisible as skills). Current set:
 - `_journal/` — journal-move helpers for closing a task.
 - `_docs/` — the shared markdown-lint wrapper (`lint-docs.sh`) and
   doc-impact/freshness checks.
+- `_repos/` — repo registry behind `/repo` (`repos.sh scan|list|paths`);
+  user-specific paths live only in the user's config dir. See
+  `_repos/README.md`.
 
 ## Notes
 

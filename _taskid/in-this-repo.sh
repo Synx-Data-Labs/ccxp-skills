@@ -56,15 +56,37 @@ function in-this-repo--match-in() {
 # clone may be another live session's working tree. Cloning fresh is what
 # in-this-repo--sibling-slug() below is for.
 function in-this-repo--sibling-path() {
-  local id="${1:-}" parent hit n=0 found=""
+  local id="${1:-}" parent hit n=0 found="" cand c top main phys_pwd
   [ -n "$id" ] || return 0
   parent="$(dirname -- "$PWD")"        # PWD is absolute, so glob hits are too
-  for hit in "$parent"/*/dev/TODO/*"${id}"*.md; do
-    [ -e "$hit" ] || continue          # no-match glob stays literal; skip it
-    found="${hit%/dev/TODO/*}"
-    [ "$found" = "$PWD" ] && { found=""; continue; }   # ignore the cwd repo itself
-    n=$((n+1))
-  done
+  # Candidates: the old peer-dir glob (zero-config, works without git or jq)
+  # plus the repo registry and a live sibling scan (_repos/repos.sh paths), so
+  # a clone under a second root is found too. Deduped by path.
+  cand="$(
+    for hit in "$parent"/*/dev/TODO/*"${id}"*.md; do
+      [ -e "$hit" ] && printf '%s\n' "${hit%/dev/TODO/*}"
+    done
+    bash "${CCXP_REPOS_SH:-$(dirname -- "${BASH_SOURCE[0]}")/../_repos/repos.sh}" paths 2>/dev/null || true
+  )"
+  # Physical paths only, so a symlinked or /var -> /private/var path dedupes.
+  cand="$(printf '%s\n' "$cand" | while IFS= read -r c; do
+    [ -n "$c" ] && (cd "$c" 2>/dev/null && pwd -P)
+  done | LC_ALL=C sort -u || true)"
+  phys_pwd="$(pwd -P)"
+  top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  main=""
+  if [ -n "$top" ]; then
+    main="$(cd "$top" && cd "$(git rev-parse --git-common-dir 2>/dev/null)" 2>/dev/null && dirname "$(pwd -P)" || true)"
+  fi
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    [ "$c" = "$PWD" ] || [ "$c" = "$phys_pwd" ] && continue   # ignore the cwd repo itself
+    [ -n "$top" ] && [ "$c" = "$top" ] && continue
+    [ -n "$main" ] && [ "$c" = "$main" ] && continue
+    for hit in "$c"/dev/TODO/*"${id}"*.md; do
+      if [ -e "$hit" ]; then found="$c"; n=$((n+1)); break; fi
+    done
+  done <<<"$cand"
   # Explicit if/return, NOT a trailing `[ ] && printf`: a falsy trailing test
   # returns 1, which under the CLI's `set -e` aborts the caller's command
   # substitution mid-flight (the warn-only/refuse banner would never print).

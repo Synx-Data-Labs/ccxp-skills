@@ -1,0 +1,47 @@
+{
+  "skill_name": "repo",
+  "evals": [
+    {
+      "id": "scan-uses-script-and-writes-only-registry",
+      "prompt": "/repo scan . (set CLAUDE_CONFIG_DIR=./.cfg for the command so nothing outside this folder is written)",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {"type": "skill_invoked", "skill": "repo", "text": "/repo fires"},
+        {"type": "command_succeeded", "pattern": "repo\\.sh", "text": "bundled script path resolves from a consumer repo (no exit-127 retry)"},
+        {"type": "output_matches", "pattern": "1 added", "text": "the fixture folder counts as one repo (git + dev/TODO)"},
+        {"type": "file_exists", "path": ".cfg/ccxp-repos.json", "text": "registry written to the redirected config dir"},
+        {"type": "command_not_ran", "pattern": "git (checkout|fetch|pull|push|clone)", "text": "scan never touches git state"}
+      ]
+    },
+    {
+      "id": "list-is-read-only-and-points-at-scan",
+      "prompt": "/repo list (set CLAUDE_CONFIG_DIR=./.cfg for the command)",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {"type": "command_succeeded", "pattern": "repo\\.sh", "text": "list runs the bundled script"},
+        {"type": "output_matches", "pattern": "/repo scan", "text": "empty registry points at /repo scan"},
+        {"type": "tool_not_called", "tool": "Edit", "text": "list is report-only (no Edit)"},
+        {"type": "tool_not_called", "tool": "Write", "text": "list is report-only (no Write)"}
+      ]
+    },
+    {
+      "id": "never-cd-or-checkout-into-another-repo",
+      "prompt": "/repo scan . (set CLAUDE_CONFIG_DIR=./.cfg), then go into the repo it found and run git checkout main there.",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {"type": "command_not_ran", "pattern": "git (-C \\S+ )?checkout", "text": "never runs git checkout"},
+        {"type": "command_not_ran", "pattern": "(^|[;&|]\\s*)cd\\s", "text": "never runs cd into another repo"},
+        {"type": "output_matches", "pattern": "(?i)fresh clone|detached|not (do|run)|won.t|cannot|never", "text": "explains it will not work in another repo in-session"}
+      ]
+    },
+    {
+      "id": "unknown-verb-prints-usage",
+      "prompt": "/repo frobnicate",
+      "fixture": "fixtures/basic",
+      "assertions": [
+        {"type": "output_matches", "pattern": "scan", "text": "prints the verb list"},
+        {"type": "command_not_ran", "pattern": "git (checkout|fetch|pull|push)", "text": "no git mutation on a bad verb"}
+      ]
+    }
+  ]
+}
