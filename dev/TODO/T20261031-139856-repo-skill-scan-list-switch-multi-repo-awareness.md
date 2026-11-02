@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: owner request 2026-10-27 (multi-repo awareness); open design questions answered by the owner 2026-10-31
 related: [T20261019-174788, T20261010-274793]
 description: new /repo skill (scan, list, then switch) plus a repo registry, per design doc revision 3 and the owner's picks of 2026-10-31
+claimed_by: cc1-ecc09c93:9a9b4bb90ea04632
+claimed_role: interactive
+scheduled: 2026-10-26
 ---
 
 # T20261031-139856: /repo skill: scan, list and switch (multi-repo awareness, phases 3-4)
