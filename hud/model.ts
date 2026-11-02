@@ -649,7 +649,7 @@ export function stalledFor(ap: Autopilot, nowMs: number): number {
  * useless) before the version line is cut. The shrink and abbreviation forms belong to the one-row band.
  */
 const DETAIL_STEPS = {
-  where: [],
+  where: ['drop:stale'],
   usage: [],
   jobs: [],
   ap: [],
@@ -736,10 +736,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     const cycle = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).reduce((m, j) => Math.max(m, j.job), 0)
     wakeItem = one('wake', [{ text: cycle > 0 ? `running r${cycle}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
-    const late = Math.floor(nowMs / 1000 - ap.next_wake_at)
-    if (stalledFor(ap, nowMs) > 0) {
+    const late = stalledFor(ap, nowMs)
+    if (late > 0) {
       wakeItem = one('wake', [{ text: `next loop overdue ${formatSpan(late, true)}`, color: 'warning' }])
-    } else if (late >= 0) {
+    } else if (formatIn(ap.next_wake_at, nowMs) === 'now') {
       wakeItem = one('wake', [{ text: 'next loop due', dim: true }])
     } else {
       wakeItem = one('wake', [{ text: `next loop ${formatStamp(ap.next_wake_at, nowMs)} (${formatIn(ap.next_wake_at, nowMs)})` }])
