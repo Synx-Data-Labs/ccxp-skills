@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261101-115518](T20261101-115518-rewire-todo-and-queue-skills-to-repo-resolve.md): Rewire todo and queue skills to repo-resolve
 - [T20261022-349299](T20261022-349299-dispatcher-detached-bg-jobs.md): ccxp-agent dispatches detached `claude --bg` jobs
 - [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
 - [T20261021-291375](T20261021-291375-schedule-delivered-autoclose-sweep-synxdb-support.md): Schedule the customer-support delivered-autoclose sweep (cron) for synxdb-support
@@ -48,6 +49,5 @@ reprioritize.
 - [T20261027-237157](T20261027-237157-ccxp-hud-one-row-modes-ci.md): ccxp-hud one-row band, AP on/off modes, configurable CI cell
 - [T20261028-392844](T20261028-392844-triage-task-comment-leaks-internal-details-to-customer-issue.md): triage --task posts internal task ID/hub path/title into a customer-visible issue comment
 - [T20261030-716636](T20261030-716636-hud-queue-cell-counts-stale-checkout-as-ready.md): HUD queue cell counts a stale local checkout as ready
-- [T20261031-139856](T20261031-139856-repo-skill-scan-list-switch-multi-repo-awareness.md): /repo skill: scan, list and switch (multi-repo awareness, phases 3-4)
 - [T20261019-187676](T20261019-187676-claim-id-pid-orphan-reclaim.md): Change claim-id from host-hash:path-hash to host-hash:PID so orphaned claims can be reclaimed
 - [T20261028-273649](T20261028-273649-ledger-inputs-actions-refs.md): Ledger persists inputs, actions and ref counters

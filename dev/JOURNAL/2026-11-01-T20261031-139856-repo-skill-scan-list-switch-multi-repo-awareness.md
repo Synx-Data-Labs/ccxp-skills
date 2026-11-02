@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 3
 source: owner request 2026-10-27 (multi-repo awareness); open design questions answered by the owner 2026-10-31
 related: [T20261019-174788, T20261010-274793]
 description: new /repo skill (scan, list, then switch) plus a repo registry, per design doc revision 3 and the owner's picks of 2026-10-31
-claimed_by: cc1-ecc09c93:9a9b4bb90ea04632
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-10-26
 ---
 
@@ -147,27 +147,27 @@ scheduled: 2026-10-26
 
 ## Test plan
 
-- [ ] Unit: `tests/repos.bats` (hermetic temp roots, real linked worktree, a real submodule given as a root, `CLAUDE_CONFIG_DIR` pointed at a temp dir, macOS-run locally and on Linux CI; mtimes are set explicitly with `touch -t`, the form BSD and GNU share, and read through `repos-mtime`, `stat -c %Y` then `stat -f %m`) with titled cases: "guidelines-only folder is not listed", "depth 1 vs owner/repo depth 2", "never descends into a repo or symlink", "linked worktree collapses under main", "submodule root is skipped", "--all is display-only", "aliases survive rescan", "stale path pruned by scan, omitted by list", "malformed registry is not overwritten", "cache reused then invalidated (registry, dir mtime, --fresh)", "zero-arg scan stores the sibling root with depth 1", "path with spaces", "list does not change .git (snapshot)", "list shows fields and marks the current repo", "list --json", "queue top skips struck-through", "worktree has its own row", "--roots is not remembered", "exclude glob", "scan with nothing to scan exits 2", "paths lists registry plus siblings, no worktrees".
-- [ ] Unit: `tests/repo_resolve.bats` (PR 2): "tier exact/prefix/substring/subsequence", "owner/name is a name, not a path", "bare name never read as a folder", "malformed registry exits 6", "resolve outside a git repo exits 2", "worktree path accepted via git worktree list", "path with spaces", "ambiguous prefix exits 3 with candidates", "--repo then CCXP_REPO then PWD order", "unregistered path refused, --any accepts", "version gate below/at/unknown".
-- [ ] `tests/taskid_in_this_repo.bats` gains "finds a repo under a second root via the registry", "falls back to the peer-dir glob when repos.sh is broken" and "does not report its own main repo from a linked worktree"; existing cases stay green (their setup isolates `CLAUDE_CONFIG_DIR`).
-- [ ] Gates: `bats tests/`, `lint_tasks.py`, `lint-docs.sh`, `readme_skill_count.bats`, `skill_score.py --check` and coverage check, `lint_identifiers.py`; new bats files must pass on macOS locally, older failures from BSD tools are trusted to Linux CI.
+- [x] Unit: `tests/repos.bats` (hermetic temp roots, real linked worktree, a real submodule given as a root, `CLAUDE_CONFIG_DIR` pointed at a temp dir, macOS-run locally and on Linux CI; mtimes are set explicitly with `touch -t`, the form BSD and GNU share, and read through `repos-mtime`, `stat -c %Y` then `stat -f %m`) with titled cases: "guidelines-only folder is not listed", "depth 1 vs owner/repo depth 2", "never descends into a repo or symlink", "linked worktree collapses under main", "submodule root is skipped", "--all is display-only", "aliases survive rescan", "stale path pruned by scan, omitted by list", "malformed registry is not overwritten", "cache reused then invalidated (registry, dir mtime, --fresh)", "zero-arg scan stores the sibling root with depth 1", "path with spaces", "list does not change .git (snapshot)", "list shows fields and marks the current repo", "list --json", "queue top skips struck-through", "worktree has its own row", "--roots is not remembered", "exclude glob", "scan with nothing to scan exits 2", "paths lists registry plus siblings, no worktrees".
+- [x] Unit: `tests/repo_resolve.bats` (PR 2): "tier exact/prefix/substring/subsequence", "owner/name is a name, not a path", "bare name never read as a folder", "malformed registry exits 6", "resolve outside a git repo exits 2", "worktree path accepted via git worktree list", "path with spaces", "ambiguous prefix exits 3 with candidates", "--repo then CCXP_REPO then PWD order", "unregistered path refused, --any accepts", "version gate below/at/unknown".
+- [x] `tests/taskid_in_this_repo.bats` gains "finds a repo under a second root via the registry", "falls back to the peer-dir glob when repos.sh is broken" and "does not report its own main repo from a linked worktree"; existing cases stay green (their setup isolates `CLAUDE_CONFIG_DIR`).
+- [x] Gates: `bats tests/`, `lint_tasks.py`, `lint-docs.sh`, `readme_skill_count.bats`, `skill_score.py --check` and coverage check, `lint_identifiers.py`; new bats files must pass on macOS locally, older failures from BSD tools are trusted to Linux CI.
 - [ ] Post-merge, not verifiable now: the skill reaches users only via a release plus `/ccxp-skills:update`; evals (`skill_eval.py repo --record`) need a live `claude -p` and are run by the maintainer.
 
 ## Done criteria
 
-- [ ] Scan rule is `dev/TODO/` only: `tests/repos.bats` "guidelines-only folder is not listed".
-- [ ] Depth and owner/repo descent, worktree collapse, submodule skip: `tests/repos.bats` "depth 1 vs owner/repo depth 2", "linked worktree collapses under main", "submodule root is skipped".
-- [ ] Registry round-trip keeps aliases; cache reuse/invalidation; stale prune: `tests/repos.bats` "aliases survive rescan", "cache reused then invalidated", "stale path pruned by scan, omitted by list", "list does not change .git".
-- [ ] Scan never descends into a repo or symlink, `--all` writes nothing, a malformed registry is not overwritten: `tests/repos.bats` "never descends into a repo or symlink", "--all is display-only", "malformed registry is not overwritten".
-- [ ] `/repo list` fields, current marker, JSON, worktree rows: `tests/repos.bats` "list shows fields and marks the current repo", "list --json", "queue top skips struck-through", "worktree has its own row".
-- [ ] `--roots` one-call override and `exclude` globs: `tests/repos.bats` "--roots is not remembered", "exclude glob".
-- [ ] CI runs the new tests and the lib is documented: `.github/workflows/tests.yml` path filter `_repos/**`, `_repos/README.md`.
-- [ ] `/repo scan` and `/repo list` skill merged (PR 1): `repo/SKILL.md`, `repo/evals/evals.json` (3+ cases incl. `tool_not_called` / `command_not_ran` for `cd` and `git checkout`; the spec's `command_succeeded` wording is read as the section-10 `command_not_ran` form).
-- [ ] Skill score at least 70 and ratchet updated: `dev/quality/skill-scores.json` entry `repo`.
-- [ ] Guidelines "Multi-repo" sections, README row and count: `dev/guidelines.md`, `repo-conventions/templates/guidelines.md`, `README.md`, `tests/readme_skill_count.bats`.
-- [ ] `in-this-repo.sh` finds repos under a second root, ignores its own main from a linked worktree, survives a broken `repos.sh`: `tests/taskid_in_this_repo.bats` (the three titles above).
-- [ ] `resolve` exit codes (0/2/3/4/5/6), `--any` and deterministic ambiguity order (PR 2): `tests/repo_resolve.bats` "ambiguous prefix exits 3 with candidates", "unregistered path refused, --any accepts", "malformed registry exits 6", "resolve outside a git repo exits 2".
-- [ ] `/repo switch` (PR 2) incl. the 2.1.246 gate: `tests/repo_resolve.bats` "version gate below/at/unknown", SKILL.md switch workflow.
+- [x] Scan rule is `dev/TODO/` only: `tests/repos.bats` "guidelines-only folder is not listed".
+- [x] Depth and owner/repo descent, worktree collapse, submodule skip: `tests/repos.bats` "depth 1 vs owner/repo depth 2", "linked worktree collapses under main", "submodule root is skipped".
+- [x] Registry round-trip keeps aliases; cache reuse/invalidation; stale prune: `tests/repos.bats` "aliases survive rescan", "cache reused then invalidated", "stale path pruned by scan, omitted by list", "list does not change .git".
+- [x] Scan never descends into a repo or symlink, `--all` writes nothing, a malformed registry is not overwritten: `tests/repos.bats` "never descends into a repo or symlink", "--all is display-only", "malformed registry is not overwritten".
+- [x] `/repo list` fields, current marker, JSON, worktree rows: `tests/repos.bats` "list shows fields and marks the current repo", "list --json", "queue top skips struck-through", "worktree has its own row".
+- [x] `--roots` one-call override and `exclude` globs: `tests/repos.bats` "--roots is not remembered", "exclude glob".
+- [x] CI runs the new tests and the lib is documented: `.github/workflows/tests.yml` path filter `_repos/**`, `_repos/README.md`.
+- [x] `/repo scan` and `/repo list` skill merged (PR 1): `repo/SKILL.md`, `repo/evals/evals.json` (3+ cases incl. `tool_not_called` / `command_not_ran` for `cd` and `git checkout`; the spec's `command_succeeded` wording is read as the section-10 `command_not_ran` form).
+- [x] Skill score at least 70 and ratchet updated: `dev/quality/skill-scores.json` entry `repo`.
+- [x] Guidelines "Multi-repo" sections, README row and count: `dev/guidelines.md`, `repo-conventions/templates/guidelines.md`, `README.md`, `tests/readme_skill_count.bats`.
+- [x] `in-this-repo.sh` finds repos under a second root, ignores its own main from a linked worktree, survives a broken `repos.sh`: `tests/taskid_in_this_repo.bats` (the three titles above).
+- [x] `resolve` exit codes (0/2/3/4/5/6), `--any` and deterministic ambiguity order (PR 2): `tests/repo_resolve.bats` "ambiguous prefix exits 3 with candidates", "unregistered path refused, --any accepts", "malformed registry exits 6", "resolve outside a git repo exits 2".
+- [x] `/repo switch` (PR 2) incl. the 2.1.246 gate: `tests/repo_resolve.bats` "version gate below/at/unknown", SKILL.md switch workflow.
 - [ ] Version bump and `claude plugin validate .` left to the maintainer's bump PR (external, unchecked on purpose).
 
 ## Root cause
@@ -184,3 +184,24 @@ scheduled: 2026-10-26
 | `README.md` | 13, 118-130 | count and skill table |
 | `.github/workflows/tests.yml` | 5-30 | path filters need `_repos/**` |
 | `dev/quality/skill-scores.json`, `dev/quality/skill-coverage-baseline.txt` | whole | ratchet; no new baseline entries allowed |
+
+## Closed (2026-11-01)
+
+- Shipped in PR #534 (claim), #535 (design, reviewed four rounds), #536 (`/repo scan` and `list`, `_repos/` lib, in-this-repo second root, docs) and #537 (`/repo switch`, `resolve.sh`, version gate); CI green on all (bats, skill-quality, lint-tasks, Markdown Lint, sync-tasks).
+- Met: all Done criteria except the two external ones below; skill score 100 (L2, 6 evals), ratchets updated, 36 + 27 BATS cases for the lib and resolver.
+- Decisions on the five reviewer ambiguities (all conservative):
+  - `--any` exists only on `resolve`; without it an unregistered path or a repo without `dev/TODO/` is refused (exit 5).
+  - `list` never prunes the registry; stale paths are omitted with a hint, only `scan` prunes.
+  - A non-unique prefix is reported ambiguous inside its tier and never falls through to a wider tier.
+  - Overlap with T20261010-274793: only a short "Multi-repo" section was added to both guidelines files, pointing at `drive/SKILL.md` Phase 1.5; that task still owns moving the cross-repo rule to the conventions layer (whichever lands second adjusts the link).
+  - The 2.1.246 gate reads `claude --version` (installed binary, which can be newer than the running session) and falls back to `cd <path> && claude` when below or unknown.
+- Also decided: `scan --all` is display-only; the `/cd` line is printed only for plain paths (double-quoted for a space), otherwise the `cd` form alone; `/repo` calls `repo/scripts/repo.sh` over the `_repos/` lib because the coverage contract requires scripts inside the skill directory.
+- External / unverified: not live for users until a maintainer release plus `/ccxp-skills:update` (no tag, version bump or publish was done); `skill_eval.py repo --record` needs a live `claude -p`; whether `/cd` accepts the double-quoted path form is assumed; 12 other local bats tests (autopilot, eta, jwt and similar, none touching this change) fail on macOS from BSD tools; the Linux CI bats job passed on every PR.
+- Follow-up filed: T20261101-115518 (rewire `/todo`, `/top`, `/bottom`, `/stage`, `/new-task`, `/migrate-task` to `repo-resolve`), staged for the next iteration and moved to the front of the queue.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — not available in this job; tests were written alongside the code and run before every push
+- Verification (`superpowers:verification-before-completion`): no — not available in this job; replaced by the local gates (bats, score and coverage ratchets, identifier and markdown lint, shellcheck) plus an independent fresh-agent review on every PR
+- Systematic debugging (`superpowers:systematic-debugging`): no — didn't get stuck
+- Receiving code review (`superpowers:receiving-code-review`): no — not available in this job; every finding was fixed or dispositioned in a PR comment (design PR: 4 review rounds, #536: 2, #537: 2)
