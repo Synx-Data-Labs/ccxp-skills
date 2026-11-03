@@ -27,6 +27,14 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
   [ -z "$output" ]
 }
 
+@test "bottom is not listed -> silent (autopilot housekeeping calls it unprompted)" {
+  run run_hook ccxp-skills:bottom
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  run run_hook bottom
+  [ -z "$output" ]
+}
+
 @test "malformed/absent skill field -> silent" {
   run bash -c "echo '{}' | '$HOOK'"
   [ "$status" -eq 0 ]
