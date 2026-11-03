@@ -342,7 +342,7 @@ test('CI colours: green passing, yellow running, grey unknown get no highlight; 
 })
 
 test('AP and queue share the second row, queue right after the AP and 24h cells, at wide and narrow widths', async () => {
-  const q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
   const s = withHelper({ autopilot: { ...AP, stats: { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' } }, queue: q }, HELPER_AP)
   for (const cols of [200, 140]) {
     const rows = bandRows(s, CI, cols)
@@ -1070,26 +1070,32 @@ test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
 
 // --- queue breakdown (dev/TODO/queue.md) ---
 
-const QUEUE = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
 // Short names: the queue cell is dropped early on a tight row (before repo/task shrink), so the long BASE names would crowd it out.
 const SHORT = { repo: 'r', branch: 'b', task_id: 'T1', task_title: 't' }
 
 test('queue: parseHelper clamps the counts and a missing or malformed queue is null', async () => {
   expect(parseHelper(HELPER)!.queue).toBeNull()
   expect(parseHelper(JSON.stringify({ ...BASE, queue: 'x' }))!.queue).toBeNull()
-  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, blocked: 1.9, decision: 'a' } }))!.queue).toEqual({ total: 5, ready: 0, blocked: 1, decision: 0, external: 0, epic: 0, claimed: 0 })
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 'a', decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, revisited: 0, autoparked: 0 })
 })
 
-test('queue: the band shows the compact form, details spell the labels out, claimed only when above 0', async () => {
+test('queue: the band shows the compact form, details spell the labels out, claimed/revisited/auto-parked only when above 0', async () => {
   const s = withHelper({ ...SHORT, queue: QUEUE })
-  expect(text(bandRows(s as any, NOCI, 140))).toContain('queue 44 = 30r 6b 3d 2e 3x')
-  expect(detail(s as any, 140).join('\n')).toContain('queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics')
+  expect(text(bandRows(s as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x')
+  expect(detail(s as any, 140).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics')
   expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 160).join('\n')).toContain('3 epics | 2 claimed')
-  // a count of 1 reads singular, 0 stays plural
-  const one = detail(withHelper({ queue: { ...QUEUE, decision: 1, epic: 1, blocked: 0 } }) as any, 160).join('\n')
-  expect(one).toContain('1 decision | 2 external | 1 epic')
-  expect(one).toContain('0 blocked')
+  const ap = { ...QUEUE, revisited: 12, autoparked: 2 }
+  expect(detail(withHelper({ queue: ap }) as any, 160).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 12 revisited | 2 auto-parked')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: ap }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 12v 2a')
+  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 1, revisited: 1, autoparked: 1 } }) as any, 200).join('\n')).toContain('3 epics | 1 claimed | 1 revisited | 1 auto-parked')
+  // a count of 1 reads singular for epics, 0 stays plural
+  const one = detail(withHelper({ queue: { ...QUEUE, epic: 1, held: 0 } }) as any, 160).join('\n')
+  expect(one).toContain('0 held | 1 epic')
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('claimed')
+  expect(text(bandRows(s as any, NOCI, 140))).not.toContain('revisited')
+  // the old marker-derived buckets are gone
+  expect(detail(s as any, 140).join('\n')).not.toMatch(/decision|external|blocked/)
 })
 
 test('queue: no queue, no cell and no line; a tight band shrinks it to ready/total before dropping it', async () => {
@@ -1212,14 +1218,14 @@ test('AP stats: the details AP line keeps the 24h cell in full and, when narrow,
 // --- CI top row: detail view, highlight, NO_COLOR ---
 
 test('details: CI first and alone, then where/usage/jobs, AP, queue on its own next line, last prompt (seven lines)', async () => {
-  const q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
   const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 200, CI)
   expect(lines.length).toBe(7)
   expect(lines[0]).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(lines[1]).toContain('acme/widgets')
   const at = lines.findIndex(l => l.startsWith('AP '))
   expect(lines[at]).not.toContain('queue')
-  expect(lines[at + 1]).toBe('queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics')
+  expect(lines[at + 1]).toBe('queue 44 = 30 ready | 6 held | 3 epics')
   expect(lines[at + 2]).toMatch(/^you /)
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   expect(lines.filter(l => l.includes('CI')).length).toBe(1)
@@ -1228,8 +1234,8 @@ test('details: CI first and alone, then where/usage/jobs, AP, queue on its own n
 
 // --- details: the AP line (AP, next loop, 24h average) and the queue on its own line right after it ---
 
-const AP_Q = { total: 44, ready: 30, blocked: 6, decision: 3, external: 2, epic: 3, claimed: 0 }
-const QLINE = 'queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics'
+const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+const QLINE = 'queue 44 = 30 ready | 6 held | 3 epics'
 const linesOf = (helper: object, cols = 240, now = DETAIL_NOW) => detailRows(withHelper({ ci: null, ...helper }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join(''))
 const apLineOf = (helper: object, cols = 240) => linesOf(helper, cols).find(l => /^AP /.test(l))
 const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
@@ -1242,11 +1248,11 @@ test('details: AP on + queue data: AP and queue are two separate consecutive lin
   expect(lines.join('\n')).not.toContain('||')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   // the queue line keeps its colours: ready is green, the other counts plain, zero counts dim
-  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE }, queue: { ...AP_Q, external: 0 } }) as any, DEFAULTS, 240, DETAIL_NOW)
+  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE }, queue: { ...AP_Q, epic: 0 } }) as any, DEFAULTS, 240, DETAIL_NOW)
   const q = rows.find(r => r[0].text.startsWith('queue '))!
   expect(q.find(x => x.text === '30 ready')?.color).toBe('success')
-  expect(q.find(x => x.text === '0 external')?.dim).toBe(true)
-  expect(q.find(x => x.text === '6 blocked')?.dim).toBe(false)
+  expect(q.find(x => x.text === '0 epics')?.dim).toBe(true)
+  expect(q.find(x => x.text === '6 held')?.dim).toBe(false)
 })
 
 test('details: the queue line follows the AP line in every AP state (due, paused, running, no stats, AP off) and is omitted without queue data', async () => {
@@ -1267,21 +1273,22 @@ test('details: the queue line follows the AP line in every AP state (due, paused
   expect(detailRows(EMPTY as any, DEFAULTS, 240, DETAIL_NOW).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('queue')
 })
 
-test('details: the queue line never abbreviates: narrow widths cut it with an ellipsis; the band keeps r/b/d/e/x', async () => {
+test('details: the queue line never abbreviates: narrow widths cut it with an ellipsis; the band keeps r/h/x', async () => {
   const helper = { autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }
   for (let cols = 240; cols >= 22; cols--) {
     const lines = linesOf(helper, cols)
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
     const q = lines.find(l => l.startsWith('queue'))
     expect(q).toBeDefined()
-    // always a prefix of the full line (+ the ellipsis when cut), so no r/b/d/e/x or `30/44` form ever appears
+    // always a prefix of the full line (+ the ellipsis when cut), so no r/h/x or `30/44` form ever appears
     const width = Math.max(20, cols - 2)
     expect(q).toBe(QLINE.length <= width ? QLINE : QLINE.slice(0, width - 1) + '…')
   }
-  expect(linesOf(helper, 40).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready | 6 blocked | 3 d…')
+  expect(linesOf(helper, 40).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready | 6 held | 3 epics')
+  expect(linesOf(helper, 36).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready | 6 held | 3 …')
   expect(linesOf(helper, 24).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready |…')
   // the single-line band is where the short forms live
-  expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 240))).toContain('queue 44 = 30r 6b 3d 2e 3x')
+  expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 240))).toContain('queue 44 = 30r 6h 3x')
   expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 90))).not.toContain('30 ready')
 })
 

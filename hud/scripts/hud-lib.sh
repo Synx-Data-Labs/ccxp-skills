@@ -361,29 +361,26 @@ sl-ledger-json() {
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
-#   {"total","ready","blocked","decision","external","epic","claimed"}
+#   {"total","ready","held","epic","claimed","revisited","autoparked"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
-# lands in EXACTLY ONE bucket, first match wins, so the buckets always sum to total:
-#   marker    a status with the bracketed marker ` — needs a human [<kind>]: <reason>`
-#             (T20261102-261809) lands in the bucket named by its kind (blocked|decision|
-#             external) before anything else; the task files are the only source, the
-#             autopilot state file no longer carries a skip list
+# lands in EXACTLY ONE of ready|held|epic|claimed, first match wins, so those four always
+# sum to total; revisited and autoparked are extra counts from the autopilot state file:
 #   epic      the frontmatter has a `children:` key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
 #             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
 #             standalone word EPIC. Free-text "umbrella"/"epic" is NOT a signal (product
 #             terms and prose misfire). Plain members of a dev/EPICS epic stay takeable.
-#   blocked   status `Blocked by T<id>` while that blocker is still in
-#             dev/TODO/, or the status contains BLOCKED or SUPERVISED (case-sensitive,
-#             so a resolved "Blocked by" is not blocked)
-#   external  the status mentions upstream, HashData, Apache, customer
-#             or external (waiting on an outside party)
-#   decision  the status says needs/owner decision, "needs a human" (unbracketed legacy
-#             wording), "needs manual", sign-off
+#   held      a status the autopilot's auto-pick skips: `Blocked by T<id>` while that blocker
+#             is still in dev/TODO/, or BLOCKED / SUPERVISED (case-sensitive, so a resolved
+#             "Blocked by" is not held), or "needs manual" / sign-off (case-insensitive).
+#             Nothing is derived from any marker text (T20261102-296642).
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
-# autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, and
-# only for its dispatch clone path (so the clone's own claims count as this clone's).
+#   revisited tasks still queued that the autopilot visited without progress (the state file's
+#             `visits` entries above 0); autoparked = tasks the autopilot parked since this
+#             run started (`parked` entries at or after `started_at`)
+# autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, for its
+# dispatch clone path (so the clone's own claims count as this clone's) and the two counts above.
 # A queue line whose task file is missing has no hints and counts as ready.
 sl-queue-json() {
   local repo_root="$1" todo q
@@ -415,8 +412,10 @@ sl-queue-json() {
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
-    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | {
-        clone: ((.dispatch_clone_path // "") | strings)}' "$sf" 2>/dev/null) || st=""
+    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | ((.started_at // "") | strings) as $s0 | {
+        clone: ((.dispatch_clone_path // "") | strings),
+        visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0)) | keys),
+        parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""
     [ -z "$st" ] || state="$st"
   fi
   local me1 me2="" ap_clone
@@ -430,15 +429,12 @@ sl-queue-json() {
     | ($rows | split("\n") | map(select(. != ""))) as $ids
     | [$ids[] | . as $id | ($meta[$id] // {status: "", claimed: "", title: "", kids: false}) as $m
         | ($m.status) as $s
-        | (([$s | ascii_downcase | capture("needs a human \\[(?<k>blocked|decision|external)\\]")] | .[0].k) // "") as $kind
-        | (if $kind != "" then $kind
-           elif $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
-           elif ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
-           elif ($s | test("upstream|HashData|Apache|customer|external"; "i")) then "external"
-           elif ($s | test("needs? (a )?(owner |user |your )?decision|owner decision|needs a human|needs manual|sign-off"; "i")) then "decision"
+        | (if $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
+           elif ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) or ($s | test("needs manual|sign-off"; "i")) then "held"
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
-    | {total: ($ids | length)} + (["ready", "blocked", "decision", "external", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)' 2>/dev/null || true
+    | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
+      + {revisited: ([($st.visits // [])[] | select(. as $v | $ids | index($v) != null)] | length), autoparked: (($st.parked // []) | unique | length)}' 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt

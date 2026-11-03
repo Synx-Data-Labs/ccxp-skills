@@ -531,9 +531,9 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   run _hud "$repo" --json
   [ "$(jq -r .queue <<<"$output")" = "null" ]
   printf -- '# Q\n\n- [T20260101-000001](T20260101-000001-a.md): a\n- [T20260101-000002](T20260101-000002-b.md): b\n' > "$repo/dev/TODO/queue.md"
-  printf -- '---\nstatus: Open — needs owner decision\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
+  printf -- '---\nstatus: Open — sign-off pending\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
   run _hud "$repo" --json
-  [ "$(jq -c .queue <<<"$output")" = '{"total":2,"ready":1,"blocked":0,"decision":1,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
+  [ "$(jq -c .queue <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
 }
 
 # ---------------------------------------------------------------------------

@@ -112,7 +112,7 @@ export function parseHelper(stdout: string): HelperData | null {
     const q = qu as Record<string, unknown>
     // Counts are clamped to whole non-negative numbers; the buckets are the helper's job to keep summing to total.
     const n = (x: unknown) => Math.max(0, Math.floor(num(x)))
-    queue = { total: n(q.total), ready: n(q.ready), blocked: n(q.blocked), decision: n(q.decision), external: n(q.external), epic: n(q.epic), claimed: n(q.claimed) }
+    queue = { total: n(q.total), ready: n(q.ready), held: n(q.held), epic: n(q.epic), claimed: n(q.claimed), revisited: n(q.revisited), autoparked: n(q.autoparked) }
   }
   const c = r.ci
   let ci: Ci | null = null
@@ -472,20 +472,21 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
 }
 
 /**
- * Details (`full`): `queue 44 = 30 ready | 6 blocked | 3 decisions | 2 external | 3 epics`, the labels always in full
- * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); the plural labels read
- * singular at a count of 1 (`1 decision`, `1 epic`). The one-row band (`!full`) starts at `queue 44 = 30r 6b 3d 2e 3x`
- * and shrinks to `queue 30/44`. `claimed` (held by another session) shows only above 0.
+ * Details (`full`): `queue 44 = 30 ready | 6 held | 3 epics`, the labels always in full
+ * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); `epics` reads
+ * singular at a count of 1. The one-row band (`!full`) starts at `queue 44 = 30r 6h 3x` and shrinks to
+ * `queue 30/44`. `claimed` (held by another session), `revisited` and `autoparked` (autopilot: visited
+ * without progress / parked this run) show only above 0: `2c`, `12v`, `2a` in the band.
  */
 export function queueVariants(q: Queue, full: boolean): Variants {
   const parts: Array<[string, string, string, number]> = [
     ['ready', 'ready', 'r', q.ready],
-    ['blocked', 'blocked', 'b', q.blocked],
-    ['decision', 'decisions', 'd', q.decision],
-    ['external', 'external', 'e', q.external],
+    ['held', 'held', 'h', q.held],
     ['epic', 'epics', 'x', q.epic],
   ]
   if (q.claimed > 0) parts.push(['claimed', 'claimed', 'c', q.claimed])
+  if (q.revisited > 0) parts.push(['revisited', 'revisited', 'v', q.revisited])
+  if (q.autoparked > 0) parts.push(['auto-parked', 'auto-parked', 'a', q.autoparked])
   if (full) {
     const long: Seg[] = [{ text: `queue ${q.total} = ` }]
     parts.forEach(([one, many, , n], i) => {
@@ -667,7 +668,7 @@ const DETAIL_STEPS = {
  *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
  *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
  * Without `ci` that is six lines at most, with `ci` seven. Labels are spelled out in full here; the one-row band
- * keeps the short forms (ctx, 5h, $, queue 30r 6b). It ignores `fields`: the lines are the view. [] when there is no data at all.
+ * keeps the short forms (ctx, 5h, $, queue 30r 6h). It ignores `fields`: the lines are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const h = snap.helper
