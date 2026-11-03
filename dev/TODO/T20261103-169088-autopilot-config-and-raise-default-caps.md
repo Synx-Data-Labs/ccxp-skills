@@ -1,8 +1,11 @@
 ---
 estimation: 1
-status: Open
+status: In Progress
 source: Owner chat 2026-11-03
 description: Raise the autopilot defaults (merge cap 64, cycle cap 64, idle retry 32 min, max visits 4) and ship /autopilot config in a release
+claimed_by: cc1-50ac6891:42c26fb875d726e0
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261103-169088: Add /autopilot config and raise autopilot default caps
