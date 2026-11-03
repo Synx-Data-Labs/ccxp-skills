@@ -466,7 +466,7 @@ _queue_fixture() {
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
   # visits above 0 for queued tasks count; a zero count and an id that is not queued do not
-  printf '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2,"T20260101-000002":0,"T20260101-000099":3},"parked":[{"id":"T20260101-000050","at":"2026-10-27T09:00:00Z"},{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"},{"id":"T20260101-000052","at":"2026-10-28T11:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
+  printf '{"schema":2,"status":"on","started_at":"2026-10-28T14:00:00Z","run_started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2,"T20260101-000002":0,"T20260101-000099":3},"parked":[{"id":"T20260101-000050","at":"2026-10-27T09:00:00Z"},{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"},{"id":"T20260101-000052","at":"2026-10-28T11:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -c '[.ready,.revisited,.autoparked]' <<<"$output")" = '[3,1,2]' ] || { echo "$output"; false; }
   # paused counts too; off, a 5.9.0 file without the fields and a malformed file show zeros
