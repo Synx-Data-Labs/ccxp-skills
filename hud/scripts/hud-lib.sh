@@ -378,7 +378,7 @@ sl-ledger-json() {
 #   ready     everything else: what the autopilot can take
 #   revisited tasks still queued that the autopilot visited without progress (the state file's
 #             `visits` entries above 0); autoparked = tasks the autopilot parked since this
-#             run started (`parked` entries at or after `started_at`)
+#             run started (`parked` entries at or after `run_started_at`, else `started_at`)
 # autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, for its
 # dispatch clone path (so the clone's own claims count as this clone's) and the two counts above.
 # A queue line whose task file is missing has no hints and counts as ready.
@@ -412,7 +412,7 @@ sl-queue-json() {
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
-    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | ((.started_at // "") | strings) as $s0 | {
+    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | ((.run_started_at // .started_at // "") | strings) as $s0 | {
         clone: ((.dispatch_clone_path // "") | strings),
         visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0)) | keys),
         parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""
