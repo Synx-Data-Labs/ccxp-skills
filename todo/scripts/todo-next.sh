@@ -8,13 +8,12 @@
 # requires reading and interpreting free-form task-body prose, a judgment
 # call this token-free script can't make.
 #
-#   todo-next.sh [--skip-needs-human] [--check]
-#     --skip-needs-human  also skip gated tasks (a "needs a human" marker, or the
-#                         legacy SUPERVISED/BLOCKED/needs manual/sign-off words, or
-#                         a `Blocked by` status; see todo-gated in _lib.sh). Used by
-#                         /drive's auto-pick; the default listing still shows them.
-#     --check             print nothing; exit 0 when at least one task would be
-#                         listed, 1 when none (T20261102-261809)
+#   todo-next.sh [--skip-gated] [--check]
+#     --skip-gated  also skip gated tasks (the SUPERVISED/BLOCKED/needs manual/sign-off
+#                   words, or a `Blocked by` status; see todo-gated in _lib.sh). Used by
+#                   /drive's auto-pick; the default listing still shows them.
+#     --check       print nothing; exit 0 when at least one task would be listed,
+#                   1 when none
 set -euo pipefail
 
 TODO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,9 +27,9 @@ function todo-next-main() {
   local skip_gated=0 check=0
   while [ $# -gt 0 ]; do
     case "$1" in
-      --skip-needs-human) skip_gated=1 ;;
+      --skip-gated) skip_gated=1 ;;
       --check) check=1 ;;
-      *) printf 'usage: todo-next.sh [--skip-needs-human] [--check]\n' >&2; return 2 ;;
+      *) printf 'usage: todo-next.sh [--skip-gated] [--check]\n' >&2; return 2 ;;
     esac
     shift
   done
