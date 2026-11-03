@@ -113,7 +113,7 @@ ap-status() {
 # Atomic write: jq filter applied to the current state via temp file + mv.
 _ap_update() {
   local f tmp; f=$(ap-state-file); tmp="$f.tmp.$$"
-  jq "$@" "$f" > "$tmp" && mv "$tmp" "$f"
+  if jq "$@" "$f" > "$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; return 1; fi
 }
 
 # A fresh run zeroes the run counters but never the lifetime baseline: the
@@ -129,7 +129,7 @@ _ap_fresh() {
       parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:])}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
   jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" --argjson carry "$carry" '{
-    schema: 2, status: "on", started_at: $now, paused_at: null,
+    schema: 2, status: "on", started_at: $now, run_started_at: $now, paused_at: null,
     lifetime_started_at: (($carry.lifetime_started_at | strings) // $now),
     lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
@@ -306,7 +306,7 @@ ap-advance() {
   f=$(ap-state-file)
   had=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
   if [ "$had" -gt 0 ]; then
-    _ap_update --arg id "$id" 'del(.visits[$id])'
+    _ap_update --arg id "$id" 'if (.visits | type) == "object" then del(.visits[$id]) else . end'
     ap-history-event advance "$id" 0
     echo reset
   else
@@ -324,7 +324,7 @@ ap-parked() {
   reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | cut -c1-200)
   n=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
   _ap_update --arg id "$id" --arg r "$reason" --arg now "$(ap-now)" --argjson n "$n" '
-    del(.visits[$id])
+    (if (.visits | type) == "object" then del(.visits[$id]) else . end)
     | .parked = ((((.parked | arrays // []) | map(select(.id != $id))) + [{id: $id, at: $now, reason: $r, visits: $n}]) | .[-50:])'
   ap-history-event park "$id" "$n"
   echo parked
@@ -339,7 +339,7 @@ ap-prune() {
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if ! compgen -G "$root/dev/TODO/$id-*.md" >/dev/null; then
-      _ap_update --arg id "$id" 'del(.visits[$id])' && printf '%s\n' "$id"
+      _ap_update --arg id "$id" 'if (.visits | type) == "object" then del(.visits[$id]) else . end' && printf '%s\n' "$id"
     fi
   done < <(jq -r '(.visits | objects // {}) | keys[]' "$f" 2>/dev/null || true)
   return 0
@@ -349,7 +349,7 @@ ap-prune() {
 ap-parked-list() {
   local f; f=$(ap-state-file)
   [ -f "$f" ] || return 0
-  jq -r '(.started_at // "") as $s | (.parked | arrays // [])[] | select(type == "object" and (.at // "") >= $s)
+  jq -r '(.run_started_at // .started_at // "") as $s | (.parked | arrays // [])[] | select(type == "object" and (.at // "") >= $s)
     | "\(.id)\t\(.reason // "")"' "$f" 2>/dev/null || true
 }
 
@@ -544,6 +544,16 @@ _ap_report_lines() {
     | sed -E 's/\r$//; s/\*\*//g; s/^[[:space:]>`_*-]+//'
 }
 
+# _ap_id_reason <text>: prints "<id><TAB><reason>" when the text starts with a task id (the longest
+# match, so a bare id never splits at its own dash), dropping a leading dash / em dash separator.
+_ap_id_reason() {
+  local rest="$1" id reason re_id='^(T[0-9]+(-[0-9]+)?)'
+  [[ "$rest" =~ $re_id ]] || return 1
+  id="${BASH_REMATCH[1]}"; reason="${rest#"$id"}"
+  reason=$(printf '%s' "$reason" | sed -E 's/^[[:space:]]*(—|-)?[[:space:]]*//')
+  printf '%s\t%s\n' "$id" "$reason"
+}
+
 _ap_strip_runs() { sed -E 's/[[:space:]]*;[[:space:]]*runs:.*$//; s/[[:space:]]+$//'; }
 
 ap-classify() {
@@ -601,15 +611,15 @@ EOF_LINES
 }
 
 ap-attention() {
-  local src="${1:-}" line rest
+  local src="${1:-}" line rest ir reason
   [ -n "$src" ] || { echo "attention <file|->" >&2; return 2; }
   local lines; lines=$(_ap_report_lines "$src") || { echo "attention: no such file: $src" >&2; return 2; }
-  local re='^(T[0-9]+(-[0-9]+)?)[[:space:]]*(—|-)[[:space:]]*(.*)$' re_id='^(T[0-9]+(-[0-9]+)?)'
   while IFS= read -r line; do
     case "$line" in NEEDS-ATTENTION:*) ;; *) continue ;; esac
     rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
-    if [[ "$rest" =~ $re ]]; then printf '%s\t%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[4]:-needs attention}"
-    elif [[ "$rest" =~ $re_id ]]; then printf '%s\tneeds attention\n' "${BASH_REMATCH[1]}"; fi
+    ir=$(_ap_id_reason "$rest") || continue
+    reason="${ir#*$'\t'}"
+    printf '%s\t%s\n' "${ir%%$'\t'*}" "${reason:-needs attention}"
   done <<EOF_LINES
 $lines
 EOF_LINES
@@ -625,21 +635,20 @@ ap-plan() {
   local src="" fallback="" line rest id reason recs="" lines
   while [ $# -gt 0 ]; do
     case "$1" in
-      --fallback) fallback="${2:-}"; shift 2 || true ;;
+      --fallback) fallback="${2:-}"; shift; [ $# -eq 0 ] || shift ;;
       *) [ -n "$src" ] || src="$1"; shift ;;
     esac
   done
   [ -n "$src" ] || { echo "plan <file|-> [--fallback T<id>]" >&2; return 2; }
   [ -z "$fallback" ] || [[ "$fallback" =~ $AP_TASK_ID_RE ]] || fallback=""
   lines=$(_ap_report_lines "$src") || { echo "plan: no such file: $src" >&2; return 2; }
-  local re_id='^(T[0-9]+(-[0-9]+)?)' re_att='^(T[0-9]+(-[0-9]+)?)[[:space:]]*(—|-)[[:space:]]*(.*)$'
-  local re_stuck='(.*)[[:space:]]+—[[:space:]]+last[[:space:]]+task[[:space:]]+(T[0-9]+(-[0-9]+)?)' tab=$'\t'
+  local re_stuck='(.*)[[:space:]]+—[[:space:]]+last[[:space:]]+task[[:space:]]+(T[0-9]+(-[0-9]+)?)' tab=$'\t' ir
   while IFS= read -r line; do
     case "$line" in
       MERGED:*|ADVANCED:*)
         rest=$(printf '%s' "${line#*:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
-        if [[ "$rest" =~ $re_id ]]; then
-          id="${BASH_REMATCH[1]}"; reason="${rest#"$id"}"; reason=$(printf '%s' "$reason" | sed -E 's/^[[:space:]]*(—|-)?[[:space:]]*//')
+        if ir=$(_ap_id_reason "$rest"); then
+          id="${ir%%"$tab"*}"; reason="${ir#*"$tab"}"
           recs="${recs}${id}${tab}advanced${tab}$(printf '%s' "${reason:-advanced}" | tr '\t' ' ')${tab}$(printf '%s' "${line%%:*}" | tr 'A-Z' 'a-z')"$'\n'
         fi ;;
       STUCK:*)
@@ -652,10 +661,9 @@ ap-plan() {
         fi ;;
       NEEDS-ATTENTION:*)
         rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
-        if [[ "$rest" =~ $re_att ]]; then
-          recs="${recs}${BASH_REMATCH[1]}${tab}stalled${tab}$(printf '%s' "${BASH_REMATCH[4]:-needs attention}" | tr '\t' ' ')${tab}attention"$'\n'
-        elif [[ "$rest" =~ $re_id ]]; then
-          recs="${recs}${BASH_REMATCH[1]}${tab}stalled${tab}needs attention${tab}attention"$'\n'
+        if ir=$(_ap_id_reason "$rest"); then
+          id="${ir%%"$tab"*}"; reason="${ir#*"$tab"}"
+          recs="${recs}${id}${tab}stalled${tab}$(printf '%s' "${reason:-needs attention}" | tr '\t' ' ')${tab}attention"$'\n'
         fi ;;
     esac
   done <<EOF_LINES
@@ -771,7 +779,7 @@ autopilot-state() {
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
-    *) sed -n '2,62p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    *) sed -n '2,/^$/p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 

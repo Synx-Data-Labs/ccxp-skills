@@ -363,7 +363,7 @@ _final_fixture() {
   _ap start >/dev/null
   _ap_set_start
 }
-_ap_set_start() { jq '.started_at = "2026-10-28T08:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
+_ap_set_start() { jq '.started_at = "2026-10-28T08:00:00Z" | .run_started_at = "2026-10-28T08:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
 
 @test "final-report: empty run prints the template with the two empty bullets" {
   _final_fixture
@@ -750,6 +750,7 @@ _stat() { _ap stats --json | jq -r "$1"; }
   run bash "$SCRIPT"
   [ "$status" -eq 2 ]
   [[ "$output" == *"stats [--json]"* ]]
+  [[ "$output" == *"final-report"* ]]
   [[ "$output" != *"set -euo pipefail"* ]]
 }
 
@@ -872,9 +873,28 @@ _hlines() { cat "$(_hist)" 2>/dev/null || true; }
   _ap start >/dev/null
   _ap parked T20260101-000001 "old" >/dev/null
   AUTOPILOT_NOW="2026-10-28T12:00:00Z" _ap parked T20260101-000002 "new" >/dev/null
-  jq '.started_at = "2026-10-28T11:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  jq '.started_at = "2026-10-28T11:00:00Z" | .run_started_at = "2026-10-28T11:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
   run _ap parked-list
   [ "$output" = $'T20260101-000002\tnew' ]
+}
+
+@test "parked-list survives pause and resume (run_started_at is not shifted)" {
+  _ap start >/dev/null
+  AUTOPILOT_NOW="2026-10-28T10:30:00Z" _ap parked T20260101-000001 "r" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T11:00:00Z" _ap pause >/dev/null
+  AUTOPILOT_NOW="2026-10-28T15:00:00Z" _ap resume >/dev/null
+  [ "$(_j .started_at)" != "$(_j .run_started_at)" ]
+  run _ap parked-list; [ "$output" = $'T20260101-000001\tr' ]
+}
+
+@test "a malformed visits value never leaves a temp file or breaks advance, parked and prune" {
+  _ap start >/dev/null
+  jq '.visits = [1,2]' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  run _ap advance T20260101-000001; [ "$status" -eq 0 ]
+  run _ap parked T20260101-000001 "r"; [ "$status" -eq 0 ]
+  run _ap prune "$BATS_TEST_TMPDIR"; [ "$status" -eq 0 ]
+  run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
+  [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'state.json.tmp' || true)" ]
 }
 
 @test "off then start carries visits and parked over; a fresh first start has none" {
@@ -951,6 +971,22 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   _report 'garbage'
   run _ap plan "$BATS_TEST_TMPDIR/report.txt" --fallback T20260101-000009
   [ -z "$output" ]
+}
+
+@test "plan: --fallback without a value ends (no hang); a bare id with no reason keeps its whole id" {
+  _report 'STUCK: CI red'
+  bash "$SCRIPT" plan "$BATS_TEST_TMPDIR/report.txt" --fallback > "$BATS_TEST_TMPDIR/pl.out" 2>&1 & local pid=$!
+  ( sleep 5; kill "$pid" 2>/dev/null ) >/dev/null 2>&1 & local dog=$!
+  local rc=0; wait "$pid" || rc=$?
+  kill "$dog" 2>/dev/null || true
+  [ "$rc" -eq 0 ]; [ ! -s "$BATS_TEST_TMPDIR/pl.out" ]
+  run _plan 'NEEDS-ATTENTION: T20260101-000044' 'ADVANCED: T20260101-000045'
+  [ "${lines[0]}" = $'T20260101-000044\tstalled\tneeds attention\tattention' ]
+  [ "${lines[1]}" = $'T20260101-000045\tadvanced\tadvanced\tadvanced' ]
+  run _ap attention "$BATS_TEST_TMPDIR/report.txt"
+  _report 'NEEDS-ATTENTION: T20260101-000044'
+  run _ap attention "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = $'T20260101-000044\tneeds attention' ]
 }
 
 @test "plan: tolerates bullets, bold and a runs suffix; strips tabs from reasons" {
