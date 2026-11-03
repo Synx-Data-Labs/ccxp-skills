@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 3
 source: conversation 2026-11-02 (owner's redesign of the 5.9.0 autopilot, T20261102-261809)
 related: T20261102-261809
 description: autopilot drives from the top of queue.md; a task it cannot advance is /bottom'ed and parked after 3 visits; no status marker in task files
-claimed_by: cc1-ecc09c93:350ac6fa233273b6
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -75,24 +75,24 @@ scheduled: 2026-11-02
 
 ## Test plan
 
-- [ ] Unit (bats, `tests/autopilot_state.bats`): `visit` increments, prints `bottom`/`park` at the limit, honors `max_visits` from config (default 3, invalid value falls back), appends history; `advance` resets; `parked` moves the entry; `plan` on reports with MERGED/ADVANCED/STUCK/NEEDS-ATTENTION/WAITING combinations and a report with no task id; 5.9.0 state (no `visits`) loads silently; `start` after `off` carries `visits`/`parked`; `stats` ignores visit lines; `report`/`final-report` list parked entries; `pickable` still `pick|drift|none`; `classify` attention-only is `bottomed`, `record bottomed` leaves `stuck_count` and notices alone; `visit --stuck` skips from `stuck_count >= 3`; `prune` drops counters of tasks no longer in `dev/TODO`; `plan` with a STUCK that has no task id, malformed ids, ADVANCED plus STUCK on one task; `top` names the first pickable task.
-- [ ] Unit (bats, `tests/todo-next.bats`): `--skip-gated` skips the legacy status words and `Blocked by`, default output unchanged, `--skip-needs-human` is a usage error.
-- [ ] Unit (bats, `tests/hud_lib.bats`): new queue buckets, `revisited` ignores state ids that are not queued, `parked` counts only this run, state ignored when off.
-- [ ] Unit (`hud/pure.test.ts`): parse clamps, band and details strings, singular/plural, widths. Runs under the host's `claude-code/testing` runner, which this repo's CI does not have, so it cannot be run here.
-- [ ] Housekeeping (the bottom and park PRs, the park refusals, `land.sh` exit 3) is prose run by a sub-agent and is not unit-testable: the SKILL.md text case pins its wording, and a live `/autopilot` run is the post-merge check below.
-- [ ] Docs: `tests/autopilot_state.bats` SKILL.md case, skill-quality ratchets, `lint-docs.sh`, `lint_tasks.py`, full `bats tests/*.bats` locally.
+- [x] Unit (bats, `tests/autopilot_state.bats`): `visit` increments, prints `bottom`/`park` at the limit, honors `max_visits` from config (default 3, invalid value falls back), appends history; `advance` resets; `parked` moves the entry; `plan` on reports with MERGED/ADVANCED/STUCK/NEEDS-ATTENTION/WAITING combinations and a report with no task id; 5.9.0 state (no `visits`) loads silently; `start` after `off` carries `visits`/`parked`; `stats` ignores visit lines; `report`/`final-report` list parked entries; `pickable` still `pick|drift|none`; `classify` attention-only is `bottomed`, `record bottomed` leaves `stuck_count` and notices alone; `visit --stuck` skips from `stuck_count >= 3`; `prune` drops counters of tasks no longer in `dev/TODO`; `plan` with a STUCK that has no task id, malformed ids, ADVANCED plus STUCK on one task; `top` names the first pickable task.
+- [x] Unit (bats, `tests/todo-next.bats`): `--skip-gated` skips the legacy status words and `Blocked by`, default output unchanged, `--skip-needs-human` is a usage error.
+- [x] Unit (bats, `tests/hud_lib.bats`): new queue buckets, `revisited` ignores state ids that are not queued, `parked` counts only this run, state ignored when off.
+- [x] Unit (`hud/pure.test.ts`): parse clamps, band and details strings, singular/plural, widths. Runs under the host's `claude-code/testing` runner, which this repo's CI does not have, so it cannot be run here.
+- [x] Housekeeping (the bottom and park PRs, the park refusals, `land.sh` exit 3) is prose run by a sub-agent and is not unit-testable: the SKILL.md text case pins its wording, and a live `/autopilot` run is the post-merge check below.
+- [x] Docs: `tests/autopilot_state.bats` SKILL.md case, skill-quality ratchets, `lint-docs.sh`, `lint_tasks.py`, full `bats tests/*.bats` locally.
 - [ ] Post-merge, not verifiable here: a live `/autopilot` cycle against a real repo (the dispatcher text is prose, its scripts are unit-tested).
 
 ## Done criteria
 
-- [ ] No script writes, parses or gates on the `needs a human` marker and no skill text tells anyone to: `todo/scripts/needs-human.sh` and `tests/needs_human.bats` are gone, `grep` over `autopilot/`, `drive/`, `todo/` and `hud/` finds the phrase only in retirement notes and incidental English (for example `todo/SKILL.md` saying a consumer gate greps for 'needs a human' words); `tests/autopilot_state.bats` ("retired commands", "no script writes a marker"). Unrelated uses of the phrase in other tests (parser robustness in `actions/sync-tasks/test_sync.py`, `repo-conventions/scripts/test_lint_tasks.py`, claim fixtures) stay.
-- [ ] A cycle that ends `NEEDS-ATTENTION`/`STUCK` without advancing yields `bottom` then, at the third visit, `park`: `tests/autopilot_state.bats` (`visit` cases).
-- [ ] An advancing cycle resets the counter: `tests/autopilot_state.bats` (`advance`, `plan` cases).
-- [ ] The visit limit is configurable and defaults to 3: `tests/autopilot_state.bats` (`max_visits`).
-- [ ] No task file records why a task was not finished: nothing in `autopilot/scripts` writes a task file; the only task-file edits are the claim release (`task_claim.sh release`) and the park (`todo-sweep.sh park`, status `Parked` plus the `## Parked` section): `autopilot/SKILL.md` Phase 3/4 text and `tests/autopilot_state.bats` (SKILL.md case).
-- [ ] Parked tasks are reported: `tests/autopilot_state.bats` (`report`, `final-report`).
-- [ ] The HUD shows ready and revisited/auto-parked counts without markers: `tests/hud_lib.bats` (run in CI); `hud/pure.test.ts` is updated but needs the host's `claude-code/testing` runner, which this repo's CI lacks, so it is checked locally with a shim or reported as not run.
-- [ ] Tests green in CI (`bats`, `lint-tasks`, `skill-quality`, `sync-tasks`, Markdown Lint).
+- [x] No script writes, parses or gates on the `needs a human` marker and no skill text tells anyone to: `todo/scripts/needs-human.sh` and `tests/needs_human.bats` are gone, `grep` over `autopilot/`, `drive/`, `todo/` and `hud/` finds the phrase only in retirement notes and incidental English (for example `todo/SKILL.md` saying a consumer gate greps for 'needs a human' words); `tests/autopilot_state.bats` ("retired commands", "no script writes a marker"). Unrelated uses of the phrase in other tests (parser robustness in `actions/sync-tasks/test_sync.py`, `repo-conventions/scripts/test_lint_tasks.py`, claim fixtures) stay.
+- [x] A cycle that ends `NEEDS-ATTENTION`/`STUCK` without advancing yields `bottom` then, at the third visit, `park`: `tests/autopilot_state.bats` (`visit` cases).
+- [x] An advancing cycle resets the counter: `tests/autopilot_state.bats` (`advance`, `plan` cases).
+- [x] The visit limit is configurable and defaults to 3: `tests/autopilot_state.bats` (`max_visits`).
+- [x] No task file records why a task was not finished: nothing in `autopilot/scripts` writes a task file; the only task-file edits are the claim release (`task_claim.sh release`) and the park (`todo-sweep.sh park`, status `Parked` plus the `## Parked` section): `autopilot/SKILL.md` Phase 3/4 text and `tests/autopilot_state.bats` (SKILL.md case).
+- [x] Parked tasks are reported: `tests/autopilot_state.bats` (`report`, `final-report`).
+- [x] The HUD shows ready and revisited/auto-parked counts without markers: `tests/hud_lib.bats` (run in CI); `hud/pure.test.ts` is updated but needs the host's `claude-code/testing` runner, which this repo's CI lacks, so it is checked locally with a shim or reported as not run.
+- [x] Tests green in CI (`bats`, `lint-tasks`, `skill-quality`, `sync-tasks`, Markdown Lint).
 
 ## Repo file references
 
@@ -107,3 +107,28 @@ scheduled: 2026-11-02
 | `hud/scripts/hud-lib.sh`, `hud/model.ts`, `types/index.d.ts`, `hud/README.md` | 367-441 / 109-116, 480-500 / 81 / 112-121, 168-171 | queue buckets, band and details, docs |
 | `tests/autopilot_state.bats`, `tests/todo-next.bats`, `tests/hud_lib.bats`, `hud/pure.test.ts` | per case | rewire and add cases |
 | `_session/task_claim.sh`, `actions/sync-tasks/test_sync.py`, `repo-conventions/scripts/test_lint_tasks.py`, `tests/task_claim.bats` | 166 / 484, 615-624 / 71 / 97-160 | only mention the phrase in fixtures; left alone |
+
+## Closed (2026-11-02)
+
+- Shipped in **PR #553** (autopilot scripts, tests, skill text) and **PR #554** (HUD); stage PR #550, claim PR #551, design PR #552. CI green on every PR (bats, lint-tasks, skill-quality, sync-tasks, Markdown Lint) and independent reviews (design 2 rounds, #553 3 passes, #554 1 pass) posted on each.
+- What landed:
+  - `autopilot-state.sh`: `plan`, `visit`, `advance`, `parked`, `parked-list`, `prune`, `top`, outcome `bottomed`, `max_visits` config, `visits`/`parked`/`run_started_at` in the state file, history events; removed `marked`, `attention-list`, `_ap_migrate`.
+  - `needs-human.sh`, `tests/needs_human.bats`, `todo-needs-human-kind` deleted; `todo-next.sh --skip-gated`; the `needs a human` text is no longer a gate.
+  - `autopilot`, `drive`, `todo` SKILL.md and `hud/README.md` updated; HUD queue cell is `{total, ready, held, epic, claimed, revisited, autoparked}`.
+- Deviations from the design as merged in #552 (all from review or the skill-quality ratchet):
+  - `plan` prints a fourth `source` column and takes `--fallback`; `top`, `prune` and `visit --stuck` exist so a STUCK without a task id can be attributed, stale counters dropped and an outage not counted.
+  - `run_started_at` (not shifted by pause/resume) is what `parked-list`, the Done list and the HUD use; `started_at` stays pause-adjusted for elapsed time.
+  - A bottom/park that changes nothing (sole task, already last, park refused) is recorded `stuck`, so it takes the back-off ladder instead of a 60 s loop; ADVANCED is only for work landed in this run.
+  - The HUD `held` bucket is the HUD's own stricter display rule, not exactly auto-pick's `todo-gated` (case-sensitive BLOCKED/SUPERVISED, `Blocked by` only while the blocker is open); the design said "a status the autopilot skips".
+  - `autopilot/SKILL.md` Phase 3/4 prose was compacted to keep the skill-size ratchet (score 84, baseline 83).
+- Known limits, not fixed: a task that ends both advanced and NEEDS-ATTENTION in one report costs one extra cycle before it is bottomed; a single task that keeps ending `STUCK` is not bottomed once three stuck cycles are recorded (the existing `stuck` notice surfaces it); the pointer repo's old `needs a human` suffixes are now ordinary status text to the autopilot until the owner's separate cleanup removes them (its tasks would be visited like any other).
+- Not verified here: a live `/autopilot` cycle (dispatcher and housekeeping are prose run by sub-agents; their scripts are unit-tested); `hud/pure.test.ts` needs the host's `claude-code/testing` runner, so it was run locally under a node:test shim (126 tests pass) and not in CI. macOS-only baseline failures (identical on main): one stats test (`paste -sd' '`), eta, gh-app-token, cleanup-branch prune, has-lgtm trailing args.
+- No release, tag or version bump was made (the owner decides the release).
+- Follow-up tasks filed: none.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no (skill not installed in this session); tests written alongside each script change, bats red/green run per slice, code-class (Phase 3.0)
+- Verification (`superpowers:verification-before-completion`): no (skill not installed here); covered by independent reviews on every PR, the local bats/shim/ratchet runs and the /address-pr pre-merge gate
+- Systematic debugging (`superpowers:systematic-debugging`): no, nothing needed it (one pipefail SIGPIPE in `top` was found by its own test)
+- Receiving code review (`superpowers:receiving-code-review`): no (skill not installed here); 11 + 7 + 10 + 3 + 4 review findings across #552, #553 and #554 each fixed or answered on the PR
