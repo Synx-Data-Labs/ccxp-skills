@@ -370,10 +370,12 @@ sl-ledger-json() {
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
 #             standalone word EPIC. Free-text "umbrella"/"epic" is NOT a signal (product
 #             terms and prose misfire). Plain members of a dev/EPICS epic stay takeable.
-#   held      a status the autopilot's auto-pick skips: `Blocked by T<id>` while that blocker
+#   held      a status the HUD counts as not takeable: `Blocked by T<id>` while that blocker
 #             is still in dev/TODO/, or BLOCKED / SUPERVISED (case-sensitive, so a resolved
-#             "Blocked by" is not held), or "needs manual" / sign-off (case-insensitive).
-#             Nothing is derived from any marker text (T20261102-296642).
+#             "Blocked by" is not held), or "needs manual" / sign-off (case-insensitive). This
+#             is the HUD's stricter display rule: auto-pick (`todo-gated`) is a little wider
+#             (case-insensitive words, any `Blocked by`), so `ready` can include a task
+#             auto-pick skips. Nothing is derived from any marker text (T20261102-296642).
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
 #   revisited tasks still queued that the autopilot visited without progress (the state file's
@@ -412,7 +414,7 @@ sl-queue-json() {
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
-    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | ((.run_started_at // .started_at // "") | strings) as $s0 | {
+    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | (((.run_started_at | strings) // (.started_at | strings)) // "") as $s0 | {
         clone: ((.dispatch_clone_path // "") | strings),
         visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0)) | keys),
         parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""

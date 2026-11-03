@@ -479,6 +479,10 @@ _queue_fixture() {
   printf '{"schema":2,"status":"on","dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -c '[.total,.revisited,.autoparked]' <<<"$output")" = '[3,0,0]' ]
+  # a non-string run_started_at falls back to started_at instead of losing the whole state read
+  printf '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","run_started_at":5,"visits":{"T20260101-000001":1},"parked":[{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -c '[.revisited,.autoparked]' <<<"$output")" = '[1,1]' ] || { echo "$output"; false; }
   printf 'not json' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -r .total <<<"$output")" = 3 ]

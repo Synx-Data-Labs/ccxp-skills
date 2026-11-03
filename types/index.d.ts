@@ -79,7 +79,7 @@ export type Ledger = {
 
 /**
  * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|held|epic|claimed, so those sum to `total`.
- * `held` = a status the autopilot skips (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off).
+ * `held` = a status the HUD counts as not takeable (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off); auto-pick's own gate is slightly wider.
  * `revisited` and `autoparked` come from the autopilot state, not from the tasks.
  */
 export type Queue = {
