@@ -113,10 +113,10 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   [ "$(_j .dispatch_clone_path)" = null ]
 }
 
-@test "delay: progress 60s, idle from config (default 45 min), capped 1h" {
+@test "delay: progress 60s, idle from config (default 32 min), capped 1h" {
   _ap start >/dev/null
   run _ap delay progress; [ "$output" = 60 ]
-  run _ap delay idle; [ "$output" = 2700 ]
+  run _ap delay idle; [ "$output" = 1920 ]
   printf '%s' '{"idle_retry_minutes": 30}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap delay idle; [ "$output" = 1800 ]
   run _ap delay capped; [ "$output" = 3600 ]
@@ -162,7 +162,7 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap record bogus; [ "$status" -ne 0 ]
 }
 
-@test "cap: defaults 24 cycles / 12 merges, from config, rolls at midnight" {
+@test "cap: defaults 64 cycles / 64 merges, from config, rolls at midnight" {
   _ap start >/dev/null
   run _ap cap; [ "$output" = ok ]
   printf '%s' '{"daily_cycle_cap": 2, "daily_merge_cap": 9}' > "$AUTOPILOT_CONFIG_FILE"
@@ -806,19 +806,20 @@ _nh_task() {
 
 _hlines() { cat "$(_hist)" 2>/dev/null || true; }
 
-@test "visit: counts up, says bottom twice then park at the third, logs each visit" {
+@test "visit: counts up, says bottom three times then park at the fourth, logs each visit" {
   _ap start >/dev/null
   run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 1" ]
   run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 2" ]
-  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "park 3" ]
-  [ "$(_j '.visits["T20260101-000001"]')" = 3 ]
-  [ "$(_hlines | jq -s '[.[] | select(.outcome == "visit")] | length')" = 3 ]
-  [ "$(_hlines | tail -1 | jq -r '"\(.task) \(.visits) \(.merged)"')" = "T20260101-000001 3 0" ]
+  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 3" ]
+  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "park 4" ]
+  [ "$(_j '.visits["T20260101-000001"]')" = 4 ]
+  [ "$(_hlines | jq -s '[.[] | select(.outcome == "visit")] | length')" = 4 ]
+  [ "$(_hlines | tail -1 | jq -r '"\(.task) \(.visits) \(.merged)"')" = "T20260101-000001 4 0" ]
   # other tasks count separately
   run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
 }
 
-@test "visit: the limit is max_visits from the config (default 3, bad values fall back)" {
+@test "visit: the limit is max_visits from the config (default 4, bad values fall back)" {
   _ap start >/dev/null
   printf '{"max_visits": 2}' > "$AUTOPILOT_CONFIG_FILE"
   _ap visit T20260101-000001 >/dev/null
@@ -826,7 +827,8 @@ _hlines() { cat "$(_hist)" 2>/dev/null || true; }
   printf '{"max_visits": 0}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap visit T20260101-000003 ; [ "$output" = "bottom 1" ]
   _ap visit T20260101-000003 >/dev/null
-  run _ap visit T20260101-000003 ; [ "$output" = "park 3" ]
+  _ap visit T20260101-000003 >/dev/null
+  run _ap visit T20260101-000003 ; [ "$output" = "park 4" ]
   printf '{"max_visits": "many"}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap visit T20260101-000004; [ "$output" = "bottom 1" ]
 }
@@ -1052,7 +1054,7 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   _ap visit T20260101-000001 >/dev/null
   _ap parked T20260101-000002 "waiting on HashData; autopilot visited 3 times without progress" >/dev/null
   run _ap report
-  [[ "$output" == *"revisiting: T20260101-000001 (1/3 no-progress visits)"* ]]
+  [[ "$output" == *"revisiting: T20260101-000001 (1/4 no-progress visits)"* ]]
   [[ "$output" == *"parked by autopilot: T20260101-000002 — waiting on HashData; autopilot visited 3 times without progress"* ]]
   printf '{"max_visits": 5}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap report
@@ -1133,8 +1135,8 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 @test "config-show: no file shows defaults and the path" {
   run _ap config-show
   [ "$status" -eq 0 ]
-  [[ "$output" == *"daily_cycle_cap"*"24"*"default"* ]]
-  [[ "$output" == *"idle_retry_minutes"*"45"*"default"* ]]
+  [[ "$output" == *"daily_cycle_cap"*"64"*"default"* ]]
+  [[ "$output" == *"idle_retry_minutes"*"32"*"default"* ]]
   [[ "$output" == *"config file: $AUTOPILOT_CONFIG_FILE (absent"* ]]
 }
 
@@ -1142,7 +1144,7 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   printf '%s' '{"daily_cycle_cap": 100}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap config-show
   [[ "$output" == *"daily_cycle_cap"*"100"*"override"* ]]
-  [[ "$output" == *"max_visits"*"3"*"default"* ]]
+  [[ "$output" == *"max_visits"*"4"*"default"* ]]
   run _ap config-show --json
   [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.value')" = 100 ]
   [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.source')" = override ]
@@ -1153,8 +1155,8 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 @test "config-show: an invalid override is ignored (shown as default)" {
   printf '%s' '{"max_visits": "abc", "daily_merge_cap": 0}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap config-show
-  [[ "$output" == *"max_visits"*"3"*"default"* ]]
-  [[ "$output" == *"daily_merge_cap"*"12"*"default"* ]]
+  [[ "$output" == *"max_visits"*"4"*"default"* ]]
+  [[ "$output" == *"daily_merge_cap"*"64"*"default"* ]]
 }
 
 @test "config-set: creates the file with mode 600 and takes effect at the next cap check" {
@@ -1223,7 +1225,7 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   [ "$status" -eq 0 ]
   [ "$(jq -c '.' "$AUTOPILOT_CONFIG_FILE")" = '{"future_key":1}' ]
   run _ap config-show
-  [[ "$output" == *"daily_cycle_cap"*"24"*"default"* ]]
+  [[ "$output" == *"daily_cycle_cap"*"64"*"default"* ]]
 }
 
 @test "config-reset: no file is a noop; unknown key is refused" {

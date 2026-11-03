@@ -42,7 +42,7 @@
 #   visit <task-id> [reason] [--stuck]
 #                               a no-progress visit: count it (dev/.autopilot-state.json
 #                               "visits"), log it, print "bottom <n>" or "park <n>" (park
-#                               when n >= max_visits, default 3); "none" unless on;
+#                               when n >= max_visits, default 4); "none" unless on;
 #                               "skip" with --stuck once stuck_count >= 3 (likely an
 #                               outage, not the task)
 #   advance <task-id>           the task moved forward: reset its counter; print reset|none
@@ -78,7 +78,7 @@
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 # Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
-#   max_visits (no-progress visits before a task is parked, default 3).
+#   max_visits (no-progress visits before a task is parked, default 4).
 
 set -euo pipefail
 
@@ -233,8 +233,8 @@ ap-cap() {
   _ap_roll_day
   local f cc mc; f=$(ap-state-file)
   cc=$(jq -r '.cycles_today // 0' "$f"); mc=$(jq -r '.merges_today // 0' "$f")
-  if [ "$cc" -ge "$(ap-config daily_cycle_cap 24)" ]; then echo capped:cycles
-  elif [ "$mc" -ge "$(ap-config daily_merge_cap 12)" ]; then echo capped:merges
+  if [ "$cc" -ge "$(ap-config daily_cycle_cap 64)" ]; then echo capped:cycles
+  elif [ "$mc" -ge "$(ap-config daily_merge_cap 64)" ]; then echo capped:merges
   else echo ok; fi
 }
 
@@ -242,7 +242,7 @@ ap-delay() {
   local outcome="${1:?outcome}" f n d key; f=$(ap-state-file)
   case "$outcome" in
     progress|bottomed) echo 60 ;;
-    idle) echo $(( $(ap-config idle_retry_minutes 45) * 60 )) ;;
+    idle) echo $(( $(ap-config idle_retry_minutes 32) * 60 )) ;;
     capped) echo 3600 ;;
     stuck|waiting)
       key=waiting_count; [ "$outcome" = stuck ] && key=stuck_count
@@ -300,7 +300,7 @@ ap-visit() {
   _ap_update --arg id "$id" '.visits = ((.visits | objects // {}) | .[$id] = (((.[$id] | numbers) // 0) + 1))'
   n=$(jq -r --arg id "$id" '.visits[$id]' "$f")
   ap-history-event visit "$id" "$n"
-  max=$(ap-config max_visits 3)
+  max=$(ap-config max_visits 4)
   if [ "$n" -ge "$max" ]; then echo "park $n"; else echo "bottom $n"; fi
 }
 
@@ -530,7 +530,7 @@ ap-report() {
   jq -r '"cycles \(.cycle_count) (today \(.cycles_today)), merged \(.merged_count) (today \(.merges_today)), stuck \(.stuck_count), last \(.last_outcome // "none")",
          (if .next_wake_at then "next cycle \(.next_wake_at)" else empty end),
          (.notices[-3:][]? | "notice [\(.via)] \(.kind): \(.text)")' "$f"
-  local aid areason max; max=$(ap-config max_visits 3)
+  local aid areason max; max=$(ap-config max_visits 4)
   jq -r --argjson max "$max" '(.visits | objects // {}) | to_entries[] | select(.value | numbers > 0) | "revisiting: \(.key) (\(.value)/\($max) no-progress visits)"' "$f" 2>/dev/null || true
   while IFS=$'\t' read -r aid areason; do
     if [ -n "$aid" ]; then printf 'parked by autopilot: %s — %s\n' "$aid" "$areason"; fi
@@ -777,8 +777,8 @@ ap-final-report() {
 
 # Config settings: key<TAB>default<TAB>min<TAB>max. The only source of the valid keys and ranges.
 _ap_config_spec() {
-  printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 24 1 1000 daily_merge_cap 12 1 1000 \
-    idle_retry_minutes 45 30 60 max_visits 3 1 20
+  printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 64 1 1000 daily_merge_cap 64 1 1000 \
+    idle_retry_minutes 32 30 60 max_visits 4 1 20
 }
 
 # The raw override for a key ("" when absent or not a positive integer).

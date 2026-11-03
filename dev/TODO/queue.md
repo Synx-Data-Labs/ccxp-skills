@@ -51,3 +51,4 @@ reprioritize.
 - [T20261030-716636](T20261030-716636-hud-queue-cell-counts-stale-checkout-as-ready.md): HUD queue cell counts a stale local checkout as ready
 - [T20261019-187676](T20261019-187676-claim-id-pid-orphan-reclaim.md): Change claim-id from host-hash:path-hash to host-hash:PID so orphaned claims can be reclaimed
 - [T20261028-273649](T20261028-273649-ledger-inputs-actions-refs.md): Ledger persists inputs, actions and ref counters
+- [T20261103-169088](T20261103-169088-autopilot-config-and-raise-default-caps.md): Add /autopilot config and raise autopilot default caps
