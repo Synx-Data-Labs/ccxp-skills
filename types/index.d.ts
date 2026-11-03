@@ -77,16 +77,22 @@ export type Ledger = {
   updated_at: string
 }
 
-/** Breakdown of dev/TODO/queue.md; every task is in exactly one bucket, so they sum to `total`. */
+/**
+ * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|held|epic|claimed, so those sum to `total`.
+ * `held` = a status the autopilot skips (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off).
+ * `revisited` and `autoparked` come from the autopilot state, not from the tasks.
+ */
 export type Queue = {
   total: number
   ready: number
-  blocked: number
-  decision: number
-  external: number
+  held: number
   epic: number
   /** Held by another session; shown only when above 0. */
   claimed: number
+  /** Queued tasks the autopilot visited without progress; shown only when above 0. */
+  revisited: number
+  /** Tasks the autopilot parked since this run started; shown only when above 0. */
+  autoparked: number
 }
 
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'

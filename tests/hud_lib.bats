@@ -424,17 +424,17 @@ _queue_fixture() {
   local repo; repo=$(_make_repo "$1")
   printf '# TODO Queue\n\nprose line\n\n' > "$repo/dev/TODO/queue.md"
   _task "$repo" 1 Open                                   # ready
-  _task "$repo" 2 "Blocked by T20260101-000003 — wait"   # blocked (blocker still open)
+  _task "$repo" 2 "Blocked by T20260101-000003 — wait"   # held (blocker still open)
   _task "$repo" 3 Open                                   # ready
   _task "$repo" 4 "Blocked by T20260101-999999"          # blocker gone: ready
-  _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # blocked
-  _task "$repo" 6 "Open — waiting on HashData review"    # external
-  _task "$repo" 7 "Open — needs owner decision"          # decision
+  _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # held
+  _task "$repo" 6 "Open — waiting on HashData review"    # ready: free text is no signal any more
+  _task "$repo" 7 "Open — needs owner decision"          # ready: same
   _task "$repo" 8 Open "" "EPIC: the big thing"          # epic (uppercase marker)
   _task "$repo" 9 Open "claimed_by: other-box:/x"        # claimed
   _task "$repo" 10 Open "claimed_by: $(_clone_id "$repo")"  # ours: ready
-  _task "$repo" 11 Open                                  # skip kind external
-  _task "$repo" 12 Open                                  # skip, no kind: decision
+  _task "$repo" 11 "Review — needs manual QA"            # held
+  _task "$repo" 12 "Open — sign-off pending"             # held
   _task "$repo" 14 "BLOCKED on infra" "" "Tracking — EPIC"  # epic beats blocked
   _task "$repo" 15 Open "children: [T20260101-000001]"   # epic by structure
   local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do _qline "$i" "$repo"; done   # 13 has no file
@@ -452,33 +452,36 @@ _queue_fixture() {
   local repo; repo=$(_queue_fixture q-fm)
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = '{"total":15,"ready":7,"blocked":2,"decision":1,"external":1,"epic":3,"claimed":1}' ] || { echo "$output"; false; }
-  [ "$(jq '.ready + .blocked + .decision + .external + .epic + .claimed - .total' <<<"$output")" = 0 ]
+  [ "$output" = '{"total":15,"ready":7,"held":4,"epic":3,"claimed":1,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
+  [ "$(jq '.ready + .held + .epic + .claimed - .total' <<<"$output")" = 0 ]
 }
 
-@test "sl-queue-json: the needs-a-human marker buckets by kind, first; the state-file lists are ignored" {
-  local repo; repo=$(_make_repo q-marker)
+@test "sl-queue-json: no marker text is read; revisited and autoparked come from the autopilot state" {
+  local repo; repo=$(_make_repo q-state)
   printf '# Q\n' > "$repo/dev/TODO/queue.md"
-  _task "$repo" 1 "Open — needs a human [external]: waits on HashData"   # kind wins over the text hints
-  _task "$repo" 2 "Open — needs a human [blocked]: needs customer sign-off"  # blocked, not external/decision
-  _task "$repo" 3 "Design — needs a human [decision]: pick A or B"
-  _task "$repo" 4 "Open — needs a human [decision]: x" "children: [T20260101-000001]"  # marker beats the epic signal
-  _task "$repo" 5 Open
-  _task "$repo" 6 "Review — SUPERVISED (needs a human with VPN)"            # legacy wording keeps its old bucket
-  local i; for i in 1 2 3 4 5 6; do _qline "$i" "$repo"; done
+  _task "$repo" 1 "Open — needs a human [external]: waits on HashData"   # the 5.9.0 text is just text: ready
+  _task "$repo" 2 Open
+  _task "$repo" 3 Open
+  local i; for i in 1 2 3; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":6,"ready":1,"blocked":2,"decision":2,"external":1,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
-  # a legacy state file with skip lists changes nothing; neither does an off or malformed one
-  printf '{"schema":2,"status":"on","skip_ids":["T20260101-000005"],"needs_attention":[{"id":"T20260101-000005","reason":"r","kind":"external"}],"dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
+  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
+  # visits above 0 for queued tasks count; a zero count and an id that is not queued do not
+  printf '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2,"T20260101-000002":0,"T20260101-000099":3},"parked":[{"id":"T20260101-000050","at":"2026-10-27T09:00:00Z"},{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"},{"id":"T20260101-000052","at":"2026-10-28T11:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -r .ready <<<"$output")" = 1 ]
+  [ "$(jq -c '[.ready,.revisited,.autoparked]' <<<"$output")" = '[3,1,2]' ] || { echo "$output"; false; }
+  # paused counts too; off, a 5.9.0 file without the fields and a malformed file show zeros
+  jq '.status = "paused"' "$repo/dev/.autopilot-state.json" > "$repo/s.t" && mv "$repo/s.t" "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -c '[.revisited,.autoparked]' <<<"$output")" = '[1,2]' ]
+  jq '.status = "off"' "$repo/dev/.autopilot-state.json" > "$repo/s.t" && mv "$repo/s.t" "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -c '[.revisited,.autoparked]' <<<"$output")" = '[0,0]' ]
+  printf '{"schema":2,"status":"on","dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
+  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
+  [ "$(jq -c '[.total,.revisited,.autoparked]' <<<"$output")" = '[3,0,0]' ]
   printf 'not json' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -r .total <<<"$output")" = 6 ]
-  # removing the marker returns the task to ready
-  _task "$repo" 1 Open
-  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -r .ready <<<"$output")" = 2 ]
+  [ "$(jq -r .total <<<"$output")" = 3 ]
 }
 
 @test "sl-queue-json: epic needs a deliberate signal; umbrella/epic prose is not one" {
@@ -498,7 +501,7 @@ _queue_fixture() {
   printf '### E1 — Thing\n\n**Parent design task:** [T20260101-000008](../TODO/T20260101-000008-t.md) (supersedes T20260101-000001)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
   local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":10,"ready":5,"blocked":1,"decision":0,"external":0,"epic":4,"claimed":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":10,"ready":5,"held":1,"epic":4,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
 }
 
 @test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {
@@ -508,9 +511,9 @@ _queue_fixture() {
   _task "$repo" 1 Open "claimed_by: null"
   _task "$repo" 2 "In Progress — UNBLOCKED now"
   _task "$repo" 3 Open "claimed_by: $(_clone_id "$ap")"
-  _task "$repo" 4 "Open — needs a human [blocked]: waits"
+  _task "$repo" 4 "Open — sign-off pending"
   local i; for i in 1 2 3 4; do _qline "$i" "$repo"; done
   printf '{"schema":2,"status":"paused","dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":4,"ready":3,"blocked":1,"decision":0,"external":0,"epic":0,"claimed":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":4,"ready":3,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
 }
