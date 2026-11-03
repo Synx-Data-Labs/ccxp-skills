@@ -19,7 +19,7 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
 
 @test "grammar: SKILL.md documents exactly on/off/pause/resume/status, no duration" {
   run grep -n 'argument-hint' "$REPO_ROOT/autopilot/SKILL.md"
-  [[ "$output" == *"on | off | pause | resume | status"* ]]
+  [[ "$output" == *"on | off | pause | resume | status | config"* ]]
   run grep -nE '<duration>|--now' "$REPO_ROOT/autopilot/SKILL.md"
   [ "$status" -ne 0 ]
   # The old resume token survives only in the one sentence that refuses it.
@@ -1126,4 +1126,115 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run grep -n '/bottom' "$s"; [ "$status" -eq 0 ]
   run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]
   run grep -n -E 'needs-human\.sh|autopilot-state\.sh (marked|attention-list|skip|unskip)|skip_ids|--skip-needs-human' "$s"; [ "$status" -ne 0 ]
+}
+
+# --- config-show / config-set / config-reset ---
+
+@test "config-show: no file shows defaults and the path" {
+  run _ap config-show
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"daily_cycle_cap"*"24"*"default"* ]]
+  [[ "$output" == *"idle_retry_minutes"*"45"*"default"* ]]
+  [[ "$output" == *"config file: $AUTOPILOT_CONFIG_FILE (absent"* ]]
+}
+
+@test "config-show: overrides are marked and --json is valid" {
+  printf '%s' '{"daily_cycle_cap": 100}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show
+  [[ "$output" == *"daily_cycle_cap"*"100"*"override"* ]]
+  [[ "$output" == *"max_visits"*"3"*"default"* ]]
+  run _ap config-show --json
+  [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.value')" = 100 ]
+  [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.source')" = override ]
+  [ "$(printf '%s' "$output" | jq -r '.settings.max_visits.source')" = default ]
+  [ "$(printf '%s' "$output" | jq -r '.file')" = "$AUTOPILOT_CONFIG_FILE" ]
+}
+
+@test "config-show: an invalid override is ignored (shown as default)" {
+  printf '%s' '{"max_visits": "abc", "daily_merge_cap": 0}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show
+  [[ "$output" == *"max_visits"*"3"*"default"* ]]
+  [[ "$output" == *"daily_merge_cap"*"12"*"default"* ]]
+}
+
+@test "config-set: creates the file with mode 600 and takes effect at the next cap check" {
+  run _ap config-set daily_cycle_cap 2
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.daily_cycle_cap' "$AUTOPILOT_CONFIG_FILE")" = 2 ]
+  [ "$(stat -c %a "$AUTOPILOT_CONFIG_FILE" 2>/dev/null || stat -f %Lp "$AUTOPILOT_CONFIG_FILE")" = 600 ]
+  _ap start >/dev/null
+  _ap record progress 0 >/dev/null; _ap record progress 0 >/dev/null
+  run _ap cap; [ "$output" = "capped:cycles" ]
+  _ap config-set daily_cycle_cap 24 >/dev/null
+  run _ap cap; [ "$output" = ok ]
+}
+
+@test "config-set: preserves other and unknown keys, leaves no temp file" {
+  printf '%s' '{"max_visits": 5, "future_key": "x"}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-set idle_retry_minutes 30
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.max_visits' "$AUTOPILOT_CONFIG_FILE")" = 5 ]
+  [ "$(jq -r '.future_key' "$AUTOPILOT_CONFIG_FILE")" = x ]
+  [ "$(jq -r '.idle_retry_minutes' "$AUTOPILOT_CONFIG_FILE")" = 30 ]
+  run _ap delay idle; [ "$output" = 1800 ]
+  [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'config.json.tmp')" ]
+}
+
+@test "config-set: rejects bad keys and values without touching the file" {
+  printf '%s' '{"max_visits": 5}' > "$AUTOPILOT_CONFIG_FILE"
+  before=$(cat "$AUTOPILOT_CONFIG_FILE")
+  for args in "bogus 5" "max_visits 0" "max_visits -1" "max_visits abc" "max_visits 1.5" "max_visits 21" \
+              "daily_cycle_cap 1001" "daily_merge_cap 0" "idle_retry_minutes 29" "idle_retry_minutes 61" "max_visits 007" "max_visits"; do
+    run _ap config-set $args
+    [ "$status" -eq 2 ] || { echo "accepted: $args"; return 1; }
+    [[ "$output" == *"config:"* || "$output" == *"config-set"* ]]
+  done
+  [ "$(cat "$AUTOPILOT_CONFIG_FILE")" = "$before" ]
+}
+
+@test "config-set: accepts the range bounds" {
+  run _ap config-set daily_cycle_cap 1000; [ "$status" -eq 0 ]
+  run _ap config-set max_visits 20; [ "$status" -eq 0 ]
+  run _ap config-set idle_retry_minutes 60; [ "$status" -eq 0 ]
+  run _ap config-set idle_retry_minutes 30; [ "$status" -eq 0 ]
+}
+
+@test "config-set: refuses to overwrite a file that is not a JSON object" {
+  printf '{not json' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-set max_visits 4
+  [ "$status" -eq 2 ]
+  [ "$(cat "$AUTOPILOT_CONFIG_FILE")" = "{not json" ]
+}
+
+@test "config-set: never touches the state file" {
+  _ap start >/dev/null
+  before=$(cat "$AUTOPILOT_STATE_FILE")
+  _ap config-set daily_merge_cap 50 >/dev/null
+  [ "$(cat "$AUTOPILOT_STATE_FILE")" = "$before" ]
+}
+
+@test "config-reset: one key keeps the rest, no key drops all four but keeps unknown keys" {
+  printf '%s' '{"max_visits": 5, "daily_cycle_cap": 9, "future_key": 1}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-reset max_visits
+  [ "$status" -eq 0 ]
+  [ "$(jq -r 'has("max_visits")' "$AUTOPILOT_CONFIG_FILE")" = false ]
+  [ "$(jq -r '.daily_cycle_cap' "$AUTOPILOT_CONFIG_FILE")" = 9 ]
+  run _ap config-reset
+  [ "$status" -eq 0 ]
+  [ "$(jq -c '.' "$AUTOPILOT_CONFIG_FILE")" = '{"future_key":1}' ]
+  run _ap config-show
+  [[ "$output" == *"daily_cycle_cap"*"24"*"default"* ]]
+}
+
+@test "config-reset: no file is a noop; unknown key is refused" {
+  run _ap config-reset; [ "$status" -eq 0 ]; [[ "$output" == noop* ]]
+  [ ! -e "$AUTOPILOT_CONFIG_FILE" ]
+  run _ap config-reset bogus; [ "$status" -eq 2 ]
+}
+
+@test "SKILL.md documents the config argument and its no-loop-effect rule" {
+  run grep -n 'config set <key> <value>' "$REPO_ROOT/autopilot/SKILL.md"
+  [ "$status" -eq 0 ]
+  run grep -n 'never starts, stops, pauses or dispatches' "$REPO_ROOT/autopilot/SKILL.md"
+  [ "$status" -eq 0 ]
 }

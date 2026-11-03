@@ -70,6 +70,11 @@
 #   final-report [--stopped <why>]
 #                               the Phase 5 bullet report (elapsed, Done,
 #                               Needs your attention) from the state file
+#   config-show [--json]        every setting with its effective value, default|override
+#                               and the config file path (read-only)
+#   config-set <key> <value>    validate, then atomically write one override (keeps other keys,
+#                               file mode 600); exit 2 on a bad key/value, state untouched
+#   config-reset [<key>]        drop one override, or all four settings' overrides
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 # Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
@@ -770,6 +775,83 @@ ap-final-report() {
   if [ -n "$out" ]; then printf '%s' "$out"; else echo "- Nothing outstanding"; fi
 }
 
+# Config settings: key<TAB>default<TAB>min<TAB>max. The only source of the valid keys and ranges.
+_ap_config_spec() {
+  printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 24 1 1000 daily_merge_cap 12 1 1000 \
+    idle_retry_minutes 45 30 60 max_visits 3 1 20
+}
+
+# The raw override for a key ("" when absent or not a positive integer).
+_ap_config_raw() {
+  local f v=""; f=$(ap-config-file)
+  [ -f "$f" ] && v=$(jq -r --arg k "$1" '.[$k] // empty' "$f" 2>/dev/null || true)
+  if [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -gt 0 ]; then printf '%s' "$v"; fi
+}
+
+ap-config-show() {
+  local json=0 f key def min max raw val src rows=""
+  case "${1:-}" in --json) json=1 ;; "") ;; *) echo "config-show [--json]" >&2; return 2 ;; esac
+  f=$(ap-config-file)
+  while IFS=$'\t' read -r key def min max; do
+    raw=$(_ap_config_raw "$key"); val=$(ap-config "$key" "$def")
+    if [ -n "$raw" ] && [ "$raw" = "$val" ]; then src=override; else src=default; fi
+    rows="${rows}${key}"$'\t'"${val}"$'\t'"${src}"$'\t'"${def}"$'\t'"${min}-${max}"$'\n'
+  done < <(_ap_config_spec)
+  if [ "$json" = 1 ]; then
+    printf '%s' "$rows" | jq -Rn --arg file "$f" '{file: $file, settings: ([inputs | split("\t") |
+      {key: .[0], value: {value: (.[1] | tonumber), source: .[2], default: (.[3] | tonumber), range: .[4]}}] | from_entries)}'
+    return 0
+  fi
+  printf '%-20s %6s  %-8s %s\n' setting value source "default (range)"
+  while IFS=$'\t' read -r key val src def min; do
+    [ -n "$key" ] || continue
+    printf '%-20s %6s  %-8s %s (%s)\n' "$key" "$val" "$src" "$def" "$min"
+  done <<< "$rows"
+  if [ -f "$f" ]; then echo "config file: $f"; else echo "config file: $f (absent: all defaults)"; fi
+}
+
+# Atomic config write: jq filter (args like _ap_update) over the file's object, temp file + mv, mode 600.
+_ap_config_write() {
+  local f tmp cur; f=$(ap-config-file); tmp="$f.tmp.$$"
+  mkdir -p "$(dirname "$f")"
+  cur='{}'
+  if [ -f "$f" ]; then
+    cur=$(cat "$f")
+    printf '%s' "$cur" | jq -e 'type == "object"' >/dev/null 2>&1 \
+      || { echo "config: $f is not a JSON object; fix or move it first" >&2; return 2; }
+  fi
+  ( umask 077; printf '%s' "$cur" | jq "$@" > "$tmp" ) || { rm -f "$tmp"; return 1; }
+  chmod 600 "$tmp" && mv "$tmp" "$f"
+}
+
+ap-config-set() {
+  local key="${1:-}" val="${2:-}" k def min max found=""
+  [ $# -eq 2 ] || { echo "config-set <key> <value>" >&2; return 2; }
+  while IFS=$'\t' read -r k def min max; do
+    [ "$k" = "$key" ] && { found=1; break; }
+  done < <(_ap_config_spec)
+  [ -n "$found" ] || { echo "config: unknown key '$key' (valid: $(_ap_config_spec | cut -f1 | paste -sd' ' -))" >&2; return 2; }
+  [[ "$val" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "config: $key must be a positive integer, got '$val'" >&2; return 2; }
+  if [ "$val" -lt "$min" ] || [ "$val" -gt "$max" ]; then
+    echo "config: $key must be between $min and $max, got $val" >&2; return 2
+  fi
+  _ap_config_write --arg k "$key" --argjson v "$val" '.[$k] = $v' || return $?
+  echo "set $key=$val ($(ap-config-file))"
+}
+
+ap-config-reset() {
+  local key="${1:-}" f k found=""; f=$(ap-config-file)
+  [ $# -le 1 ] || { echo "config-reset [<key>]" >&2; return 2; }
+  if [ -n "$key" ]; then
+    while IFS=$'\t' read -r k _; do [ "$k" = "$key" ] && found=1; done < <(_ap_config_spec)
+    [ -n "$found" ] || { echo "config: unknown key '$key' (valid: $(_ap_config_spec | cut -f1 | paste -sd' ' -))" >&2; return 2; }
+  fi
+  [ -f "$f" ] || { echo "noop: no config file, nothing to reset"; return 0; }
+  _ap_config_write --argjson ks "$(_ap_config_spec | cut -f1 | jq -R . | jq -sc --arg k "$key" 'if $k == "" then . else [$k] end')" \
+    'delpaths($ks | map([.]))' || return $?
+  if [ -n "$key" ]; then echo "reset $key"; else echo "reset all overrides"; fi
+}
+
 autopilot-state() {
   local cmd="${1:-}"; shift || true
   case "$cmd" in
@@ -779,6 +861,7 @@ autopilot-state() {
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
+    config-show) ap-config-show "$@" ;; config-set) ap-config-set "$@" ;; config-reset) ap-config-reset "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
     *) sed -n '2,/^$/p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
