@@ -896,6 +896,18 @@ _hlines() { cat "$(_hist)" 2>/dev/null || true; }
   [ "$(_stat .cycles_24h)" = 1 ]; [ "$(_stat .merged_24h)" = 1 ]
 }
 
+@test "prune: drops counters of tasks that left dev/TODO, keeps the others, never wipes on a wrong root" {
+  _nh_repo
+  _nh_task T20260101-000001 "Open" a
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000002 >/dev/null
+  run _ap prune "$BATS_TEST_TMPDIR/not-a-repo"; [ -z "$output" ]
+  [ "$(_j '.visits | length')" = 2 ]
+  run _ap prune "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
+  [ "$(_j '.visits | keys | join(",")')" = T20260101-000001 ]
+  run _ap prune "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
+}
+
 # --- plan: which tasks a cycle advanced and which it stalled on ---
 
 _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
@@ -1058,6 +1070,8 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run grep -n 'autopilot-state.sh plan' "$s"; [ "$status" -eq 0 ]
   run grep -n 'autopilot-state.sh visit' "$s"; [ "$status" -eq 0 ]
   run grep -n 'autopilot-state.sh parked' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh prune' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'park refused' "$s"; [ "$status" -eq 0 ]
   run grep -n '/bottom' "$s"; [ "$status" -eq 0 ]
   run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]
   run grep -n -E 'needs-human\.sh|autopilot-state\.sh (marked|attention-list|skip|unskip)|skip_ids|--skip-needs-human' "$s"; [ "$status" -ne 0 ]

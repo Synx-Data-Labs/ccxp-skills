@@ -46,6 +46,9 @@
 #                               "skip" with --stuck once stuck_count >= 3 (likely an
 #                               outage, not the task)
 #   advance <task-id>           the task moved forward: reset its counter; print reset|none
+#   prune [repo-root]           drop visit counters of tasks that are no longer in
+#                               <repo-root>/dev/TODO (closed or parked by someone else);
+#                               prints the dropped ids
 #   parked <task-id> [reason]   record that the task was parked (drops its counter, keeps
 #                               the last 50 in the state's "parked" list); print parked
 #   parked-list                 "<task-id><TAB><reason>" per task parked since started_at
@@ -325,6 +328,21 @@ ap-parked() {
     | .parked = ((((.parked | arrays // []) | map(select(.id != $id))) + [{id: $id, at: $now, reason: $r, visits: $n}]) | .[-50:])'
   ap-history-event park "$id" "$n"
   echo parked
+}
+
+# prune [repo-root]: drop counters of tasks that no longer have a dev/TODO file. Needs a dev/TODO
+# directory (a wrong root never wipes the counters); prints each dropped id.
+ap-prune() {
+  local root="${1:-$(ap-work-root)}" f id
+  f=$(ap-state-file)
+  [ -f "$f" ] && [ -d "$root/dev/TODO" ] || return 0
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    if ! compgen -G "$root/dev/TODO/$id-*.md" >/dev/null; then
+      _ap_update --arg id "$id" 'del(.visits[$id])' && printf '%s\n' "$id"
+    fi
+  done < <(jq -r '(.visits | objects // {}) | keys[]' "$f" 2>/dev/null || true)
+  return 0
 }
 
 # parked-list -> "<task-id><TAB><reason>" per task parked since this run's started_at.
@@ -749,7 +767,7 @@ autopilot-state() {
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
-    top) ap-top "$@" ;; plan) ap-plan "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
+    top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
