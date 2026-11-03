@@ -1,6 +1,6 @@
 ---
 estimation: 1
-status: In Progress
+status: Open
 source: Owner chat 2026-11-03
 description: Raise the autopilot defaults (merge cap 64, cycle cap 64, idle retry 32 min, max visits 4) and ship /autopilot config in a release
 ---
