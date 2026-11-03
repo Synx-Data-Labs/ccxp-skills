@@ -19,7 +19,7 @@ bash <plugin>/hud/scripts/ledger.sh show [--brief]
 bash <plugin>/hud/scripts/ledger.sh render                                       # reply sections + "Ledger: <abs path>" line
 bash <plugin>/hud/scripts/ledger.sh reply [--tldr "<t>"]                         # reply tail: Running, Next, Parked, "Ledger: <abs path>"
 bash <plugin>/hud/scripts/ledger.sh check <replyfile|->                           # draft reply vs ledger: MISSING / EXTRA / NO-CONTEXT refs, exit 1
-bash <plugin>/hud/scripts/ledger.sh set-counter <n|s|k> <value>                  # initialise a ref counter exactly
+bash <plugin>/hud/scripts/ledger.sh set-counter <n|s|k|d> <value>                # initialise a ref counter exactly (d = the decisions counter)
 ```
 
 The JSON is the source of truth: the dispatcher composes the Running / Next / Parked sections of each reply from `render` (or `show`) and changes them only through these calls, so reply and file cannot drift.
@@ -33,6 +33,23 @@ ledger.sh next set <ref> [--text "<t>"] [--context <abs-path>]
 ledger.sh ref next <n|s|k>      # allocate and print the next ref
 ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g. n22)
 ```
+
+## Decisions log
+
+The owner's standing decisions live in `ccxp-decisions.json` (+ rendered `ccxp-decisions.md`) in the ledger's directory, or at `CCXP_DECISIONS_FILE`. File formats, capture rules and examples: `agent-pairing/decisions.md`.
+
+```bash
+ledger.sh decision add "<text>" [--quote "<owner words>"] [--scope global|repo:<name>] [--context <abs-path>] [--source <job/ref>]   # prints d<n>
+ledger.sh decision supersede <ref> "<new text>" [same options]   # old entry kept, marked superseded-by the new ref
+ledger.sh decision retire <ref> ["<reason>"]                     # no longer applies
+ledger.sh decision list [--all] [--scope <s>] [--json]           # active only unless --all, newest first
+ledger.sh decision show <ref>
+ledger.sh ref next d | ref bump d<n> | set-counter d <n>         # the d counter (never reused)
+ledger.sh reply [--tldr "<t>"] [--no-decisions]                  # adds "Decisions: N active (latest: d<k> ...)" + .md path before "Ledger:"
+```
+
+- Text is capped at 400 chars, `--quote` at 600; longer or credential-looking values are rejected, not cut.
+- `show` adds a `decisions` summary and `show --brief` a `decisions=N` field once a decisions file exists; `check` only reports malformed entries (`MALFORMED ...`).
 
 ## Resume after a restart
 

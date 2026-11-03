@@ -167,6 +167,7 @@ ledger-ctx() {
 # Split args into POS (positional), CTX/HAVE_CTX (--context) and TTL/HAVE_TTL (--title).
 ledger-args() {
   POS=(); CTX=""; TTL=""; TXT=""; REF=""; HAVE_CTX=false; HAVE_TTL=false; HAVE_TXT=false
+  QUOTE=""; SCOPE=""; SRC=""; HAVE_SCOPE=false; ALL=false; JSON=false
   PF=""; AGT=""; FLG=""; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -188,6 +189,15 @@ ledger-args() {
         [[ -z "$2" || "$2" =~ ^(autopilot|needs-confirmation|detached)(,(autopilot|needs-confirmation|detached))*$ ]] \
           || { echo "ledger: --flags takes autopilot, needs-confirmation, detached (comma list): $2" >&2; return 2; }
         FLG="$2"; HAVE_FLG=true; shift 2 ;;
+      --quote) [[ $# -ge 2 ]] || { echo "ledger: --quote needs a value" >&2; return 2; }
+        QUOTE=$(ledger-bounded "$2" 600 --quote) || return 2; shift 2 ;;
+      --scope) [[ $# -ge 2 ]] || { echo "ledger: --scope needs a value" >&2; return 2; }
+        [[ "$2" =~ ^(global|repo:[A-Za-z0-9._-]{1,80})$ ]] || { echo "ledger: --scope must be global or repo:<name>: $2" >&2; return 2; }
+        SCOPE="$2"; HAVE_SCOPE=true; shift 2 ;;
+      --source) [[ $# -ge 2 ]] || { echo "ledger: --source needs a value" >&2; return 2; }
+        SRC=$(ledger-clip "$2" 120); shift 2 ;;
+      --all) ALL=true; shift ;;
+      --json) JSON=true; shift ;;
       --title) [[ $# -ge 2 ]] || { echo "ledger: --title needs a value" >&2; return 2; }
         TTL=$(ledger-clip "$2" 120); HAVE_TTL=true; shift 2 ;;
       *) POS+=("$1"); shift ;;
@@ -242,29 +252,34 @@ ledger-set() {
 
 # Reply sections as plain text, ready to paste: Next, Running, Parked (empty ones omitted), then the Ledger line.
 ledger-render-text() {
-  local md; md=$(ledger-md-file)
+  local md dec; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"
-  ledger-read | jq -r --arg md "$md" '
+  dec=$(decisions-summary)
+  decisions-render-file
+  ledger-read | jq -r --arg md "$md" --arg dec "$dec" '
     def ctx: if .context != "" then "\n  " + .context else "" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     sect("Next:"; [.next[] | "**\(.ref)** \(.text)" + ctx]),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
     sect("Parked:"; [.parked[] | "**\(.id)**" + (if .title then " " + .title else "" end) + ctx]),
+    (if $dec != "" then $dec + "\n" else empty end),
     "Ledger: " + $md'
 }
 
 # Reply tail in the user-mandated order (Running, Next, Parked, Ledger line), plain text, no markdown.
-# $1 optional TL;DR text (printed first).
+# $1 optional TL;DR text (printed first), $2 "no" to leave out the Decisions lines.
 ledger-reply() {
-  local md; md=$(ledger-md-file)
+  local md dec=""; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"
-  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" '
+  [[ "${2:-}" == "no" ]] || dec=$(decisions-summary)
+  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" '
     def ctx: if .context != "" then "\n  " + .context else "\n  context: MISSING" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     (if $tldr != "" then "TL;DR: " + $tldr + "\n" else empty end),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
     sect("Next:"; [.next[] | "\(.ref) \(.text)" + ctx]),
     sect("Parked:"; [.parked[] | .id + (if .title then " " + .title else "" end) + ctx]),
+    (if $dec != "" then $dec + "\n" else empty end),
     "Ledger: " + $md'
 }
 
@@ -283,6 +298,8 @@ ledger-check() {
     (.parked[] | select(.context == "") | .id)] | .[]')
   [[ -z "$nocx" ]] || { while read -r r; do echo "NO-CONTEXT $r (context file is required)"; done <<<"$nocx"; rc=1; }
   [[ -z "$extra" ]] || { while read -r r; do echo "EXTRA $r (in reply, not in ledger)"; done <<<"$extra"; rc=1; }
+  local bad; bad=$(decisions-malformed)
+  [[ -z "$bad" ]] || { printf '%s\n' "$bad"; rc=1; }
   return $rc
 }
 
@@ -292,18 +309,236 @@ ledger-sha() { { shasum -a 256 "$1" 2>/dev/null || sha256sum "$1" 2>/dev/null; }
 
 ledger-prompt-dir() { printf '%s/ccxp-prompts' "$(dirname "$(ledger-file)")"; }
 
+# True when $1 looks like it holds a credential (prompt saving and the decisions log share this check).
+ledger-secret-like() {
+  printf '%s' "${1:-}" | grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'
+}
+
 # Save stdin as the job prompt for job $1; prints the path. Refuses text that looks like a credential.
 ledger-save-prompt() {
   local d f text; d=$(ledger-prompt-dir); f="$d/$1.md"
   text=$(head -c 200000)
   [[ -n "$text" ]] || { echo "ledger: empty prompt on stdin" >&2; return 2; }
-  if printf '%s' "$text" | grep -Eq 'gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[abpr]-[A-Za-z0-9-]{10,}|BEGIN [A-Z ]*PRIVATE KEY'; then
+  if ledger-secret-like "$text"; then
     echo "ledger: prompt looks like it holds a credential; not saved" >&2; return 2
   fi
   mkdir -p "$d" && chmod 700 "$d" 2>/dev/null
   ( umask 077; printf '%s\n' "$text" > "$f" ) || return 1
   chmod 600 "$f" 2>/dev/null
   printf '%s' "$f"
+}
+
+# ---- Decisions log: ccxp-decisions.json (+ rendered .md, + archive) next to the ledger ----
+
+decisions-file() {
+  printf '%s' "${CCXP_DECISIONS_FILE:-$(dirname "$(ledger-file)")/ccxp-decisions.json}"
+}
+
+decisions-md-file() { local f; f=$(decisions-file); printf '%s.md' "${f%.json}"; }
+
+decisions-archive-file() { local f; f=$(decisions-file); printf '%s-archive.json' "${f%.json}"; }
+
+DECISIONS_EMPTY='{"schema":1,"counter":0,"decisions":[]}'
+
+# $1 text, $2 max chars, $3 label: strip control chars; reject (not cut) over-long or credential-like text.
+ledger-bounded() {
+  local t n; t=$(printf '%s' "${1:-}" | tr -d '\000-\037\177')
+  n=$(printf '%s' "$t" | jq -Rrs 'length')
+  [[ "$n" -le "$2" ]] || { echo "ledger: $3 is $n chars, max $2" >&2; return 2; }
+  ledger-secret-like "$t" && { echo "ledger: $3 looks like it holds a credential; not saved" >&2; return 2; }
+  printf '%s' "$t"
+}
+
+# Current decisions, normalized; defaults when missing. Entries without a d<n> ref and text are dropped
+# (`check` reports them); the counter is never below the highest ref present.
+decisions-read() {
+  local f out; f=$(decisions-file)
+  out=$(jq -c 'if type == "object" then . else {} end
+    | [(.decisions // [])[] | select(type == "object" and (.ref | strings | test("^d[0-9]{1,9}$")) and (.text | strings | length > 0))
+       | {ref, text, quote: (.quote | strings // ""), scope: (.scope | strings // "global"), context: (.context | strings // ""),
+          source: (.source | strings // ""), added_at: (.added_at | strings // ""),
+          status: (if (.status | strings // "active") | IN("active", "superseded", "retired") then .status // "active" else "active" end),
+          superseded_by: (.superseded_by | strings // ""), reason: (.reason | strings // ""), closed_at: (.closed_at | strings // "")}] as $d
+    | {schema: 1, updated_at: (.updated_at | strings // ""),
+       counter: ([(.counter | numbers // 0)] + [$d[].ref[1:] | tonumber] | max), decisions: $d}' "$f" 2>/dev/null) || out=""
+  printf '%s' "${out:-$DECISIONS_EMPTY}"
+}
+
+# Write $1 (JSON) to file $2 atomically, mode 600.
+decisions-write() {
+  local tmp; tmp=$(mktemp "$2.XXXXXX") || return 1
+  printf '%s\n' "$1" > "$tmp" && chmod 600 "$tmp" 2>/dev/null && mv "$tmp" "$2" && return 0
+  unlink "$tmp" 2>/dev/null; return 1
+}
+
+# Past 200 entries, retired/superseded ones closed over 90 days ago move to the archive file. $1 JSON; prints JSON.
+decisions-archive() {
+  local cur="$1" cutoff moved af arch
+  [[ "$(jq '.decisions | length' <<<"$cur")" -gt 200 ]] || { printf '%s' "$cur"; return 0; }
+  cutoff=$(date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -v-90d +%Y-%m-%dT%H:%M:%SZ)
+  moved=$(jq -c --arg c "$cutoff" '[.decisions[] | select(.status != "active" and .closed_at != "" and .closed_at < $c)]' <<<"$cur")
+  [[ "$moved" != "[]" ]] || { printf '%s' "$cur"; return 0; }
+  af=$(decisions-archive-file)
+  arch=$(jq -c --argjson m "$moved" 'if type == "object" then . else {} end | {schema: 1, decisions: ((.decisions // []) + $m)}' "$af" 2>/dev/null) \
+    || arch=$(jq -nc --argjson m "$moved" '{schema: 1, decisions: $m}')
+  decisions-write "$arch" "$af" || { printf '%s' "$cur"; return 0; }
+  jq -c --argjson m "$moved" '.decisions |= map(select(.ref as $r | ($m | map(.ref) | index($r)) == null))' <<<"$cur"
+}
+
+# $1 jq filter over the normalized decisions; remaining args are jq args. Sets DECISIONS_LAST.
+decisions-update() {
+  local filter="$1"; shift
+  local f cur new
+  f=$(decisions-file)
+  mkdir -p "$(dirname "$f")" 2>/dev/null || return 1
+  if [[ -s "$f" ]]; then
+    jq -e 'type == "object"' "$f" >/dev/null 2>&1 \
+      || { echo "ledger: $f is not valid JSON; not overwriting it (fix or move it aside)" >&2; return 1; }
+    jq -e '(.schema | numbers // 1) > 1' "$f" >/dev/null 2>&1 \
+      && { echo "ledger: $f has a newer schema than this script (1); not writing" >&2; return 1; }
+  fi
+  cur=$(decisions-read)
+  new=$(printf '%s' "$cur" | jq -c "$@" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$filter | .schema = 1 | .updated_at = \$now" 2>/dev/null) || return 1
+  new=$(decisions-archive "$new")
+  decisions-write "$new" "$f" || return 1
+  DECISIONS_LAST="$new"
+  decisions-render-file
+}
+
+# Rewrite ccxp-decisions.md from the current file (no file, nothing to render). Best-effort.
+decisions-render-file() {
+  local f md tmp; f=$(decisions-file); [[ -f "$f" ]] || return 0
+  md=$(decisions-md-file)
+  tmp=$(mktemp "$md.XXXXXX") || return 0
+  if decisions-read | jq -r --arg md "$md" '
+      def enc: split("/") | map(@uri) | join("/");
+      def day: .added_at[0:10];
+      def item: "- " + .ref + " [" + day + "] " + .text
+        + (if .quote != "" then "\n  quote: \"" + .quote + "\"" else "" end)
+        + (if .context != "" then "\n  context: [context](file://" + (.context | enc) + ") " + .context else "" end);
+      def num: .ref[1:] | tonumber;
+      [.decisions[] | select(.status == "active")] as $act
+      | [.decisions[] | select(.status != "active")] as $old
+      | "# CCXP decisions\n\nUpdated: " + .updated_at + "\n\nDecisions: [decisions](file://" + ($md | enc) + ") " + $md + "\n\n"
+        + "## Active (" + ($act | length | tostring) + ")\n"
+        + (if ($act | length) == 0 then "- none\n" else
+            ([$act[].scope] | unique | map(
+              . as $s | "\n### " + $s + "\n" + ([$act[] | select(.scope == $s)] | sort_by(-num) | map(item) | join("\n")) + "\n") | join(""))
+          end)
+        + "\n## Superseded / retired (" + ($old | length | tostring) + ")\n"
+        + (if ($old | length) == 0 then "- none\n" else
+            ([$old | sort_by(-num)[] | "- " + .ref + " [" + day + "] " + .text + " - "
+              + (if .status == "superseded" then "superseded by " + .superseded_by else "retired" + (if .reason != "" then ": " + .reason else "" end) end)
+              + " (" + .closed_at[0:10] + ")"] | join("\n")) + "\n" end)' > "$tmp" 2>/dev/null; then
+    chmod 600 "$tmp" 2>/dev/null
+    mv "$tmp" "$md" 2>/dev/null || unlink "$tmp" 2>/dev/null
+  else
+    unlink "$tmp" 2>/dev/null
+  fi
+  return 0
+}
+
+# "Decisions: N active (latest: d4 text)" + the .md path; empty when there is no active decision.
+decisions-summary() {
+  local f md; f=$(decisions-file); [[ -f "$f" ]] || return 0
+  md=$(decisions-md-file); [[ "$md" == /* ]] || md="$(pwd)/$md"
+  decisions-read | jq -r --arg md "$md" '
+    [.decisions[] | select(.status == "active")] as $a
+    | if ($a | length) == 0 then empty else
+        "Decisions: \($a | length) active (latest: \($a | max_by(.ref[1:] | tonumber) | .ref + " " + (.text | if length > 100 then .[0:100] + "..." else . end)))\n  " + $md
+      end'
+}
+
+# d3 / D3 / 3 -> d3
+decisions-id() {
+  local n="${1:-}"; n="${n#[dD]}"
+  ledger-int "$n" || return 2
+  printf 'd%s' "$((10#$n))"
+}
+
+# Lines that make `check` fail: entries the reader would drop, duplicate refs, bad status.
+decisions-malformed() {
+  local f; f=$(decisions-file); [[ -s "$f" ]] || return 0
+  jq -r 'if type != "object" then "MALFORMED decisions file (not a JSON object)" else
+      ((.decisions // []) | to_entries[]
+        | select((.value | type != "object") or ((.value.ref | strings | test("^d[0-9]{1,9}$")) | not)
+                 or ((.value.text | strings | length) == 0)
+                 or ((.value.status // "active") | IN("active", "superseded", "retired") | not))
+        | "MALFORMED decision entry #\(.key) (needs a d<n> ref, text and a valid status)"),
+      ([(.decisions // [])[] | select(type == "object") | .ref] | group_by(.) | map(select(length > 1) | "MALFORMED duplicate decision ref \(.[0])")[])
+    end' "$f" 2>/dev/null || echo "MALFORMED decisions file (not valid JSON)"
+}
+
+# Plain-text view of one entry (JSON on stdin).
+decisions-entry-text() {
+  jq -r '"\(.ref) [\(.added_at[0:10])] \(.scope): \(.text)"
+    + (if .status != "active" then "\n  status: \(.status)" + (if .superseded_by != "" then " by \(.superseded_by)" else "" end)
+        + (if .reason != "" then " (\(.reason))" else "" end) + (if .closed_at != "" then " on \(.closed_at[0:10])" else "" end) else "" end)
+    + (if .quote != "" then "\n  quote: \"\(.quote)\"" else "" end)
+    + (if .context != "" then "\n  context: \(.context)" else "" end)
+    + (if .source != "" then "\n  source: \(.source)" else "" end)'
+}
+
+# $1 ref; prints status ("" when unknown)
+decisions-status() { decisions-read | jq -r --arg r "$1" '[.decisions[] | select(.ref == $r) | .status][0] // ""'; }
+
+# decision add|supersede|retire|list|show ...
+ledger-decision() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    add)
+      ledger-args "$@" || return 2
+      local text; text=$(ledger-bounded "${POS[0]:-}" 400 "decision text") || return 2
+      [[ -n "$text" ]] || { echo "ledger: empty decision text" >&2; return 2; }
+      decisions-update '.counter += 1 | .decisions += [{ref: ("d" + (.counter | tostring)), text: $t, quote: $q, scope: $s,
+          context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
+        --arg t "$text" --arg q "$QUOTE" --arg s "${SCOPE:-global}" --arg c "$CTX" --arg src "$SRC" || return 1
+      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST" ;;
+    supersede)
+      ledger-args "$@" || return 2
+      local r st text; r=$(decisions-id "${POS[0]:-}") || return 2
+      text=$(ledger-bounded "${POS[1]:-}" 400 "decision text") || return 2
+      [[ -n "$text" ]] || { echo "ledger: empty decision text" >&2; return 2; }
+      st=$(decisions-status "$r")
+      [[ -n "$st" ]] || { echo "ledger: no decision $r" >&2; return 1; }
+      [[ "$st" == active ]] || { echo "ledger: $r is already $st" >&2; return 1; }
+      decisions-update '(.decisions | map(select(.ref == $r)) | .[0]) as $old | (.counter += 1) | ("d" + (.counter | tostring)) as $new
+        | .decisions |= map(if .ref == $r then .status = "superseded" | .superseded_by = $new | .closed_at = $now else . end)
+        | .decisions += [{ref: $new, text: $t, quote: $q, scope: (if $hs then $s else $old.scope end),
+            context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
+        --arg r "$r" --arg t "$text" --arg q "$QUOTE" --arg s "$SCOPE" --argjson hs "$HAVE_SCOPE" --arg c "$CTX" --arg src "$SRC" || return 1
+      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST" ;;
+    retire)
+      ledger-args "$@" || return 2
+      local r st reason; r=$(decisions-id "${POS[0]:-}") || return 2
+      reason=$(ledger-bounded "${POS[1]:-}" 200 "reason") || return 2
+      st=$(decisions-status "$r")
+      [[ -n "$st" ]] || { echo "ledger: no decision $r" >&2; return 1; }
+      [[ "$st" == active ]] || { echo "ledger: $r is already $st" >&2; return 1; }
+      decisions-update '.decisions |= map(if .ref == $r then .status = "retired" | .reason = $why | .closed_at = $now else . end)' \
+        --arg r "$r" --arg why "$reason" || return 1
+      printf '%s\n' "$r" ;;
+    list)
+      ledger-args "$@" || return 2
+      local rows
+      rows=$(decisions-read | jq -c --argjson all "$ALL" --arg s "$SCOPE" --argjson hs "$HAVE_SCOPE" \
+        '[.decisions[] | select($all or .status == "active") | select(($hs | not) or .scope == $s)] | sort_by(-(.ref[1:] | tonumber))')
+      if [[ "$JSON" == true ]]; then printf '%s\n' "$rows"; return 0; fi
+      [[ "$rows" != "[]" ]] || { echo "no decisions"; return 0; }
+      jq -c '.[]' <<<"$rows" | while IFS= read -r row; do decisions-entry-text <<<"$row"; done ;;
+    show)
+      local r st f; r=$(decisions-id "${1:-}") || return 2
+      st=$(decisions-status "$r")
+      if [[ -n "$st" ]]; then
+        decisions-read | jq -c --arg r "$r" '.decisions[] | select(.ref == $r)' | decisions-entry-text
+      elif f=$(decisions-archive-file) && jq -e --arg r "$r" '.decisions[]? | select(.ref == $r)' "$f" >/dev/null 2>&1; then
+        echo "(archived)"
+        jq -c --arg r "$r" '.decisions[] | select(.ref == $r)' "$f" | decisions-entry-text
+      else
+        echo "ledger: no decision $r" >&2; return 1
+      fi ;;
+    *) echo "usage: ledger.sh decision add <text> [--quote q] [--scope global|repo:<name>] [--context <abs path>] [--source s] | supersede <ref> <text> [same options] | retire <ref> [reason] | list [--all] [--scope s] [--json] | show <ref>" >&2; return 2 ;;
+  esac
 }
 
 ledger() {
@@ -396,17 +631,26 @@ ledger() {
       ledger-int "${1:-}" || return 2
       echo "ledger: set-parked is deprecated and does nothing (the parked count is the length of the parked array)" >&2 ;;
     set-counter)
-      [[ "${1:-}" =~ ^[nsk]$ ]] || { echo "ledger: set-counter prefix must be n, s or k: ${1:-}" >&2; return 2; }
+      if [[ "${1:-}" == d ]]; then
+        ledger-int "${2:-}" || return 2
+        decisions-update '.counter = $v' --argjson v "$((10#$2))"; return
+      fi
+      [[ "${1:-}" =~ ^[nsk]$ ]] || { echo "ledger: set-counter prefix must be n, s, k or d: ${1:-}" >&2; return 2; }
       ledger-int "${2:-}" || return 2
       ledger-update '.ref_counters[$p] = $v' --arg p "$1" --argjson v "$((10#$2))" ;;
     render) ledger-render-text ;;
     reply)
-      case "${1:-}" in
-        "") ledger-reply "" ;;
-        --tldr) [[ $# -ge 2 ]] || { echo "ledger: --tldr needs text" >&2; return 2; }
-          ledger-reply "$(ledger-clip "$2" 300)" ;;
-        *) echo "usage: ledger.sh reply [--tldr <text>]" >&2; return 2 ;;
-      esac ;;
+      local tldr="" nodec=yes
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --tldr) [[ $# -ge 2 ]] || { echo "ledger: --tldr needs text" >&2; return 2; }
+            tldr=$(ledger-clip "$2" 300); shift 2 ;;
+          --no-decisions) nodec=no; shift ;;
+          *) echo "usage: ledger.sh reply [--tldr <text>] [--no-decisions]" >&2; return 2 ;;
+        esac
+      done
+      ledger-reply "$tldr" "$([[ "$nodec" == no ]] && echo no || echo yes)" ;;
+    decision) ledger-decision "$@" ;;
     check) ledger-check "${1:-}" ;;
     next | input | action) case "${1:-}" in
         add) shift; ledger-args "$@" || return 2
@@ -418,25 +662,37 @@ ledger() {
       esac ;;
     ref) case "${1:-}" in
         next)
-          [[ "${2:-}" =~ ^[nsk]$ ]] || { echo "ledger: ref next prefix must be n, s or k: ${2:-}" >&2; return 2; }
+          if [[ "${2:-}" == d ]]; then
+            decisions-update '.counter += 1' || return 1
+            jq -r '"d" + (.counter | tostring)' <<<"$DECISIONS_LAST"; return
+          fi
+          [[ "${2:-}" =~ ^[nsk]$ ]] || { echo "ledger: ref next prefix must be n, s, k or d: ${2:-}" >&2; return 2; }
           ledger-update '.ref_counters[$p] += 1' --arg p "$2" || return 1
           jq -r --arg p "$2" '$p + (.ref_counters[$p] | tostring)' <<<"$LEDGER_LAST" ;;
         bump)
-          local r p n; r=$(printf '%s' "${2:-}" | tr 'NSK' 'nsk'); p="${r:0:1}"
+          local r p n; r=$(printf '%s' "${2:-}" | tr 'NSKD' 'nskd'); p="${r:0:1}"
+          if [[ "$p" == d ]]; then
+            n=$(decisions-id "$r") || return 2
+            decisions-update '.counter = ([.counter, $n] | max)' --argjson n "${n#d}"; return
+          fi
           ledger-prefix "$p" || return 2
           n=$(ledger-refnum "$r") || return 2
           ledger-update '.ref_counters[$p] = ([.ref_counters[$p], $n] | max)' --arg p "$p" --argjson n "$n" ;;
-        *) echo "usage: ledger.sh ref next <n|s|k> | ref bump <ref>" >&2; return 2 ;;
+        *) echo "usage: ledger.sh ref next <n|s|k|d> | ref bump <ref>" >&2; return 2 ;;
       esac ;;
     show)
       if [[ "${1:-}" == "--brief" ]]; then
-        ledger-read | jq -r '"running=\(.running | length) parked=\(.parked | length) next=\(.next | length)"'
+        ledger-read | jq -r '"running=\(.running | length) parked=\(.parked | length) next=\(.next | length)"' \
+          | { read -r line; [[ -f "$(decisions-file)" ]] && line+=" decisions=$(decisions-read | jq '[.decisions[] | select(.status == "active")] | length')"; printf '%s\n' "$line"; }
       elif jq -e 'type == "object"' "$(ledger-file)" >/dev/null 2>&1; then
-        ledger-read | jq -c '. + {next_job: (.lifetime_jobs + 1)}'
+        local dsum=null
+        [[ -f "$(decisions-file)" ]] && dsum=$(decisions-read | jq -c '[.decisions[] | select(.status == "active")] as $a
+          | {active: ($a | length), latest: ($a | max_by(.ref[1:] | tonumber) | if . then {ref, text} else null end)}')
+        ledger-read | jq -c --argjson d "$dsum" '. + {next_job: (.lifetime_jobs + 1)} + (if $d then {decisions: $d} else {} end)'
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k> <v> | ref next|bump | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 

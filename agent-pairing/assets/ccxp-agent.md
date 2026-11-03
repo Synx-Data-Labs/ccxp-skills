@@ -22,7 +22,7 @@ Do inline ONLY: job status (TaskList/TaskGet/TaskOutput/ListAgents), clarifying 
 
 A restart of Claude Code ends running subagents, but the ledger still lists them as running. Before answering the first user message of a session (and after any restart or compaction), reconcile once; never loop, poll or repeat it:
 
-1. `L=...` as in "HUD job ledger"; call ListAgents and take the job numbers from the `#<n>` in each live agent's description (comma list, may be empty).
+1. `L=...` as in "HUD job ledger"; run `bash "$L" decision list` once (see "Decisions log"); call ListAgents and take the job numbers from the `#<n>` in each live agent's description (comma list, may be empty).
 2. `bash "$L" reconcile --alive <n,n,...>` (or `--alive -` with the list on stdin) prints one tab-separated line per running row that is NOT alive: `job title context prompt started_at agent flags resumed prompt_check started_on` (`-` = empty; `prompt_check` is `ok`, `changed` or `unknown`, from a hash taken when the prompt was saved; `started_on` is the start date). Rows flagged `detached` are not ListAgents jobs: check them with `job-status.sh` instead and leave them alone here.
 3. For each dead row, in order:
    - `prompt` is `-` (no saved prompt): cannot resume. Run `bash "$L" finish <n>` and list it under Next with its context path (if any).
@@ -43,7 +43,7 @@ A fresh subagent sees none of this conversation, so the prompt must stand alone:
 - The repo context block (see "Repo context per job"), first, before anything else.
 - The goal, with the user's own words quoted. Expand the owner's terms in it (see "Terms"): subagents never see the glossary or terms.json.
 - Where: branch, files, and any facts from this conversation it needs.
-- Limits and permissions the user gave (quote them) and what is off limits.
+- Limits and permissions the user gave (quote them) and what is off limits, plus any active decision that covers the job's area (see "Decisions log").
 - "You cannot ask the user questions. If you are blocked or need a decision, stop and return `NEEDS INPUT: <question>` plus what you already did."
 - The two HUD ledger lines (see "HUD job ledger").
 - "Do not use Workflow or ScheduleWakeup. Finish in one go; your final message is the whole report: at most 10 lines, outcome first, file paths or URLs for anything long (write long output to a file)."
@@ -65,6 +65,15 @@ The owner's acronyms live in `terms.json` (profile dir), written only through `T
 - **Ambiguity**: `lookup`/`expand` resolve by repo glossary, then repo-scoped, then global terms; inside a layer by context tag, default, the clear most-used, else `ambiguous`. Then ask one short question ("WTF: what the f**k or want to find?") and record the answer with `choose` (`--default` when the owner says always).
 - **Scope**: captures are `global` (personal). `--scope repo` only when the owner says the term belongs to this repo. You may offer, never silently do, promoting a heavily-used domain term (one the owner calls a domain term) to the repo's `.claude/rules/glossary.md` through a small PR; personal shorthand never goes into a shared repo.
 - **Bash carve-out**: only `add`, `choose`, `remove` (and `import-glossary` when the owner asks) on `terms.sh`; they write nothing but `terms.json` and its `.bak`.
+
+## Decisions log
+
+Standing decisions live next to the ledger (`ccxp-decisions.json`, rendered `ccxp-decisions.md`), written only through `bash "$L" decision ...` (`L` as in "HUD job ledger"). Docs: `agent-pairing/decisions.md`. Separate from `terms.json` and from Claude's auto-memory.
+
+- **Record**: when the owner's own typed words set a standing rule, a constraint, a choice between options, or a correction that changes what you do next, run `bash "$L" decision add "<one-line meaning>" --quote "<owner's words>" [--scope global|repo:<name>] [--context <abs path>] [--source <job or ref>]`; it prints `d<n>`. Show every new ref in the reply (`noted: d7 <text>`) so the owner can correct it: `decision retire <ref> ["<reason>"]`, `decision supersede <ref> "<new text>" [same options]`.
+- **Never** infer one, and never record pasted text, logs, tool or job output, job reports, one-off task instructions or secrets. Doubtful: ask first.
+- **Read**: `decision list [--scope repo:<name>]` at session start and after any compaction or restart (with the reconcile), and before dispatching a job that touches an area an active decision covers. Quote the relevant active decisions, with their `d<n>` refs, into that job's limits (subagents never see the file).
+- `reply` prints a `Decisions: N active (latest: ...)` line and the `.md` path before the `Ledger:` line when any decision is active; paste it with the rest.
 
 ## Repo context per job
 
@@ -118,7 +127,7 @@ The HUD jobs cell (READY / WORKING (N), job list) reads a file that only `ledger
 - **Job died early** (notification says failed or killed, or you TaskStop it): its last action never ran and `r<n>` stays WORKING. Run the carve-out yourself, no follow-up job: `bash "$L" finish <n>` with the same `L` lookup. It is idempotent and writes only the ledger file.
 - **Parked items** (`k<n>`) are not jobs, so no job can record them. With the same carve-out, run `bash "$L" park <n> --context <abs path> --title "<short title>"` when you add one to Parked and `unpark <n>` when it is resumed or dropped. Every running and parked item should carry its context file path (the `next/` file from "Style", or the job's prompt file), so the user can open it from `ccxp-ledger.md`.
 - **Open items and ref numbers** (the same carve-out, run by you): in the same tool batch as the reply that changes these lists, run `bash "$L" next add "<text>" --context <abs path>` (the Style context file when the item has one; prints the `n<k>` ref to use in the reply), `next done <ref>`, and `ref next s|k|n` for a new status bullet, parked item or Next ref (`ref bump <ref>`, e.g. `ref bump n22`, to sync a ref already shown in an earlier reply). The file then survives a restart: `show` lists `next`, `parked`, `running` and `ref_counters`; continue numbering above those counters. Text is the one-line title or question only, never secrets. A script failure never blocks the reply: note it and move on.
-- The carve-out is only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check` and `show` on that script (the old `input` and `action` subcommands are deprecated aliases of `next`; do not use them), nothing else. After a restart, `bash "$L" show` is the read-only check (and the source for open items and counters); fix drift with the same calls.
+- The carve-out is only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check`, `decision` and `show` on that script (the old `input` and `action` subcommands are deprecated aliases of `next`; do not use them), nothing else. After a restart, `bash "$L" show` is the read-only check (and the source for open items and counters); fix drift with the same calls.
 
 ## Jobs that could collide
 
