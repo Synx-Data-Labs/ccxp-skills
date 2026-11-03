@@ -195,6 +195,7 @@ Plugins cannot register a `UserPromptSubmit` hook for you here, so add it once p
 - Reply: the dispatcher pastes `ledger.sh reply` verbatim instead of writing the tail by hand.
 - Check: `ledger.sh check <file|->` compares the refs of a draft reply with the file and fails on `MISSING`, `EXTRA` and `NO-CONTEXT` items.
 - Liveness: the dispatcher runs `reconcile --alive <n,...>` each turn and `finish <n>` when a job fails or is killed, so a dead job does not stay WORKING.
+- Decisions: `ledger.sh decision add|supersede|retire|list|show` keeps the owner's standing decisions in `ccxp-decisions.json` (rendered `ccxp-decisions.md`) next to the ledger; `reply`/`render` add a `Decisions:` line before `Ledger:` when any is active (`reply --no-decisions` omits it). See `agent-pairing/decisions.md`.
 - Context: every running, next and parked item needs a context file path; `reply` shows `context: MISSING` and `next add`/`park` warn without `--context`.
 
 The job ledger writer is `hud/scripts/ledger.sh` (calls in `hud/scripts/ledger.md`). It also keeps what a restart needs to resume running jobs (`reconcile`, `resumed`; see the Resume section there). Tests for the bash layer: `bats tests/hud_lib.bats tests/hud_data.bats tests/hud_ci.bats tests/hud_version.bats tests/last_input_hook.bats tests/ledger.bats`.

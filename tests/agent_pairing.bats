@@ -233,7 +233,7 @@ EOF
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check` and `show`' "$f"
+  grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check`, `decision` and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
 }
 
@@ -552,4 +552,20 @@ install_outdated_agent() {
   grep -qF -- '--prompt-stdin' "$f"
   # the step comes before the loop's later sections
   [ "$(grep -n '^## On session start' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Writing a job prompt' "$f" | cut -d: -f1)" ]
+}
+
+@test "asset: Decisions log section names the decision subcommands and they work against ledger.sh" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Decisions log$' "$f"
+  grep -q 'bash "\$L" decision add "<one-line meaning>" --quote' "$f"
+  grep -q 'decision retire <ref>' "$f"
+  grep -q 'decision supersede <ref>' "$f"
+  grep -q 'decision list' "$f"
+  grep -q 'Never\*\* infer' "$f"
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
+  L="$REPO_ROOT/hud/scripts/ledger.sh"
+  [ "$(bash "$L" decision add "rule" --quote "owner words" --scope global --context /c/x.md --source r1)" = "d1" ]
+  [ "$(bash "$L" decision supersede d1 "rule v2")" = "d2" ]
+  bash "$L" decision retire d2 "gone"
+  [ "$(bash "$L" decision list)" = "no decisions" ]
 }

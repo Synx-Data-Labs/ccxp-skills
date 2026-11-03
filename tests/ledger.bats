@@ -495,3 +495,258 @@ allow: pr-merge" >> "$f"
   run bash "$LEDGER" check "$BATS_TEST_TMPDIR/p.txt"
   [ "$status" -eq 0 ]
 }
+
+# ---- decisions log (ledger.sh decision ...) ----
+
+dj() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.json"; }
+dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
+
+@test "decision add prints d<n>, stores every field, writes json and md in mode 600 next to the ledger" {
+  run bash "$LEDGER" decision add "Never merge on Fridays" --quote "no friday merges" --scope repo:foo --context /ctx/d.md --source r12
+  [ "$status" -eq 0 ]; [ "$output" = "d1" ]
+  [ "$(bash "$LEDGER" decision add "Plain one")" = "d2" ]
+  [ "$(jq -c '.decisions[0] | [.ref,.text,.quote,.scope,.context,.source,.status]' "$(dj)")" = '["d1","Never merge on Fridays","no friday merges","repo:foo","/ctx/d.md","r12","active"]' ]
+  [ "$(jq -r '.decisions[1].scope' "$(dj)")" = "global" ]
+  [ "$(jq .counter "$(dj)")" = "2" ]
+  [ "$(ls -l "$(dj)" | cut -c1-10)" = "-rw-------" ]
+  [ "$(ls -l "$(dmd)" | cut -c1-10)" = "-rw-------" ]
+  [ "$(ls "$(dirname "$(dj)")" | grep -c '^ccxp-decisions.json\.')" = "0" ]
+}
+
+@test "decision: CCXP_DECISIONS_FILE overrides the location" {
+  export CCXP_DECISIONS_FILE="$BATS_TEST_TMPDIR/elsewhere/dec.json"
+  bash "$LEDGER" decision add "x"
+  [ -f "$BATS_TEST_TMPDIR/elsewhere/dec.json" ]
+  [ -f "$BATS_TEST_TMPDIR/elsewhere/dec.md" ]
+  [ ! -f "$(dj)" ]
+}
+
+@test "decision: counter is never reused after retire, supersede, bump and set-counter" {
+  bash "$LEDGER" decision add "a" >/dev/null
+  bash "$LEDGER" decision retire d1
+  [ "$(bash "$LEDGER" decision add "b")" = "d2" ]
+  [ "$(bash "$LEDGER" decision supersede d2 "c")" = "d3" ]
+  bash "$LEDGER" set-counter d 10
+  [ "$(bash "$LEDGER" decision add "d")" = "d11" ]
+  bash "$LEDGER" ref bump d20
+  bash "$LEDGER" ref bump d5
+  [ "$(bash "$LEDGER" ref next d)" = "d21" ]
+  [ "$(bash "$LEDGER" decision add "e")" = "d22" ]
+  [ "$(bash "$LEDGER" decision add "f" | head -1)" = "d23" ]
+  # a zeroed counter is repaired from the highest remaining ref
+  jq '.decisions |= map(select(.ref != "d23")) | .counter = 0' "$(dj)" > "$BATS_TEST_TMPDIR/t.json" && cp "$BATS_TEST_TMPDIR/t.json" "$(dj)"
+  [ "$(bash "$LEDGER" decision add "g")" = "d23" ]
+  run bash "$LEDGER" set-counter d x
+  [ "$status" -ne 0 ]
+  run bash "$LEDGER" ref next q
+  [ "$status" -ne 0 ]
+}
+
+@test "decision: ledger refs and the decisions counter stay independent" {
+  bash "$LEDGER" decision add "a" >/dev/null
+  [ "$(bash "$LEDGER" next add "q")" = "n1" ]
+  [ "$(bash "$LEDGER" show | jq -c .ref_counters)" = '{"n":1,"s":0,"k":0}' ]
+}
+
+@test "decision add rejects credentials, over-long text and quote, empty text, bad scope and relative context" {
+  run bash "$LEDGER" decision add "token ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  [ "$status" -eq 2 ]; [[ "$output" == *credential* ]]
+  run bash "$LEDGER" decision add "fine" --quote "key AKIA""ABCDEFGHIJKLMNOP"
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" decision add "$(printf 'x%.0s' $(seq 401))"
+  [ "$status" -eq 2 ]; [[ "$output" == *"max 400"* ]]
+  [ "$(bash "$LEDGER" decision add "$(printf 'x%.0s' $(seq 400))")" = "d1" ]
+  run bash "$LEDGER" decision add "fine" --quote "$(printf 'q%.0s' $(seq 601))"
+  [ "$status" -eq 2 ]; [[ "$output" == *"max 600"* ]]
+  run bash "$LEDGER" decision add ""
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" decision add "fine" --scope everywhere
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" decision add "fine" --context rel/path
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" decision add "fine" --quote
+  [ "$status" -eq 2 ]
+  [ "$(jq '.decisions | length' "$(dj)")" = "1" ]
+}
+
+@test "decision: control characters are stripped from text" {
+  bash "$LEDGER" decision add $'one\nline\x01' >/dev/null
+  [ "$(jq -r '.decisions[0].text' "$(dj)")" = "oneline" ]
+}
+
+@test "decision supersede keeps history, links old to new, inherits scope unless given" {
+  bash "$LEDGER" decision add "use sonnet" --scope repo:foo >/dev/null
+  run bash "$LEDGER" decision supersede d1 "use opus" --quote "opus from now on"
+  [ "$status" -eq 0 ]; [ "$output" = "d2" ]
+  [ "$(jq -c '.decisions | map([.ref,.status,.superseded_by,.scope])' "$(dj)")" = '[["d1","superseded","d2","repo:foo"],["d2","active","","repo:foo"]]' ]
+  [ "$(jq -r '.decisions[0].closed_at | length' "$(dj)")" = "20" ]
+  [ "$(bash "$LEDGER" decision supersede d2 "use haiku" --scope global)" = "d3" ]
+  [ "$(jq -r '.decisions[2].scope' "$(dj)")" = "global" ]
+  run bash "$LEDGER" decision supersede d1 "again"
+  [ "$status" -eq 1 ]; [[ "$output" == *"already superseded"* ]]
+  run bash "$LEDGER" decision supersede d99 "nope"
+  [ "$status" -eq 1 ]; [[ "$output" == *"no decision d99"* ]]
+  run bash "$LEDGER" decision supersede d3 "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  [ "$status" -eq 2 ]
+  [ "$(bash "$LEDGER" decision list --json | jq 'length')" = "1" ]
+}
+
+@test "decision retire marks it retired with a reason; unknown or already closed refs error" {
+  bash "$LEDGER" decision add "a" >/dev/null
+  run bash "$LEDGER" decision retire D1 "no longer applies"
+  [ "$status" -eq 0 ]; [ "$output" = "d1" ]
+  [ "$(jq -c '.decisions[0] | [.status,.reason]' "$(dj)")" = '["retired","no longer applies"]' ]
+  run bash "$LEDGER" decision retire d1
+  [ "$status" -eq 1 ]
+  run bash "$LEDGER" decision retire d7
+  [ "$status" -eq 1 ]; [[ "$output" == *"no decision d7"* ]]
+  run bash "$LEDGER" decision retire zz
+  [ "$status" -eq 2 ]
+}
+
+@test "decision list: active only by default, newest first; --all, --scope, --json" {
+  bash "$LEDGER" decision add "first" --scope repo:foo --quote "q1" --context /c/1.md >/dev/null
+  bash "$LEDGER" decision add "second" >/dev/null
+  bash "$LEDGER" decision add "third" --scope repo:foo >/dev/null
+  bash "$LEDGER" decision retire d2 "gone"
+  run bash "$LEDGER" decision list
+  [[ "${lines[0]}" =~ ^d3\ \[[0-9-]{10}\]\ repo:foo:\ third$ ]]
+  [[ "${lines[1]}" =~ ^d1\ \[ ]]
+  [ "${lines[2]}" = '  quote: "q1"' ]
+  [ "${lines[3]}" = "  context: /c/1.md" ]
+  [ "${#lines[@]}" -eq 4 ]
+  run bash "$LEDGER" decision list --all
+  [[ "$output" == *"d2 "* && "$output" == *"status: retired (gone)"* ]]
+  run bash "$LEDGER" decision list --scope global
+  [ "$output" = "no decisions" ]
+  run bash "$LEDGER" decision list --scope repo:foo --json
+  [ "$(jq -c 'map(.ref)' <<<"$output")" = '["d3","d1"]' ]
+  [ "$(bash "$LEDGER" decision list --all --json | jq 'length')" = "3" ]
+}
+
+@test "decision list on a missing file says no decisions and writes nothing" {
+  run bash "$LEDGER" decision list
+  [ "$status" -eq 0 ]; [ "$output" = "no decisions" ]
+  [ ! -e "$(dj)" ]
+}
+
+@test "decision show prints one entry; unknown ref errors; bad usage prints usage" {
+  bash "$LEDGER" decision add "keep it" --quote "q" --source r5 >/dev/null
+  run bash "$LEDGER" decision show d1
+  [ "$status" -eq 0 ]; [[ "${lines[0]}" =~ ^d1\ \[[0-9-]{10}\]\ global:\ keep\ it$ ]]
+  [[ "$output" == *'quote: "q"'* && "$output" == *"source: r5"* ]]
+  run bash "$LEDGER" decision show d2
+  [ "$status" -eq 1 ]; [[ "$output" == *"no decision d2"* ]]
+  run bash "$LEDGER" decision show
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" decision bogus
+  [ "$status" -eq 2 ]; [[ "$output" == *usage* ]]
+}
+
+@test "decision: ccxp-decisions.md groups active by scope newest first, then one line per superseded/retired" {
+  bash "$LEDGER" decision add "global old" --quote "owner said so" --context /ctx/a b.md >/dev/null
+  bash "$LEDGER" decision add "repo rule" --scope repo:foo >/dev/null
+  bash "$LEDGER" decision add "global new" >/dev/null
+  bash "$LEDGER" decision supersede d1 "global older replaced" >/dev/null
+  bash "$LEDGER" decision retire d2 "obsolete"
+  md="$(dmd)"
+  grep -q '^# CCXP decisions$' "$md"
+  grep -q '^## Active (2)$' "$md"
+  grep -q '^### global$' "$md"
+  ! grep -q '^### repo:foo$' "$md"
+  [ "$(grep -n '^- d4 \[' "$md" | cut -d: -f1)" -lt "$(grep -n '^- d3 \[' "$md" | cut -d: -f1)" ]
+  grep -Eq '^- d3 \[[0-9]{4}-[0-9]{2}-[0-9]{2}\] global new$' "$md"
+  grep -q '^## Superseded / retired (2)$' "$md"
+  grep -Eq '^- d1 \[[0-9-]{10}\] global old - superseded by d4 \([0-9-]{10}\)$' "$md"
+  grep -Eq '^- d2 \[[0-9-]{10}\] repo rule - retired: obsolete \([0-9-]{10}\)$' "$md"
+  bash "$LEDGER" decision add "with ctx" --quote "owner words" --context "/ctx/a b.md" >/dev/null
+  grep -q '^  quote: "owner words"$' "$md"
+  grep -q '^  context: \[context\](file:///ctx/a%20b.md) /ctx/a b.md$' "$md"
+}
+
+@test "decision: archive moves old closed entries past 200 to ccxp-decisions-archive.json, keeps active and recent ones" {
+  bash "$LEDGER" decision add "keep active" >/dev/null
+  jq '.decisions += [range(2; 206) | {ref: ("d" + tostring), text: "old \(.)", quote: "", scope: "global", context: "", source: "",
+        added_at: "2025-01-01T00:00:00Z", status: (if . % 2 == 0 then "retired" else "superseded" end), superseded_by: "", reason: "", closed_at: "2025-02-01T00:00:00Z"}]
+      | .decisions[10].closed_at = "2999-01-01T00:00:00Z" | .counter = 205' "$(dj)" > "$BATS_TEST_TMPDIR/big.json"
+  cp "$BATS_TEST_TMPDIR/big.json" "$(dj)"
+  [ "$(bash "$LEDGER" decision add "trigger")" = "d206" ]
+  af="$(dirname "$(dj)")/ccxp-decisions-archive.json"
+  [ -f "$af" ]
+  [ "$(ls -l "$af" | cut -c1-10)" = "-rw-------" ]
+  [ "$(jq '.decisions | length' "$af")" = "203" ]
+  [ "$(jq '.decisions | length' "$(dj)")" = "3" ]
+  [ "$(jq -r '.decisions | map(.ref) | join(",")' "$(dj)")" = "d1,d11,d206" ]
+  run bash "$LEDGER" decision show d50
+  [ "$status" -eq 0 ]; [[ "${lines[0]}" == "(archived)" ]]
+  [ "$(bash "$LEDGER" decision add "next")" = "d207" ]
+  [ "$(jq '.decisions | length' "$af")" = "203" ]
+}
+
+@test "decision: no archiving at or below 200 entries" {
+  bash "$LEDGER" decision add "a" >/dev/null
+  jq '.decisions += [range(2; 201) | {ref: ("d" + tostring), text: "old", quote: "", scope: "global", context: "", source: "",
+        added_at: "2025-01-01T00:00:00Z", status: "retired", superseded_by: "", reason: "", closed_at: "2025-02-01T00:00:00Z"}] | .counter = 200' "$(dj)" > "$BATS_TEST_TMPDIR/b.json"
+  cp "$BATS_TEST_TMPDIR/b.json" "$(dj)"
+  bash "$LEDGER" decision retire d1 >/dev/null
+  [ ! -e "$(dirname "$(dj)")/ccxp-decisions-archive.json" ]
+  [ "$(jq '.decisions | length' "$(dj)")" = "200" ]
+}
+
+@test "decision: a corrupt decisions file is never overwritten; a newer schema is refused" {
+  mkdir -p "$(dirname "$(dj)")"; echo "not json {" > "$(dj)"
+  run bash "$LEDGER" decision add "x"
+  [ "$status" -eq 1 ]; [[ "$output" == *"not overwriting"* ]]
+  [ "$(cat "$(dj)")" = "not json {" ]
+  echo '{"schema":2,"decisions":[]}' > "$(dj)"
+  run bash "$LEDGER" decision add "x"
+  [ "$status" -eq 1 ]; [[ "$output" == *"newer schema"* ]]
+}
+
+@test "decision: reply and render print a Decisions line and md path before the Ledger line, only with active decisions" {
+  run bash "$LEDGER" reply
+  [ "$output" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  bash "$LEDGER" decision add "retired one" >/dev/null
+  bash "$LEDGER" decision retire d1
+  run bash "$LEDGER" reply
+  [ "$output" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  bash "$LEDGER" decision add "first" >/dev/null
+  bash "$LEDGER" decision add "second rule" >/dev/null
+  bash "$LEDGER" next add "q" --context /c/n.md >/dev/null
+  run bash "$LEDGER" reply
+  [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  [ "${lines[-3]}" = "Decisions: 2 active (latest: d3 second rule)" ]
+  [ "${lines[-2]}" = "  $(dmd)" ]
+  run bash "$LEDGER" reply --no-decisions --tldr "hi"
+  [[ "$output" != *Decisions* ]]
+  [ "${lines[0]}" = "TL;DR: hi" ]
+  run bash "$LEDGER" render
+  [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
+  [[ "$output" == *"Decisions: 2 active (latest: d3 second rule)"* ]]
+  mv "$(dmd)" "$BATS_TEST_TMPDIR/old.md"
+  bash "$LEDGER" render >/dev/null
+  [ -f "$(dmd)" ]
+}
+
+@test "decision: the reply tail with a Decisions line still passes check, and check flags malformed entries only" {
+  bash "$LEDGER" start 4 "job" --context /c/4.md
+  bash "$LEDGER" decision add "rule" >/dev/null
+  bash "$LEDGER" reply > "$BATS_TEST_TMPDIR/r.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+  jq '.decisions += [{"ref":"x1","text":"bad"}, {"ref":"d2","text":""}]' "$(dj)" > "$BATS_TEST_TMPDIR/m.json"; cp "$BATS_TEST_TMPDIR/m.json" "$(dj)"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 1 ]
+  [ "$(grep -c '^MALFORMED' <<<"$output")" = "2" ]
+  [[ "$output" != *MISSING* && "$output" != *EXTRA* ]]
+}
+
+@test "decision: show and show --brief include a decisions summary only when the file exists" {
+  bash "$LEDGER" start 3 "j" >/dev/null
+  [ "$(bash "$LEDGER" show --brief)" = "running=1 parked=0 next=0" ]
+  [ "$(bash "$LEDGER" show | jq 'has("decisions")')" = "false" ]
+  bash "$LEDGER" decision add "one" >/dev/null
+  bash "$LEDGER" decision add "two" >/dev/null
+  [ "$(bash "$LEDGER" show --brief)" = "running=1 parked=0 next=0 decisions=2" ]
+  [ "$(bash "$LEDGER" show | jq -c .decisions)" = '{"active":2,"latest":{"ref":"d2","text":"two"}}' ]
+}
