@@ -895,6 +895,21 @@ _hlines() { cat "$(_hist)" 2>/dev/null || true; }
   run _ap prune "$BATS_TEST_TMPDIR"; [ "$status" -eq 0 ]
   run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
   [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'state.json.tmp' || true)" ]
+  # a failing jq filter returns non-zero and leaves no temp file behind
+  run bash -c "source '$SCRIPT'; _ap_update 'this is not a jq filter ('"
+  [ "$status" -ne 0 ]
+  [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'state.json.tmp' || true)" ]
+}
+
+@test "done: a merge from before a pause stays in the Done list (the pause shifts started_at, not run_started_at)" {
+  _final_fixture
+  printf -- '---\nstatus: Done\n---\n\nPR #77.\n' > dev/JOURNAL/2026-10-28-T9111111-fix-widget.md
+  git add -A; GIT_AUTHOR_DATE="2026-10-28T09:00:00Z" GIT_COMMITTER_DATE="2026-10-28T09:00:00Z" git commit -q -m journal
+  AUTOPILOT_NOW="2026-10-28T10:00:00Z" _ap pause >/dev/null
+  AUTOPILOT_NOW="2026-10-28T14:00:00Z" _ap resume >/dev/null
+  [ "$(_j .started_at)" = "2026-10-28T12:00:00Z" ]; [ "$(_j .run_started_at)" = "2026-10-28T08:00:00Z" ]
+  AUTOPILOT_NOW="2026-10-28T15:00:00Z" run _ap done
+  [[ "$output" == *"- Merged T9111111 (fix-widget) — PR #77"* ]]
 }
 
 @test "off then start carries visits and parked over; a fresh first start has none" {

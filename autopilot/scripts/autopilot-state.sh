@@ -51,7 +51,8 @@
 #                               prints the dropped ids
 #   parked <task-id> [reason]   record that the task was parked (drops its counter, keeps
 #                               the last 50 in the state's "parked" list); print parked
-#   parked-list                 "<task-id><TAB><reason>" per task parked since started_at
+#   parked-list                 "<task-id><TAB><reason>" per task parked since this run began
+#                               (run_started_at, which a pause does not shift)
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -718,7 +719,7 @@ _ap_journal_pr() {
 
 ap-done() {
   local f started root path b id slug pr n=0; f=$(ap-state-file); root=$(_ap_root)
-  started=$(jq -r '.started_at // empty' "$f" 2>/dev/null || true)
+  started=$(jq -r '.run_started_at // .started_at // empty' "$f" 2>/dev/null || true)
   if [ -n "$started" ]; then
     while IFS= read -r path; do
       [ -n "$path" ] || continue
