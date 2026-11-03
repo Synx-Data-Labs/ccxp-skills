@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: conversation 2026-11-02 (owner's redesign of the 5.9.0 autopilot, T20261102-261809)
 related: T20261102-261809
 description: autopilot drives from the top of queue.md; a task it cannot advance is /bottom'ed and parked after 3 visits; no status marker in task files
+claimed_by: cc1-ecc09c93:350ac6fa233273b6
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261102-296642: autopilot: drive from the top of queue.md; a no-progress task is /bottom'ed and parked after 3 visits (no status marker in task files)
