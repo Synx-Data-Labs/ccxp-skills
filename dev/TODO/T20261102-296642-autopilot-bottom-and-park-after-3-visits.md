@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 3
 source: conversation 2026-11-02 (owner's redesign of the 5.9.0 autopilot, T20261102-261809)
 related: T20261102-261809
