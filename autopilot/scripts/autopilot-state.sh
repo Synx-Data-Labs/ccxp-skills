@@ -14,7 +14,9 @@
 #                               id is ignored; informational; the HUD shows "running r<n>" from the ledger) / finished
 #   cap                         print ok | capped:<cycles|merges>  (rolls the day)
 #   record <outcome> [merged] [task-id] [reason]
-#                               outcome: progress|idle|stuck|waiting|capped;
+#                               outcome: progress|idle|stuck|waiting|bottomed|capped;
+#                               bottomed = a cycle that only stalled on tasks (leaves the
+#                               stuck/waiting counters and the notice flags alone, wakes in 60 s);
 #                               updates counters + next_wake_at, prints the
 #                               notice kind to send (idle|resumed|stuck|waiting|
 #                               capped) or "none"
@@ -26,16 +28,27 @@
 #   eligible <task-file>        exit 0 when the status line allows auto-driving (not
 #                               gated: see todo-gated in todo/scripts/_lib.sh)
 #   pickable [repo-root]        pick | drift | none: pick = /drive could take a task
-#                               (todo-next.sh --skip-needs-human --check), drift =
+#                               (todo-next.sh --skip-gated --check), drift =
 #                               nothing pickable but `todo-sweep.sh plan` has mechanical
 #                               findings (a /drive sweep would fix them), none = idle
-#   attention-list [repo-root]  one "<id><TAB><kind><TAB><reason>" per task whose status
-#                               carries the "needs a human" marker (derived from the task
-#                               files of the dispatch clone when the state names one, else
-#                               the repo; there is no skip list in the state file)
-#   marked <task-id> [repo-root] exit 0 (and print the kind) when that task's file is
-#                               marked, 1 when not: the dispatcher's check that a
-#                               NEEDS-ATTENTION driver really landed its marker
+#   top [repo-root]             the id of the first task todo-next.sh --skip-gated lists
+#                               (what /drive will pick), or nothing
+#   plan <file|-> [--fallback T<id>]
+#                               one "<task-id><TAB>advanced|stalled<TAB><reason><TAB><source>"
+#                               line per task a /drive report names (MERGED:/ADVANCED: =
+#                               advanced; NEEDS-ATTENTION: or STUCK: last task = stalled
+#                               unless advanced; source = merged|advanced|attention|stuck).
+#                               A STUCK with no task id names the --fallback task, if given.
+#   visit <task-id> [reason] [--stuck]
+#                               a no-progress visit: count it (dev/.autopilot-state.json
+#                               "visits"), log it, print "bottom <n>" or "park <n>" (park
+#                               when n >= max_visits, default 3); "none" unless on;
+#                               "skip" with --stuck once stuck_count >= 3 (likely an
+#                               outage, not the task)
+#   advance <task-id>           the task moved forward: reset its counter; print reset|none
+#   parked <task-id> [reason]   record that the task was parked (drops its counter, keeps
+#                               the last 50 in the state's "parked" list); print parked
+#   parked-list                 "<task-id><TAB><reason>" per task parked since started_at
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -55,6 +68,8 @@
 #                               Needs your attention) from the state file
 # Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
+# Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
+#   max_visits (no-progress visits before a task is parked, default 3).
 
 set -euo pipefail
 
@@ -106,7 +121,9 @@ _ap_fresh() {
   [ -f "$f" ] && carry=$(jq -c 'select(type == "object") | {
       lifetime_started_at: (((.lifetime_started_at // .started_at) | strings | select(test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))) // null),
       lifetime_cycles: ((.lifetime_cycles // .cycle_count) | numbers // 0),
-      lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0)}' "$f" 2>/dev/null) || carry=""
+      lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0),
+      visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0))),
+      parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:])}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
   jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" --argjson carry "$carry" '{
     schema: 2, status: "on", started_at: $now, paused_at: null,
@@ -114,6 +131,7 @@ _ap_fresh() {
     lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
+    visits: ($carry.visits // {}), parked: ($carry.parked // []),
     dispatch_clone_path: null, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
@@ -143,29 +161,7 @@ _ap_due() {
   if [ "$(ap-remaining)" -gt 30 ]; then echo already-on; else echo dispatch; fi  # 30 s tolerance: a wake may fire slightly early
 }
 
-# One-time migration (T20261102-261809): the per-clone skip list is gone, the gate is the
-# "needs a human" marker in the task files. A state file written by an older version may
-# still carry skip_ids/needs_attention; drop them (they were already wiped daily) and, when
-# there was something in them, leave one `migrated` notice naming the ids and reasons so
-# the owner can mark those tasks. Idempotent; a missing or non-object file is a no-op.
-_ap_migrate() {
-  local f text; f=$(ap-state-file)
-  [ -f "$f" ] || return 0
-  jq -e 'type == "object" and (has("skip_ids") or has("needs_attention"))' "$f" >/dev/null 2>&1 || return 0
-  text=$(jq -r '[ (.needs_attention // [])[] | select(type == "object") | "\(.id // "?") (\(.reason // "needs attention"))" ] as $a
-    | [ (.skip_ids // [])[] | strings ] as $s
-    | ($a | map(split(" (")[0])) as $aid
-    | ($a + [ $s[] | select(. as $i | $aid | index($i) | not) ]) | join("; ")' "$f" 2>/dev/null || true)
-  if [ -n "$text" ]; then
-    _ap_update --arg t "dropped the old skip list, mark these tasks with needs-human.sh if they still need a human: $text" --arg now "$(ap-now)" \
-      'del(.skip_ids, .needs_attention) | .notices = (((.notices // []) + [{kind: "migrated", text: $t, via: "fallback", at: $now}]) | .[-20:])'
-  else
-    _ap_update 'del(.skip_ids, .needs_attention)'
-  fi
-}
-
 ap-start() {
-  _ap_migrate
   case "$(ap-status)" in
     on) _ap_due ;;
     paused) echo paused ;;
@@ -236,7 +232,7 @@ ap-cap() {
 ap-delay() {
   local outcome="${1:?outcome}" f n d key; f=$(ap-state-file)
   case "$outcome" in
-    progress) echo 60 ;;
+    progress|bottomed) echo 60 ;;
     idle) echo $(( $(ap-config idle_retry_minutes 45) * 60 )) ;;
     capped) echo 3600 ;;
     stuck|waiting)
@@ -264,6 +260,79 @@ ap-history-append() {
       printf '%s\n' "$line" >> "$h"
   } 2>/dev/null || true
   return 0
+}
+
+# Appends one {ts, outcome: visit|advance|park, merged: 0, task, visits} line to the history log
+# (same failure-tolerant single append as ap-history-append). `stats` ignores these outcomes.
+ap-history-event() {
+  local kind="$1" task="$2" n="$3" h line
+  [[ "$n" =~ ^[0-9]+$ ]] || n=0
+  {
+    h=$(ap-history-file)
+    mkdir -p "$(dirname "$h")" &&
+      line=$(jq -nc --arg ts "$(ap-now)" --arg o "$kind" --arg t "$task" --argjson n "$n" '{ts: $ts, outcome: $o, merged: 0, task: $t, visits: $n}') &&
+      printf '%s\n' "$line" >> "$h"
+  } 2>/dev/null || true
+  return 0
+}
+
+AP_TASK_ID_RE='^T[0-9]+(-[0-9]+)?$'
+
+# visit <task-id> [reason] [--stuck] -> "bottom <n>" | "park <n>" | "none" | "skip" (see the usage header)
+ap-visit() {
+  local id="" f n max stuck=0 a
+  for a in "$@"; do
+    if [ "$a" = --stuck ]; then stuck=1; elif [ -z "$id" ]; then id="$a"; fi
+  done
+  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "visit <task-id> [reason] [--stuck]" >&2; return 2; }
+  [ "$(ap-status)" = on ] || { echo none; return 0; }
+  f=$(ap-state-file)
+  if [ "$stuck" = 1 ] && [ "$(jq -r '(.stuck_count | numbers) // 0' "$f")" -ge 3 ]; then echo skip; return 0; fi
+  _ap_update --arg id "$id" '.visits = ((.visits | objects // {}) | .[$id] = (((.[$id] | numbers) // 0) + 1))'
+  n=$(jq -r --arg id "$id" '.visits[$id]' "$f")
+  ap-history-event visit "$id" "$n"
+  max=$(ap-config max_visits 3)
+  if [ "$n" -ge "$max" ]; then echo "park $n"; else echo "bottom $n"; fi
+}
+
+# advance <task-id> -> reset | none: the task moved forward, so its no-progress counter restarts.
+ap-advance() {
+  local id="${1:-}" f had
+  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "advance <task-id>" >&2; return 2; }
+  [ "$(ap-status)" = on ] || { echo none; return 0; }
+  f=$(ap-state-file)
+  had=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
+  if [ "$had" -gt 0 ]; then
+    _ap_update --arg id "$id" 'del(.visits[$id])'
+    ap-history-event advance "$id" 0
+    echo reset
+  else
+    echo none
+  fi
+}
+
+# parked <task-id> [reason] -> parked: the dispatcher landed the park PR. Drops the counter and
+# keeps the entry (last 50) so reports and the HUD can say "parked by autopilot".
+ap-parked() {
+  local id="${1:-}" reason="${2:-}" f n
+  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "parked <task-id> [reason]" >&2; return 2; }
+  [ -f "$(ap-state-file)" ] || { echo none; return 0; }
+  f=$(ap-state-file)
+  reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | cut -c1-200)
+  n=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
+  _ap_update --arg id "$id" --arg r "$reason" --arg now "$(ap-now)" --argjson n "$n" '
+    del(.visits[$id])
+    | .parked = ((((.parked | arrays // []) | map(select(.id != $id))) + [{id: $id, at: $now, reason: $r, visits: $n}]) | .[-50:])'
+  ap-history-event park "$id" "$n"
+  echo parked
+}
+
+# parked-list -> "<task-id><TAB><reason>" per task parked since this run's started_at.
+ap-parked-list() {
+  local f; f=$(ap-state-file)
+  [ -f "$f" ] || return 0
+  jq -r '(.started_at // "") as $s | (.parked | arrays // [])[] | select(type == "object" and (.at // "") >= $s)
+    | "\(.id)\t\(.reason // "")"' "$f" 2>/dev/null || true
 }
 
 # stats [--json]: progress over the rolling last 24 h (now-86400 < ts <= now) and lifetime
@@ -300,6 +369,7 @@ ap-stats() {
     def r2: (. * 100 | round) / 100;
     ($st[0] | if type == "object" then . else {} end) as $s
     | [inputs | fromjson? | select(type == "object")
+       | select(((.outcome | strings // "") | IN("visit", "advance", "park")) | not)
        | select((.ts | strings | ep) != null) | {t: (.ts | ep), o: (.outcome | strings // ""), m: (.merged | n)}] as $h
     | ($now - 86400) as $cut
     | ($h | map(select(.t > $cut and .t <= $now))) as $w
@@ -334,11 +404,10 @@ ap-stats() {
 # record <outcome> [merged] [task-id] [reason] -> notice kind (or none)
 ap-record() {
   local outcome="${1:?outcome}" merged="${2:-0}" task="${3:-}" reason="${4:-}" f notice=none
-  case "$outcome" in progress|idle|stuck|waiting|capped) ;; *) echo "bad outcome: $outcome" >&2; return 1 ;; esac
+  case "$outcome" in progress|idle|stuck|waiting|bottomed|capped) ;; *) echo "bad outcome: $outcome" >&2; return 1 ;; esac
   [[ "$merged" =~ ^[0-9]+$ ]] || merged=0
   [ "$(ap-status)" = on ] || { echo none; return 0; }
   f=$(ap-state-file)
-  _ap_migrate
   _ap_roll_day
   local was_idle was_stuck was_wait was_capped cycle=1 d nw
   was_idle=$(jq -r '.idle_notified' "$f"); was_stuck=$(jq -r '.stuck_notified' "$f")
@@ -351,8 +420,8 @@ ap-record() {
     | .last_cycle_at = (if $c == 1 then $now else .last_cycle_at end) | .last_outcome = $o
     | .last_task = (if $t == "" then null else $t end)
     | .last_stuck_reason = (if $o == "stuck" and $r != "" then $r else null end)
-    | .stuck_count = (if $o == "stuck" then .stuck_count + 1 elif $o == "waiting" then .stuck_count else 0 end)
-    | .waiting_count = (if $o == "waiting" then .waiting_count + 1 else 0 end)
+    | .stuck_count = (if $o == "stuck" then .stuck_count + 1 elif $o == "waiting" or $o == "bottomed" then .stuck_count else 0 end)
+    | .waiting_count = (if $o == "waiting" then .waiting_count + 1 elif $o == "bottomed" then .waiting_count else 0 end)
     | .busy_since = null | .current_task = null'
   ap-history-append "$outcome" "$merged" "$task"
   case "$outcome" in
@@ -367,6 +436,7 @@ ap-record() {
       if [ "$(jq -r .waiting_count "$f")" -ge 2 ] && [ "$was_wait" != true ]; then notice=waiting; _ap_update '.waiting_notified = true'; fi ;;
     capped)
       if [ "$was_capped" != true ]; then notice=capped; _ap_update '.capped_notified = true'; fi ;;
+    bottomed) : ;;
   esac
   d=$(ap-delay "$outcome"); nw=$(( $(_ap_epoch "$(ap-now)") + d ))
   _ap_update --arg w "$(_ap_iso "$nw")" '.next_wake_at = $w'
@@ -374,7 +444,7 @@ ap-record() {
 }
 
 # Status-line markers that need a human (or are blocked): not auto-driven. The
-# definition is shared with todo-next.sh --skip-needs-human (todo-gated, _lib.sh).
+# definition is shared with todo-next.sh --skip-gated (todo-gated, _lib.sh).
 ap-eligible() {
   local file="${1:?task file}" line
   [ -f "$file" ] || return 1
@@ -385,11 +455,11 @@ ap-eligible() {
   return 0
 }
 
-# --- needs-a-human tasks, derived from the task files -------------------------
+# --- the repo the dispatcher reads --------------------------------------------
 
-# Where marker PRs land first: the dispatch clone (pulled every cycle) when the state names a
-# live one, else the repo root. AUTOPILOT_REPO_ROOT overrides both (tests, the final report).
-ap-attention-root() {
+# The dispatch clone (pulled every cycle) when the state names a live one, else the repo root.
+# AUTOPILOT_REPO_ROOT overrides both (tests, the final report).
+ap-work-root() {
   local f c
   if [ -n "${AUTOPILOT_REPO_ROOT:-}" ]; then printf '%s' "$AUTOPILOT_REPO_ROOT"; return 0; fi
   f=$(ap-state-file)
@@ -397,22 +467,20 @@ ap-attention-root() {
   if [ -n "$c" ] && [ -d "$c/dev/TODO" ]; then printf '%s' "$c"; else _ap_root; fi
 }
 
-ap-attention-list() {
-  bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" list "${1:-$(ap-attention-root)}"
-}
-
-# marked <task-id> [repo-root]: prints the kind, exit 0 when marked; 1 when not (or no file).
-ap-marked() {
-  local id="${1:-}"
-  [ -n "$id" ] || { echo "marked <task-id> [repo-root]" >&2; return 2; }
-  NEEDS_HUMAN_ROOT="${2:-$(ap-attention-root)}" bash "$(_ap_dir)/../../todo/scripts/needs-human.sh" kind "$id" 2>/dev/null
+# top [repo-root]: the id /drive will pick (first task todo-next.sh --skip-gated lists), or nothing.
+ap-top() {
+  local root="${1:-$(ap-work-root)}" first id
+  first=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" --skip-gated 2>/dev/null) || return 0
+  id=$(printf '%s\n' "$first" | sed -nE 's/^#[0-9]+ of [0-9]+: (T[0-9]+(-[0-9]+)?) .*/\1/p' | head -1)
+  [[ "$id" =~ $AP_TASK_ID_RE ]] && printf '%s\n' "$id"
+  return 0
 }
 
 # pickable [repo-root]: pick | drift | none (see the usage header).
 ap-pickable() {
-  local root="${1:-$(ap-attention-root)}" scripts plan
+  local root="${1:-$(ap-work-root)}" scripts plan
   scripts="$(_ap_dir)/../../todo/scripts"
-  if (cd "$root" && bash "$scripts/todo-next.sh" --skip-needs-human --check) 2>/dev/null; then echo pick; return 0; fi
+  if (cd "$root" && bash "$scripts/todo-next.sh" --skip-gated --check) 2>/dev/null; then echo pick; return 0; fi
   plan=$(bash "$scripts/todo-sweep.sh" plan --root "$root" 2>/dev/null || true)
   if printf '%s\n' "$plan" | grep -qE $'^(ADD|REMOVE|UNBLOCK|CLOSE_DONE|ORDER_VIOLATION)\t'; then echo drift; else echo none; fi
 }
@@ -438,10 +506,11 @@ ap-report() {
   jq -r '"cycles \(.cycle_count) (today \(.cycles_today)), merged \(.merged_count) (today \(.merges_today)), stuck \(.stuck_count), last \(.last_outcome // "none")",
          (if .next_wake_at then "next cycle \(.next_wake_at)" else empty end),
          (.notices[-3:][]? | "notice [\(.via)] \(.kind): \(.text)")' "$f"
-  local aid akind areason
-  while IFS=$'\t' read -r aid akind areason; do
-    if [ -n "$aid" ]; then printf 'needs a human: %s [%s] — %s\n' "$aid" "$akind" "$areason"; fi
-  done < <(ap-attention-list 2>/dev/null || true)
+  local aid areason max; max=$(ap-config max_visits 3)
+  jq -r --argjson max "$max" '(.visits | objects // {}) | to_entries[] | select(.value | numbers > 0) | "revisiting: \(.key) (\(.value)/\($max) no-progress visits)"' "$f" 2>/dev/null || true
+  while IFS=$'\t' read -r aid areason; do
+    if [ -n "$aid" ]; then printf 'parked by autopilot: %s — %s\n' "$aid" "$areason"; fi
+  done < <(ap-parked-list 2>/dev/null || true)
   if [ "$st" = on ] && ! _ap_is_busy; then
     local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
     if [ -n "$we" ] && [ -n "$now" ] && [ $(( now - we )) -gt 600 ]; then echo "overdue: no wake fired since $w — type /autopilot on to recover"; fi
@@ -463,7 +532,7 @@ ap-classify() {
   local src="${1:-}" line rest id reason lines
   [ -n "$src" ] || { echo "classify <file|->" >&2; return 2; }
   lines=$(_ap_report_lines "$src") || { echo "classify: no such file: $src" >&2; return 2; }
-  local merged=0 merged_id="" stuck=0 stuck_id="" stuck_reason="" waiting=0 wait_reason="" attn=0
+  local merged=0 merged_id="" stuck=0 stuck_id="" stuck_reason="" waiting=0 wait_reason="" attn=0 adv=0 adv_id=""
   local re_id='^(T[0-9]+(-[0-9]+)?)'
   while IFS= read -r line; do
     case "$line" in
@@ -483,6 +552,9 @@ ap-classify() {
         rest=$(printf '%s' "${line#WAITING:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
         case "$rest" in ''|'<'*) continue ;; esac
         waiting=1; wait_reason="$rest" ;;
+      ADVANCED:*)
+        rest=$(printf '%s' "${line#ADVANCED:}" | sed -E 's/^[[:space:]]+//')
+        if [[ "$rest" =~ $re_id ]]; then adv=$(( adv + 1 )); adv_id="${BASH_REMATCH[1]}"; fi ;;
       NEEDS-ATTENTION:*)
         rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//')
         if [[ "$rest" =~ $re_id ]]; then attn=$(( attn + 1 )); fi ;;
@@ -490,17 +562,20 @@ ap-classify() {
   done <<EOF_LINES
 $lines
 EOF_LINES
-  # Precedence follows autopilot/SKILL.md Phase 4: progress (merged, nothing
-  # stuck), waiting (nothing merged), stuck, then a lone NEEDS-ATTENTION = idle.
+  # Precedence follows autopilot/SKILL.md Phase 4: progress (merged or advanced, nothing
+  # stuck), waiting (nothing merged), stuck, then a lone NEEDS-ATTENTION = progress with 0
+  # merged (the stalled task is about to leave the top of the queue; wake in 60 s).
   if [ "$merged" -gt 0 ] && [ "$stuck" = 0 ]; then
     printf 'progress %s %s -\n' "$merged" "${merged_id:--}"
+  elif [ "$adv" -gt 0 ] && [ "$stuck" = 0 ] && [ "$waiting" = 0 ]; then
+    printf 'progress 0 %s -\n' "${adv_id:--}"
   elif [ "$merged" = 0 ] && [ "$waiting" = 1 ]; then
     printf 'waiting 0 - %s\n' "$wait_reason"
   elif [ "$stuck" = 1 ]; then
     [ -n "$stuck_id" ] || stuck_id="${merged_id:--}"
     printf 'stuck %s %s %s\n' "$merged" "$stuck_id" "${stuck_reason:-stuck}"
   elif [ "$attn" -gt 0 ]; then
-    printf 'idle 0 - only needs-attention tasks reported\n'
+    printf 'bottomed 0 - only needs-attention tasks reported\n'
   else
     printf 'stuck 0 - dispatch failed or report unparseable\n'
     return 2
@@ -522,6 +597,58 @@ $lines
 EOF_LINES
 }
 
+# plan <file|-> [--fallback T<id>]: one "<task-id><TAB>advanced|stalled<TAB><reason><TAB><source>" line
+# per task the report names, in order of first appearance (source: merged|advanced|attention|stuck).
+# advanced = on a MERGED: or ADVANCED: line; stalled = on a NEEDS-ATTENTION: line, or the "last task"
+# of a STUCK: line, and not also advanced. A STUCK without a task id names the --fallback task (the
+# one the dispatcher recorded before dispatch) when given. WAITING lines and an unparseable report
+# name nothing (no visit is counted).
+ap-plan() {
+  local src="" fallback="" line rest id reason recs="" lines
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fallback) fallback="${2:-}"; shift 2 || true ;;
+      *) [ -n "$src" ] || src="$1"; shift ;;
+    esac
+  done
+  [ -n "$src" ] || { echo "plan <file|-> [--fallback T<id>]" >&2; return 2; }
+  [ -z "$fallback" ] || [[ "$fallback" =~ $AP_TASK_ID_RE ]] || fallback=""
+  lines=$(_ap_report_lines "$src") || { echo "plan: no such file: $src" >&2; return 2; }
+  local re_id='^(T[0-9]+(-[0-9]+)?)' re_att='^(T[0-9]+(-[0-9]+)?)[[:space:]]*(—|-)[[:space:]]*(.*)$'
+  local re_stuck='(.*)[[:space:]]+—[[:space:]]+last[[:space:]]+task[[:space:]]+(T[0-9]+(-[0-9]+)?)' tab=$'\t'
+  while IFS= read -r line; do
+    case "$line" in
+      MERGED:*|ADVANCED:*)
+        rest=$(printf '%s' "${line#*:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+        if [[ "$rest" =~ $re_id ]]; then
+          id="${BASH_REMATCH[1]}"; reason="${rest#"$id"}"; reason=$(printf '%s' "$reason" | sed -E 's/^[[:space:]]*(—|-)?[[:space:]]*//')
+          recs="${recs}${id}${tab}advanced${tab}$(printf '%s' "${reason:-advanced}" | tr '\t' ' ')${tab}$(printf '%s' "${line%%:*}" | tr 'A-Z' 'a-z')"$'\n'
+        fi ;;
+      STUCK:*)
+        rest=$(printf '%s' "${line#STUCK:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+        case "$rest" in ''|'<'*) continue ;; esac
+        if [[ "$rest" =~ $re_stuck ]]; then
+          recs="${recs}${BASH_REMATCH[2]}${tab}stalled${tab}$(printf '%s' "${BASH_REMATCH[1]:-stuck}" | tr '\t' ' ')${tab}stuck"$'\n'
+        elif [ -n "$fallback" ]; then
+          recs="${recs}${fallback}${tab}stalled${tab}$(printf '%s' "$rest" | tr '\t' ' ')${tab}stuck"$'\n'
+        fi ;;
+      NEEDS-ATTENTION:*)
+        rest=$(printf '%s' "${line#NEEDS-ATTENTION:}" | sed -E 's/^[[:space:]]+//' | _ap_strip_runs)
+        if [[ "$rest" =~ $re_att ]]; then
+          recs="${recs}${BASH_REMATCH[1]}${tab}stalled${tab}$(printf '%s' "${BASH_REMATCH[4]:-needs attention}" | tr '\t' ' ')${tab}attention"$'\n'
+        elif [[ "$rest" =~ $re_id ]]; then
+          recs="${recs}${BASH_REMATCH[1]}${tab}stalled${tab}needs attention${tab}attention"$'\n'
+        fi ;;
+    esac
+  done <<EOF_LINES
+$lines
+EOF_LINES
+  printf '%s' "$recs" | awk -F'\t' '
+    { ids[NR] = $1; st[NR] = $2; rs[NR] = $3; sr[NR] = $4; if ($2 == "advanced" && !($1 in ar)) { ar[$1] = $3; as[$1] = $4 } }
+    END { for (i = 1; i <= NR; i++) { if (seen[ids[i]]++) continue
+            if (ids[i] in ar) print ids[i] "\tadvanced\t" ar[ids[i]] "\t" as[ids[i]]; else print ids[i] "\tstalled\t" rs[i] "\t" sr[i] } }'
+}
+
 # --- dispatch clone path ------------------------------------------------------
 
 _ap_sha256() {
@@ -541,7 +668,7 @@ ap-clone-path() {
 
 # "T<id> (<slug>)" from the task's file name under dev/{TODO,PARKING,JOURNAL}; bare id when not found.
 _ap_label() {
-  local id="$1" root f b slug; root=$(_ap_root)
+  local id="$1" root f b slug; root=$(ap-repo-root)
   for f in "$root"/dev/TODO/"$id"-*.md "$root"/dev/PARKING/"$id"-*.md "$root"/dev/JOURNAL/*-"$id"-*.md; do
     [ -e "$f" ] || continue
     b=$(basename "$f" .md); slug="${b#*"$id"-}"
@@ -602,9 +729,9 @@ ap-final-report() {
   local out="" id reason ids
   while IFS=$'\t' read -r id reason; do
     [ -n "$id" ] || continue
-    out="${out}- $(_ap_label "$id") — ${reason}"$'\n'
-  done < <(ap-attention-list | cut -f1,3)
-  ids=$(ap-attention-list | cut -f1)
+    out="${out}- Parked by autopilot: $(_ap_label "$id") — ${reason}"$'\n'
+  done < <(ap-parked-list)
+  ids=$(ap-parked-list | cut -f1)
   if [ "$(jq -r '.last_outcome // empty' "$f")" = stuck ]; then
     id=$(jq -r '.last_task // empty' "$f"); reason=$(jq -r '.last_stuck_reason // "stuck"' "$f")
     if [ -n "$id" ] && ! printf '%s\n' "$ids" | grep -qxF "$id"; then
@@ -621,11 +748,12 @@ autopilot-state() {
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
-    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;; attention-list) ap-attention-list "$@" ;;
-    marked) ap-marked "$@" ;; notify) ap-notify "$@" ;;
+    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
+    top) ap-top "$@" ;; plan) ap-plan "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
+    notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     done) ap-done ;; final-report) ap-final-report "$@" ;;
-    *) sed -n '2,56p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
+    *) sed -n '2,62p' "${BASH_SOURCE[0]}" >&2; return 2 ;;
   esac
 }
 

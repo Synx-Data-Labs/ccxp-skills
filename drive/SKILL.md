@@ -27,13 +27,11 @@ argument-hint: "[task-id]"
   form) the id was resolved by the orchestrator. Only effect: Phase 0's skip rule does not
   apply (see Phase 0 below) — nothing else about Phase 1 onward changes.
 
-**Gated tasks (T20261102-261809).**
+**Gated tasks.**
 
-- Auto-pick never takes a task whose `status:` is gated: the marker `— needs a human [<kind>]: <reason>` (`kind` = `blocked|decision|external`), `Blocked by`, `SUPERVISED`, `BLOCKED`, `needs manual`, `sign-off`.
-  - One shared definition: `todo-gated` in `todo/scripts/_lib.sh`.
+- Auto-pick never takes a task whose `status:` is gated: `Blocked by`, `SUPERVISED`, `BLOCKED`, `needs manual`, `sign-off` (case-insensitive). One shared definition: `todo-gated` in `todo/scripts/_lib.sh`, applied by `todo-next.sh --skip-gated`.
 - An explicit task id is never filtered: a human asking for that task gets it.
-- A driver that cannot proceed for an owner-only reason **writes the marker** (see "Escalation Rules").
-- The owner removes it (`bash <skills-root>/todo/scripts/needs-human.sh clear <task-file>`) to return the task to the pool.
+- Nothing is written to a task file to say why a run could not finish it. Under `/autopilot` the dispatcher moves a task that did not advance to the back of `queue.md` and parks it after repeated no-progress visits (`autopilot/SKILL.md` Phase 3 and 4).
 
 ## Workflow
 
@@ -68,7 +66,7 @@ Before picking new work, check if prior escalations have received replies:
 If no task ID given (auto-pick):
 
 1. **Run `/todo sweep` first.** Auto-pick reads `queue.md`'s order via `/todo next`, and `sweep` is the only workflow that keeps `queue.md` in sync with `dev/TODO/` (adds untracked files, strikes closed/parked entries, fixes stale blockers, re-orders on blocker violations). Skipping it risks picking a stale queue entry (a task already closed by another session) or missing blocker-ordering fixes that would have changed the #1 slot. Run it every auto-pick, not just periodically — it's idempotent and a no-op when nothing has drifted.
-2. Run `/todo next` logic — read all `dev/TODO/*.md`, build dependency graph, score by readiness + priority + unblocks — through `bash <skills-root>/todo/scripts/todo-next.sh --skip-needs-human` so gated tasks (marker, `Blocked by`, `SUPERVISED`, ...) are never the #1 pick
+2. Run `/todo next` logic — read all `dev/TODO/*.md`, build dependency graph, score by readiness + priority + unblocks — through `bash <skills-root>/todo/scripts/todo-next.sh --skip-gated` so gated tasks (`Blocked by`, `SUPERVISED`, ...) are never the #1 pick
 3. Select the #1 recommendation
 4. Flip the task file's Status `Open` → `Design` (in-place). **Peer mode is on by default** (disable with `CCXP_PEER_MODE=0`), so cross-session collisions ARE possible (ccxp + interactive sessions run as parallel peers) — see the peer-mode claim block in "Claim PR" below before picking. (With `CCXP_PEER_MODE=0`, the old one-session-per-clone assumption applies — no separate claim registry, no collisions to detect.)
 5. Report the pick to the user: task ID, title, current status, what "done" looks like.
@@ -470,7 +468,7 @@ When the current task (G, the goal) can't progress because it depends on another
    - The task-file update recording the park (status + **the exact branch name** + what's done/what remains) must land **on main** (small docs PR — auto-merges as status-change tier). A progress note committed only to the work branch is invisible to every future session: main's task file still reads as un-started "In Progress", and the resuming session re-does the work on a fresh branch (observed incident: a feature was implemented twice on two branches because a park/resume didn't record which branch had the in-progress work).
    - **On resuming any `In Progress` task, FIRST look for existing work**: `git fetch -q && git branch -r | grep -i "t{id-digits}"` and read the task file's recorded branch pointer. Continue the newest matching branch — do not create a fresh one unless none exists or the existing one is explicitly recorded as abandoned. **If the task is cross-repo** (Target repo set, a `## Cross-repo work` pointer recorded, or the implementation lands in another repo — see Phase 1.5.0), this hub `git branch` grep is **blind** to the target-repo work: also run the Phase-1.5.0 guard (`bash <skills-root>/_gh/gh.sh pr list --repo "$TARGET_REPO" --search "t{id-digits}" --state all`) and drive/verify any existing target PR instead of re-implementing.
    - Before exiting the session, return the clone to `main`.
-3. **Recurse into B** — unless B is marked: if B's `status:` already carries the `needs a human` marker (`needs-human.sh kind T{B}` exits 0), do not drive it; mark G `blocked` with `Blocked by T{B}` in the reason (see "Marking an owner-gated task") and stop, otherwise the next cycle would re-pick G and loop. Default (no flag) — invoke the `/drive` workflow on B **inline, in this
+3. **Recurse into B.** Default (no flag) — invoke the `/drive` workflow on B **inline, in this
    same conversation**:
    - Flip B's Status to the appropriate next state.
    - Run Phase 2 → Phase 5 on B end-to-end.
@@ -624,7 +622,7 @@ Use `/slack-check-reply <task-id>` or `/slack-check-reply all`. Phase 0.5 runs t
 | Test failures after 2 fix attempts | Slack with error details, stop |
 | Build/CI failure not caused by our changes | Slack, stop |
 | Task requires secrets/permissions not available | Slack, stop |
-| Owner-only reason (decision, outside party, blocker only the owner can clear) | **Mark the task**, then stop (below) |
+| Owner-only reason (decision, outside party, blocker only the owner can clear) | Stop and report it (below); write nothing to the task file |
 
 **Continue autonomously when:**
 
@@ -635,14 +633,13 @@ Use `/slack-check-reply <task-id>` or `/slack-check-reply all`. Phase 0.5 runs t
 | Minor test fix needed | Fix, re-run, continue |
 | Design is clear, implementation is straightforward | Code, test, PR, continue |
 
-### Marking an owner-gated task
+### Stopping on an owner-only reason
 
-When a run stops because only the owner can move the task (an open decision, an outside party, a blocker only the owner can clear), do not just report it: leave the reason where every session and the owner can see it.
+When a run stops because only the owner can move the task (an open decision, an outside party, a blocker only the owner can clear), do not record the reason in the task file.
 
-- Branch `t<id>-needs-human` off `main`; run `bash <skills-root>/todo/scripts/needs-human.sh mark --release T<id> <blocked|decision|external> "<one-line reason>"` (`--release` also clears a claim this clone holds); commit only that task file.
-- Open a docs-only PR and run `/address-pr <number>` (same auto-merge tier as the claim PR); then `git checkout main && git pull && git remote prune origin`.
-- Report `NEEDS-ATTENTION: T<id> — <reason>` (under `/autopilot`) only after the marker is on `main`; the dispatcher verifies it.
-- The owner un-gates by removing the suffix (`needs-human.sh clear <task-file>`) or by answering the decision; auto-pick then takes the task again. Task size is never a reason to mark.
+- Interactive: say what is needed and stop; the task keeps its status.
+- Under `/autopilot`: end the report with `NEEDS-ATTENTION: T<id> — <reason>` (and `ADVANCED: T<id> — <what moved>` if a design PR, a split, a pushed branch or a PR landed first). When the stalled task is a blocker you recursed into (Phase 6), name the blocker, not the goal. The dispatcher then bottoms the task and counts the visit.
+- Task size is never a reason to stop: split a big task (`autopilot/SKILL.md` "Big tasks").
 
 ## Branch naming
 

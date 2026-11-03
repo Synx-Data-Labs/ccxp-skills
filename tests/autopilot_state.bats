@@ -289,12 +289,24 @@ _report() { printf '%s\n' "$@" > "$BATS_TEST_TMPDIR/report.txt"; }
   [ "${output%% *}" = waiting ]
 }
 
-@test "classify: a lone NEEDS-ATTENTION is idle, and attention lists it" {
+@test "classify: a lone NEEDS-ATTENTION is bottomed with 0 merged, and attention lists it" {
   _report 'NEEDS-ATTENTION: T9333333 — needs an owner decision on scope'
   run _ap classify "$BATS_TEST_TMPDIR/report.txt"
-  [ "$status" -eq 0 ]; [ "${output%% *}" = idle ]
+  [ "$status" -eq 0 ]; [ "${output%% *}" = bottomed ]; [[ "$output" == "bottomed 0 - "* ]]
   run _ap attention "$BATS_TEST_TMPDIR/report.txt"
   [ "$output" = "$(printf 'T9333333\tneeds an owner decision on scope')" ]
+}
+
+@test "classify: ADVANCED alone is progress with 0 merged; ADVANCED next to STUCK is stuck" {
+  _report 'ADVANCED: T9111111 — design PR #12 merged'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "$output" = "progress 0 T9111111 -" ]
+  _report 'ADVANCED: T9111111 — design PR #12 merged' 'STUCK: CI red — last task T9111111 (a)'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "${output%% *}" = stuck ]
+  _report 'ADVANCED: T9111111 — design PR #12 merged' 'WAITING: approval on #12'
+  run _ap classify "$BATS_TEST_TMPDIR/report.txt"
+  [ "${output%% *}" = waiting ]
 }
 
 @test "classify: NEEDS-ATTENTION next to a merge is still progress" {
@@ -762,119 +774,243 @@ _nh_task() {
   [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .next_wake_at)" = null ]
 }
 
-@test "a fresh state has no skip_ids or needs_attention" {
+@test "a fresh state has empty visits and parked; a 5.9.0 state without them loads silently" {
   _ap start >/dev/null
-  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
-}
-
-@test "the skip and unskip commands are gone" {
-  _ap start >/dev/null
-  run _ap skip T1 "x"; [ "$status" -eq 2 ]
-  run _ap unskip T1; [ "$status" -eq 2 ]
-}
-
-@test "day rollover leaves no gating state and a marked task stays marked in its file" {
-  _nh_repo; _nh_task T20260101-000001 "Open — needs a human [decision]: pick"
-  _ap start >/dev/null
-  AUTOPILOT_TODAY=2026-10-29 _ap cap >/dev/null
-  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
-  run _ap marked T20260101-000001; [ "$status" -eq 0 ]; [ "$output" = decision ]
-}
-
-@test "migration: a state file with skip_ids and needs_attention loads, drops them once and leaves a notice" {
-  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":1,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"next_wake_at":null,"skip_ids":["T1","T2"],"needs_attention":[{"id":"T1","reason":"owner decision","kind":"decision"}]}' > "$AUTOPILOT_STATE_FILE"
-  run _ap start; [ "$status" -eq 0 ]; [ "$output" = dispatch ]
-  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
-  [ "$(_j '.notices|length')" = 1 ]; [ "$(_j '.notices[0].kind')" = migrated ]
-  [[ "$(_j '.notices[0].text')" == *"T1 (owner decision)"* ]]
-  [[ "$(_j '.notices[0].text')" == *"T2"* ]]
-  _ap start >/dev/null
-  [ "$(_j '.notices|length')" = 1 ]   # idempotent: no second notice
-}
-
-@test "migration: record also drops the legacy fields; an empty legacy list adds no notice" {
-  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","lifetime_cycles":0,"lifetime_merged":0,"cycle_count":0,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"skip_ids":[],"needs_attention":[]}' > "$AUTOPILOT_STATE_FILE"
-  _ap record progress 0 "" >/dev/null
-  [ "$(_j 'has("skip_ids") or has("needs_attention")')" = false ]
+  [ "$(_j '.visits')" = '{}' ]; [ "$(_j '.parked')" = '[]' ]
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":1,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"next_wake_at":null}' > "$AUTOPILOT_STATE_FILE"
+  run _ap start; [ "$output" = dispatch ]
+  run _ap visit T20260101-000001 "x"; [ "$output" = "bottom 1" ]
   [ "$(_j '.notices|length')" = 0 ]
 }
 
-@test "eligible: the needs-a-human marker, any kind, and every legacy marker are refused" {
-  local t="$BATS_TEST_TMPDIR/t.md" k
-  for k in blocked decision external; do
-    printf -- '---\nstatus: Open — needs a human [%s]: because\n---\n# T\n' "$k" > "$t"
+@test "retired commands: skip, unskip, marked and attention-list are usage errors" {
+  _ap start >/dev/null
+  local c
+  for c in skip unskip marked attention-list; do run _ap "$c" T1; [ "$status" -eq 2 ]; done
+}
+
+@test "eligible: the five pre-5.9.0 human-only words are refused; the 5.9.0 'needs a human' text is not a gate" {
+  local t="$BATS_TEST_TMPDIR/t.md" s
+  for s in 'In Progress — SUPERVISED (needs VPN)' 'Open — BLOCKED upstream' 'Review — needs manual QA' 'Open — sign-off pending' 'Blocked by T20260101-000001'; do
+    printf -- '---\nstatus: %s\n---\n# T\n' "$s" > "$t"
     run _ap eligible "$t"; [ "$status" -ne 0 ]
   done
-  printf -- '---\nstatus: Open — Needs A Human: legacy wording\n---\n# T\n' > "$t"
-  run _ap eligible "$t"; [ "$status" -ne 0 ]
-  printf -- '---\nstatus: Review — needs manual QA\n---\n# T\n' > "$t"
-  run _ap eligible "$t"; [ "$status" -ne 0 ]
-  printf -- '---\nstatus: Open\n---\n# T\nneeds a human in the body only\n' > "$t"
+  printf -- '---\nstatus: Open — needs a human [decision]: pick one\n---\n# T\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -eq 0 ]
+  printf -- '---\nstatus: Open — UNBLOCKED now\n---\n# T\n' > "$t"
   run _ap eligible "$t"; [ "$status" -eq 0 ]
 }
 
-@test "attention-list: one line per marked task, derived from the task files" {
-  _nh_repo
-  _nh_task T20260101-000001 "Open — needs a human [external]: waits on HashData" a
-  _nh_task T20260101-000002 "Open" b
-  _nh_task T20260101-000003 "Design — needs a human [decision]: A or B" c
-  run _ap attention-list
-  [ "$status" -eq 0 ]
-  [ "${#lines[@]}" -eq 2 ]
-  [ "${lines[0]}" = $'T20260101-000001\texternal\twaits on HashData' ]
-  [ "${lines[1]}" = $'T20260101-000003\tdecision\tA or B' ]
+# --- visits: bottom after a no-progress visit, park at max_visits (T20261102-296642) ---
+
+_hlines() { cat "$(_hist)" 2>/dev/null || true; }
+
+@test "visit: counts up, says bottom twice then park at the third, logs each visit" {
+  _ap start >/dev/null
+  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 1" ]
+  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 2" ]
+  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "park 3" ]
+  [ "$(_j '.visits["T20260101-000001"]')" = 3 ]
+  [ "$(_hlines | jq -s '[.[] | select(.outcome == "visit")] | length')" = 3 ]
+  [ "$(_hlines | tail -1 | jq -r '"\(.task) \(.visits) \(.merged)"')" = "T20260101-000001 3 0" ]
+  # other tasks count separately
+  run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
 }
 
-@test "attention-list reads the dispatch clone named in the state, not the user's own tree" {
-  local clone="$BATS_TEST_TMPDIR/clone" own="$BATS_TEST_TMPDIR/own"
-  mkdir -p "$clone/dev/TODO" "$own/dev/TODO"
-  printf -- '---\nstatus: Open — needs a human [blocked]: marked on main\n---\n' > "$clone/dev/TODO/T20260101-000007-x.md"
-  printf -- '---\nstatus: Open\n---\n' > "$own/dev/TODO/T20260101-000007-x.md"
+@test "visit: the limit is max_visits from the config (default 3, bad values fall back)" {
   _ap start >/dev/null
-  _ap_update_clone() { jq --arg c "$1" '.dispatch_clone_path = $c' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
-  cd "$own" && git init -q .
-  _ap_update_clone "$clone"
-  run _ap attention-list
-  [ "$output" = $'T20260101-000007\tblocked\tmarked on main' ]
-  _ap_update_clone "$BATS_TEST_TMPDIR/gone"      # a vanished clone falls back to the repo
-  run _ap attention-list
+  printf '{"max_visits": 2}' > "$AUTOPILOT_CONFIG_FILE"
+  _ap visit T20260101-000001 >/dev/null
+  run _ap visit T20260101-000001; [ "$output" = "park 2" ]
+  printf '{"max_visits": 0}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap visit T20260101-000003 ; [ "$output" = "bottom 1" ]
+  _ap visit T20260101-000003 >/dev/null
+  run _ap visit T20260101-000003 ; [ "$output" = "park 3" ]
+  printf '{"max_visits": "many"}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap visit T20260101-000004; [ "$output" = "bottom 1" ]
+}
+
+@test "visit and advance do nothing unless on; a bad id is a usage error" {
+  run _ap visit T20260101-000001; [ "$output" = none ]
+  _ap start >/dev/null; _ap pause >/dev/null
+  run _ap visit T20260101-000001; [ "$output" = none ]
+  run _ap advance T20260101-000001; [ "$output" = none ]
+  _ap resume >/dev/null
+  run _ap visit nonsense; [ "$status" -eq 2 ]
+  run _ap advance; [ "$status" -eq 2 ]
+}
+
+@test "advance: resets a counted task and logs it; an uncounted task is a quiet none" {
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
+  run _ap advance T20260101-000001; [ "$output" = reset ]
+  [ "$(_j '.visits | has("T20260101-000001")')" = false ]
+  [ "$(_hlines | jq -s '[.[] | select(.outcome == "advance")] | length')" = 1 ]
+  run _ap advance T20260101-000001; [ "$output" = none ]
+  [ "$(_hlines | jq -s '[.[] | select(.outcome == "advance")] | length')" = 1 ]
+  run _ap visit T20260101-000001; [ "$output" = "bottom 1" ]
+}
+
+@test "parked: drops the counter, keeps the entry, replaces a repeat, keeps the last 50" {
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
+  run _ap parked T20260101-000001 $'needs an owner\tdecision\nsecond line'; [ "$output" = parked ]
+  [ "$(_j '.visits | length')" = 0 ]
+  [ "$(_j '.parked | length')" = 1 ]
+  [ "$(_j '.parked[0] | "\(.id) \(.visits) \(.at)"')" = "T20260101-000001 3 $AUTOPILOT_NOW" ]
+  [ "$(_j '.parked[0].reason')" = "needs an owner decision second line" ]
+  [ "$(_hlines | jq -s '[.[] | select(.outcome == "park")] | length')" = 1 ]
+  _ap parked T20260101-000001 "again" >/dev/null
+  [ "$(_j '.parked | length')" = 1 ]
+  local i
+  for i in $(seq 1 55); do _ap parked "$(printf 'T20260102-%06d' "$i")" "r" >/dev/null; done
+  [ "$(_j '.parked | length')" = 50 ]
+  [ "$(_j '.parked[-1].id')" = T20260102-000055 ]
+}
+
+@test "parked-list: only entries parked since this run started" {
+  _ap start >/dev/null
+  _ap parked T20260101-000001 "old" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T12:00:00Z" _ap parked T20260101-000002 "new" >/dev/null
+  jq '.started_at = "2026-10-28T11:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  run _ap parked-list
+  [ "$output" = $'T20260101-000002\tnew' ]
+}
+
+@test "off then start carries visits and parked over; a fresh first start has none" {
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
+  _ap parked T20260101-000009 "r" >/dev/null
+  _ap off >/dev/null
+  run _ap start; [ "$output" = started ]
+  [ "$(_j '.visits["T20260101-000001"]')" = 2 ]
+  [ "$(_j '.parked[0].id')" = T20260101-000009 ]
+}
+
+@test "stats: visit, advance and park log lines are not cycles and do not create history" {
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null; _ap advance T20260101-000001 >/dev/null; _ap parked T20260101-000001 >/dev/null
+  [ "$(_stat .has_history)" = false ]
+  [ "$(_stat .cycles_24h)" = 0 ]
+  _ap record progress 1 T20260101-000002 >/dev/null
+  [ "$(_stat .cycles_24h)" = 1 ]; [ "$(_stat .merged_24h)" = 1 ]
+}
+
+# --- plan: which tasks a cycle advanced and which it stalled on ---
+
+_plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
+
+@test "plan: MERGED and ADVANCED are advanced; NEEDS-ATTENTION and STUCK last task are stalled, each with its source" {
+  run _plan 'MERGED: T20260101-000001 (a) — PR #1' 'ADVANCED: T20260101-000002 — design PR #2 merged' \
+    'NEEDS-ATTENTION: T20260101-000003 — needs an owner decision' 'STUCK: CI red — last task T20260101-000004 (d)'
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 4 ]
+  [ "${lines[0]}" = $'T20260101-000001\tadvanced\t(a) — PR #1\tmerged' ]
+  [ "${lines[1]}" = $'T20260101-000002\tadvanced\tdesign PR #2 merged\tadvanced' ]
+  [ "${lines[2]}" = $'T20260101-000003\tstalled\tneeds an owner decision\tattention' ]
+  [ "${lines[3]}" = $'T20260101-000004\tstalled\tCI red\tstuck' ]
+}
+
+@test "plan: advanced wins when the same task is also stalled; repeats collapse" {
+  run _plan 'STUCK: split but CI red — last task T20260101-000001 (a)' 'ADVANCED: T20260101-000001 — split into 3 sub-tasks' \
+    'NEEDS-ATTENTION: T20260101-000002 — x' 'NEEDS-ATTENTION: T20260101-000002 — y'
+  [ "${#lines[@]}" -eq 2 ]
+  [ "${lines[0]}" = $'T20260101-000001\tadvanced\tsplit into 3 sub-tasks\tadvanced' ]
+  [ "${lines[1]}" = $'T20260101-000002\tstalled\tx\tattention' ]
+}
+
+@test "plan: WAITING, a STUCK without a task id, template lines and garbage name nothing" {
+  run _plan 'WAITING: approval on #3' 'STUCK: dispatch failed' 'MERGED: <id>' 'garbage' 'ADVANCED: no id here'
+  [ "$status" -eq 0 ]; [ -z "$output" ]
+  run _ap plan "$BATS_TEST_TMPDIR/missing.txt"; [ "$status" -eq 2 ]
+  run _ap plan; [ "$status" -eq 2 ]
+}
+
+@test "plan --fallback: a STUCK without a task id names the task recorded before dispatch; a bad fallback is ignored" {
+  _report 'STUCK: CI red, forgot the id'
+  run _ap plan "$BATS_TEST_TMPDIR/report.txt" --fallback T20260101-000009
+  [ "$output" = $'T20260101-000009\tstalled\tCI red, forgot the id\tstuck' ]
+  run _ap plan "$BATS_TEST_TMPDIR/report.txt" --fallback nonsense
+  [ -z "$output" ]
+  # a STUCK that does name its task keeps that task, and an unparseable report never uses the fallback
+  _report 'STUCK: x — last task T20260101-000004 (d)'
+  run _ap plan "$BATS_TEST_TMPDIR/report.txt" --fallback T20260101-000009
+  [ "$output" = $'T20260101-000004\tstalled\tx\tstuck' ]
+  _report 'garbage'
+  run _ap plan "$BATS_TEST_TMPDIR/report.txt" --fallback T20260101-000009
   [ -z "$output" ]
 }
 
-@test "report: lists marked tasks from the files; removing the marker removes the line" {
-  _nh_repo
-  _nh_task T20260101-000001 "Open — needs a human [decision]: pick one"
-  _ap start >/dev/null
-  run _ap report
-  [[ "$output" == *"needs a human: T20260101-000001 [decision] — pick one"* ]]
-  bash "$REPO_ROOT/todo/scripts/needs-human.sh" clear "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000001-slug.md" >/dev/null
-  run _ap report
-  [[ "$output" != *"needs a human:"* ]]
+@test "plan: tolerates bullets, bold and a runs suffix; strips tabs from reasons" {
+  run _plan $'- **NEEDS-ATTENTION: T20260101-000003 — a\tb**; runs: https://x/1'
+  [ "$output" = $'T20260101-000003\tstalled\ta b\tattention' ]
 }
 
-@test "report: shows notices and overdue" {
+@test "visit --stuck: counts while fewer than 3 cycles in a row ended stuck, then skips (likely an outage)" {
   _ap start >/dev/null
-  _ap notify idle "nothing drivable" >/dev/null
+  run _ap visit T20260101-000001 "x" --stuck; [ "$output" = "bottom 1" ]
+  _ap record stuck 0 T20260101-000001 "ci" >/dev/null; _ap record stuck 0 T20260101-000002 "ci" >/dev/null
+  run _ap visit T20260101-000002 "x" --stuck; [ "$output" = "bottom 1" ]
+  _ap record stuck 0 T20260101-000003 "ci" >/dev/null
+  run _ap visit T20260101-000003 "x" --stuck; [ "$output" = skip ]
+  [ "$(_j '.visits | has("T20260101-000003")')" = false ]
+  # a NEEDS-ATTENTION stall (no --stuck) always counts, outage or not
+  run _ap visit T20260101-000003 "needs a human"; [ "$output" = "bottom 1" ]
+}
+
+@test "record bottomed: a cycle that wakes in 60 s and leaves the stuck/waiting counters and notices alone" {
+  _ap start >/dev/null
+  _ap record stuck 0 T20260101-000001 "ci" >/dev/null; _ap record stuck 0 T20260101-000001 "ci" >/dev/null
+  run _ap record bottomed 0 T20260101-000002; [ "$output" = none ]
+  [ "$(_j .stuck_count)" = 2 ]; [ "$(_j .last_outcome)" = bottomed ]; [ "$(_j .cycle_count)" = 3 ]
+  [ "$(_j .next_wake_at)" = "2026-10-28T10:01:00Z" ]
+  run _ap delay bottomed; [ "$output" = 60 ]
+  # after an idle notice it does not fire "resumed" (it is not progress)
   _ap record idle >/dev/null
-  AUTOPILOT_NOW="2026-10-28T20:00:00Z" run _ap report
-  [[ "$output" == *"notice [fallback] idle"* ]]
-  [[ "$output" == *"overdue"* ]]
+  run _ap record bottomed 0 T20260101-000003; [ "$output" = none ]
+  [ "$(_j .idle_notified)" = true ]
+  run _ap record progress 1 T20260101-000004; [ "$output" = resumed ]
 }
 
-@test "final-report: marked tasks and a stuck last task are listed once each, with slugs" {
+@test "top: the id /drive will pick, skipping gated tasks; nothing when none" {
+  _nh_repo
+  echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
+  _nh_task T20260101-000001 "Open — SUPERVISED (needs VPN)" a
+  _nh_task T20260101-000002 "Open" b
+  _nh_task T20260101-000003 "Open" c
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
+}
+
+# --- reports list the revisited and parked tasks ---
+
+@test "report: lists revisited tasks with the limit and tasks parked by autopilot" {
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null
+  _ap parked T20260101-000002 "waiting on HashData; autopilot visited 3 times without progress" >/dev/null
+  run _ap report
+  [[ "$output" == *"revisiting: T20260101-000001 (1/3 no-progress visits)"* ]]
+  [[ "$output" == *"parked by autopilot: T20260101-000002 — waiting on HashData; autopilot visited 3 times without progress"* ]]
+  printf '{"max_visits": 5}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap report
+  [[ "$output" == *"(1/5 no-progress visits)"* ]]
+}
+
+@test "final-report: parked tasks and a stuck last task are listed once each, with slugs" {
   _final_fixture
-  mkdir -p dev/TODO
-  printf -- '---\nstatus: Open — needs a human [decision]: needs an owner decision\n---\n' > dev/TODO/T20261001-555555-big-decision.md
+  mkdir -p dev/PARKING dev/TODO
+  printf -- '---\nstatus: Parked\n---\n' > dev/PARKING/T20261001-555555-big-decision.md
   printf -- '---\nstatus: Open\n---\n' > dev/TODO/T20261001-666666-flaky.md
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" _ap parked T20261001-555555 "needs an owner decision; autopilot visited 3 times without progress" >/dev/null
   _ap record stuck 0 T20261001-666666 "CI keeps failing" >/dev/null
   AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [[ "$output" == *"- T20261001-555555 (big-decision) — needs an owner decision"* ]]
+  [[ "$output" == *"- Parked by autopilot: T20261001-555555 (big-decision) — needs an owner decision; autopilot visited 3 times without progress"* ]]
   [[ "$output" == *"- Stuck: T20261001-666666 (flaky) — CI keeps failing"* ]]
   [[ "$output" != *"Nothing outstanding"* ]]
-  # a stuck task that is also marked is not listed twice
-  printf -- '---\nstatus: Open — needs a human [blocked]: also blocked\n---\n' > dev/TODO/T20261001-666666-flaky.md
+  # a stuck task that is also parked is not listed twice
+  _ap record stuck 0 T20261001-555555 "again" >/dev/null
   AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [ "$(grep -c 'T20261001-666666' <<<"$output")" = 1 ]
+  [ "$(grep -c 'T20261001-555555' <<<"$output")" = 1 ]
 }
 
 @test "final-report: missing state file is exit 2" {
@@ -883,17 +1019,10 @@ _nh_task() {
   run _ap final-report; [ "$status" -eq 2 ]
 }
 
-@test "marked: exit 1 for an unmarked task or a missing file, prints the kind otherwise" {
-  _nh_repo; _nh_task T20260101-000001 "Open"
-  run _ap marked T20260101-000001; [ "$status" -eq 1 ]
-  run _ap marked T20260101-000009; [ "$status" -ne 0 ]
-  run _ap marked; [ "$status" -eq 2 ]
-}
-
-@test "pickable: pick, drift and none" {
+@test "pickable: pick, drift and none; a gated status never counts as pickable" {
   _nh_repo
   echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
-  _nh_task T20260101-000001 "Open — needs a human [decision]: wait" a
+  _nh_task T20260101-000001 "Open — SUPERVISED (needs VPN)" a
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
   _nh_task T20260101-000002 "Open" b
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
@@ -902,23 +1031,34 @@ _nh_task() {
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = drift ]
 }
 
-@test "pickable: a marked task never counts as pickable until the marker is removed" {
+@test "pickable: a bottomed task is still pickable when it is the only one (priority is queue order only)" {
   _nh_repo
   echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
-  _nh_task T20260101-000001 "Open — needs a human [external]: upstream" a
-  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
-  bash "$REPO_ROOT/todo/scripts/needs-human.sh" clear "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000001-a.md" >/dev/null
+  _nh_task T20260101-000001 "Open" a
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
+  _ap start >/dev/null
+  _ap visit T20260101-000001 >/dev/null
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
 }
 
-@test "SKILL.md: big tasks are split, the dispatcher only runs /drive, no skip list" {
-  run grep -n 'Big tasks' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n -- 'blocks: T<original-id>' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n -i 'umbrella task)' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -ne 0 ]
-  run grep -n -E 'autopilot-state.sh (skip|unskip)|skip_ids' "$REPO_ROOT/autopilot/SKILL.md"
-  # the only mention left is the one-line migration note
-  [ "$(grep -c 'skip_ids' "$REPO_ROOT/autopilot/SKILL.md")" -le 1 ]
-  run grep -n -- '/drive --auto-selected' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh pickable' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh marked' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+@test "no script writes a marker into a task file: needs-human.sh and its parser are gone" {
+  [ ! -e "$REPO_ROOT/todo/scripts/needs-human.sh" ]
+  run grep -rn 'todo-needs-human-kind\|skip-needs-human' "$REPO_ROOT/todo" "$REPO_ROOT/autopilot" "$REPO_ROOT/drive" "$REPO_ROOT/hud" "$REPO_ROOT/tests"
+  # only this test and the todo-next usage-error test may name the retired flag
+  [ "$(grep -v 'autopilot_state.bats\|todo-next.bats' <<<"$output" | grep -c .)" = 0 ]
+}
+
+@test "SKILL.md: bottom-and-park cycle, visit counter and no marker or skip list" {
+  local s="$REPO_ROOT/autopilot/SKILL.md"
+  run grep -n 'Big tasks' "$s"; [ "$status" -eq 0 ]
+  run grep -n -- 'blocks: T<original-id>' "$s"; [ "$status" -eq 0 ]
+  run grep -n -i 'umbrella task)' "$s"; [ "$status" -ne 0 ]
+  run grep -n -- '/drive --auto-selected' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh pickable' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh plan' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh visit' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh parked' "$s"; [ "$status" -eq 0 ]
+  run grep -n '/bottom' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]
+  run grep -n -E 'needs-human\.sh|autopilot-state\.sh (marked|attention-list|skip|unskip)|skip_ids|--skip-needs-human' "$s"; [ "$status" -ne 0 ]
 }
