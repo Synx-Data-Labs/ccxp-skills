@@ -188,3 +188,21 @@ _origin_moves_on() {
   run bash -c "printf '%s' '{\"cwd\":\"$ME\",\"queue_source\":\"bogus\"}' | bash '$HUD' --json"
   [ "$(jq -c '.queue | [.total, has("source")]' <<<"$output")" = '[2,false]' ]
 }
+
+@test "origin/HEAD naming a missing branch is unknown (marked fallback), not a guess at main" {
+  _world
+  git -C "$ME" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/ghost
+  run _q "$ME" default-branch
+  [ "$(jq -c '[.source, .fallback]' <<<"$output")" = '["working-tree",true]' ] || { echo "$output"; false; }
+}
+
+@test "the fetch leaves .git/FETCH_HEAD alone (git 2.29+)" {
+  _world; _origin_moves_on
+  git --version | grep -qE 'version (2\.(2[9]|[3-9][0-9])|[3-9])' || skip "old git"
+  git -C "$ME" fetch -q origin main
+  local before; before=$(cat "$ME/.git/FETCH_HEAD")
+  touch -t 202001010000 "$ME/.git/FETCH_HEAD" 2>/dev/null; printf 'marker\n' > "$ME/.git/FETCH_HEAD"
+  run _q "$ME" default-branch
+  [ "$(cat "$ME/.git/FETCH_HEAD")" = "marker" ]
+  [ -n "$before" ]
+}
