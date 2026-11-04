@@ -28,6 +28,10 @@
 #   ledger.sh ref next <n|s|k>    allocate and print the next ref (for s and k)
 #   ledger.sh ref bump <ref>      raise that prefix's counter to at least this number (n22)
 #   ledger.sh show [--brief]      print the ledger JSON, or one summary line (never fails)
+#   ledger.sh authz list [--json]            one TSV line per key: key value note quote date (unlisted keys read as no)
+#   ledger.sh authz show [<key>]             <key>: yes|no (default no); no key: the effective list as JSON
+#   ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   owner's typed words only
+#     (ccxp-authz.json next to the ledger, mode 600, atomic; once it exists reply/render add an "Authorization:" section)
 #
 # File: ${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}
 # {"schema":3,"updated_at","next_job","lifetime_jobs",
@@ -90,7 +94,7 @@ ledger-read() {
 ledger-render() {
   local md tmp; md=$(ledger-md-file)
   tmp=$(mktemp "$md.XXXXXX") || return 0
-  if printf '%s' "$1" | jq -r --arg md "$md" '
+  if printf '%s' "$1" | jq -r --arg md "$md" --argjson az "$(authz-effective-if-file)" '
       def enc: split("/") | map(@uri) | join("/");
       def item($head): "- " + $head + "\n  context: "
         + (if .context != "" then "[context](file://" + (.context | enc) + ")\n  " + .context else "(none)" end);
@@ -99,7 +103,8 @@ ledger-render() {
       "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\nLedger: [ledger](file://" + ($md | enc) + ") " + $md + "\n\n"
       + sect("Running"; [.running[] | item("r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)")]) + "\n"
       + sect("Next"; [.next[] | item("\(.ref) \(.text)")]) + "\n"
-      + sect("Parked"; [.parked[] | item(.id + (if .title then " " + .title else "" end))])' > "$tmp" 2>/dev/null; then
+      + sect("Parked"; [.parked[] | item(.id + (if .title then " " + .title else "" end))])
+      + (if ($az | length) == 0 then "" else "\n" + sect("Authorization"; [$az[] | "- " + .key + ": " + .value]) end)' > "$tmp" 2>/dev/null; then
     chmod 600 "$tmp" 2>/dev/null
     mv "$tmp" "$md" 2>/dev/null || unlink "$tmp" 2>/dev/null
   else
@@ -167,7 +172,7 @@ ledger-ctx() {
 # Split args into POS (positional), CTX/HAVE_CTX (--context) and TTL/HAVE_TTL (--title).
 ledger-args() {
   POS=(); CTX=""; TTL=""; TXT=""; REF=""; HAVE_CTX=false; HAVE_TTL=false; HAVE_TXT=false
-  QUOTE=""; SCOPE=""; SRC=""; HAVE_SCOPE=false; ALL=false; JSON=false
+  QUOTE=""; NOTE=""; SCOPE=""; SRC=""; HAVE_SCOPE=false; ALL=false; JSON=false
   PF=""; AGT=""; FLG=""; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -191,6 +196,8 @@ ledger-args() {
         FLG="$2"; HAVE_FLG=true; shift 2 ;;
       --quote) [[ $# -ge 2 ]] || { echo "ledger: --quote needs a value" >&2; return 2; }
         QUOTE=$(ledger-bounded "$2" 600 --quote) || return 2; shift 2 ;;
+      --note) [[ $# -ge 2 ]] || { echo "ledger: --note needs a value" >&2; return 2; }
+        NOTE=$(ledger-bounded "$2" 200 --note) || return 2; shift 2 ;;
       --scope) [[ $# -ge 2 ]] || { echo "ledger: --scope needs a value" >&2; return 2; }
         [[ "$2" =~ ^(global|repo:[A-Za-z0-9._-]{1,80})$ ]] || { echo "ledger: --scope must be global or repo:<name>: $2" >&2; return 2; }
         SCOPE="$2"; HAVE_SCOPE=true; shift 2 ;;
@@ -256,12 +263,13 @@ ledger-render-text() {
   [[ "$md" == /* ]] || md="$(pwd)/$md"
   dec=$(decisions-summary)
   decisions-render-file
-  ledger-read | jq -r --arg md "$md" --arg dec "$dec" '
+  ledger-read | jq -r --arg md "$md" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
     def ctx: if .context != "" then "\n  " + .context else "" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     sect("Next:"; [.next[] | "**\(.ref)** \(.text)" + ctx]),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
     sect("Parked:"; [.parked[] | "**\(.id)**" + (if .title then " " + .title else "" end) + ctx]),
+    (if ($az | length) == 0 then empty else sect("Authorization:"; [$az[] | "  " + .key + ": " + .value]) end),
     (if $dec != "" then $dec + "\n" else empty end),
     "Ledger: " + $md'
 }
@@ -272,13 +280,14 @@ ledger-reply() {
   local md dec=""; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"
   [[ "${2:-}" == "no" ]] || dec=$(decisions-summary)
-  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" '
+  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
     def ctx: if .context != "" then "\n  " + .context else "\n  context: MISSING" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     (if $tldr != "" then "TL;DR: " + $tldr + "\n" else empty end),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
     sect("Next:"; [.next[] | "\(.ref) \(.text)" + ctx]),
     sect("Parked:"; [.parked[] | .id + (if .title then " " + .title else "" end) + ctx]),
+    (if ($az | length) == 0 then empty else sect("Authorization:"; [$az[] | "  " + .key + ": " + .value]) end),
     (if $dec != "" then $dec + "\n" else empty end),
     "Ledger: " + $md'
 }
@@ -391,8 +400,11 @@ decisions-archive() {
 
 # $1 jq filter over the normalized decisions; remaining args are jq args. Sets DECISIONS_LAST.
 # The read-modify-write runs under a mkdir lock (<file>.lock; waits up to ~10s, a lock older than 60s is stale).
-decisions-update() {
-  local lock rc i; lock="$(decisions-file).lock"
+decisions-update() { ledger-with-lock "$(decisions-file).lock" decisions-update-locked "$@"; }
+
+# $1 lock dir, then a command: run it under a mkdir lock (waits up to ~10s, a lock older than 60s is stale).
+ledger-with-lock() {
+  local lock="$1" rc i; shift
   mkdir -p "$(dirname "$lock")" 2>/dev/null || return 1
   for ((i = 0; i < 100; i++)); do
     mkdir "$lock" 2>/dev/null && break
@@ -400,7 +412,7 @@ decisions-update() {
     sleep 0.1
   done
   [[ -d "$lock" && $i -lt 100 ]] || { echo "ledger: could not lock $lock" >&2; return 1; }
-  decisions-update-locked "$@"; rc=$?
+  "$@"; rc=$?
   rmdir "$lock" 2>/dev/null
   return $rc
 }
@@ -580,6 +592,85 @@ ledger-decision() {
   esac
 }
 
+# ---- Authorization list: ccxp-authz.json next to the ledger. Unknown or unlisted keys are NO (ask). ----
+
+authz-file() {
+  printf '%s' "${CCXP_AUTHZ_FILE:-$(dirname "$(ledger-file)")/ccxp-authz.json}"
+}
+
+# Known capability keys, in display order: key<TAB>note. Everything ships as no.
+AUTHZ_KNOWN="customer_visible_posts	posts customers can see (issue/PR comments, announcements, release notes)
+tagging	git tags and releases
+pushing_artifacts	registries, promote and publish
+github_issues_update_close	update or close GitHub issues
+gitlab_issues_update_close	update or close GitLab issues
+delete_data	delete data with no recoverable copy
+secret_handling	create, rotate, read or move secrets
+spend_money	anything that costs money
+third_party_messages	email or DM to a third party
+admin_or_bypass	admin actions, branch-protection bypass
+install_software_outside_repo	install software outside the repo
+owner_accounts_credentials	use the owner's accounts or credentials
+unlisted_other	anything not listed above"
+
+authz-entries() {
+  local f; f=$(authz-file)
+  jq -c 'if type == "object" and (.entries | type) == "object" then .entries else {} end
+    | with_entries(select(.value | type == "object") | .value |= {value: (if .value == "yes" then "yes" else "no" end),
+        note: (.note | strings // ""), quote: (.quote | strings // ""), date: (.date | strings // "")})' "$f" 2>/dev/null || printf '{}'
+}
+
+# Effective list as a JSON array [{key,value,note,quote,date}]: known keys first (default no), then extras.
+authz-effective() {
+  local known e; known=$(printf '%s\n' "$AUTHZ_KNOWN" | jq -Rn '[inputs | split("\t") | {key: .[0], note: .[1]}]')
+  e=$(authz-entries); [[ -n "$e" ]] || e='{}'
+  jq -nc --argjson k "$known" --argjson e "$e" '
+    ([$k[] | .key]) as $names
+    | [$k[] | . as $d | ($e[$d.key] // {}) | {key: $d.key, value: (.value // "no"), note: (if (.note // "") != "" then .note else $d.note end),
+        quote: (.quote // ""), date: (.date // "")}]
+      + [$e | to_entries[] | select(.key as $n | $names | index($n) | not) | {key, value: .value.value, note: .value.note, quote: .value.quote, date: .value.date}]'
+}
+
+# Same, but [] when no authz file exists yet (keeps replies unchanged for users who never set one).
+authz-effective-if-file() {
+  [[ -f "$(authz-file)" ]] && authz-effective || printf '[]'
+}
+
+authz-update() {
+  local f tmp; f=$(authz-file)
+  if [[ -s "$f" ]]; then
+    jq -e 'type == "object"' "$f" >/dev/null 2>&1 \
+      || { echo "ledger: $f is not valid JSON; not overwriting it (fix or move it aside)" >&2; return 1; }
+    jq -e '(.schema | numbers // 1) > 1' "$f" >/dev/null 2>&1 \
+      && { echo "ledger: $f has a newer schema than this script (1); not writing" >&2; return 1; }
+  fi
+  tmp=$(jq -nc --argjson e "$(authz-entries)" --arg k "$1" --arg v "$2" --arg q "$3" --arg n "$4" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{schema: 1, updated_at: $now, entries: ($e + {($k): {value: $v, note: $n, quote: $q, date: $now}})}') || return 1
+  decisions-write "$tmp" "$f"
+}
+
+ledger-authz() {
+  local sub="${1:-}"; shift || true
+  case "$sub" in
+    list)
+      authz-effective | jq -r --argjson j "$([[ "${1:-}" == --json ]] && echo true || echo false)" \
+        'if $j then tostring else .[] | [.key, .value, .note, .quote, .date[0:10]] | join("\t") end' ;;
+    show)
+      if [[ -z "${1:-}" ]]; then authz-effective; return; fi
+      authz-effective | jq -r --arg k "$1" '([.[] | select(.key == $k) | .value][0]) // "no"' ;;
+    set)
+      ledger-args "$@" || return 2
+      local k="${POS[0]:-}" v="${POS[1]:-}"
+      [[ "$k" =~ ^[a-z][a-z0-9_]{1,63}$ ]] || { echo "ledger: authz key must be lower_snake_case: $k" >&2; return 2; }
+      [[ "$v" == yes || "$v" == no ]] || { echo "ledger: authz value must be yes or no: $v" >&2; return 2; }
+      [[ "$v" == no || -n "$QUOTE" ]] || echo "ledger: warning: authz yes without --quote (record the owner's words)" >&2
+      ledger-with-lock "$(authz-file).lock" authz-update "$k" "$v" "$QUOTE" "$NOTE" || return 1
+      ledger-render "$(ledger-read)"
+      printf '%s: %s\n' "$k" "$v" ;;
+    *) echo "usage: ledger.sh authz list [--json] | show [<key>] | set <key> yes|no [--quote <owner words>] [--note <text>]" >&2; return 2 ;;
+  esac
+}
+
 ledger() {
   local cmd="${1:-show}"; shift || true
   case "$cmd" in
@@ -691,6 +782,7 @@ ledger() {
       done
       ledger-reply "$tldr" "$([[ "$nodec" == no ]] && echo no || echo yes)" ;;
     decision) ledger-decision "$@" ;;
+    authz) ledger-authz "$@" ;;
     check) ledger-check "${1:-}" ;;
     next | input | action) case "${1:-}" in
         add) shift; ledger-args "$@" || return 2
@@ -733,7 +825,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 

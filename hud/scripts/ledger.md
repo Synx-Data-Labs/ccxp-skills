@@ -92,3 +92,16 @@ Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): r
 - Not locked: two writers racing can hand out the same ref (last write wins); the dispatcher is the single writer for refs.
 - Text is cut to 300 characters and control characters are stripped. Titles, questions and paths only: never pass secrets, tokens or credentials (the files are mode 600).
 - Writes are atomic (temp file + `mv`); a missing or corrupt file starts fresh.
+
+## Authorization list
+
+`ccxp-authz.json` (or `CCXP_AUTHZ_FILE`) in the ledger's directory; mode 600, atomic writes, a corrupt file is never overwritten. Unlisted or unknown keys read as `no` (ask first).
+
+```
+ledger.sh authz list [--json]       # TSV: key value note quote date, known keys first
+ledger.sh authz show [<key>]        # yes|no for a key (default no), or the whole list as JSON
+ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   # owner's typed words only; yes without --quote warns
+```
+
+- Known keys (all default `no`): `customer_visible_posts`, `tagging`, `pushing_artifacts`, `github_issues_update_close`, `gitlab_issues_update_close`, `delete_data`, `secret_handling`, `spend_money`, `third_party_messages`, `admin_or_bypass`, `install_software_outside_repo`, `owner_accounts_credentials`, `unlisted_other`. Any other `lower_snake_case` key may be added.
+- Once the file exists, `reply`/`render` print an `Authorization:` section after Parked and `ccxp-ledger.md` gets an `## Authorization` section (one `key: yes|no` line per key).

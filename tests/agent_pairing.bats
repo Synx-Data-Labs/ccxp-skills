@@ -233,7 +233,7 @@ EOF
   grep -q 'no follow-up job' "$f"
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
-  grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check`, `decision` and `show`' "$f"
+  grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check`, `decision`, `authz` (`list`/`show` freely; `set` only on the owner.s typed words) and `show`' "$f"
   grep -q 'Bash is read-only only' "$f"
 }
 
@@ -568,6 +568,21 @@ install_outdated_agent() {
   [ "$(bash "$L" decision supersede d1 "rule v2")" = "d2" ]
   bash "$L" decision retire d2 "gone"
   [ "$(bash "$L" decision list)" = "no decisions" ]
+}
+
+@test "asset: consent section consults the authorization list and the subcommands work against ledger.sh" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^\*\*Authorization list\*\*' "$f"
+  grep -qF 'bash "$L" authz list' "$f"
+  grep -qF 'authz set <key> yes|no --quote' "$f"
+  grep -q 'never gets broader authorization than the list' "$f"
+  grep -q 'unlisted key' "$f"
+  grep -q '`authz` (`list`/`show` freely' "$f"
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
+  L="$REPO_ROOT/hud/scripts/ledger.sh"
+  bash "$L" authz set tagging yes --quote "owner words"
+  [ "$(bash "$L" authz show tagging)" = "yes" ]
+  [ "$(bash "$L" authz show delete_data)" = "no" ]
 }
 
 @test "asset: CI failure response section has detection, action and limits" {

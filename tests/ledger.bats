@@ -821,3 +821,79 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   bash "$LEDGER" set-counter d 99999999
   [ "$(bash "$LEDGER" decision add "edge")" = "d100000000" ]
 }
+
+# ---- authorization list ----
+
+Q="At this moment, I trust you to do the customer visible posts, tagging, and pushing artifacts, and updating/closing github issues and gitlab issues. You can leave the rest of the items (e.g. delete data, secret handling, etc.) to me."
+
+@test "authz: unknown, unlisted and unset capabilities default to no; reads write no file" {
+  [ "$(bash "$LEDGER" authz show tagging)" = "no" ]
+  [ "$(bash "$LEDGER" authz show never_heard_of_it)" = "no" ]
+  [ "$(bash "$LEDGER" authz list | wc -l | tr -d ' ')" = "13" ]
+  [ "$(bash "$LEDGER" authz list | cut -f2 | sort -u)" = "no" ]
+  [ ! -e "$BATS_TEST_TMPDIR/sub/ccxp-authz.json" ]
+}
+
+@test "authz set/list: stores value, quote, note and date; the owner's seed list reads back" {
+  for k in customer_visible_posts tagging pushing_artifacts github_issues_update_close gitlab_issues_update_close; do
+    run bash "$LEDGER" authz set "$k" yes --quote "$Q"; [ "$status" -eq 0 ]; [ "$output" = "$k: yes" ]
+  done
+  for k in delete_data secret_handling spend_money third_party_messages admin_or_bypass install_software_outside_repo owner_accounts_credentials unlisted_other; do
+    bash "$LEDGER" authz set "$k" no --quote "$Q" --note "owner keeps this"
+  done
+  [ "$(bash "$LEDGER" authz show tagging)" = "yes" ]
+  [ "$(bash "$LEDGER" authz show secret_handling)" = "no" ]
+  [ "$(bash "$LEDGER" authz list | cut -f2 | grep -c yes)" = "5" ]
+  run bash "$LEDGER" authz list --json
+  [ "$(jq -r '.[] | select(.key == "tagging") | .quote' <<<"$output")" = "$Q" ]
+  [ "$(jq -r '.[] | select(.key == "delete_data") | .note' <<<"$output")" = "owner keeps this" ]
+  [ "$(jq -r '.[] | select(.key == "tagging") | .date' <<<"$output")" != "" ]
+}
+
+@test "authz set: validates key and value, warns on yes without quote, rejects credentials, keeps custom keys" {
+  run bash "$LEDGER" authz set Bad yes; [ "$status" -eq 2 ]
+  run bash "$LEDGER" authz set tagging maybe; [ "$status" -eq 2 ]
+  run bash "$LEDGER" authz set tagging; [ "$status" -eq 2 ]
+  run bash "$LEDGER" authz set tagging yes --quote "$(printf 'gh%s' 'p_abcdefghijklmnopqrstuvwxyz0123456789')"; [ "$status" -eq 2 ]
+  run --separate-stderr bash "$LEDGER" authz set tagging yes; [ "$status" -eq 0 ]
+  [[ "$stderr" == *"without --quote"* ]]
+  bash "$LEDGER" authz set my_custom yes --quote x
+  [ "$(bash "$LEDGER" authz show my_custom)" = "yes" ]
+  [ "$(bash "$LEDGER" authz list | tail -1 | cut -f1)" = "my_custom" ]
+  run bash "$LEDGER" authz bogus; [ "$status" -eq 2 ]
+}
+
+@test "authz: file is mode 600, atomic (no temp or lock left), valid JSON; setting again replaces in place" {
+  bash "$LEDGER" authz set tagging yes --quote a
+  bash "$LEDGER" authz set tagging no --quote b
+  f="$BATS_TEST_TMPDIR/sub/ccxp-authz.json"
+  [ "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" = "600" ]
+  jq -e '.schema == 1 and (.entries | length) == 1 and .entries.tagging.value == "no" and .entries.tagging.quote == "b"' "$f"
+  [ -z "$(ls "$BATS_TEST_TMPDIR/sub" | grep -E 'ccxp-authz\.json\.')" ]
+}
+
+@test "authz: a corrupt file is never overwritten; CCXP_AUTHZ_FILE overrides the location" {
+  mkdir -p "$BATS_TEST_TMPDIR/sub"; echo 'not json' > "$BATS_TEST_TMPDIR/sub/ccxp-authz.json"
+  run bash "$LEDGER" authz set tagging yes --quote x; [ "$status" -eq 1 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/sub/ccxp-authz.json")" = "not json" ]
+  [ "$(bash "$LEDGER" authz show tagging)" = "no" ]
+  export CCXP_AUTHZ_FILE="$BATS_TEST_TMPDIR/other/az.json"
+  bash "$LEDGER" authz set tagging yes --quote x
+  [ -f "$BATS_TEST_TMPDIR/other/az.json" ]
+}
+
+@test "authz: reply, render and ccxp-ledger.md show an Authorization section after Parked, only once a list exists" {
+  bash "$LEDGER" park k1 --context /c/p.md
+  run bash "$LEDGER" reply; [[ "$output" != *Authorization* ]]
+  bash "$LEDGER" authz set tagging yes --quote x
+  for cmd in reply render; do
+    run bash "$LEDGER" $cmd
+    [[ "$output" == *"Parked:"*"Authorization:"*"  tagging: yes"*"  delete_data: no"*"Ledger: "* ]]
+  done
+  md="$BATS_TEST_TMPDIR/sub/ledger.md"
+  [ "$(grep -c '^- .*: \(yes\|no\)$' "$md")" = "13" ]
+  grep -q '^- tagging: yes$' "$md"
+  [ "$(grep -n '^## Parked' "$md" | cut -d: -f1)" -lt "$(grep -n '^## Authorization (13)' "$md" | cut -d: -f1)" ]
+  printf 'k1 parked\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"; [ "$status" -eq 0 ]
+}
