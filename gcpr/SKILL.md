@@ -56,6 +56,10 @@ It runs, only over the changed non-deleted paths (the script resolves renames an
 
 Policy is **check-then-continue**: `lint` always exits 0 and a violation surfaces loudly without blocking the commit. The PR's own `Markdown Lint` check is the authoritative gate. This is the canonical recipe; the ad-hoc doc-push sites in `/ccxp` and `/drive` call the one-line form of `_docs/lint-docs.sh`.
 
+### 1.6 Secret-handling check (recommended)
+
+Before committing, run `/secrets-check` (the repo's `scripts/lint-secret-handling.sh --diff origin/main`, or its built-in fallback) so a secret on a command line or a token literal is caught before it reaches `main`. Advisory here: report findings, do not auto-fix; CI's own secret lint is the gate where the repo has one.
+
 ### 2. Group into logical commits
 
 This is the critical step. Analyze ALL uncommitted changes and split them into logical groups. Each group becomes one commit.

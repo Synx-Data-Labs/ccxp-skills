@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 52 skills in one step:
+so `/plugin` can install all 53 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -138,6 +138,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
 | `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a skip-if-populated `.envrc` |
+| `secrets-check` | Pre-PR secret-handling check: runs the repo's `scripts/lint-secret-handling.sh --diff` and reports masked findings |
 
 ### General-purpose utility
 
@@ -179,6 +180,18 @@ The plugin's `hooks/rm-guard.sh` PreToolUse hook (matcher `Bash`) backs the "not
 - **Fails open:** an unparsable command, a missing `python3` or an analyzer error allows the call and prints one `rm-guard:` line on stderr.
 - **Override:** set `CCXP_ALLOW_RM=1` in the environment of the Claude Code process (for example the `env` block of `settings.json`, or the shell that starts `claude`). An inline `CCXP_ALLOW_RM=1 rm ...` in the command does not count.
 - **Scope:** a backstop for the common paths, not a sandbox. `bash script.sh`, `python -c 'shutil.rmtree(...)'`, `git clean` and similar still delete. Hooks load at session start: after `/plugin update`, start a new session.
+
+### Secret guard (`secret-guard` hook)
+
+The plugin's `hooks/secret-guard.sh` PreToolUse hook (matcher `Bash`, next to `rm-guard`) denies a Bash call whose command line carries a secret and tells the agent the safe form (stdin, `--token-file`, `op run`, `op inject`). The analysis is in `hooks/secret-guard.py`; the deny message masks any matched value to a few characters plus `...` and never echoes it.
+
+- **Blocked rules:** `token-literal` (ghp_/github_pat_/xox*-/AKIA/private key/Slack webhook, `SECRET_NAME=<long literal>`), `cmdline-secret` (`--token <v>`, `--password <v>`, `password=<v>`, `curl -u user:pass`, `docker login -p`, `user:pass@` URL, `gh secret set --body`), `echo-secret` (echo/printf of a secret variable with no pipe or redirect), `env-dump` (bare `env`/`printenv`, `printenv SECRET_NAME`, `env | grep token`, `cat .env`), `set-x-secret` (`set -x`/`bash -x` and a secret variable in the same command line; narrower than the repo lint, which looks at a whole script).
+- **Allowed:** `op run -- cmd`, `cmd <<< "$VAR"`, `echo "$VAR" | cmd`, `--token-file <path>`, `cat .env.tpl`, bare `-p` flags such as `mkdir -p`.
+- **Rule ids** mirror the header of the hub repo's `scripts/lint-secret-handling.sh`; `tests/secret_guard_rules.bats` checks them against the vendored `tests/fixtures/lint-secret-handling.header` (refresh it by hand when the hub script's rule ids change).
+- **Allow-list:** `.secret-guard-allow` at the git toplevel, one `rule-id:command-glob:reason` per line (reason mandatory; glob matched against the whole command, `*` crosses spaces).
+- **Fails open:** missing `python3`, an analyzer error or unparsable input allows the call with one `secret-guard:` line on stderr.
+- **Override:** set `CCXP_ALLOW_SECRETS=1` in the environment of the Claude Code process. The call is allowed and one line (UTC time and rule ids, never the command) is appended to `${CCXP_SECRET_GUARD_LOG:-$HOME/.claude/secret-guard-overrides.log}`.
+- **Scope:** a backstop for the common paths on the command string, not a sandbox: a script file, a value read from a file you wrote, or an encoded value is not seen. Hooks load at session start. The `/secrets-check` skill is the whole-diff counterpart before a PR.
 
 ### Terms hook (ccxp-agent acronym memory)
 
