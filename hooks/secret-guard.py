@@ -48,7 +48,9 @@ RULE_IDS = ("token-literal", "cmdline-secret", "echo-secret", "env-dump", "set-x
 # A secret-ish variable name: a whole "_"-separated word, so TOKENS_USED / TOKENIZER do not match.
 SECRET_WORD = r"(?:TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API_?KEY|APIKEY|PRIVATE_KEY|CREDENTIALS?|AUTH|PAT)"
 SECRET_NAME_RE = re.compile(r"(?:^|_)" + SECRET_WORD + r"(?:_|$)", re.I)
-SAFE_SUFFIX = re.compile(r"_(?:FILE|PATH|NAME|ID|DIR|URL|VAR|ENV|LENGTH|LEN|COUNT|HOST|USER)$", re.I)
+# AUTH/PAT alone are too common in config names (GH_AUTH=enabled): only echo/expansion rules use them.
+STRONG_NAME_RE = re.compile(r"(?:^|_)(?:TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|API_?KEY|APIKEY|PRIVATE_KEY|CREDENTIALS?)(?:_|$)", re.I)
+SAFE_SUFFIX = re.compile(r"_(?:FILE|PATH|NAME|ID|DIR|URL|VAR|ENV|LENGTH|LEN|COUNT|HOST|USER|MODE|TYPE|METHOD|ENABLED|ENABLE|DISABLED)$", re.I)
 
 TOKEN_PATTERNS = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
@@ -186,7 +188,7 @@ def analyze(cmd):
 
     for m in NAMED_LITERAL.finditer(body):
         name, val = m.group(1), m.group(3)
-        if (SECRET_NAME_RE.search(name) and not SAFE_SUFFIX.search(name)
+        if (STRONG_NAME_RE.search(name) and not SAFE_SUFFIX.search(name)
                 and re.search(r"\d", val) and re.search(r"[A-Za-z]", val)):
             add("token-literal", val)
 
@@ -200,7 +202,7 @@ def analyze(cmd):
             for m in PASSWORD_ASSIGN.finditer(stage):
                 add("cmdline-secret", m.group(2))
             for m in ENV_PREFIX.finditer(stage):
-                if (SECRET_NAME_RE.search(m.group(1)) and not SAFE_SUFFIX.search(m.group(1))
+                if (STRONG_NAME_RE.search(m.group(1)) and not SAFE_SUFFIX.search(m.group(1))
                         and not re.search(r"^[/.~]|\.[A-Za-z]{1,5}$", m.group(3))):  # a file path is not a value
                     add("cmdline-secret", m.group(3))
             for pat, grp in ((CURL_USER, 3), (DOCKER_LOGIN, 2), (MYSQL_P, 1), (GH_SECRET_BODY, 2)):
