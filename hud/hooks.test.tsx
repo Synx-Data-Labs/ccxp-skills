@@ -290,7 +290,7 @@ test('a partial session.measure updates context and keeps the other units', asyn
   world($, on, w)
   on('session.measure', (_: any, e: any) => ({ changed: e.changed }))
   await $.session.start(START)
-  await $.session.measure({ context: { window: 200000, percent: 90 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42 }], changed: ['context', 'rateLimits'] })
+  await $.session.measure({ context: { window: 200000, percent: 90 }, rateLimits: [{ kind: 'five_hour', percentUsed: 42, resetsAt: Math.floor(Date.now() / 1000) + 4 * 3600 }], changed: ['context', 'rateLimits'] })
   await $.session.measure({ context: { window: 200000, percent: 50 }, changed: ['context'] })
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()

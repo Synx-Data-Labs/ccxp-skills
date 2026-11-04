@@ -17,7 +17,7 @@ import type { Register } from 'claude-code'
 import type { CiConfig, HudConfig, Snapshot } from '../types'
 import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { fillStyleFor } from './fill'
-import { EMPTY, compactLine, countJobs, parseHelper } from './model'
+import { EMPTY, compactLine, countJobs, parseHelper, resetEpochSec } from './model'
 import { bandTree, noColorValue, userMessageTree } from './render'
 import { configureHud } from './configure'
 
@@ -200,13 +200,6 @@ async function readUsage($: any): Promise<Partial<Snapshot>> {
   } catch {
     return {}
   }
-}
-
-/** Reset time as epoch seconds: accepts seconds, milliseconds or an ISO string; null when absent or unparseable. */
-function resetEpochSec(v: unknown): number | null {
-  const n = typeof v === 'string' ? (/^\d+(\.\d+)?$/.test(v) ? Number(v) : Date.parse(v) / 1000) : v
-  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null
-  return n > 1e11 ? n / 1000 : n
 }
 
 function usagePart(u: any): Partial<Snapshot> {

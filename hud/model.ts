@@ -197,8 +197,7 @@ export const RATE_WINDOW_SEC = 5 * 3600
  */
 export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number): number | null {
   if (resetsAt === null) return null
-  if (used >= 100) return 0
-  if (!(used >= 1)) return null
+  if (used >= 100 || !(used >= 1)) return null // already at the limit, or too little used to project
   const remaining = resetsAt - nowMs / 1000
   const elapsed = RATE_WINDOW_SEC - remaining
   if (remaining <= 0 || elapsed < 120) return null
@@ -206,10 +205,18 @@ export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: nu
   return secToFull < remaining ? secToFull / 3600 : null
 }
 
+/** Reset time as epoch seconds: accepts seconds, milliseconds or an ISO string; null when absent or unparseable. */
+export function resetEpochSec(v: unknown): number | null {
+  const n = typeof v === 'string' ? (/^\d+(\.\d+)?$/.test(v) ? Number(v) : Date.parse(v) / 1000) : v
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null
+  return n > 1e11 ? n / 1000 : n
+}
+
 /** `1.5h` from an hour or more, `40m` below (never `0m`). */
 export function formatRunout(hours: number): string {
-  if (hours >= 1) return `${Math.round(hours * 10) / 10}h`
-  return `${Math.max(1, Math.round(hours * 60))}m`
+  const min = Math.max(1, Math.round(hours * 60))
+  if (min >= 60) return `${Math.round(hours * 10) / 10}h`
+  return `${min}m`
 }
 
 /** The cell's segments: `65% left` in its tone, then ` · out 1.5h` when the burn rate would run dry before the reset. */

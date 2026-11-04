@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, formatRunout, rateRunoutHours, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -688,11 +688,12 @@ test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it o
   expect(rateRunoutHours(0, rateReset(3600), RATE_NOW)).toBeNull() // nothing used
   expect(rateRunoutHours(50, rateReset(60), RATE_NOW)).toBeNull() // under 2 minutes elapsed: no projection
   expect(rateRunoutHours(50, RATE_NOW / 1000 - 5, RATE_NOW)).toBeNull() // window already reset
-  expect(rateRunoutHours(100, rateReset(3600), RATE_NOW)).toBe(0)
+  expect(rateRunoutHours(100, rateReset(3600), RATE_NOW)).toBeNull() // already at the limit: no estimate
 })
 
 test('formatRunout: 1.5h from an hour, 40m below, never 0m', () => {
-  expect([formatRunout(1.5), formatRunout(1), formatRunout(2.04), formatRunout(2 / 3), formatRunout(0.001)]).toEqual(['1.5h', '1h', '2h', '40m', '1m'])
+  expect([formatRunout(1.5), formatRunout(1), formatRunout(2.04), formatRunout(2 / 3), formatRunout(0.001), formatRunout(0.995)]).toEqual(['1.5h', '1h', '2h', '40m', '1m', '1h'])
+  expect([resetEpochSec(1_800_000_000), resetEpochSec(1_800_000_000_000), resetEpochSec('1800000000'), resetEpochSec('2027-01-15T08:00:00Z'), resetEpochSec('x'), resetEpochSec(null), resetEpochSec(0)]).toEqual([1_800_000_000, 1_800_000_000, 1_800_000_000, 1_800_000_000, null, null, null])
 })
 
 test('rate cell: N% left in its tone, runout only when it would run dry before the reset; details spell it out', () => {
