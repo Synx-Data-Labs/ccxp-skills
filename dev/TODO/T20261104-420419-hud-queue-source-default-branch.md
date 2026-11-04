@@ -1,7 +1,11 @@
 ---
-status: Done
+status: In Progress
+estimation: 3
 source: Owner chat 2026-11-04 (job 738): "for the queue, anyway to point it to the default branch, instead of the current clone? will that be part of the `/hud config`?"
 description: HUD queue cell can read the repo's default branch (queue.source) instead of the current clone's working tree
+claimed_by: cc1-50ac6891:205b92c3feae63fa
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261104-420419: HUD queue source: default branch instead of the current clone
