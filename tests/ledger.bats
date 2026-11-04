@@ -750,3 +750,26 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   [ "$(bash "$LEDGER" show --brief)" = "running=1 parked=0 next=0 decisions=2" ]
   [ "$(bash "$LEDGER" show | jq -c .decisions)" = '{"active":2,"latest":{"ref":"d2","text":"two"}}' ]
 }
+
+@test "decision: writes refuse while the file has malformed entries or a non-array decisions; nothing is dropped" {
+  bash "$LEDGER" decision add "keep" >/dev/null
+  jq '.decisions += [{"ref":"bad","text":"x","extra":"keep"}]' "$(dj)" > "$BATS_TEST_TMPDIR/m.json"; cp "$BATS_TEST_TMPDIR/m.json" "$(dj)"
+  run bash "$LEDGER" decision add "more"
+  [ "$status" -eq 1 ]; [[ "$output" == *"not writing"* ]]
+  [ "$(jq -r '.decisions[1].extra' "$(dj)")" = "keep" ]
+  echo '{"schema":1,"decisions":{"a":1}}' > "$(dj)"
+  run bash "$LEDGER" decision add "more"
+  [ "$status" -eq 1 ]; [[ "$output" == *"not an array"* ]]
+  [ "$(jq -c .decisions "$(dj)")" = '{"a":1}' ]
+}
+
+@test "decision: set-counter d never lowers the counter; --source is checked for credentials; archived refs are named as such" {
+  bash "$LEDGER" decision add "a" >/dev/null; bash "$LEDGER" decision add "b" >/dev/null
+  bash "$LEDGER" set-counter d 0
+  [ "$(bash "$LEDGER" decision add "c")" = "d3" ]
+  run bash "$LEDGER" decision add "d" --source "ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  [ "$status" -eq 2 ]
+  printf '%s\n' '{"schema":1,"decisions":[{"ref":"d9","text":"old","status":"retired"}]}' > "$(dirname "$(dj)")/ccxp-decisions-archive.json"
+  run bash "$LEDGER" decision retire d9
+  [ "$status" -eq 1 ]; [[ "$output" == *archived* ]]
+}

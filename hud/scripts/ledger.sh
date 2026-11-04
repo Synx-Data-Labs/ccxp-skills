@@ -195,7 +195,7 @@ ledger-args() {
         [[ "$2" =~ ^(global|repo:[A-Za-z0-9._-]{1,80})$ ]] || { echo "ledger: --scope must be global or repo:<name>: $2" >&2; return 2; }
         SCOPE="$2"; HAVE_SCOPE=true; shift 2 ;;
       --source) [[ $# -ge 2 ]] || { echo "ledger: --source needs a value" >&2; return 2; }
-        SRC=$(ledger-clip "$2" 120); shift 2 ;;
+        SRC=$(ledger-bounded "$2" 120 --source) || return 2; shift 2 ;;
       --all) ALL=true; shift ;;
       --json) JSON=true; shift ;;
       --title) [[ $# -ge 2 ]] || { echo "ledger: --title needs a value" >&2; return 2; }
@@ -397,6 +397,8 @@ decisions-update() {
     jq -e '(.schema | numbers // 1) > 1' "$f" >/dev/null 2>&1 \
       && { echo "ledger: $f has a newer schema than this script (1); not writing" >&2; return 1; }
   fi
+  local bad; bad=$(decisions-malformed)
+  [[ -z "$bad" ]] || { printf '%s\n' "$bad" >&2; echo "ledger: $f has malformed entries; not writing (fix the file, then retry)" >&2; return 1; }
   cur=$(decisions-read)
   new=$(printf '%s' "$cur" | jq -c "$@" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$filter | .schema = 1 | .updated_at = \$now" 2>/dev/null) || return 1
   new=$(decisions-archive "$new")
@@ -459,7 +461,8 @@ decisions-id() {
 # Lines that make `check` fail: entries the reader would drop, duplicate refs, bad status.
 decisions-malformed() {
   local f; f=$(decisions-file); [[ -s "$f" ]] || return 0
-  jq -r 'if type != "object" then "MALFORMED decisions file (not a JSON object)" else
+  jq -r 'if type != "object" then "MALFORMED decisions file (not a JSON object)"
+    elif ((.decisions // []) | type) != "array" then "MALFORMED decisions is not an array" else
       ((.decisions // []) | to_entries[]
         | select((.value | type != "object") or ((.value.ref | strings | test("^d[0-9]{1,9}$")) | not)
                  or ((.value.text | strings | length) == 0)
@@ -482,6 +485,15 @@ decisions-entry-text() {
 # $1 ref; prints status ("" when unknown)
 decisions-status() { decisions-read | jq -r --arg r "$1" '[.decisions[] | select(.ref == $r) | .status][0] // ""'; }
 
+# Error for a ref that is not in the live file: archived entries are read-only history.
+decisions-missing() {
+  if jq -e --arg r "$1" '.decisions[]? | select(.ref == $r)' "$(decisions-archive-file)" >/dev/null 2>&1; then
+    echo "ledger: $1 is archived (closed history); nothing to change" >&2
+  else
+    echo "ledger: no decision $1" >&2
+  fi
+}
+
 # decision add|supersede|retire|list|show ...
 ledger-decision() {
   local sub="${1:-}"; shift || true
@@ -500,7 +512,7 @@ ledger-decision() {
       text=$(ledger-bounded "${POS[1]:-}" 400 "decision text") || return 2
       [[ -n "$text" ]] || { echo "ledger: empty decision text" >&2; return 2; }
       st=$(decisions-status "$r")
-      [[ -n "$st" ]] || { echo "ledger: no decision $r" >&2; return 1; }
+      [[ -n "$st" ]] || { decisions-missing "$r"; return 1; }
       [[ "$st" == active ]] || { echo "ledger: $r is already $st" >&2; return 1; }
       decisions-update '(.decisions | map(select(.ref == $r)) | .[0]) as $old | (.counter += 1) | ("d" + (.counter | tostring)) as $new
         | .decisions |= map(if .ref == $r then .status = "superseded" | .superseded_by = $new | .closed_at = $now else . end)
@@ -513,7 +525,7 @@ ledger-decision() {
       local r st reason; r=$(decisions-id "${POS[0]:-}") || return 2
       reason=$(ledger-bounded "${POS[1]:-}" 200 "reason") || return 2
       st=$(decisions-status "$r")
-      [[ -n "$st" ]] || { echo "ledger: no decision $r" >&2; return 1; }
+      [[ -n "$st" ]] || { decisions-missing "$r"; return 1; }
       [[ "$st" == active ]] || { echo "ledger: $r is already $st" >&2; return 1; }
       decisions-update '.decisions |= map(if .ref == $r then .status = "retired" | .reason = $why | .closed_at = $now else . end)' \
         --arg r "$r" --arg why "$reason" || return 1
@@ -633,7 +645,7 @@ ledger() {
     set-counter)
       if [[ "${1:-}" == d ]]; then
         ledger-int "${2:-}" || return 2
-        decisions-update '.counter = $v' --argjson v "$((10#$2))"; return
+        decisions-update '.counter = ([.counter, $v] | max)' --argjson v "$((10#$2))"; return
       fi
       [[ "${1:-}" =~ ^[nsk]$ ]] || { echo "ledger: set-counter prefix must be n, s, k or d: ${1:-}" >&2; return 2; }
       ledger-int "${2:-}" || return 2
