@@ -423,7 +423,7 @@ _sl-git-has-no-fetch-head() {
 _sl-queue-fetch-run() {
   local nofh=()
   _sl-git-has-no-fetch-head && nofh=(--no-write-fetch-head)
-  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GCM_INTERACTIVE=never GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5' \
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GCM_INTERACTIVE=never GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-$(git config --get core.sshCommand 2>/dev/null || echo ssh)} -o BatchMode=yes -o ConnectTimeout=5" \
     sl-run-timeout "$HUD_QUEUE_FETCH_TIMEOUT" git -C "$1" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-recurse-submodules "${nofh[@]}" origin "$2" >/dev/null 2>&1 || true
 }
 
