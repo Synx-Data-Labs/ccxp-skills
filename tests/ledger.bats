@@ -859,6 +859,8 @@ Q="At this moment, I trust you to do the customer visible posts, tagging, and pu
   [[ "$stderr" == *"needs --quote"* ]]
   [ "$(bash "$LEDGER" authz show tagging)" = "no" ]
   run bash "$LEDGER" authz set k1 no; [ "$status" -eq 2 ]
+  run bash "$LEDGER" authz set k1_x yes --quote q; [ "$status" -eq 2 ]
+  run bash "$LEDGER" authz set zz yes --quote " "; [ "$status" -eq 2 ]
   bash "$LEDGER" authz set my_custom yes --quote x
   [ "$(bash "$LEDGER" authz show my_custom)" = "yes" ]
   [ "$(bash "$LEDGER" authz list | tail -1 | cut -f1)" = "my_custom" ]
