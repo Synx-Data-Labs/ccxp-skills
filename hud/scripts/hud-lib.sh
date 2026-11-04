@@ -372,16 +372,18 @@ HUD_QUEUE_BRANCH_RE='^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$'
 # origin/master when that remote-tracking ref exists), or nothing. No network, no gh.
 sl-default-branch() {
   local root="$1" ref b=""
-  ref=$(git -C "$root" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null) || ref=""
-  [ -z "$ref" ] || b="${ref#refs/remotes/origin/}"
-  if [ -z "$b" ] || ! [[ "$b" =~ $HUD_QUEUE_BRANCH_RE ]]; then
-    b=""
-    local cand
-    for cand in main master; do
-      if git -C "$root" rev-parse --verify -q "refs/remotes/origin/$cand" >/dev/null 2>&1; then b="$cand"; break; fi
-    done
+  if ref=$(git -C "$root" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null) && [ -n "$ref" ]; then
+    # origin/HEAD is authoritative: an unusable name or a missing target means "unknown" (marked
+    # working-tree fallback), never a guess at main/master.
+    b="${ref#refs/remotes/origin/}"
+    [[ "$b" =~ $HUD_QUEUE_BRANCH_RE ]] && git -C "$root" rev-parse --verify -q "refs/remotes/origin/$b" >/dev/null 2>&1 && printf '%s' "$b"
+    return 0
   fi
-  printf '%s' "$b"
+  local cand
+  for cand in main master; do
+    if git -C "$root" rev-parse --verify -q "refs/remotes/origin/$cand" >/dev/null 2>&1; then printf '%s' "$cand"; return 0; fi
+  done
+  return 0
 }
 
 # $1 repo root $2 branch -> at most one detached `git fetch origin <branch>` per HUD_QUEUE_FETCH_TTL
@@ -411,8 +413,18 @@ sl-queue-fetch() {
   return 0
 }
 
+# git >= 2.29 can fetch without overwriting .git/FETCH_HEAD (so a user's `git fetch x; git merge FETCH_HEAD` is never disturbed).
+_sl-git-has-no-fetch-head() {
+  local v; v=$(git --version 2>/dev/null | sed -E 's/^[^0-9]*([0-9]+)\.([0-9]+).*/\1 \2/')
+  set -- $v
+  [ -n "${1:-}" ] && { [ "$1" -gt 2 ] || { [ "$1" -eq 2 ] && [ "${2:-0}" -ge 29 ]; }; }
+}
+
 _sl-queue-fetch-run() {
-  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5'     sl-run-timeout "$HUD_QUEUE_FETCH_TIMEOUT" git -C "$1" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-recurse-submodules origin "$2" >/dev/null 2>&1 || true
+  local nofh=()
+  _sl-git-has-no-fetch-head && nofh=(--no-write-fetch-head)
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GCM_INTERACTIVE=never GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5' \
+    sl-run-timeout "$HUD_QUEUE_FETCH_TIMEOUT" git -C "$1" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-recurse-submodules "${nofh[@]}" origin "$2" >/dev/null 2>&1 || true
 }
 
 # $1 repo root $2 ref $3 empty dest dir -> dev/TODO and dev/EPICS of $2 extracted under $3 (object reads
@@ -423,7 +435,11 @@ sl-queue-materialize() {
     git -C "$root" cat-file -e "$ref:$p" 2>/dev/null && paths+=("$p")
   done
   [ "${#paths[@]}" -gt 0 ] || return 1
-  git -C "$root" archive --format=tar "$ref" "${paths[@]}" 2>/dev/null | tar -x -C "$dest" 2>/dev/null
+  # No lazy fetch from a promisor remote (partial clone) and no credential prompt: an unreadable blob means fallback.
+  GIT_NO_LAZY_FETCH=1 GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GCM_INTERACTIVE=never \
+    git -C "$root" archive --format=tar "$ref" "${paths[@]}" 2>/dev/null | tar -x -C "$dest" 2>/dev/null
+  local rcs=("${PIPESTATUS[@]}")
+  [ "${rcs[0]}" -eq 0 ] && [ "${rcs[1]}" -eq 0 ]
 }
 
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
@@ -463,6 +479,8 @@ sl-queue-json() {
     if [ -n "$br" ]; then
       sl-queue-fetch "$repo_root" "$br"
       if git -C "$repo_root" rev-parse --verify -q "refs/remotes/origin/$br^{commit}" >/dev/null 2>&1; then
+        # A helper killed mid-archive (the mod's 5 s limit) cannot clean up: sweep our own stale temp dirs first.
+        find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'hud-queue.??????' -mmin +10 -exec rm -rf {} + 2>/dev/null || true
         tmp=$(mktemp -d "${TMPDIR:-/tmp}/hud-queue.XXXXXX" 2>/dev/null) || tmp=""
         if [ -n "$tmp" ] && sl-queue-materialize "$repo_root" "refs/remotes/origin/$br" "$tmp"; then
           src_root="$tmp"
