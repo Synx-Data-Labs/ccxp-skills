@@ -344,10 +344,15 @@ sl-ledger-file() {
 
 # -> one normalized compact JSON object, or nothing when the ledger is
 # missing/unreadable/not an object (callers hide the section or show a dash).
+# `stats` ({approx, avg_approx, jobs_24h, avg_jobs_day, trend}: jobs started in the rolling last 24 h vs the
+# lifetime average per day) comes from `ledger.sh stats --json` (read-only, from the start log ledger.sh writes);
+# absent when the ledger has never counted a job or the call fails.
 sl-ledger-json() {
-  local f; f=$(sl-ledger-file)
+  local f stats script="$_SL_DIR/ledger.sh"; f=$(sl-ledger-file)
   [ -f "$f" ] || return 0
-  jq -c 'select(type == "object") | {
+  stats=""
+  [ -f "$script" ] && stats=$(CCXP_LEDGER_FILE="$f" bash "$script" stats --json 2>/dev/null | jq -c '{approx, avg_approx, jobs_24h, avg_jobs_day, trend}' 2>/dev/null) || stats=""
+  jq -c --argjson st "${stats:-null}" 'select(type == "object") | {
       updated_at: (.updated_at | strings // ""),
       next_job: (.next_job | numbers // 0),
       lifetime_jobs: (.lifetime_jobs | numbers // 0),
@@ -355,7 +360,8 @@ sl-ledger-json() {
                | (if type == "string" then {id: .} elif type == "object" then . else {} end)
                | select(.id | strings) | {id}],
       running: [(.running // [])[] | select(type == "object")
-                | {job: (.job | numbers // 0), title: (.title | strings // ""), flags: (.flags | strings // "")}]}' "$f" 2>/dev/null || true
+                | {job: (.job | numbers // 0), title: (.title | strings // ""), flags: (.flags | strings // "")}]}
+    + (if $st then {stats: $st} else {} end)' "$f" 2>/dev/null || true
 }
 
 # --- Queue source: the repo's default branch instead of this clone's working tree (T20261104-420419) ---

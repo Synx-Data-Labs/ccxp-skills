@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
 # Queue high watermark for the ccxp-hud mod: the largest queue length (task lines of
-# dev/TODO/queue.md) ever seen, over three windows: lifetime, last 30 days, last 7 days.
+# dev/TODO/queue.md) seen over three rolling windows: last 180 days, last 30 days, last 7 days.
 #
 # Two series feed it, both keyed by repo root + queue path (the HUD is used in many repos):
 #   1. history  - a backfill derived from `git log -p` of the queue file on the default branch
 #                 (one detached pass, cached, re-run at most once per HUD_HWM_TTL and only when the
 #                 branch moved; incremental when the old tip is an ancestor of the new one).
-#                 Gives all three windows from the first run, no fetch (reads local objects only).
+#                 Gives all three windows from the first run (the pass reads the whole file history, so
+#                 180 days are covered from day one), no fetch (reads local objects only).
 #   2. samples  - an append-only local log of (epoch, length), written by the HUD poll whenever
 #                 the length it shows changes; catches peaks that never reached a commit.
-#                 Size-capped: past HUD_HWM_SAMPLE_CAP lines the oldest half is dropped.
-# The lifetime maximum is also kept in a tiny `.max` file, so rotating or rebuilding either
-# series never lowers it. A window's value at its start counts too (a queue that was 40 for
-# the whole week and changed 8 days ago still has a 7d maximum of 40).
+#                 Rotation keeps the 180-day window intact: past HUD_HWM_SAMPLE_CAP lines it first drops
+#                 samples older than 180 days (keeping the newest of those, the value in force at the
+#                 window start), and only if that is not enough the oldest half.
+# A window's value at its start counts too (a queue that was 40 for the whole week and changed
+# 8 days ago still has a 7d maximum of 40). There is no lifetime maximum any more; old `max-<key>`
+# files from earlier versions are ignored.
 #
 # State dir (shared with the queue-source stamps): $HUD_QUEUE_STATE_DIR, else
 # ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-queue. Test hooks: HUD_HWM_SYNC=1 (backfill in the
@@ -26,7 +29,8 @@ _HW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HW_DIR/hud-lib.sh"
 
 HUD_HWM_TTL="${HUD_HWM_TTL:-3600}"
-HUD_HWM_SAMPLE_CAP="${HUD_HWM_SAMPLE_CAP:-2000}"
+HUD_HWM_SAMPLE_CAP="${HUD_HWM_SAMPLE_CAP:-20000}"
+HUD_HWM_WINDOW_DAYS=180
 HUD_HWM_TIMEOUT=60
 HUD_HWM_QUEUE_PATH="dev/TODO/queue.md"
 
@@ -48,21 +52,8 @@ _hw-ref() {
   printf 'HEAD'
 }
 
-# $1 file -> its numbers' maximum on the second column (0 when missing or empty)
-_hw-file-max() { [ -f "$1" ] && awk -F'\t' '$2 ~ /^[0-9]+$/ && $2 + 0 > m { m = $2 + 0 } END { print m + 0 }' "$1" 2>/dev/null || echo 0; }
-
-# $1 .max file $2 value -> raise the stored lifetime maximum (never lowers it)
-_hw-raise-max() {
-  local f="$1" v="$2" cur=0
-  [[ "$v" =~ ^[0-9]+$ ]] || return 0
-  [ -f "$f" ] && cur=$(cat "$f" 2>/dev/null)
-  [[ "$cur" =~ ^[0-9]+$ ]] || cur=0
-  [ "$v" -le "$cur" ] || printf '%s\n' "$v" > "$f" 2>/dev/null || true
-}
-
 # $1 repo root -> (re)build the history series from git, in the foreground. Incremental when the
-# stored tip is an ancestor of the new one. Writes hist-<key>, hist-<key>.meta ("ref sha count") and
-# raises max-<key>. Never fails.
+# stored tip is an ancestor of the new one. Writes hist-<key> and hist-<key>.meta ("ref sha count"). Never fails.
 _sl-hwm-backfill-run() {
   local root="$1" dir key ref sha meta hist oref osha ocnt start="" count=0 mode=full tmp
   dir=$(_hw-dir); key=$(sl-hwm-key "$root"); hist="$dir/hist-$key"; meta="$hist.meta"
@@ -98,7 +89,6 @@ _sl-hwm-backfill-run() {
   if [ "$mode" = incr ]; then cat "$tmp" >> "$hist" 2>/dev/null; rm -f "$tmp" 2>/dev/null
   else mv -f "$tmp" "$hist" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 0; }; fi
   printf '%s %s %s\n' "$ref" "$sha" "$final" > "$meta" 2>/dev/null || true
-  _hw-raise-max "$dir/max-$key" "$(_hw-file-max "$hist")"
   return 0
 }
 
@@ -126,28 +116,36 @@ sl-hwm-backfill() {
 }
 
 # $1 repo root $2 current queue length -> append "epoch<TAB>length" to the sample log when the length
-# differs from the last sample; rotate past the cap (keep the newest half); raise the lifetime maximum.
+# differs from the last sample; rotate past the cap (see the header: the 180-day window survives).
 sl-hwm-sample() {
-  local root="$1" total="$2" dir key f last lastv="" n cap="$HUD_HWM_SAMPLE_CAP"
+  local root="$1" total="$2" dir key f last lastv="" n cap="$HUD_HWM_SAMPLE_CAP" now cut
   [[ "$total" =~ ^[0-9]+$ ]] || return 0
   dir=$(_hw-dir); mkdir -p "$dir" 2>/dev/null || return 0
-  key=$(sl-hwm-key "$root"); f="$dir/samples-$key"
+  key=$(sl-hwm-key "$root"); f="$dir/samples-$key"; now=$(_hw-now)
   [ -f "$f" ] && last=$(tail -n 1 "$f" 2>/dev/null) && lastv="${last#*$'\t'}"
   if [ "$lastv" != "$total" ]; then
-    printf '%s\t%s\n' "$(_hw-now)" "$total" >> "$f" 2>/dev/null || return 0
-    _hw-raise-max "$dir/max-$key" "$total"
+    printf '%s\t%s\n' "$now" "$total" >> "$f" 2>/dev/null || return 0
     if [[ "$cap" =~ ^[0-9]+$ ]] && [ "$cap" -ge 2 ]; then
       n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
       if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt "$cap" ]; then
-        if tail -n $((cap / 2)) "$f" > "$f.tmp.$$" 2>/dev/null; then mv -f "$f.tmp.$$" "$f" 2>/dev/null || true; fi
+        cut=$((now - HUD_HWM_WINDOW_DAYS * 86400))
+        # 1) age: drop what is older than the window, but keep the newest such line (the value at the window start)
+        awk -F'\t' -v cut="$cut" '$1 + 0 >= cut { if (have) { print old; have = 0 } print; next } { old = $0; have = 1 }' "$f" > "$f.tmp.$$" 2>/dev/null \
+          && mv -f "$f.tmp.$$" "$f" 2>/dev/null
         rm -f "$f.tmp.$$" 2>/dev/null
+        # 2) still over the cap (a burst inside the window): the oldest half goes
+        n=$(wc -l < "$f" 2>/dev/null | tr -d ' ')
+        if [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -gt "$cap" ]; then
+          if tail -n $((cap / 2)) "$f" > "$f.tmp.$$" 2>/dev/null; then mv -f "$f.tmp.$$" "$f" 2>/dev/null || true; fi
+          rm -f "$f.tmp.$$" 2>/dev/null
+        fi
       fi
     fi
   fi
   return 0
 }
 
-# $1 repo root $2 current queue length -> `{"life":N,"d30":N,"d7":N}` (life >= d30 >= d7 >= current), or
+# $1 repo root $2 current queue length -> `{"d180":N,"d30":N,"d7":N}` (d180 >= d30 >= d7 >= current), or
 # nothing when $2 is not a number. Samples the length, kicks the detached backfill, then reads both series.
 sl-queue-hwm() {
   local root="$1" total="$2" dir key now
@@ -155,18 +153,16 @@ sl-queue-hwm() {
   sl-hwm-sample "$root" "$total"
   sl-hwm-backfill "$root"
   dir=$(_hw-dir); key=$(sl-hwm-key "$root"); now=$(_hw-now)
-  local max0=0; [ -f "$dir/max-$key" ] && max0=$(cat "$dir/max-$key" 2>/dev/null)
-  [[ "$max0" =~ ^[0-9]+$ ]] || max0=0
-  { cat "$dir/hist-$key" "$dir/samples-$key" 2>/dev/null || true; } | LC_ALL=C sort -s -n -k1,1 | awk -F'\t' -v now="$now" -v cur="$total" -v max0="$max0" '
-    BEGIN { c30 = now - 30 * 86400; c7 = now - 7 * 86400; life = max0 + 0 }
+  { cat "$dir/hist-$key" "$dir/samples-$key" 2>/dev/null || true; } | LC_ALL=C sort -s -n -k1,1 | awk -F'\t' -v now="$now" -v cur="$total" '
+    BEGIN { c180 = now - 180 * 86400; c30 = now - 30 * 86400; c7 = now - 7 * 86400 }
     $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
       t = $1 + 0; v = $2 + 0
-      if (v > life) life = v
+      if (t < c180) k180 = v; else if (v > m180) m180 = v
       if (t < c30) k30 = v; else if (v > m30) m30 = v
       if (t < c7) k7 = v; else if (v > m7) m7 = v
     }
     END {
-      if (k30 > m30) m30 = k30; if (k7 > m7) m7 = k7
-      if (cur > m7) m7 = cur; if (m7 > m30) m30 = m7; if (m30 > life) life = m30
-      printf "{\"life\":%d,\"d30\":%d,\"d7\":%d}\n", life, m30, m7 }' 2>/dev/null || true
+      if (k180 > m180) m180 = k180; if (k30 > m30) m30 = k30; if (k7 > m7) m7 = k7
+      if (cur > m7) m7 = cur; if (m7 > m30) m30 = m7; if (m30 > m180) m180 = m30
+      printf "{\"d180\":%d,\"d30\":%d,\"d7\":%d}\n", m180, m30, m7 }' 2>/dev/null || true
 }

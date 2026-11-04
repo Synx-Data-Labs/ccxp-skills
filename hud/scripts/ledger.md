@@ -75,6 +75,11 @@ A restart ends running subagents but leaves their `running` rows. `start` can re
 - `ref_counters` (`n`, `s`, `k`): highest number ever used, never lowered. `park <k>` also bumps `k`; `next done` on an unknown ref is a no-op.
 - Gone since schema 2: the `parked` count and `parked_ids`, `inputs`/`actions` and their `*_open` counts, the `i`/`a` counters, `next_open`. `set-parked` and `input`/`action` still exist as deprecated no-op / aliases of `next`.
 
+## Start log and stats
+
+- `start` of a NEW job appends `<epoch><TAB><n>` to `ccxp-ledger-starts.log` (same directory and base name as the ledger, `-starts.log`; mode 600; no titles). A one-time `#seed<TAB><first-job estimate><TAB><log began>` line comes first when the ledger already counted jobs.
+- `ledger.sh stats [--json]` (read-only): jobs started in the rolling last 24 h vs lifetime jobs per day; the HUD jobs line shows it as `last 24h: jobs 8 ▲ / average 5.2/day`. `LEDGER_NOW` overrides the clock in tests.
+
 ## Markdown view
 
 Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows `context: [context](file:///abs/path)` (path percent-encoded) and the plain absolute path on the next line so a terminal can cmd-click it; an empty context shows `context: (none)`. The header has a `Ledger:` link to the file itself. `render` (the reply text) prints full absolute paths. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.

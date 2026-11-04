@@ -536,7 +536,22 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   run _hud "$repo" --json
   [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
   # the high watermark rides along (no git history in this fixture: the current length is all there is)
-  [ "$(jq -c .queue.hwm <<<"$output")" = '{"life":2,"d30":2,"d7":2}' ]
+  [ "$(jq -c .queue.hwm <<<"$output")" = '{"d180":2,"d30":2,"d7":2}' ]
+}
+
+@test "--json: ledger.stats (jobs started in the last 24h vs the lifetime average per day) comes from ledger.sh's start log; no total-jobs key beyond lifetime_jobs" {
+  local repo; repo=$(_make_repo r-jobstats)
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 230 "a"
+  bash "$REPO_ROOT/hud/scripts/ledger.sh" start 231 "b"
+  run _hud "$repo" --json
+  [ "$(jq -c '.ledger.stats | keys' <<<"$output")" = '["approx","avg_approx","avg_jobs_day","jobs_24h","trend"]' ]
+  [ "$(jq -r '.ledger.stats.jobs_24h' <<<"$output")" = "2" ]
+  [ "$(jq -r '.ledger.stats.approx' <<<"$output")" = "false" ]
+  # a ledger without a start log and without jobs has no stats key at all
+  echo '{"schema":3,"lifetime_jobs":0,"running":[]}' > "$CCXP_LEDGER_FILE"
+  unlink "${CCXP_LEDGER_FILE%.json}-starts.log"
+  run _hud "$repo" --json
+  [ "$(jq -r '.ledger | has("stats")' <<<"$output")" = "false" ]
 }
 
 # ---------------------------------------------------------------------------
