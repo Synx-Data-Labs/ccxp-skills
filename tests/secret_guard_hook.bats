@@ -47,6 +47,7 @@ assert_allowed() {
   assert_blocked "curl -u admin:hunter22 https://x.example"
   assert_blocked "docker login -u me -p hunter22"
   assert_blocked "gh secret set FOO --body hunter22"
+  assert_blocked "mysql -u root -phunter22 db"
 }
 
 @test "blocked: echo, env dumps, cat .env and set -x with secrets" {
@@ -90,14 +91,69 @@ assert_allowed() {
   [[ "$(reason)" != *hunter22* ]]
 }
 
-@test "allow-list: matching rule-id:glob:reason entry allows; no reason does not" {
+commit_allow() {
   git -C "$CWD" init -q
-  printf 'cmdline-secret:tool --password=*:fixture only\n' >"$CWD/.secret-guard-allow"
+  git -C "$CWD" config user.email t@example.com; git -C "$CWD" config user.name t
+  printf '%s\n' "$1" >"$CWD/.secret-guard-allow"
+  git -C "$CWD" add .secret-guard-allow && git -C "$CWD" commit -q -m allow
+}
+
+@test "allow-list: committed rule-id:glob:reason entry allows and logs the hit" {
+  commit_allow 'cmdline-secret:tool --password=*:fixture only'
   assert_allowed "tool --password=hunter22"
-  printf 'cmdline-secret:tool --password=*\n' >"$CWD/.secret-guard-allow"
+  grep -q 'allow-list rules=cmdline-secret' "$CCXP_SECRET_GUARD_LOG"
+}
+
+@test "allow-list: glob may contain colons; reason is taken after the last colon" {
+  commit_allow 'cmdline-secret:curl -u admin:*:fixture'
+  assert_allowed "curl -u admin:hunter22 https://x.example"
+}
+
+@test "allow-list: missing reason or wrong rule allows nothing" {
+  commit_allow 'cmdline-secret:tool --password=*'
   assert_blocked "tool --password=hunter22"
-  printf 'echo-secret:tool --password=*:wrong rule\n' >"$CWD/.secret-guard-allow"
+  commit_allow 'echo-secret:tool --password=*:wrong rule'
   assert_blocked "tool --password=hunter22"
+}
+
+@test "allow-list: an untracked or locally modified file is ignored (agent cannot grant itself a pass)" {
+  git -C "$CWD" init -q
+  printf 'cmdline-secret:tool --password=*:self-granted\n' >"$CWD/.secret-guard-allow"
+  assert_blocked "tool --password=hunter22"
+  commit_allow 'echo-secret:nothing:x'
+  printf 'cmdline-secret:tool --password=*:self-granted\n' >"$CWD/.secret-guard-allow"
+  assert_blocked "tool --password=hunter22"
+}
+
+@test "an inherited SECRET_GUARD_REPORT_ONLY env var does not disable denies" {
+  export SECRET_GUARD_REPORT_ONLY=1
+  assert_blocked "tool --password=hunter22"
+}
+
+@test "no false positives on quoted text, grep patterns and BuildKit secrets" {
+  assert_allowed 'git commit -m "fix --token handling"'
+  assert_allowed 'echo "use --token foo"'
+  assert_allowed 'grep -- --password docs.md'
+  assert_allowed 'docker buildx build --secret id=npmrc,src=$HOME/.npmrc .'
+  assert_allowed 'gh pr create --title t --body "mentions --password abc"'
+}
+
+@test "echo-secret: stderr echo, nested echo, lowercase names and here-strings are caught" {
+  assert_blocked 'echo "$GH_TOKEN" 2>&1'
+  assert_blocked 'echo $GH_TOKEN >&2'
+  assert_blocked 'echo $GH_TOKEN | tee /dev/stderr'
+  assert_blocked 'if true; then echo "$GH_TOKEN"; fi'
+  assert_blocked '( echo $my_token )'
+  assert_blocked 'echo "a; $GH_TOKEN"'
+  assert_blocked 'cat <<< "$GH_TOKEN"'
+  assert_blocked 'echo "$NPM_AUTH"'
+  assert_allowed 'echo "$GH_TOKEN" > /tmp/t.file'
+}
+
+@test "deny message shows a length for non-token values, never the value" {
+  run run_hook "tool --password=hunter22"
+  [[ "$(reason)" == *"(8 chars)"* ]]
+  [[ "$(reason)" != *hunter* ]]
 }
 
 @test "override: CCXP_ALLOW_SECRETS=1 allows, logs rule ids and never the value" {

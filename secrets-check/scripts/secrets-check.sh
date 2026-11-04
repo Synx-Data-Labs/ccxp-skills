@@ -4,7 +4,8 @@
 # Usage: secrets-check.sh [base-ref]      (default origin/main)
 #
 # Runs the repo's scripts/lint-secret-handling.sh --diff <base> when present.
-# Otherwise runs a rough built-in grep set on the ADDED lines of <base>...HEAD
+# Otherwise runs a rough built-in grep set on the ADDED lines of the merge-base
+# diff, including staged, unstaged and untracked files
 # and prints only `fallback: <rule>: diff line <n>` -- never the matched line or
 # value, so nothing secret reaches a transcript. Reports only; never edits.
 #
@@ -20,7 +21,13 @@ function secrets-check-fallback() {
     "token-literal|(TOKEN|SECRET|PASSWORD|API_?KEY)[A-Z_]*=[A-Za-z0-9+_-]{16,}"
   )
   local diff
-  diff="$(git diff "${base}...HEAD" -U0 | grep -E '^\+[^+]|^\+$' || true)"
+  local mb f
+  mb="$(git merge-base "$base" HEAD)"
+  # committed + staged + unstaged tracked changes against the merge-base, plus untracked files
+  diff="$(git diff "$mb" -U0 | grep -E '^\+[^+]|^\+$' || true)"
+  while IFS= read -r f; do
+    [[ -f "$f" ]] && diff+=$'\n'"$(sed 's/^/+/' "$f")"
+  done < <(git ls-files -o --exclude-standard)
   local entry
   for entry in "${rules[@]}"; do
     rule=${entry%%|*}
@@ -39,6 +46,9 @@ function secrets-check() {
   git rev-parse --verify --quiet "${base}^{commit}" >/dev/null || { echo "secrets-check: base ref '${base}' does not resolve" >&2; return 2; }
   cd "$root"
   if [[ -f scripts/lint-secret-handling.sh ]]; then
+    if [[ -n "$(git status --porcelain)" ]]; then
+      echo "secrets-check: warning: uncommitted changes are not covered by the repo lint's --diff (it reads ${base}...HEAD); commit first" >&2
+    fi
     bash scripts/lint-secret-handling.sh --diff "$base"
     return $?
   fi
