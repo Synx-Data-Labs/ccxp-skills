@@ -165,7 +165,7 @@ This fires **every iteration** of the §2 loop, not just the first — each push
 bash <skills-root>/_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref = the PR's base branch
 ```
 
-- **Secret-handling check (recommended):** also run `/secrets-check` on the PR diff when the PR touches scripts, workflows or docs with commands; advisory, report masked findings and fix by moving the secret to stdin/`--token-file`/`op run`.
+- **Secret-handling check (recommended):** run `/secrets-check` on the PR diff; advisory, masked findings only.
 - If it flags docs the PR didn't touch, the change isn't done: push a commit updating them (a fresh §2 iteration), or — interactively — record an explicit "reviewed, no change needed".
 - **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash <skills-root>/_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost.
 - It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
