@@ -773,3 +773,17 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   run bash "$LEDGER" decision retire d9
   [ "$status" -eq 1 ]; [[ "$output" == *archived* ]]
 }
+
+@test "decision: a corrupt archive file is never overwritten; archiving is skipped" {
+  bash "$LEDGER" decision add "keep" >/dev/null
+  jq '.decisions += [range(2; 206) | {ref: ("d" + tostring), text: "old", quote: "", scope: "global", context: "", source: "",
+        added_at: "2025-01-01T00:00:00Z", status: "retired", superseded_by: "", reason: "", closed_at: "2025-02-01T00:00:00Z"}] | .counter = 205' "$(dj)" > "$BATS_TEST_TMPDIR/b.json"
+  cp "$BATS_TEST_TMPDIR/b.json" "$(dj)"
+  af="$(dirname "$(dj)")/ccxp-decisions-archive.json"; echo garbage > "$af"
+  run bash "$LEDGER" decision add "trigger"
+  [ "$status" -eq 0 ]; [[ "$output" == *"not a valid archive"* ]]
+  [ "$(cat "$af")" = "garbage" ]
+  [ "$(jq '.decisions | length' "$(dj)")" = "206" ]
+  run bash "$LEDGER" decision add "x" --context "/tmp/ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  [ "$status" -eq 2 ]
+}

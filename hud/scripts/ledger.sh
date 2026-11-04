@@ -379,6 +379,10 @@ decisions-archive() {
   moved=$(jq -c --arg c "$cutoff" '[.decisions[] | select(.status != "active" and .closed_at != "" and .closed_at < $c)]' <<<"$cur")
   [[ "$moved" != "[]" ]] || { printf '%s' "$cur"; return 0; }
   af=$(decisions-archive-file)
+  if [[ -s "$af" ]] && ! jq -e 'type == "object" and ((.decisions // []) | type) == "array"' "$af" >/dev/null 2>&1; then
+    echo "ledger: $af is not a valid archive; skipping archiving (fix or move it aside)" >&2
+    printf '%s' "$cur"; return 0
+  fi
   arch=$(jq -c --argjson m "$moved" 'if type == "object" then . else {} end | {schema: 1, decisions: ((.decisions // []) + $m)}' "$af" 2>/dev/null) \
     || arch=$(jq -nc --argjson m "$moved" '{schema: 1, decisions: $m}')
   decisions-write "$arch" "$af" || { printf '%s' "$cur"; return 0; }
@@ -502,6 +506,7 @@ ledger-decision() {
       ledger-args "$@" || return 2
       local text; text=$(ledger-bounded "${POS[0]:-}" 400 "decision text") || return 2
       [[ -n "$text" ]] || { echo "ledger: empty decision text" >&2; return 2; }
+      ledger-secret-like "$CTX" && { echo "ledger: --context looks like it holds a credential; not saved" >&2; return 2; }
       decisions-update '.counter += 1 | .decisions += [{ref: ("d" + (.counter | tostring)), text: $t, quote: $q, scope: $s,
           context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
         --arg t "$text" --arg q "$QUOTE" --arg s "${SCOPE:-global}" --arg c "$CTX" --arg src "$SRC" || return 1
