@@ -34,7 +34,7 @@ function secret-guard() {
     return 0
   fi
   if [[ "${CCXP_ALLOW_SECRETS:-}" == 1 ]]; then
-    out="$(printf '%s' "$input" | SECRET_GUARD_REPORT_ONLY=1 python3 -I "$dir/secret-guard.py")" || out=unknown
+    out="$(printf '%s' "$input" | python3 -I "$dir/secret-guard.py" --report-only)" || out=unknown
     [[ -n "$out" ]] && secret-guard-log "$out"
     return 0
   fi

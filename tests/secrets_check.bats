@@ -60,3 +60,27 @@ setup() {
   run bash "$SC" main
   [ "$status" -eq 2 ]
 }
+
+@test "fallback: an uncommitted and an untracked fake token are both caught" {
+  echo "x" >"$FX/tracked.txt"; git -C "$FX" add -A; git -C "$FX" commit -q -m c
+  echo "token $FAKE" >>"$FX/tracked.txt"
+  cd "$FX"
+  run bash "$SC" main
+  [ "$status" -eq 1 ]
+  [[ "$output" != *"$FAKE"* ]]
+  git -C "$FX" checkout -q -- tracked.txt
+  echo "token $FAKE" >"$FX/new-untracked.txt"
+  run bash "$SC" main
+  [ "$status" -eq 1 ]
+}
+
+@test "repo lint mode warns that uncommitted changes are not covered" {
+  mkdir -p "$FX/scripts"
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$FX/scripts/lint-secret-handling.sh"
+  git -C "$FX" add -A; git -C "$FX" commit -q -m lint
+  echo dirty >"$FX/dirty.txt"
+  cd "$FX"
+  run bash "$SC" main
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"uncommitted changes"* ]]
+}
