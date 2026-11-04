@@ -106,7 +106,12 @@ export type Queue = {
   branch?: string
   /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
   fallback?: boolean
+  /** High watermark of the queue length (hud-queue-hwm.sh); absent when unknown. Always life >= d30 >= d7 >= total. */
+  hwm?: QueueHwm
 }
+
+/** The largest queue length seen over the lifetime of the repo's history, the last 30 days and the last 7 days. */
+export type QueueHwm = { life: number; d30: number; d7: number }
 
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
 
