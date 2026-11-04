@@ -38,7 +38,7 @@ setup() {
 
 @test "config wizard asks for the colour and persists fillColor with ci" {
   grep -q "header: 'Fill colour'" "$ROOT/hud/configure.ts"
-  grep -qF 'withConfig(existing, { ci, fillColor, version })' "$ROOT/hud/configure.ts"
+  grep -qF 'withConfig(existing, { ci, fillColor, version, queue })' "$ROOT/hud/configure.ts"
 }
 
 @test "config wizard asks whether to show the plugin version and persists version" {

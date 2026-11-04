@@ -1,10 +1,10 @@
 // ccxp-hud config: pure functions only (no `$`), so the unit tests can pin them.
 // Missing, empty or malformed input always means the defaults, which are ON.
 
-import type { CiConfig, Field, HudConfig } from '../types'
+import type { CiConfig, Field, HudConfig, QueueConfig, QueueSource } from '../types'
 import { FILL_DEFAULT, parseFillColor } from './fill'
 
-export type { CiConfig, Field, HudConfig }
+export type { CiConfig, Field, HudConfig, QueueConfig, QueueSource }
 
 export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
@@ -58,6 +58,16 @@ export function parseCi(x: unknown): CiConfig | undefined {
   return out
 }
 
+export const QUEUE_SOURCES: readonly QueueSource[] = ['working-tree', 'default-branch']
+
+/** `queue` as `{source}` (or a bare source string); an unknown source or shape means the default (working tree). */
+export function parseQueue(x: unknown): QueueConfig | undefined {
+  const raw: unknown = typeof x === 'string' ? { source: x } : x
+  if (!isRecord(raw) || typeof raw.source !== 'string') return undefined
+  const source = raw.source.trim().toLowerCase() as QueueSource
+  return QUEUE_SOURCES.includes(source) ? { source } : undefined
+}
+
 /** Parses one config file's text into the keys that are valid; never throws. */
 export function parseConfigText(text: string | undefined | null): Partial<HudConfig> {
   if (!text) return {}
@@ -83,6 +93,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
     if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) out[key] = raw[key] as number
   }
   if ('ci' in raw) out.ci = parseCi(raw.ci)
+  if ('queue' in raw) out.queue = parseQueue(raw.queue)
   return out
 }
 
@@ -236,8 +247,8 @@ export function isRewritable(text: string | undefined | null): boolean {
   }
 }
 
-/** Text of a config file after `/hud config`: `ci` (null hides CI), `fillColor` and `version` are set unless undefined (then left as they are); other keys are kept. */
-export function withConfig(text: string | undefined | null, patch: { ci?: CiConfig | null; fillColor?: string; version?: boolean }): string {
+/** Text of a config file after `/hud config`: `ci` (null hides CI), `fillColor`, `version` and `queue` are set unless undefined (then left as they are); other keys are kept. */
+export function withConfig(text: string | undefined | null, patch: { ci?: CiConfig | null; fillColor?: string; version?: boolean; queue?: QueueConfig }): string {
   let raw: Raw = {}
   try {
     const parsed: unknown = text ? JSON.parse(text) : {}
@@ -249,5 +260,6 @@ export function withConfig(text: string | undefined | null, patch: { ci?: CiConf
   if (patch.ci !== undefined) next.ci = patch.ci
   if (patch.fillColor !== undefined) next.fillColor = patch.fillColor
   if (patch.version !== undefined) next.version = patch.version
+  if (patch.queue !== undefined) next.queue = patch.queue
   return JSON.stringify(next, null, 2) + '\n'
 }

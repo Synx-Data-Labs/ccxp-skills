@@ -358,6 +358,74 @@ sl-ledger-json() {
                 | {job: (.job | numbers // 0), title: (.title | strings // ""), flags: (.flags | strings // "")}]}' "$f" 2>/dev/null || true
 }
 
+# --- Queue source: the repo's default branch instead of this clone's working tree (T20261104-420419) ---
+# `queue.source = "default-branch"` reads dev/TODO and dev/EPICS from origin/<default> with git object
+# reads only (no checkout, nothing written in the working tree), so a clone that is far behind origin
+# still shows what origin has. The fetch that keeps origin/<default> fresh is cached, detached and rate
+# limited, like the CI and version lookups. Test hooks: HUD_QUEUE_STATE_DIR (stamp dir),
+# HUD_QUEUE_FETCH_SYNC=1 (fetch in the foreground), HUD_QUEUE_FETCH_TTL (seconds between fetches).
+HUD_QUEUE_FETCH_TTL="${HUD_QUEUE_FETCH_TTL:-120}"
+HUD_QUEUE_FETCH_TIMEOUT=15
+HUD_QUEUE_BRANCH_RE='^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$'
+
+# $1 repo root -> the default branch name (from refs/remotes/origin/HEAD, else origin/main, else
+# origin/master when that remote-tracking ref exists), or nothing. No network, no gh.
+sl-default-branch() {
+  local root="$1" ref b=""
+  ref=$(git -C "$root" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null) || ref=""
+  [ -z "$ref" ] || b="${ref#refs/remotes/origin/}"
+  if [ -z "$b" ] || ! [[ "$b" =~ $HUD_QUEUE_BRANCH_RE ]]; then
+    b=""
+    local cand
+    for cand in main master; do
+      if git -C "$root" rev-parse --verify -q "refs/remotes/origin/$cand" >/dev/null 2>&1; then b="$cand"; break; fi
+    done
+  fi
+  printf '%s' "$b"
+}
+
+# $1 repo root $2 branch -> at most one detached `git fetch origin <branch>` per HUD_QUEUE_FETCH_TTL
+# (stamped BEFORE the attempt, so an offline remote is not retried every poll). Never blocks, never
+# prompts for credentials, silent on failure, no garbage collection, nothing in the working tree.
+sl-queue-fetch() {
+  local root="$1" branch="$2" dir stamp now last=0 key
+  git -C "$root" remote get-url origin >/dev/null 2>&1 || return 0
+  dir="${HUD_QUEUE_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-queue}"
+  mkdir -p "$dir" 2>/dev/null || return 0
+  key=$(printf '%s' "$root" | cksum | cut -d' ' -f1)
+  stamp="$dir/fetch-$key"
+  now=$(date +%s)
+  if [ -f "$stamp" ]; then
+    last=$(stat -c %Y "$stamp" 2>/dev/null || stat -f %m "$stamp" 2>/dev/null) || last=0
+    [[ "$last" =~ ^[0-9]+$ ]] || last=0
+    [ "$last" -le "$now" ] || last=0 # a future stamp (clock skew) must not stop fetching
+  fi
+  [ $((now - last)) -ge "$HUD_QUEUE_FETCH_TTL" ] || return 0
+  : > "$stamp" 2>/dev/null || return 0
+  if [ "${HUD_QUEUE_FETCH_SYNC:-}" = 1 ]; then
+    _sl-queue-fetch-run "$root" "$branch"
+  else
+    ( _sl-queue-fetch-run "$root" "$branch" ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+  fi
+  return 0
+}
+
+_sl-queue-fetch-run() {
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=5'     sl-run-timeout "$HUD_QUEUE_FETCH_TIMEOUT" git -C "$1" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-recurse-submodules origin "$2" >/dev/null 2>&1 || true
+}
+
+# $1 repo root $2 ref $3 empty dest dir -> dev/TODO and dev/EPICS of $2 extracted under $3 (object reads
+# only: `git archive` of the commit; the working tree is never touched). Non-zero when dev/TODO is absent.
+sl-queue-materialize() {
+  local root="$1" ref="$2" dest="$3" paths=() p
+  for p in dev/TODO dev/EPICS; do
+    git -C "$root" cat-file -e "$ref:$p" 2>/dev/null && paths+=("$p")
+  done
+  [ "${#paths[@]}" -gt 0 ] || return 1
+  git -C "$root" archive --format=tar "$ref" "${paths[@]}" 2>/dev/null | tar -x -C "$dest" 2>/dev/null
+}
+
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
@@ -385,8 +453,34 @@ sl-ledger-json() {
 # dispatch clone path (so the clone's own claims count as this clone's) and the two counts above.
 # A queue line whose task file is missing has no hints and counts as ready.
 sl-queue-json() {
-  local repo_root="$1" todo q
-  todo="$repo_root/dev/TODO"; q="$todo/queue.md"
+  local repo_root="$1" want_src="${2:-working-tree}" src_root todo q
+  local extra='{}' tmp=""
+  src_root="$repo_root"
+  if [ "$want_src" = default-branch ]; then
+    # Never fatal: when origin/<default> cannot be read, fall back to the working tree and say so.
+    local br; br=$(sl-default-branch "$repo_root")
+    extra='{"source":"working-tree","fallback":true}'
+    if [ -n "$br" ]; then
+      sl-queue-fetch "$repo_root" "$br"
+      if git -C "$repo_root" rev-parse --verify -q "refs/remotes/origin/$br^{commit}" >/dev/null 2>&1; then
+        tmp=$(mktemp -d "${TMPDIR:-/tmp}/hud-queue.XXXXXX" 2>/dev/null) || tmp=""
+        if [ -n "$tmp" ] && sl-queue-materialize "$repo_root" "refs/remotes/origin/$br" "$tmp"; then
+          src_root="$tmp"
+          extra=$(jq -n -c --arg b "$br" '{source: "default-branch", branch: $b}')
+        fi
+      fi
+    fi
+  fi
+  _sl-queue-json "$repo_root" "$src_root" "$extra"
+  local rc=$?
+  [ -z "$tmp" ] || rm -rf "$tmp" 2>/dev/null || true
+  return $rc
+}
+
+# $1 repo root (clone identity, autopilot state) $2 root holding dev/TODO and dev/EPICS to read $3 extra JSON to merge in
+_sl-queue-json() {
+  local repo_root="$1" src_root="$2" extra="$3" todo q
+  todo="$src_root/dev/TODO"; q="$todo/queue.md"
   [ -f "$q" ] || return 0
   local rows="" files=() id file base
   while IFS='|' read -r id file; do
@@ -409,7 +503,7 @@ sl-queue-json() {
       n >= 2 && title == "" && /^# / { title = $0; gsub(/\t/, " ", title) }
       END { flush() }' "${files[@]}" 2>/dev/null) || info=""
   fi
-  local parents; parents=$(cat "$repo_root"/dev/EPICS/E*.md 2>/dev/null \
+  local parents; parents=$(cat "$src_root"/dev/EPICS/E*.md 2>/dev/null \
     | grep -iE '^[*_ ]*parent( design task)?[*_ ]*:' | sed -E 's/^[^T]*(T[0-9]+-[0-9]+).*/\1/' | grep -E '^T[0-9]+-[0-9]+$' || true)
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
@@ -424,7 +518,7 @@ sl-queue-json() {
   me1=$(sl-clone-id "$repo_root")
   ap_clone=$(printf '%s' "$state" | jq -r '.clone' 2>/dev/null) || ap_clone=""
   [ -z "$ap_clone" ] || [ ! -d "$ap_clone" ] || me2=$(sl-clone-id "$ap_clone")
-  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --arg parents "$parents" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" '
+  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --arg parents "$parents" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" --argjson extra "$extra" '
     ($info | split("\n") | map(select(. != "") | split("\t") | {key: .[0], value: {status: (.[1] // ""), claimed: (.[2] // ""), title: (.[3] // ""), kids: ((.[4] // "0") == "1")}}) | from_entries) as $meta
     | ($open | split("\n") | map(select(. != ""))) as $openIds
     | ($parents | split("\n") | map(select(. != ""))) as $epicParents
@@ -436,7 +530,7 @@ sl-queue-json() {
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
     | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
-      + {revisited: ([($st.visits // [])[] | select(. as $v | $ids | index($v) != null)] | length), autoparked: (($st.parked // []) | unique | length)}' 2>/dev/null || true
+      + {revisited: ([($st.visits // [])[] | select(. as $v | $ids | index($v) != null)] | length), autoparked: (($st.parked // []) | unique | length)} + $extra' 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt

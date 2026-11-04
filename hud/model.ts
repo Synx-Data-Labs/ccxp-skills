@@ -113,6 +113,10 @@ export function parseHelper(stdout: string): HelperData | null {
     // Counts are clamped to whole non-negative numbers; the buckets are the helper's job to keep summing to total.
     const n = (x: unknown) => Math.max(0, Math.floor(num(x)))
     queue = { total: n(q.total), ready: n(q.ready), held: n(q.held), epic: n(q.epic), claimed: n(q.claimed), revisited: n(q.revisited), autoparked: n(q.autoparked) }
+    // Untrusted: the branch is only drawn when it is a plain git ref name (the same shape the config accepts for `ci.branch`).
+    const branch = str(q.branch)
+    if (q.source === 'default-branch' && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch)) queue.branch = branch
+    else if (q.fallback === true) queue.fallback = true
   }
   const c = r.ci
   let ci: Ci | null = null
@@ -488,15 +492,16 @@ export function queueVariants(q: Queue, full: boolean): Variants {
   if (q.revisited > 0) parts.push(['revisited', 'revisited', 'v', q.revisited])
   if (q.autoparked > 0) parts.push(['auto-parked', 'auto-parked', 'a', q.autoparked])
   if (full) {
-    const long: Seg[] = [{ text: `queue ${q.total} = ` }]
+    const long: Seg[] = [{ text: `queue${q.branch ? ` (${q.branch})` : q.fallback ? ' (working tree, origin unavailable)' : ''} ${q.total} = ` }]
     parts.forEach(([one, many, , n], i) => {
       if (i > 0) long.push({ text: ' | ', dim: true })
       long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
     })
     return [long]
   }
-  const short: Seg[] = [{ text: `queue ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
-  const tiny: Seg[] = [{ text: `queue ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
+  const at = q.branch ? `@${q.branch}` : q.fallback ? '@wt' : ''
+  const short: Seg[] = [{ text: `queue${at} ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
+  const tiny: Seg[] = [{ text: `queue${at} ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
   return [short, tiny]
 }
 

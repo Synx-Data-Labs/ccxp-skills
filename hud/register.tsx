@@ -160,7 +160,7 @@ async function refresh($: any, cfg: HudConfig) {
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
-      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version }),
+      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, queue_source: cfg.queue?.source ?? 'working-tree' }),
       timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null

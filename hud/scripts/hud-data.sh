@@ -21,16 +21,19 @@
 #                         "stats"},   # null | {"has_history","approx","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
-#    "queue": null | {"total","ready","blocked","decision","external","epic","claimed"},
-#                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue
+#    "queue": null | {"total","ready","held","epic","claimed","revisited","autoparked"[,"source","branch"|"fallback"]},
+#                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
+#                         # `source`/`branch` only when stdin `queue_source` is "default-branch": read from origin/<branch>
+#                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
-# `ci_ttl` (poll seconds), and `show_version` (bool, default true). Never exits non-zero: any failure prints "{}" so the mod
+# `ci_ttl` (poll seconds), and `show_version` (bool, default true),
+# `queue_source` ("working-tree" default | "default-branch"). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
-# time-limited CI lookup in hud-ci.sh; the only writes are its cache files.
+# time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` for queue_source default-branch).
 
 _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hud-lib.sh
@@ -41,7 +44,7 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-version.sh"
 
 hud-data() {
-  local input cwd session_id ci_cfg ci_ttl show_version
+  local input cwd session_id ci_cfg ci_ttl show_version queue_source
   input=$(cat)
   cwd=$(printf '%s' "$input" | jq -r '.cwd // .workspace.current_dir // ""' 2>/dev/null) || cwd=""
   session_id=$(printf '%s' "$input" | jq -r '.session_id // empty' 2>/dev/null) || session_id=""
@@ -50,6 +53,8 @@ hud-data() {
   ci_ttl=$(printf '%s' "$input" | jq -r '(.ci_ttl // 0) | floor' 2>/dev/null) || ci_ttl=0
 
   show_version=$(printf '%s' "$input" | jq -r 'if .show_version == false then 0 else 1 end' 2>/dev/null) || show_version=1
+
+  queue_source=$(printf '%s' "$input" | jq -r 'if .queue_source == "default-branch" then "default-branch" else "working-tree" end' 2>/dev/null) || queue_source="working-tree"
 
   local repo_root clone_id label task_id="" task_title="" branch rec
   repo_root=$(sl-repo-root "$cwd")
@@ -85,7 +90,7 @@ hud-data() {
   local ledger; ledger=$(sl-ledger-json)
   [ -n "$ledger" ] || ledger="null"
 
-  local queue; queue=$(sl-queue-json "$repo_root" 2>/dev/null) || queue=""
+  local queue; queue=$(sl-queue-json "$repo_root" "$queue_source" 2>/dev/null) || queue=""
   [ -n "$queue" ] || queue="null"
 
   local repo_name ci

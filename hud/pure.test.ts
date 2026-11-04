@@ -1375,3 +1375,43 @@ test('alertSegs: red row is bold, red, undimmed; NO_COLOR drops the colour and s
   const green = bandRows(withHelper({ ci: { state: 'passing', at: RUN_AT } }), { ...CI, fields: ['ci'] }, 140)[0]
   expect(isAlertRow(green)).toBe(false)
 })
+
+// --- queue source (T20261104-420419): working tree (default) or the default branch ---
+
+test('queue source: config parses {source} or a bare string; unknown means unset; a project value replaces the user value like ci', async () => {
+  expect(parseConfigText('{"queue": {"source": "default-branch"}}').queue).toEqual({ source: 'default-branch' })
+  expect(parseConfigText('{"queue": "Default-Branch"}').queue).toEqual({ source: 'default-branch' })
+  expect(parseConfigText('{"queue": {"source": "working-tree"}}').queue).toEqual({ source: 'working-tree' })
+  for (const bad of ['{"queue": {"source": "nope"}}', '{"queue": 3}', '{"queue": null}', '{"queue": {}}']) expect(parseConfigText(bad).queue).toBeUndefined()
+  expect(mergeConfig({}, {}).queue).toBeUndefined()
+  expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), {}).queue).toEqual({ source: 'default-branch' })
+  expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), parseConfigText('{"queue": {"source": "working-tree"}}')).queue).toEqual({ source: 'working-tree' })
+  // `"queue": null` in a project file switches a user-level source off for that project, like `ci: null`.
+  expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), parseConfigText('{"queue": null}')).queue).toBeUndefined()
+})
+
+test('queue source: withConfig writes the queue key and keeps the rest', async () => {
+  expect(JSON.parse(withConfig('{"band": true}', { queue: { source: 'default-branch' } }))).toEqual({ band: true, queue: { source: 'default-branch' } })
+  expect(JSON.parse(withConfig('{"queue": {"source": "default-branch"}}', { fillColor: 'blue' }))).toEqual({ queue: { source: 'default-branch' }, fillColor: 'blue' })
+})
+
+test('queue source: parseHelper keeps a plain branch name only for source default-branch, and a fallback flag', async () => {
+  const q = (extra: object) => parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, ...extra } }))!.queue
+  expect(q({ source: 'default-branch', branch: 'main' })).toEqual({ ...QUEUE, branch: 'main' })
+  expect(q({ source: 'default-branch', branch: 'release/4.8' })!.branch).toBe('release/4.8')
+  expect(q({ source: 'default-branch', branch: 'bad branch; ls' })).toEqual(QUEUE)
+  expect(q({ source: 'working-tree', branch: 'main' })).toEqual(QUEUE)
+  expect(q({ source: 'working-tree', fallback: true })).toEqual({ ...QUEUE, fallback: true })
+})
+
+test('queue source: the band reads queue@main, details queue (main); working tree is unchanged; a fallback is marked', async () => {
+  const main = withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main' } })
+  expect(text(bandRows(main as any, NOCI, 140))).toContain('queue@main 44 = 30r 6h 3x')
+  expect(detail(main as any, 160).join('\n')).toContain('queue (main) 44 = 30 ready | 6 held | 3 epics')
+  const wt = withHelper({ ...SHORT, queue: QUEUE })
+  expect(text(bandRows(wt as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x')
+  expect(text(bandRows(wt as any, NOCI, 140))).not.toContain('queue@')
+  const fb = withHelper({ ...SHORT, queue: { ...QUEUE, fallback: true } })
+  expect(text(bandRows(fb as any, NOCI, 140))).toContain('queue@wt 44 = 30r 6h 3x')
+  expect(detail(fb as any, 200).join('\n')).toContain('queue (working tree, origin unavailable) 44 = 30 ready')
+})
