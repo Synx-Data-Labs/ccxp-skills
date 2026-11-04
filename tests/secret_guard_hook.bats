@@ -176,6 +176,8 @@ commit_allow() {
 
 @test "more shapes: env prefix, -e NAME=literal, curl variants, .env readers, xtrace" {
   assert_blocked 'GH_TOKEN=abcdef123456 gh api user'
+  assert_blocked 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY aws s3 ls'
+  assert_allowed 'GOOGLE_APPLICATION_CREDENTIALS=/etc/keys/sa.json cmd'
   assert_blocked 'docker run -e POSTGRES_PASSWORD=mysecretpw img'
   assert_blocked 'curl -su admin:hunter22 https://x.example'
   assert_blocked 'curl --user=admin:hunter22 https://x.example'
