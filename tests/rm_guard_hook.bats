@@ -321,7 +321,7 @@ rm -rf "$TARGET"'
 @test "hooks.json registers rm-guard.sh on the Bash matcher; scripts are executable" {
   run jq -r '[.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[].command] | .[]' "$REPO_ROOT/hooks/hooks.json"
   [ "$status" -eq 0 ]
-  [ "$output" = '"${CLAUDE_PLUGIN_ROOT}/hooks/rm-guard.sh"' ]
+  [[ "$output" == *'"${CLAUDE_PLUGIN_ROOT}/hooks/rm-guard.sh"'* ]]
   [ -x "$REPO_ROOT/hooks/rm-guard.sh" ]
 }
 

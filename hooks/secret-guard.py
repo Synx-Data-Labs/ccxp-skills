@@ -201,7 +201,7 @@ def analyze(cmd):
                 add("cmdline-secret", m.group(2))
             for m in ENV_PREFIX.finditer(stage):
                 if (SECRET_NAME_RE.search(m.group(1)) and not SAFE_SUFFIX.search(m.group(1))
-                        and not re.search(r"/|\.[A-Za-z]{1,5}$", m.group(3))):  # a file path is not a value
+                        and not re.search(r"^[/.~]|\.[A-Za-z]{1,5}$", m.group(3))):  # a file path is not a value
                     add("cmdline-secret", m.group(3))
             for pat, grp in ((CURL_USER, 3), (DOCKER_LOGIN, 2), (MYSQL_P, 1), (GH_SECRET_BODY, 2)):
                 for m in pat.finditer(stage):
