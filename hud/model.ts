@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -55,6 +55,13 @@ function parseStats(x: unknown): ApStats | null {
   return { has_history: o.has_history === true, approx: o.approx === true, merged_24h: num(o.merged_24h), cycles_24h: num(o.cycles_24h), avg_merged_24h: num(o.avg_merged_24h), trend }
 }
 
+function parseJobStats(x: unknown): JobStats | null {
+  if (typeof x !== 'object' || x === null || Array.isArray(x)) return null
+  const o = x as Record<string, unknown>
+  const trend = o.trend === 'up' || o.trend === 'down' ? o.trend : 'flat'
+  return { approx: o.approx === true, avg_approx: o.avg_approx === true, jobs_24h: Math.max(0, Math.floor(num(o.jobs_24h))), avg_jobs_day: Math.max(0, num(o.avg_jobs_day)), trend }
+}
+
 /** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
 export function parseHelper(stdout: string): HelperData | null {
   let raw: unknown
@@ -98,6 +105,7 @@ export function parseHelper(stdout: string): HelperData | null {
         .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null)
         .map(x => ({ job: num(x.job), title: str(x.title), flags: str(x.flags) })),
       lifetime_jobs: num(l.lifetime_jobs),
+      stats: parseJobStats(l.stats),
       // v3: array of {id,...}; old files: a count plus parked_ids
       parked: (Array.isArray(l.parked)
         ? l.parked.map(x => (typeof x === 'string' ? x : typeof x === 'object' && x !== null ? (x as Record<string, unknown>).id : null))
@@ -122,10 +130,10 @@ export function parseHelper(stdout: string): HelperData | null {
     const h = q.hwm
     if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
       const hw = h as Record<string, unknown>
-      if ([hw.life, hw.d30, hw.d7].every(x => typeof x === 'number' && Number.isFinite(x))) {
+      if ([hw.d180, hw.d30, hw.d7].every(x => typeof x === 'number' && Number.isFinite(x))) {
         const d7 = Math.max(n(hw.d7), queue.total)
         const d30 = Math.max(n(hw.d30), d7)
-        queue.hwm = { life: Math.max(n(hw.life), d30), d30, d7 }
+        queue.hwm = { d180: Math.max(n(hw.d180), d30), d30, d7 }
       }
     }
   }
@@ -439,6 +447,23 @@ function apStatsVariants(ap: Autopilot): Variants | null {
 }
 
 /**
+ * The jobs line's 24h cell (details only): `last 24h: jobs 8 ▲ / average 5.2/day`. Same conventions as the AP cell
+ * (apStatsVariants): the count is jobs STARTED in the rolling last 24 h, the average is lifetime jobs per day at one
+ * decimal; a green `▲` above, a red `▼` below, NO arrow when equal at that decimal or when the count is an estimate;
+ * `~` before the count = it may be too low (the start log is younger than 24 h), `~` before the average = it rests on
+ * an estimated first-job time. No stats, no cell (there is no total-jobs fallback).
+ */
+function jobStatsSegs(st: JobStats | null | undefined): Seg[] | null {
+  if (!st) return null
+  const glyph = st.approx ? '' : st.trend === 'up' ? '▲' : st.trend === 'down' ? '▼' : ''
+  return [
+    { text: `last 24h: jobs ${st.approx ? '~' : ''}${st.jobs_24h}` },
+    ...(glyph ? [{ text: ` ${glyph}`, color: st.trend === 'up' ? ('success' as const) : ('error' as const) }] : []),
+    { text: ` / average ${st.avg_approx ? '~' : ''}${st.avg_jobs_day.toFixed(1)}/day`, dim: true },
+  ]
+}
+
+/**
  * The repo cell, most to least detail:
  * `[→ ]owner/name @ branch* (wt X) (account) (root: X)`. It follows the session cwd (the helper is
  * run for it). `→` leads for a couple of refreshes after the working repo changed; `(root: X)` shows
@@ -558,8 +583,8 @@ export function queueVariants(q: Queue, full: boolean): Variants {
       long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
     })
     if (q.hwm) {
-      const tone = q.total >= q.hwm.life && q.hwm.life > 0 ? 'warning' : undefined
-      long.push({ text: ' | ', dim: true }, { text: `max ${q.hwm.life} life / ${q.hwm.d30} 30d / ${q.hwm.d7} 7d`, dim: !tone, color: tone })
+      const tone = q.total >= q.hwm.d180 && q.hwm.d180 > 0 ? 'warning' : undefined
+      long.push({ text: ' | ', dim: true }, { text: `max ${q.hwm.d180} 180d / ${q.hwm.d30} 30d / ${q.hwm.d7} 7d`, dim: !tone, color: tone })
     }
     return [long]
   }
@@ -568,11 +593,11 @@ export function queueVariants(q: Queue, full: boolean): Variants {
   const short: Seg[] = [{ text: `queue${at} ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
   const tiny: Seg[] = [{ text: `queue${at} ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
   if (!hw) return [short, tiny]
-  // High watermark: wide `max 40 life / 31 30d / 22 7d`, then `max 40/31/22` (life/30d/7d), then dropped. At the lifetime high: warning colour.
-  const tone = q.total >= hw.life && hw.life > 0 ? 'warning' : undefined
+  // High watermark: wide `max 40 180d / 31 30d / 22 7d`, then `max 40/31/22` (180d/30d/7d), then dropped. At the 180-day high: warning colour.
+  const tone = q.total >= hw.d180 && hw.d180 > 0 ? 'warning' : undefined
   return [
-    [...short, { text: ` · max ${hw.life} life / ${hw.d30} 30d / ${hw.d7} 7d`, dim: !tone, color: tone }],
-    [...short, { text: ` · max ${hw.life}/${hw.d30}/${hw.d7}`, dim: !tone, color: tone }],
+    [...short, { text: ` · max ${hw.d180} 180d / ${hw.d30} 30d / ${hw.d7} 7d`, dim: !tone, color: tone }],
+    [...short, { text: ` · max ${hw.d180}/${hw.d30}/${hw.d7}`, dim: !tone, color: tone }],
     short,
     tiny,
   ]
@@ -741,7 +766,7 @@ const DETAIL_STEPS = {
  * never abbreviated). Lines with nothing to say are left out, none is reserved.
  *   0 CI (first, alone; highlighted when red)
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit left, API-equivalent cost
- *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
+ *   3 jobs state, parked, last 24h jobs / average per day (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
  *   4 autopilot, next loop time (or overdue), 24h cell
  *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
  *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
@@ -785,11 +810,12 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   if (led) {
     const state = jobState(led.running.length)
     const parked = led.parked.length
+    const js = jobStatsSegs(led.stats)
     add(
       [
         one('state', [{ text: state.text, color: state.color }]),
         one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]),
-        one('total', [{ text: `total jobs ${led.lifetime_jobs}`, dim: true }]),
+        js ? one('jobs24', js) : null,
       ],
       DETAIL_STEPS.jobs,
     )

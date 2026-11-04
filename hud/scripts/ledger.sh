@@ -5,6 +5,7 @@
 #       start also takes [--started-at HH:MM] [--prompt-file <abs-path> | --prompt-stdin] [--agent <type[/model]>] [--flags a,b]
 #       (flags: autopilot, needs-confirmation, detached); --prompt-stdin saves stdin as <ledger dir>/ccxp-prompts/<n>.md (mode 600)
 #   ledger.sh finish <n>                                 job r<n> no longer running (drops its saved prompt copy)
+#   ledger.sh stats [--json]      jobs started in the rolling last 24 h vs the lifetime average per day (read-only; see ledger-stats)
 #   ledger.sh reconcile --alive <n,n,...|->              print running rows NOT in the alive list, one TSV line each:
 #                                 job title context prompt started_at agent flags resumed prompt_check started_on   ("-" = empty / no prompt file)
 #   ledger.sh set-started <n> HH:MM   set a running row's start time (24h, validated)
@@ -51,6 +52,11 @@
 # parked count larger than the ids it came with is reported on stderr (no placeholders invented).
 # Text is cut to 300 chars, control chars stripped.
 # Writes are atomic (temp file + mv); a missing or corrupt file starts fresh.
+# Start log: `start` of a NEW job also appends "<epoch>\t<n>" to <ledger dir>/ccxp-ledger-starts.log (same base
+# name, `-starts.log`; mode 600, append-only, no titles). The first time the log is created while the ledger
+# already counts jobs, a one-time seed line `#seed\t<first-job estimate epoch>\t<log began epoch>` goes first, so the
+# lifetime average is meaningful from day one (the estimate is the oldest `<ledger>.bak-<UTC stamp>` migration
+# backup, else the moment the log began). `stats` reads it; nothing else writes it.
 # Not locked: concurrent writers are last-write-wins. Titles and paths only, NEVER secrets.
 
 ledger-file() {
@@ -60,6 +66,80 @@ ledger-file() {
 ledger-md-file() {
   local f; f=$(ledger-file)
   printf '%s.md' "${f%.json}"
+}
+
+ledger-starts-file() {
+  local f; f=$(ledger-file)
+  printf '%s-starts.log' "${f%.json}"
+}
+
+# $1 fallback epoch -> best estimate of when the first job started: the oldest `<ledger>.bak-<UTC stamp>-<pid>`
+# migration backup next to the ledger, else the fallback.
+ledger-first-estimate() {
+  local f b st first=""
+  f=$(ledger-file)
+  while IFS= read -r b; do
+    st="${b##*.bak-}"; st="${st%%-*}"
+    [[ "$st" =~ ^[0-9]{8}T[0-9]{6}Z$ ]] || continue
+    st=$(printf '%s' "$st" | jq -R 'try (strptime("%Y%m%dT%H%M%SZ") | mktime) catch empty' 2>/dev/null) || continue
+    [[ "$st" =~ ^[0-9]+$ ]] || continue
+    [[ -z "$first" || "$st" -lt "$first" ]] && first="$st"
+  done < <(compgen -G "$f.bak-*" 2>/dev/null)
+  printf '%s' "${first:-$1}"
+}
+
+# $1 job number -> append its start to the start log unless the job is already running or already logged.
+# Best-effort: a failure here never fails `start`.
+ledger-log-start() {
+  local n="$1" lf cur now first
+  lf=$(ledger-starts-file); now="${LEDGER_NOW:-$(date +%s)}"
+  cur=$(ledger-read)
+  printf '%s' "$cur" | jq -e --argjson n "$n" '[.running[] | select(.job == $n)] | length == 0' >/dev/null 2>&1 || return 0
+  [[ -f "$lf" ]] && grep -q -E "^[0-9]+"$'\t'"$n\$" "$lf" 2>/dev/null && return 0
+  mkdir -p "$(dirname "$lf")" 2>/dev/null || return 0
+  if [[ ! -f "$lf" ]]; then
+    : > "$lf" 2>/dev/null && chmod 600 "$lf" 2>/dev/null || return 0
+    if printf '%s' "$cur" | jq -e '.lifetime_jobs > 0' >/dev/null 2>&1; then
+      first=$(ledger-first-estimate "$now")
+      printf '#seed\t%s\t%s\n' "$first" "$now" >> "$lf" 2>/dev/null || true
+    fi
+  fi
+  printf '%s\t%s\n' "$now" "$n" >> "$lf" 2>/dev/null || true
+  return 0
+}
+
+# stats [--json]: jobs STARTED in the rolling last 24 h (now-86400 < ts <= now) against the lifetime average per day.
+#   - the unit is the job START (the log has no finish times);
+#   - lifetime jobs = the ledger's lifetime_jobs (highest number ever), or the logged starts when larger;
+#   - lifetime days = max(1, (now - first job) / 86400); first job = the seed estimate, else the oldest logged start;
+#   - trend compares jobs_24h with the average rounded to 1 decimal: up|down|flat (as autopilot stats);
+#   - `approx` (the 24h count may be too low) when the log does not reach back over the whole window: no log yet,
+#     or it began less than 24 h ago on top of a seed; `avg_approx` when the first-job time is an estimate (a seed
+#     or no log). Nothing is printed for a ledger that has never counted a job. Never fails.
+ledger-stats() {
+  local json=0 lf now life out
+  case "${1:-}" in --json) json=1 ;; '') ;; *) echo "usage: ledger.sh stats [--json]" >&2; return 2 ;; esac
+  lf=$(ledger-starts-file); now="${LEDGER_NOW:-$(date +%s)}"
+  life=$(ledger-read | jq '.lifetime_jobs' 2>/dev/null) || life=0
+  [[ -f "$lf" ]] || lf=/dev/null
+  out=$(jq -n -R -c --argjson now "$now" --argjson life "${life:-0}" --argjson est "$(ledger-first-estimate "$now")" '
+    def r2: (. * 100 | round) / 100;
+    [inputs | split("\t")] as $rows
+    | ([$rows[] | select(.[0] == "#seed" and (.[1] | test("^[0-9]+$")) and (.[2] | test("^[0-9]+$"))) | {first: (.[1] | tonumber), began: (.[2] | tonumber)}] | .[0]) as $seed
+    | [$rows[] | select((.[0] | test("^[0-9]+$")) and (.[0] | tonumber) <= $now) | (.[0] | tonumber)] as $t
+    | ($now - 86400) as $cut
+    | ([$life, ($t | length)] | max) as $lt
+    | ([($seed.first // null), ($t | min)] | map(select(. != null)) | min // $est) as $first
+    | ((($now - $first) / 86400) | if . < 1 then 1 else . end) as $days
+    | ($lt / $days | r2) as $avg
+    | ($t | map(select(. > $cut)) | length) as $n24
+    | ((($t | length) == 0) or ($seed != null and $seed.began > $cut)) as $approx
+    | select($lt > 0)
+    | {approx: $approx, avg_approx: ($seed != null or ($t | length) == 0), jobs_24h: $n24, lifetime_jobs: $lt, lifetime_days: ($days | r2), avg_jobs_day: $avg,
+       trend: (($avg * 10 | round) / 10 | if $n24 > . then "up" elif $n24 < . then "down" else "flat" end)}' "$lf" 2>/dev/null) || out=""
+  [[ -n "$out" ]] || return 0
+  if [[ $json == 1 ]]; then printf '%s\n' "$out"; return 0; fi
+  printf '%s' "$out" | jq -r '"24h: \(if .approx then "~" else "" end)\(.jobs_24h) jobs started · lifetime \(.lifetime_jobs) jobs over \(.lifetime_days) days · average \(if .avg_approx then "~" else "" end)\(.avg_jobs_day)/day"'
 }
 
 LEDGER_EMPTY='{"schema":3,"lifetime_jobs":0,"running":[],"next":[],"parked":[],"ref_counters":{"n":0,"s":0,"k":0}}'
@@ -683,6 +763,7 @@ ledger() {
         PF=$(ledger-save-prompt "$((10#${POS[0]}))") || return 2; HAVE_PF=true
       fi
       local SHA=""; [[ "$HAVE_PF" == true && -f "$PF" ]] && SHA=$(ledger-sha "$PF")
+      ledger-log-start "$((10#${POS[0]}))"
       ledger-update '(.running | map(select(.job == $n)) | .[0]) as $old
         | .running = ([.running[] | select(.job != $n)]
                       + [{job: $n, title: $t, context: (if $hc then $c else ($old.context // "") end),
@@ -702,6 +783,7 @@ ledger() {
       ledger-update '.running |= map(select(.job != $n))' --argjson n "$((10#$1))" || return 1
       [[ -f "$pf" ]] && unlink "$pf" 2>/dev/null
       return 0 ;;
+    stats) ledger-stats "$@" ;;
     reconcile)
       local alive="" have=false
       while [[ $# -gt 0 ]]; do
@@ -826,7 +908,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | stats [--json] | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 

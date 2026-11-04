@@ -77,9 +77,23 @@ export type Autopilot = {
   stats: ApStats | null
 }
 
+/** Jobs started in the rolling last 24 h against the lifetime average per day (`ledger.sh stats`); absent when the ledger has never counted a job. */
+export type JobStats = {
+  /** jobs_24h may be too low (the start log does not cover the whole window yet); false = exact. No trend arrow is drawn for it. */
+  approx: boolean
+  /** The average rests on an estimated first-job time (the log was seeded from the lifetime counter). */
+  avg_approx: boolean
+  jobs_24h: number
+  /** Lifetime jobs per day. */
+  avg_jobs_day: number
+  /** jobs_24h against the average at one decimal: up = busier (green arrow), down = quieter (red arrow), flat = same (no arrow). */
+  trend: 'up' | 'down' | 'flat'
+}
+
 export type Ledger = {
   running: { job: number; title: string; flags: string }[]
   lifetime_jobs: number
+  stats: JobStats | null
   /** Parked items; the HUD shows only the count (length). */
   parked: { id: string }[]
   next_job: number
@@ -106,12 +120,12 @@ export type Queue = {
   branch?: string
   /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
   fallback?: boolean
-  /** High watermark of the queue length (hud-queue-hwm.sh); absent when unknown. Always life >= d30 >= d7 >= total. */
+  /** High watermark of the queue length (hud-queue-hwm.sh); absent when unknown. Always d180 >= d30 >= d7 >= total (last 180 / 30 / 7 days). */
   hwm?: QueueHwm
 }
 
 /** The largest queue length seen over the lifetime of the repo's history, the last 30 days and the last 7 days. */
-export type QueueHwm = { life: number; d30: number; d7: number }
+export type QueueHwm = { d180: number; d30: number; d7: number }
 
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
 

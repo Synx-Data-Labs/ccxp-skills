@@ -298,7 +298,7 @@ test('a partial session.measure updates context and keeps the other units', asyn
   await band.unmount()
 })
 
-const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, parked: [{ id: 'k2' }], next_job: 83, updated_at: '' }
+const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, stats: { approx: false, avg_approx: false, jobs_24h: 8, avg_jobs_day: 5.2, trend: 'up' }, parked: [{ id: 'k2' }], next_job: 83, updated_at: '' }
 const HELPER_FULL = JSON.stringify({
   ...JSON.parse(HELPER_AP),
   ledger: LEDGER,
@@ -315,10 +315,10 @@ test('/hud details is a toggle: the first run expands the band to detail lines, 
   w.helper = { exitCode: 0, stdout: HELPER_FULL }
   world($, on, w)
   await $.session.start(START)
-  // Only the expanded view has the lifetime job count.
+  // Only the expanded view has the jobs-per-day cell.
   const expanded = async () => {
     const band = await $.ui.mount(BAND(140))
-    const isExpanded = (await band.find({ type: 'Text', text: /^total jobs 82$/ })) !== undefined
+    const isExpanded = (await band.find({ type: 'Text', text: /^last 24h: jobs 8/ })) !== undefined
     await band.unmount()
     return isExpanded
   }

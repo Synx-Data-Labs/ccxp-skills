@@ -582,7 +582,7 @@ const fullSnap = (over = {}) => ({
     repo_slug: 'acme/widgets',
     dirty: 2,
     autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) + 720 },
-    ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, parked: [{ id: 'k1' }, { id: 'k2' }], next_job: 83, updated_at: '' },
+    ledger: { running: [{ job: 70, title: 'Redo HUD repo field' }, { job: 73, title: 'Autopilot cycle 2' }], lifetime_jobs: 82, stats: { approx: false, avg_approx: false, jobs_24h: 8, avg_jobs_day: 5.2, trend: 'up' }, parked: [{ id: 'k1' }, { id: 'k2' }], next_job: 83, updated_at: '' },
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
     last_input_at: Math.floor(DETAIL_NOW / 1000) - 300,
   }),
@@ -611,7 +611,7 @@ test('details: lines in order: where, usage, jobs, autopilot, last prompt (no qu
   expect(lines.length).toBe(5)
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50')
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
   expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
 })
@@ -636,8 +636,37 @@ test('details: parked shows the count only, never the parked ids', async () => {
   const ids = ['k5', 'k6', 'k7', 'k8', 'k9', 'k10', 'k11', 'k12', 'k13']
   const ledger = { running: [], lifetime_jobs: 82, parked: ids.map(id => ({ id })), next_job: 83, updated_at: '' }
   const lines = detail(withHelper({ ledger }) as any, 140)
-  expect(lines[2]).toBe('READY │ parked 9 │ total jobs 82')
+  expect(lines[2]).toBe('READY │ parked 9')
   expect(lines.join('\n')).not.toMatch(/k\d/)
+})
+
+const jobsLine = (stats: unknown) => detail(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, 140)[2]
+const JS = { approx: false, avg_approx: false, jobs_24h: 8, avg_jobs_day: 5.2, trend: 'up' }
+
+test('details: the jobs line ends with `last 24h: jobs n / average m/day` and never shows a total-jobs figure', async () => {
+  expect(jobsLine(JS)).toBe('READY │ parked 0 │ last 24h: jobs 8 ▲ / average 5.2/day')
+  expect(jobsLine({ ...JS, jobs_24h: 3, trend: 'down' })).toBe('READY │ parked 0 │ last 24h: jobs 3 ▼ / average 5.2/day')
+  expect(jobsLine({ ...JS, jobs_24h: 5, avg_jobs_day: 5.04, trend: 'flat' })).toBe('READY │ parked 0 │ last 24h: jobs 5 / average 5.0/day') // equal at one decimal: no arrow
+  expect(jobsLine({ ...JS, approx: true })).toBe('READY │ parked 0 │ last 24h: jobs ~8 / average 5.2/day') // estimate: ~, no arrow
+  expect(jobsLine({ ...JS, avg_approx: true })).toBe('READY │ parked 0 │ last 24h: jobs 8 ▲ / average ~5.2/day')
+  expect(jobsLine(null)).toBe('READY │ parked 0') // no stats, no cell, no total fallback
+  expect(jobsLine(undefined)).toBe('READY │ parked 0')
+  expect(detail(fullSnap(), 140).join('\n')).not.toMatch(/total jobs/)
+})
+
+test('details: the jobs 24h arrow is green above, red below, and absent for equal or an estimate', async () => {
+  const arrow = (stats: object) => detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, NOCI, 140, DETAIL_NOW)[2].find(g => /[▲▼]/.test(g.text))
+  expect(arrow(JS)?.color).toBe('success')
+  expect(arrow({ ...JS, trend: 'down' })?.color).toBe('error')
+  expect(arrow({ ...JS, trend: 'flat' })).toBeUndefined()
+  expect(arrow({ ...JS, approx: true })).toBeUndefined()
+})
+
+test('parseHelper: ledger.stats is kept when it is an object, otherwise null', async () => {
+  const get = (stats: unknown) => parseHelper(JSON.stringify({ ...BASE, ledger: { running: [], lifetime_jobs: 5, stats, parked: [], next_job: 6, updated_at: '' } }))!.ledger!.stats
+  expect(get(JS)).toEqual(JS)
+  expect(get({ jobs_24h: 2.7, avg_jobs_day: 1, trend: 'sideways' })).toEqual({ approx: false, avg_approx: false, jobs_24h: 2, avg_jobs_day: 1, trend: 'flat' })
+  for (const bad of [undefined, null, 'x', []]) expect(get(bad)).toBeNull()
 })
 
 test('details: every line fits the terminal at every width and the band row is untouched', async () => {
@@ -658,8 +687,8 @@ test('details: a narrow terminal cuts a line with an ellipsis and never abbrevia
   expect(cut.length).toBe(54)
   expect(cut.endsWith('…')).toBe(true)
   expect(full[1].startsWith(cut.slice(0, -1))).toBe(true)
-  // the jobs line: `total jobs` is never shortened to `total`
-  expect(detail(fullSnap(), 30)[2]).toBe('WORKING (2) │ parked 2 │ to…')
+  // the jobs line: the 24h cell is cut with an ellipsis, never abbreviated
+  expect(detail(fullSnap(), 30)[2]).toBe('WORKING (2) │ parked 2 │ la…')
   // no shortened forms at any width (the band's ctx / 5h / bare `total` forms never appear in details)
   for (let cols = 140; cols >= 22; cols--) {
     const all = detail(snap(), cols).join('\n')
@@ -715,7 +744,7 @@ test('details: the jobs line never lists the running jobs (the band already show
   expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 96% left │ API-equivalent cost $693.75')
   const all = lines.join('\n')
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
+  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
   // ...but the one-row band keeps its short forms
   expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...NOCI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
 })
@@ -1145,47 +1174,47 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
 
-// --- queue high watermark (lifetime / 30d / 7d) ---
+// --- queue high watermark (180d / 30d / 7d) ---
 
-const HWM = { life: 90, d30: 61, d7: 52 }
+const HWM = { d180: 90, d30: 61, d7: 52 }
 
 test('queue hwm: parseHelper keeps a complete watermark, nests the windows and the current length, ignores anything else', async () => {
   const get = (hwm: unknown) => parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, hwm } }))!.queue!.hwm
   expect(get(HWM)).toEqual(HWM)
-  expect(get({ life: 10, d30: 20, d7: 30 })).toEqual({ life: 44, d30: 44, d7: 44 }) // never below the nested window or the current length (44)
-  expect(get({ life: 50.9, d30: -3, d7: 0 })).toEqual({ life: 50, d30: 44, d7: 44 })
-  for (const bad of [undefined, null, 'x', [], {}, { life: 9, d30: 5 }, { life: '9', d30: 5, d7: 1 }, { life: 9, d30: NaN, d7: 1 }]) expect(get(bad)).toBeUndefined()
+  expect(get({ d180: 10, d30: 20, d7: 30 })).toEqual({ d180: 44, d30: 44, d7: 44 }) // never below the nested window or the current length (44)
+  expect(get({ d180: 50.9, d30: -3, d7: 0 })).toEqual({ d180: 50, d30: 44, d7: 44 })
+  for (const bad of [undefined, null, 'x', [], {}, { d180: 9, d30: 5 }, { d180: '9', d30: 5, d7: 1 }, { d180: 9, d30: NaN, d7: 1 }, { life: 9, d30: 5, d7: 1 }]) expect(get(bad)).toBeUndefined()
 })
 
-test('queue hwm: the band shows max life / 30d / 7d, details too; no watermark means the cell is unchanged', async () => {
+test('queue hwm: the band shows max 180d / 30d / 7d, details too; no watermark means the cell is unchanged', async () => {
   const s = withHelper({ ...SHORT, queue: { ...QUEUE, hwm: HWM } })
-  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6h 3x · max 90 life / 61 30d / 52 7d')
-  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | max 90 life / 61 30d / 52 7d')
+  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6h 3x · max 90 180d / 61 30d / 52 7d')
+  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | max 90 180d / 61 30d / 52 7d')
   expect(text(bandRows(withHelper({ ...SHORT, queue: QUEUE }) as any, NOCI, 160))).not.toContain('max')
   expect(detail(withHelper({ queue: QUEUE }) as any, 200).join('\n')).not.toContain('max')
   // the source marker stays in front of the numbers
-  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6h 3x · max 90 life / 61 30d / 52 7d')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6h 3x · max 90 180d / 61 30d / 52 7d')
 })
 
-test('queue hwm: a narrow band degrades max life/30d/7d, then max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
+test('queue hwm: a narrow band degrades max 180d/30d/7d, then max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
   const q = { ...QUEUE, hwm: HWM }
   const seen = new Set<string>()
   for (let cols = 160; cols >= 22; cols--) {
     const rows = bandRows(withHelper({ ...SHORT, task_title: '', queue: q, ledger: null, ci: null }) as any, NOCI, cols)
     const t = text(rows)
     for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
-    if (t.includes('max 90 life / 61 30d / 52 7d')) seen.add('long')
+    if (t.includes('max 90 180d / 61 30d / 52 7d')) seen.add('long')
     else if (t.includes('max 90/61/52')) seen.add('short')
     else if (t.includes('queue 44 = 30r')) seen.add('plain')
     else if (t.includes('queue 30/44')) seen.add('tiny')
   }
   expect([...seen].sort()).toEqual(['long', 'plain', 'short', 'tiny'])
-  // never a half-cut watermark such as "max 90 life / 6"
-  for (let cols = 60; cols >= 40; cols--) expect(text(bandRows(withHelper({ ...SHORT, queue: q, ledger: null, ci: null }) as any, NOCI, cols))).not.toMatch(/max \d+ life \/( \d+( 30d)?)?$/m)
+  // never a half-cut watermark such as "max 90 180d / 6"
+  for (let cols = 60; cols >= 40; cols--) expect(text(bandRows(withHelper({ ...SHORT, queue: q, ledger: null, ci: null }) as any, NOCI, cols))).not.toMatch(/max \d+ 180d \/( \d+( 30d)?)?$/m)
 })
 
-test('queue hwm: at the lifetime high the max reads in the warning colour, otherwise dim', async () => {
-  const find = (total: number) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, held: 0, epic: 0, hwm: { life: 90, d30: 90, d7: 90 } } }) as any, NOCI, 200).flat().find(x => x.text.includes('max 90'))!
+test('queue hwm: at the 180-day high the max reads in the warning colour, otherwise dim', async () => {
+  const find = (total: number) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, held: 0, epic: 0, hwm: { d180: 90, d30: 90, d7: 90 } } }) as any, NOCI, 200).flat().find(x => x.text.includes('max 90'))!
   expect(find(90).color).toBe('warning')
   expect(find(44).color).toBeUndefined()
   expect(find(44).dim).toBe(true)

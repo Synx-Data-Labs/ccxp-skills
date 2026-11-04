@@ -88,8 +88,8 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"; echo '{{bad' > "$CCXP_LEDGER_FILE"
   bash "$LEDGER" start 3 "t"
   [ "$(bash "$LEDGER" show | jq .lifetime_jobs)" = "3" ]
-  # no stray temp files left behind: json, md and the backup of the corrupt file
-  [ "$(ls "$(dirname "$CCXP_LEDGER_FILE")" | wc -l | tr -d ' ')" = "3" ]
+  # no stray temp files left behind: json, md, the start log and the backup of the corrupt file
+  [ "$(ls "$(dirname "$CCXP_LEDGER_FILE")" | wc -l | tr -d ' ')" = "4" ]
 }
 
 
@@ -174,7 +174,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
     [ "$status" -ne 0 ]
   done
   [ "$(cat "$CCXP_LEDGER_FILE")" = "$before" ]
-  [ "$(ls "$(dirname "$CCXP_LEDGER_FILE")" | wc -l | tr -d ' ')" = "2" ]
+  [ "$(ls "$(dirname "$CCXP_LEDGER_FILE")" | wc -l | tr -d ' ')" = "3" ]   # json, md, start log
 }
 
 @test "old-shape file keeps working and gains the new fields on first write" {
@@ -900,4 +900,93 @@ Q="At this moment, I trust you to do the customer visible posts, tagging, and pu
   [ "$(grep -n '^## Parked' "$md" | cut -d: -f1)" -lt "$(grep -n '^## Authorization (13)' "$md" | cut -d: -f1)" ]
   printf 'k1 parked\n' > "$BATS_TEST_TMPDIR/r.txt"
   run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"; [ "$status" -eq 0 ]
+}
+
+# --- start log + stats (jobs started in the rolling last 24 h vs the lifetime average per day) ---
+
+LOG() { printf '%s' "${CCXP_LEDGER_FILE%.json}-starts.log"; }
+
+@test "start appends '<epoch><TAB><n>' to the start log once per job (a re-start or a second start of a running job adds nothing)" {
+  export LEDGER_NOW=1800000000
+  bash "$LEDGER" start 5 "five"
+  bash "$LEDGER" start 5 "five again"
+  LEDGER_NOW=1800000100 bash "$LEDGER" start 6 "six"
+  [ "$(cat "$(LOG)")" = $'1800000000\t5\n1800000100\t6' ]
+  [ "$(stat -c %a "$(LOG)" 2>/dev/null || stat -f %Lp "$(LOG)")" = 600 ]
+  # no titles or prompts in the log
+  ! grep -q five "$(LOG)"
+  # a finished job that is started again is not counted twice
+  bash "$LEDGER" finish 5
+  LEDGER_NOW=1800000200 bash "$LEDGER" start 5 "five reopened"
+  [ "$(wc -l < "$(LOG)" | tr -d ' ')" -eq 2 ]
+}
+
+@test "the first start on a ledger that already counts jobs writes a one-time seed (first-job estimate from the oldest migration backup)" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":782,"running":[]}' > "$CCXP_LEDGER_FILE"
+  touch "$CCXP_LEDGER_FILE.bak-20261030T172334Z-1" "$CCXP_LEDGER_FILE.bak-20261101T000000Z-2"
+  LEDGER_NOW=1793834380 bash "$LEDGER" start 783 "x"
+  LEDGER_NOW=1793834400 bash "$LEDGER" start 784 "y"
+  [ "$(cat "$(LOG)")" = $'#seed\t1793381014\t1793834380\n1793834380\t783\n1793834400\t784' ]
+}
+
+@test "a fresh ledger (no jobs yet) gets no seed: the first logged start is the first job" {
+  LEDGER_NOW=1800000000 bash "$LEDGER" start 1 "x"
+  [ "$(cat "$(LOG)")" = $'1800000000\t1' ]
+}
+
+@test "stats: 24h count is starts in (now-86400, now]; the average is lifetime jobs over max(1, days since the first job); trend vs the 1-decimal average" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":100,"running":[]}' > "$CCXP_LEDGER_FILE"
+  local now=1800000000 d=86400
+  # exact log (no seed): first start 10 days ago; 100 jobs / 10 days = 10.0 per day
+  printf '%s\t1\n%s\t98\n%s\t99\n%s\t100\n' $((now - 10 * d)) $((now - d)) $((now - 3600)) $((now - 60)) > "$(LOG)"
+  LEDGER_NOW=$now run bash "$LEDGER" stats --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -c '{approx, avg_approx, jobs_24h, avg_jobs_day, trend}' <<<"$output")" = '{"approx":false,"avg_approx":false,"jobs_24h":2,"avg_jobs_day":10,"trend":"down"}' ]
+  # the start exactly 24 h ago is outside the window; a future-dated or malformed line is skipped
+  printf '%s\t101\nnonsense\n%s\t102\n' $((now - 10)) $((now + 500)) >> "$(LOG)"
+  echo '{"schema":3,"lifetime_jobs":102,"running":[]}' > "$CCXP_LEDGER_FILE"
+  LEDGER_NOW=$now run bash "$LEDGER" stats --json
+  [ "$(jq .jobs_24h <<<"$output")" -eq 3 ]
+  [ "$(jq .trend <<<"$output")" = '"down"' ]
+  # busy day: up
+  printf '%s\t103\n%s\t104\n%s\t105\n%s\t106\n%s\t107\n%s\t108\n%s\t109\n%s\t110\n%s\t111\n%s\t112\n%s\t113\n' $(for k in $(seq 1 11); do echo $((now - 100 - k)); done) >> "$(LOG)"
+  LEDGER_NOW=$now run bash "$LEDGER" stats --json
+  [ "$(jq .trend <<<"$output")" = '"up"' ]
+  # the plain form
+  LEDGER_NOW=$now run bash "$LEDGER" stats
+  [[ "$output" == "24h: 14 jobs started · lifetime "* ]]
+}
+
+@test "stats: equal at one decimal is flat; days are at least 1" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":3,"running":[]}' > "$CCXP_LEDGER_FILE"
+  local now=1800000000
+  printf '%s\t1\n%s\t2\n%s\t3\n' $((now - 600)) $((now - 500)) $((now - 400)) > "$(LOG)"
+  LEDGER_NOW=$now run bash "$LEDGER" stats --json
+  [ "$(jq -c '{jobs_24h, lifetime_days, avg_jobs_day, trend}' <<<"$output")" = '{"jobs_24h":3,"lifetime_days":1,"avg_jobs_day":3,"trend":"flat"}' ]
+}
+
+@test "stats: a seeded log is approximate (avg estimated; the 24h count too while the log is under 24 h old)" {
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":782,"running":[]}' > "$CCXP_LEDGER_FILE"
+  local now=1800000000 d=86400
+  printf '#seed\t%s\t%s\n%s\t783\n' $((now - 5 * d)) $((now - 3600)) $((now - 60)) > "$(LOG)"
+  LEDGER_NOW=$now run bash "$LEDGER" stats --json
+  [ "$(jq -c '{approx, avg_approx, jobs_24h, avg_jobs_day}' <<<"$output")" = '{"approx":true,"avg_approx":true,"jobs_24h":1,"avg_jobs_day":156.4}' ]
+  # a day later the log covers the whole window: the count is exact, the average stays an estimate
+  LEDGER_NOW=$((now + 2 * d)) run bash "$LEDGER" stats --json
+  [ "$(jq -c '{approx, avg_approx}' <<<"$output")" = '{"approx":false,"avg_approx":true}' ]
+}
+
+@test "stats: no log yet on a ledger with jobs is an approximate zero; an empty ledger prints nothing; stats never writes" {
+  LEDGER_NOW=1800000000 run bash "$LEDGER" stats --json
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":50,"running":[]}' > "$CCXP_LEDGER_FILE"
+  LEDGER_NOW=1800000000 run bash "$LEDGER" stats --json
+  [ "$(jq -c '{approx, jobs_24h}' <<<"$output")" = '{"approx":true,"jobs_24h":0}' ]
+  [ ! -e "$(LOG)" ]
 }

@@ -25,7 +25,7 @@
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
 #                         # `source`/`branch` only when stdin `queue_source` is "default-branch": read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
-#                         # `hwm`: {"life","d30","d7"} high watermark of the queue length (lifetime / last 30 days / last 7 days), from
+#                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
