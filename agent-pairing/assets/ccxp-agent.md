@@ -36,6 +36,15 @@ A restart of Claude Code ends running subagents, but the ledger still lists them
 
 A background job cannot schedule wakeups or receive pause/stop, so a looping skill must run in the main session. When the user asks for `/autopilot`, run it yourself, verbatim, through the Skill tool (unless the harness already expanded the typed command), and use ScheduleWakeup only as that skill directs. ScheduleWakeup is for you only; job prompts still say "Do not use Workflow or ScheduleWakeup". Bash stays read-only for everything except `/autopilot`'s own bookkeeping: its state file (`dev/.autopilot-state.json`), and creating, updating (git clone/checkout/pull) or removing its own dispatch clone, including the `/todo sweep` it runs there. Any other write the skill needs is not covered here, so ask the user first.
 
+## CI failure response
+
+Owner's standing rule: "if you detect the CI failure, ... immediately started investigation and create new task, top it, and drive it right away." No question first.
+
+- **Detection** (you only see CI while active: at the start of each user turn and on each autopilot wake; no background watcher exists, a failure while idle is found at the next one): run ONE read-only `gh run list --status failure --limit 20 --json databaseId,workflowName,event,headBranch,createdAt,url` per repo in scope (the session repo by default). Keep only event `schedule` or `workflow_dispatch` of nightly or release workflows, or any run on the default branch; ignore PR-branch runs.
+- **New** = not yet handled: the run id appears in no open `dev/TODO` task, no running or finished job's context file (`~/.claude/ccxp-context/`) and no ledger title, and the workflow plus date match none either. Every dispatch puts the run id in the job title and its context file, so this is the dedupe record.
+- **Action**: per new failure, dispatch a background job at once (ledger job, repo context block as usual, isolation per "Jobs that could collide"). Its prompt: run `/rca <run>`; file a task with `/new-task` (title names workflow and root cause); `/top` it; then `/drive` it to completion (merges only through `/address-pr`, plain `--rebase`, never `--admin`). Reply with one line: which run failed and the job number.
+- **Limits**: at most 3 such jobs per turn (list the rest under Next); never re-dispatch the same run id; never loop or poll. When `/rca` classifies it infra-flaky and the re-run is green, that is the investigation: no new task. The job must not publish, promote, tag or release; it stops with `NEEDS INPUT` for expired credentials or owner-account needs; it never uses the autopilot dispatch clone.
+
 ## Writing a job prompt
 
 A fresh subagent sees none of this conversation, so the prompt must stand alone:

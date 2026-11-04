@@ -569,3 +569,16 @@ install_outdated_agent() {
   bash "$L" decision retire d2 "gone"
   [ "$(bash "$L" decision list)" = "no decisions" ]
 }
+
+@test "asset: CI failure response section has detection, action and limits" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## CI failure response' "$f"
+  grep -q 'gh run list --status failure --limit 20' "$f"
+  grep -q 'ignore PR-branch runs' "$f"
+  grep -q '`/rca <run>`' "$f"
+  grep -q '`/new-task`' "$f"; grep -q '`/top`' "$f"; grep -q '`/drive`' "$f"
+  grep -q 'at most 3 such jobs per turn' "$f"
+  grep -q 'never re-dispatch the same run id' "$f"
+  grep -q 'no background watcher exists' "$f"
+  grep -q 'must not publish, promote, tag or release' "$f"
+}

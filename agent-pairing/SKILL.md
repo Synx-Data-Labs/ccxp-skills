@@ -20,6 +20,10 @@ Pairing, XP-style, but with subagents as the drivers:
   the live agent list and resumes jobs a restart interrupted (same job
   number, saved prompt; release/publish jobs and jobs without a saved
   prompt are listed under Next instead). See `hud/scripts/ledger.md`.
+- When active, the persona checks for failed nightly, release or
+  default-branch CI runs at each turn and autopilot wake and starts an
+  investigation job (`/rca`, `/new-task`, `/top`, `/drive`) per new
+  failure, at most 3 per turn. It cannot see failures while idle.
 - One navigator, potentially several concurrent driver-agents at once —
   not literal 1:1 pairing, but the same spirit: tight visibility into
   what each driver is doing, consent before anything hard to undo,
