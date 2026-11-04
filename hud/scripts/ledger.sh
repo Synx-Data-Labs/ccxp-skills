@@ -30,7 +30,7 @@
 #   ledger.sh show [--brief]      print the ledger JSON, or one summary line (never fails)
 #   ledger.sh authz list [--json]            one TSV line per key: key value note quote date (unlisted keys read as no)
 #   ledger.sh authz show [<key>]             <key>: yes|no (default no); no key: the effective list as JSON
-#   ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   owner's typed words only
+#   ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   owner's typed words only; yes requires --quote
 #     (ccxp-authz.json next to the ledger, mode 600, atomic; once it exists reply/render add an "Authorization:" section)
 #
 # File: ${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}
@@ -663,7 +663,8 @@ ledger-authz() {
       local k="${POS[0]:-}" v="${POS[1]:-}"
       [[ "$k" =~ ^[a-z][a-z0-9_]{1,63}$ ]] || { echo "ledger: authz key must be lower_snake_case: $k" >&2; return 2; }
       [[ "$v" == yes || "$v" == no ]] || { echo "ledger: authz value must be yes or no: $v" >&2; return 2; }
-      [[ "$v" == no || -n "$QUOTE" ]] || echo "ledger: warning: authz yes without --quote (record the owner's words)" >&2
+      [[ ! "$k" =~ ^[knrsd][0-9]+$ ]] || { echo "ledger: authz key must not look like a ref: $k" >&2; return 2; }
+      [[ "$v" == no || -n "$QUOTE" ]] || { echo "ledger: authz yes needs --quote \"<owner's words>\"" >&2; return 2; }
       ledger-with-lock "$(authz-file).lock" authz-update "$k" "$v" "$QUOTE" "$NOTE" || return 1
       ledger-render "$(ledger-read)"
       printf '%s: %s\n' "$k" "$v" ;;

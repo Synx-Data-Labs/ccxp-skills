@@ -100,7 +100,7 @@ Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): r
 ```
 ledger.sh authz list [--json]       # TSV: key value note quote date, known keys first
 ledger.sh authz show [<key>]        # yes|no for a key (default no), or the whole list as JSON
-ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   # owner's typed words only; yes without --quote warns
+ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   # owner's typed words only; yes requires --quote
 ```
 
 - Known keys (all default `no`): `customer_visible_posts`, `tagging`, `pushing_artifacts`, `github_issues_update_close`, `gitlab_issues_update_close`, `delete_data`, `secret_handling`, `spend_money`, `third_party_messages`, `admin_or_bypass`, `install_software_outside_repo`, `owner_accounts_credentials`, `unlisted_other`. Any other `lower_snake_case` key may be added.

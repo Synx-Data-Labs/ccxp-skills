@@ -850,13 +850,15 @@ Q="At this moment, I trust you to do the customer visible posts, tagging, and pu
   [ "$(jq -r '.[] | select(.key == "tagging") | .date' <<<"$output")" != "" ]
 }
 
-@test "authz set: validates key and value, warns on yes without quote, rejects credentials, keeps custom keys" {
+@test "authz set: validates key and value, requires a quote for yes, rejects credentials, keeps custom keys" {
   run bash "$LEDGER" authz set Bad yes; [ "$status" -eq 2 ]
   run bash "$LEDGER" authz set tagging maybe; [ "$status" -eq 2 ]
   run bash "$LEDGER" authz set tagging; [ "$status" -eq 2 ]
   run bash "$LEDGER" authz set tagging yes --quote "$(printf 'gh%s' 'p_abcdefghijklmnopqrstuvwxyz0123456789')"; [ "$status" -eq 2 ]
-  run --separate-stderr bash "$LEDGER" authz set tagging yes; [ "$status" -eq 0 ]
-  [[ "$stderr" == *"without --quote"* ]]
+  run --separate-stderr bash "$LEDGER" authz set tagging yes; [ "$status" -eq 2 ]
+  [[ "$stderr" == *"needs --quote"* ]]
+  [ "$(bash "$LEDGER" authz show tagging)" = "no" ]
+  run bash "$LEDGER" authz set k1 no; [ "$status" -eq 2 ]
   bash "$LEDGER" authz set my_custom yes --quote x
   [ "$(bash "$LEDGER" authz show my_custom)" = "yes" ]
   [ "$(bash "$LEDGER" authz list | tail -1 | cut -f1)" = "my_custom" ]
