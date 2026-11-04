@@ -124,7 +124,7 @@ export type Queue = {
   hwm?: QueueHwm
 }
 
-/** The largest queue length seen over the lifetime of the repo's history, the last 30 days and the last 7 days. */
+/** The largest queue length seen over the last 180 days, the last 30 days and the last 7 days. */
 export type QueueHwm = { d180: number; d30: number; d7: number }
 
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
