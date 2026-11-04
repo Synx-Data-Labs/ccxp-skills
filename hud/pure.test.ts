@@ -1145,6 +1145,52 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
 
+// --- queue high watermark (lifetime / 30d / 7d) ---
+
+const HWM = { life: 90, d30: 61, d7: 52 }
+
+test('queue hwm: parseHelper keeps a complete watermark, nests the windows and the current length, ignores anything else', async () => {
+  const get = (hwm: unknown) => parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, hwm } }))!.queue!.hwm
+  expect(get(HWM)).toEqual(HWM)
+  expect(get({ life: 10, d30: 20, d7: 30 })).toEqual({ life: 44, d30: 44, d7: 44 }) // never below the nested window or the current length (44)
+  expect(get({ life: 50.9, d30: -3, d7: 0 })).toEqual({ life: 50, d30: 44, d7: 44 })
+  for (const bad of [undefined, null, 'x', [], {}, { life: 9, d30: 5 }, { life: '9', d30: 5, d7: 1 }, { life: 9, d30: NaN, d7: 1 }]) expect(get(bad)).toBeUndefined()
+})
+
+test('queue hwm: the band shows max life / 30d / 7d, details too; no watermark means the cell is unchanged', async () => {
+  const s = withHelper({ ...SHORT, queue: { ...QUEUE, hwm: HWM } })
+  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6h 3x · max 90 life / 61 30d / 52 7d')
+  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | max 90 life / 61 30d / 52 7d')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: QUEUE }) as any, NOCI, 160))).not.toContain('max')
+  expect(detail(withHelper({ queue: QUEUE }) as any, 200).join('\n')).not.toContain('max')
+  // the source marker stays in front of the numbers
+  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6h 3x · max 90 life / 61 30d / 52 7d')
+})
+
+test('queue hwm: a narrow band degrades max life/30d/7d, then max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
+  const q = { ...QUEUE, hwm: HWM }
+  const seen = new Set<string>()
+  for (let cols = 160; cols >= 22; cols--) {
+    const rows = bandRows(withHelper({ ...SHORT, task_title: '', queue: q, ledger: null, ci: null }) as any, NOCI, cols)
+    const t = text(rows)
+    for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    if (t.includes('max 90 life / 61 30d / 52 7d')) seen.add('long')
+    else if (t.includes('max 90/61/52')) seen.add('short')
+    else if (t.includes('queue 44 = 30r')) seen.add('plain')
+    else if (t.includes('queue 30/44')) seen.add('tiny')
+  }
+  expect([...seen].sort()).toEqual(['long', 'plain', 'short', 'tiny'])
+  // never a half-cut watermark such as "max 90 life / 6"
+  for (let cols = 60; cols >= 40; cols--) expect(text(bandRows(withHelper({ ...SHORT, queue: q, ledger: null, ci: null }) as any, NOCI, cols))).not.toMatch(/max \d+ life \/( \d+( 30d)?)?$/m)
+})
+
+test('queue hwm: at the lifetime high the max reads in the warning colour, otherwise dim', async () => {
+  const find = (total: number) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, held: 0, epic: 0, hwm: { life: 90, d30: 90, d7: 90 } } }) as any, NOCI, 200).flat().find(x => x.text.includes('max 90'))!
+  expect(find(90).color).toBe('warning')
+  expect(find(44).color).toBeUndefined()
+  expect(find(44).dim).toBe(true)
+})
+
 // --- autopilot 24h progress and lifetime average -------------------------------------------------
 const STATS = { has_history: true, approx: false, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' }
 const apStats = (over = {}) => withHelper({ autopilot: { ...AP, stats: { ...STATS, ...over } } })

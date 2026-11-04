@@ -25,6 +25,8 @@
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
 #                         # `source`/`branch` only when stdin `queue_source` is "default-branch": read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
+#                         # `hwm`: {"life","d30","d7"} high watermark of the queue length (lifetime / last 30 days / last 7 days), from
+#                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
@@ -42,6 +44,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-ci.sh"
 # shellcheck source=hud-version.sh
 . "$_HD_DIR/hud-version.sh"
+# shellcheck source=hud-queue-hwm.sh
+. "$_HD_DIR/hud-queue-hwm.sh"
 
 hud-data() {
   local input cwd session_id ci_cfg ci_ttl show_version queue_source
@@ -92,6 +96,12 @@ hud-data() {
 
   local queue; queue=$(sl-queue-json "$repo_root" "$queue_source" 2>/dev/null) || queue=""
   [ -n "$queue" ] || queue="null"
+  if [ "$queue" != "null" ]; then
+    # High watermark (hud-queue-hwm.sh): samples the length, kicks a detached git-history backfill, reads local files only.
+    local hwm; hwm=$(sl-queue-hwm "$repo_root" "$(printf '%s' "$queue" | jq -r '.total // empty' 2>/dev/null)" 2>/dev/null) || hwm=""
+    if [ -n "$hwm" ]; then queue=$(printf '%s' "$queue" | jq -c --argjson h "$hwm" '. + {hwm: $h}' 2>/dev/null) || true; fi
+    [ -n "$queue" ] || queue="null"
+  fi
 
   local repo_name ci
   repo_name=$(sl-origin-name "$repo_root")

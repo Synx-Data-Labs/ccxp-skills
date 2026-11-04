@@ -118,6 +118,16 @@ export function parseHelper(stdout: string): HelperData | null {
     const branch = str(q.branch)
     if (q.source === 'default-branch' && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch)) queue.branch = branch
     else if (q.fallback === true) queue.fallback = true
+    // The watermark is drawn only when all three numbers are there; the windows are nested by definition, so enforce it (and the current length).
+    const h = q.hwm
+    if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
+      const hw = h as Record<string, unknown>
+      if ([hw.life, hw.d30, hw.d7].every(x => typeof x === 'number' && Number.isFinite(x))) {
+        const d7 = Math.max(n(hw.d7), queue.total)
+        const d30 = Math.max(n(hw.d30), d7)
+        queue.hwm = { life: Math.max(n(hw.life), d30), d30, d7 }
+      }
+    }
   }
   const c = r.ci
   let ci: Ci | null = null
@@ -547,12 +557,25 @@ export function queueVariants(q: Queue, full: boolean): Variants {
       if (i > 0) long.push({ text: ' | ', dim: true })
       long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
     })
+    if (q.hwm) {
+      const tone = q.total >= q.hwm.life && q.hwm.life > 0 ? 'warning' : undefined
+      long.push({ text: ' | ', dim: true }, { text: `max ${q.hwm.life} life / ${q.hwm.d30} 30d / ${q.hwm.d7} 7d`, dim: !tone, color: tone })
+    }
     return [long]
   }
   const at = q.branch ? `@${q.branch}` : q.fallback ? '@wt' : ''
+  const hw = q.hwm
   const short: Seg[] = [{ text: `queue${at} ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
   const tiny: Seg[] = [{ text: `queue${at} ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
-  return [short, tiny]
+  if (!hw) return [short, tiny]
+  // High watermark: wide `max 40 life / 31 30d / 22 7d`, then `max 40/31/22` (life/30d/7d), then dropped. At the lifetime high: warning colour.
+  const tone = q.total >= hw.life && hw.life > 0 ? 'warning' : undefined
+  return [
+    [...short, { text: ` · max ${hw.life} life / ${hw.d30} 30d / ${hw.d7} 7d`, dim: !tone, color: tone }],
+    [...short, { text: ` · max ${hw.life}/${hw.d30}/${hw.d7}`, dim: !tone, color: tone }],
+    short,
+    tiny,
+  ]
 }
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
@@ -563,8 +586,8 @@ const ORDER = {
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {

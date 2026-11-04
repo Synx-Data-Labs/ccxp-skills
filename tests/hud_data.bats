@@ -7,6 +7,7 @@ HUD="$REPO_ROOT/hud/scripts/hud-data.sh"
 SCRIPT="$REPO_ROOT/hud/scripts/hud-lib.sh"
 
 setup() {
+  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 # fetch stamps and the queue watermark never touch ~/.claude
   isolate_claimant_state
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
@@ -533,7 +534,9 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   printf -- '# Q\n\n- [T20260101-000001](T20260101-000001-a.md): a\n- [T20260101-000002](T20260101-000002-b.md): b\n' > "$repo/dev/TODO/queue.md"
   printf -- '---\nstatus: Open — sign-off pending\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
   run _hud "$repo" --json
-  [ "$(jq -c .queue <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
+  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
+  # the high watermark rides along (no git history in this fixture: the current length is all there is)
+  [ "$(jq -c .queue.hwm <<<"$output")" = '{"life":2,"d30":2,"d7":2}' ]
 }
 
 # ---------------------------------------------------------------------------
