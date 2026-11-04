@@ -802,3 +802,22 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   [ "$status" -eq 2 ]
   [ "$(jq -r '.decisions[0].status' "$(dj)")" = "active" ]
 }
+
+@test "decision: concurrent adds are serialized (no lost entries, no duplicate refs); the lock is released" {
+  for i in 1 2 3 4 5 6 7 8; do bash "$LEDGER" decision add "c$i" >/dev/null & done
+  wait
+  [ "$(jq '.decisions | length' "$(dj)")" = "8" ]
+  [ "$(jq '[.decisions[].ref] | unique | length' "$(dj)")" = "8" ]
+  [ ! -e "$(dj).lock" ]
+  mkdir "$(dj).lock"; touch -t 202001010000 "$(dj).lock"
+  [ "$(bash "$LEDGER" decision add "after stale lock")" = "d9" ]
+}
+
+@test "decision: the counter is capped at 8 digits so refs always stay valid" {
+  run bash "$LEDGER" set-counter d 999999999
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" ref bump d999999999
+  [ "$status" -eq 2 ]
+  bash "$LEDGER" set-counter d 99999999
+  [ "$(bash "$LEDGER" decision add "edge")" = "d100000000" ]
+}

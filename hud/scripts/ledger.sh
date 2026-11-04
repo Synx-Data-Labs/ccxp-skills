@@ -390,7 +390,22 @@ decisions-archive() {
 }
 
 # $1 jq filter over the normalized decisions; remaining args are jq args. Sets DECISIONS_LAST.
+# The read-modify-write runs under a mkdir lock (<file>.lock; waits up to ~10s, a lock older than 60s is stale).
 decisions-update() {
+  local lock rc i; lock="$(decisions-file).lock"
+  mkdir -p "$(dirname "$lock")" 2>/dev/null || return 1
+  for ((i = 0; i < 100; i++)); do
+    mkdir "$lock" 2>/dev/null && break
+    [[ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] && rmdir "$lock" 2>/dev/null
+    sleep 0.1
+  done
+  [[ -d "$lock" && $i -lt 100 ]] || { echo "ledger: could not lock $lock" >&2; return 1; }
+  decisions-update-locked "$@"; rc=$?
+  rmdir "$lock" 2>/dev/null
+  return $rc
+}
+
+decisions-update-locked() {
   local filter="$1"; shift
   local f cur new
   f=$(decisions-file)
@@ -657,6 +672,7 @@ ledger() {
     set-counter)
       if [[ "${1:-}" == d ]]; then
         ledger-int "${2:-}" || return 2
+        [[ ${#2} -le 8 ]] || { echo "ledger: decision counter must be at most 8 digits" >&2; return 2; }
         decisions-update '.counter = ([.counter, $v] | max)' --argjson v "$((10#$2))"; return
       fi
       [[ "${1:-}" =~ ^[nsk]$ ]] || { echo "ledger: set-counter prefix must be n, s, k or d: ${1:-}" >&2; return 2; }
@@ -697,6 +713,7 @@ ledger() {
           local r p n; r=$(printf '%s' "${2:-}" | tr 'NSKD' 'nskd'); p="${r:0:1}"
           if [[ "$p" == d ]]; then
             n=$(decisions-id "$r") || return 2
+            [[ ${#n} -le 9 ]] || { echo "ledger: decision counter must be at most 8 digits" >&2; return 2; }
             decisions-update '.counter = ([.counter, $n] | max)' --argjson n "${n#d}"; return
           fi
           ledger-prefix "$p" || return 2
