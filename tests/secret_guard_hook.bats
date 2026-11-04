@@ -160,6 +160,9 @@ commit_allow() {
   assert_allowed 'echo "$TOKENS_USED $TOKENIZER_X"'
   assert_allowed 'GOOGLE_APPLICATION_CREDENTIALS=service-account-key.json cmd'
   assert_allowed 'TOKEN_NAME=my-long-token-name-xyz cmd'
+  assert_allowed 'AUTH_MODE=oauth2 npm test'
+  assert_allowed 'GH_AUTH=enabled ./run.sh'
+  assert_allowed 'PASSWORD_AUTH_ENABLED=disabled sshd'
 }
 
 @test "heredoc bodies are data: an apostrophe there does not hide a later flag" {
