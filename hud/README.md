@@ -87,14 +87,14 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 - ctx is context LEFT (100 minus the engine's percent used). Green above 75, yellow above 50 up to 75, red at 50 or less; the boundaries are strict (75 is yellow, 50 is red) and compare the rounded number shown.
 - Jobs cell: green `READY` when the job ledger (`hud/scripts/ledger.md`) has no running job, yellow `WORKING (N)` while N run. No ledger, no cell. It reads the ledger, not the engine's agent list.
 
+- Theme tokens only (`success`, `warning`, `error`), no escape codes: themes and `NO_COLOR` keep working.
+
 ### Jobs 24h cell
 
 - Where: the jobs line of `/hud details` (the one-row band keeps `READY` / `WORKING (N)`): `READY │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day`. The old `total jobs N` figure is gone.
 - Unit: jobs STARTED (the ledger has no finish times to count). `n` = starts in the rolling last 24 hours (not a calendar day); `m` = lifetime jobs (the ledger's `lifetime_jobs`, the highest job number ever) divided by max(1, days since the first job), one decimal.
 - Same conventions as the AP 24h cell: green `▲` above the average, red `▼` below, no arrow when equal at one decimal; `~8` = the count may be too low (the start log is younger than 24 hours), no arrow then; `~5.2` = the average rests on an estimated first-job time. No stats, no cell.
 - Data: `ledger.sh start` appends `epoch<TAB>n` for each NEW job to `ccxp-ledger-starts.log` next to the ledger (mode 600, append-only, no titles; a re-start of a running or already logged job adds nothing). The first time the log is created on a ledger that already counts jobs, a one-time `#seed` line records an estimated first-job time (the oldest `<ledger>.bak-<UTC stamp>` migration backup, else now), so the average is meaningful from day one. `ledger.sh stats [--json]` does the read-only math (`LEDGER_NOW` is the test clock); `hud-data.sh` adds it as `ledger.stats` = `{approx, avg_approx, jobs_24h, avg_jobs_day, trend}`, absent when the ledger has never counted a job.
-
-- Theme tokens only (`success`, `warning`, `error`), no escape codes: themes and `NO_COLOR` keep working.
 
 ## CI cell
 
