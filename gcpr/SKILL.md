@@ -58,7 +58,7 @@ Policy is **check-then-continue**: `lint` always exits 0 and a violation surface
 
 ### 1.6 Secret-handling check (recommended)
 
-Run `/secrets-check` (the repo's secret lint on `origin/main...HEAD`, which reads committed changes only, or its built-in fallback, which also covers uncommitted and untracked files; commit first when the repo has the lint) before pushing so a secret on a command line or a token literal is caught before it reaches `main`. Advisory here: report findings, do not auto-fix; CI's own secret lint is the gate where the repo has one.
+Run `/secrets-check` before pushing; advisory, report masked findings, never auto-fix.
 
 ### 2. Group into logical commits
 

@@ -150,6 +150,47 @@ commit_allow() {
   assert_allowed 'echo "$GH_TOKEN" > /tmp/t.file'
 }
 
+@test "quote-aware: prose in commit/PR text never trips the non-token rules" {
+  assert_allowed "git commit -m 'never echo \$TOKEN'"
+  assert_allowed 'git commit -m "docs: curl -u user:pass x"'
+  assert_allowed 'gh pr create --body "avoid docker login -p secret"'
+  assert_allowed 'git commit -m "docs: postgres://u:pw@host"'
+  assert_allowed 'grep -rn "echo $TOKEN" .'
+  assert_allowed 'echo "${TOKEN:+set}"'
+  assert_allowed 'echo "$TOKENS_USED $TOKENIZER_X"'
+  assert_allowed 'GOOGLE_APPLICATION_CREDENTIALS=service-account-key.json cmd'
+  assert_allowed 'TOKEN_NAME=my-long-token-name-xyz cmd'
+}
+
+@test "heredoc bodies are data: an apostrophe there does not hide a later flag" {
+  assert_blocked "$(printf 'cat <<EOF > f\ndon'"'"'t\nEOF\ncmd --token abc123def456')"
+  assert_allowed "$(printf 'git commit -F - <<EOF\nnever echo $TOKEN\nEOF')"
+}
+
+@test "pipes: a text command earlier in a pipeline does not hide a later secret flag" {
+  assert_blocked 'echo x | gh auth login --token abc123def456'
+  assert_blocked 'git log | xargs cmd --password hunter22'
+  assert_blocked 'ssh host "cmd --password hunter22"'
+  assert_blocked "bash -c 'cmd --token abc123def456'"
+}
+
+@test "more shapes: env prefix, -e NAME=literal, curl variants, .env readers, xtrace" {
+  assert_blocked 'GH_TOKEN=abcdef123456 gh api user'
+  assert_blocked 'docker run -e POSTGRES_PASSWORD=mysecretpw img'
+  assert_blocked 'curl -su admin:hunter22 https://x.example'
+  assert_blocked 'curl --user=admin:hunter22 https://x.example'
+  assert_blocked 'cat .env .env.local'
+  assert_blocked 'cat .env.example .env'
+  assert_blocked 'head -n 3 .env'
+  assert_blocked 'grep PASSWORD .env'
+  assert_blocked 'echo $TOKEN | base64'
+  assert_blocked 'echo $TOKEN | sed s/a/b/'
+  assert_blocked 'echo "a > b" $GH_TOKEN'
+  assert_blocked 'set -o xtrace; curl -H "$API_TOKEN" x'
+  assert_allowed 'cat .env.example'
+  assert_allowed 'echo "$GH_TOKEN" | gh auth login --with-token'
+}
+
 @test "deny message shows a length for non-token values, never the value" {
   run run_hook "tool --password=hunter22"
   [[ "$(reason)" == *"(8 chars)"* ]]
