@@ -787,3 +787,18 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   run bash "$LEDGER" decision add "x" --context "/tmp/ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   [ "$status" -eq 2 ]
 }
+
+@test "decision: an empty archive file blocks archiving (nothing lost); supersede also checks --context" {
+  bash "$LEDGER" decision add "keep" >/dev/null
+  jq '.decisions += [range(2; 206) | {ref: ("d" + tostring), text: "old", quote: "", scope: "global", context: "", source: "",
+        added_at: "2025-01-01T00:00:00Z", status: "retired", superseded_by: "", reason: "", closed_at: "2025-02-01T00:00:00Z"}] | .counter = 205' "$(dj)" > "$BATS_TEST_TMPDIR/b.json"
+  cp "$BATS_TEST_TMPDIR/b.json" "$(dj)"
+  af="$(dirname "$(dj)")/ccxp-decisions-archive.json"; : > "$af"
+  run bash "$LEDGER" decision add "trigger"
+  [[ "$output" == *"not a valid archive"* ]]
+  [ ! -s "$af" ]
+  [ "$(jq '.decisions | length' "$(dj)")" = "206" ]
+  run bash "$LEDGER" decision supersede d1 "b" --context "/tmp/ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  [ "$status" -eq 2 ]
+  [ "$(jq -r '.decisions[0].status' "$(dj)")" = "active" ]
+}
