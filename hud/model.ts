@@ -8,6 +8,7 @@ export const EMPTY: Snapshot = {
   helper: null,
   ctxLeft: null,
   rateUsed: null,
+  rateResetsAt: null,
   costUsd: null,
   jobs: { running: 0, waiting: 0, failed: 0 },
   stale: false,
@@ -177,6 +178,48 @@ export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'
   if (left > cfg.ctxWarn) return 'success'
   if (left > cfg.ctxCrit) return 'warning'
   return 'error'
+}
+
+/** Colour of the 5-hour limit LEFT percentage: red under 10, orange (the warning tone) under 25, green otherwise. */
+export function rateTone(left: number): Tone {
+  if (left < 10) return 'error'
+  if (left < 25) return 'warning'
+  return 'success'
+}
+
+/** Rate-limit window length the engine reports for `five_hour`. */
+export const RATE_WINDOW_SEC = 5 * 3600
+
+/**
+ * Hours until the 5-hour limit hits 100% at the burn rate so far (used% / elapsed time in the window), or
+ * null when it would not run out before the window resets, or when there is too little to go on (no reset
+ * time, under 1% used, or under 2 minutes elapsed). `resetsAt` is epoch seconds.
+ */
+export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number): number | null {
+  if (resetsAt === null) return null
+  if (used >= 100) return 0
+  if (!(used >= 1)) return null
+  const remaining = resetsAt - nowMs / 1000
+  const elapsed = RATE_WINDOW_SEC - remaining
+  if (remaining <= 0 || elapsed < 120) return null
+  const secToFull = (100 - used) / (used / elapsed)
+  return secToFull < remaining ? secToFull / 3600 : null
+}
+
+/** `1.5h` from an hour or more, `40m` below (never `0m`). */
+export function formatRunout(hours: number): string {
+  if (hours >= 1) return `${Math.round(hours * 10) / 10}h`
+  return `${Math.max(1, Math.round(hours * 60))}m`
+}
+
+/** The cell's segments: `65% left` in its tone, then ` · out 1.5h` when the burn rate would run dry before the reset. */
+function rateSegs(used: number, resetsAt: number | null, nowMs: number, label: string, verb: string): Seg[] {
+  const left = Math.max(0, 100 - Math.round(used))
+  const color = rateTone(left)
+  const segs: Seg[] = [{ text: `${label}${left}% left`, color }]
+  const out = rateRunoutHours(used, resetsAt, nowMs)
+  if (out !== null) segs.push({ text: ` · ${verb}${formatRunout(out)}`, color })
+  return segs
 }
 
 /** Jobs cell: green READY when nothing runs, yellow WORKING (N) otherwise; `withCount: false` is the narrow form. */
@@ -417,7 +460,7 @@ function repoVariants(snap: Snapshot): Variants | null {
   return out
 }
 
-function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
+function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = Date.now()): Item | null {
   const h = snap.helper
   const one = (...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
   switch (field) {
@@ -462,7 +505,7 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig): Item | null {
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
-      return snap.rateUsed === null ? null : one([{ text: `5h ${Math.round(snap.rateUsed)}%` }])
+      return snap.rateUsed === null ? null : one(rateSegs(snap.rateUsed, snap.rateResetsAt, nowMs, '5h ', 'out '), rateSegs(snap.rateUsed, null, nowMs, '5h ', ''))
     case 'cost':
       return snap.costUsd === null ? null : one([{ text: `$${snap.costUsd.toFixed(2)}` }])
     case 'lastat': {
@@ -542,7 +585,7 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
   for (const f of ORDER[mode]) {
     // The version segment is switched by its own `version` key, not by `fields`.
     if (f !== 'ver' && !cfg.fields.includes(f)) continue
-    const it = itemFor(f, snap, cfg)
+    const it = itemFor(f, snap, cfg, nowMs)
     // The tier sets how detailed the AP and ctx cells start; the rest start full and shrink only to fit.
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' ? Math.min(start, it.variants.length - 1) : 0 })
     // The 24h progress cell rides with the AP cell (same switch); it shrinks after the ctx bar, CI and jobs cells, so the 24h merged count and the average survive common widths.
@@ -667,7 +710,7 @@ const DETAIL_STEPS = {
  * `/hud details`: the band expanded to up to seven live lines, each cut to the terminal width (with an ellipsis,
  * never abbreviated). Lines with nothing to say are left out, none is reserved.
  *   0 CI (first, alone; highlighted when red)
- *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit used, API-equivalent cost
+ *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit left, API-equivalent cost
  *   3 jobs state, parked, total (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
  *   4 autopilot, next loop time (or overdue), 24h cell
  *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
@@ -679,7 +722,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const h = snap.helper
   const width = Math.max(20, columns - 2)
   const one = (field: string, ...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
-  const pick = (f: Field) => itemFor(f, snap, cfg)
+  const pick = (f: Field) => itemFor(f, snap, cfg, nowMs)
   const lines: Seg[][] = []
   const add = (items: Array<Item | null>, steps: readonly string[]) => {
     const row = fitRow(items.filter((x): x is Item => x !== null), steps, width, true)
@@ -697,13 +740,13 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   )
 
   // 2. context, rate limit and cost, spelled out. context is what is LEFT (the band's ctx), 5-hour limit is the
-  // share of the subscription's rolling 5-hour window USED, cost is the engine's API-price estimate for this session.
+  // share of the subscription's rolling 5-hour window LEFT (plus a runout estimate when it would run dry), cost is the engine's API-price estimate for this session.
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
     usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color: ctxTone(left, cfg) }]))
   }
-  if (snap.rateUsed !== null) usage.push(one('rate', [{ text: `5-hour limit ${Math.round(snap.rateUsed)}% used` }]))
+  if (snap.rateUsed !== null) usage.push(one('rate', rateSegs(snap.rateUsed, snap.rateResetsAt, nowMs, '5-hour limit ', 'runs out in ')))
   if (snap.costUsd !== null) usage.push(one('cost', [{ text: `API-equivalent cost $${snap.costUsd.toFixed(2)}` }]))
   add(usage, DETAIL_STEPS.usage)
 

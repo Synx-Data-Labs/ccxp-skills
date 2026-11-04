@@ -202,6 +202,13 @@ async function readUsage($: any): Promise<Partial<Snapshot>> {
   }
 }
 
+/** Reset time as epoch seconds: accepts seconds, milliseconds or an ISO string; null when absent or unparseable. */
+function resetEpochSec(v: unknown): number | null {
+  const n = typeof v === 'string' ? (/^\d+(\.\d+)?$/.test(v) ? Number(v) : Date.parse(v) / 1000) : v
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null
+  return n > 1e11 ? n / 1000 : n
+}
+
 function usagePart(u: any): Partial<Snapshot> {
   // Only the units present in `u` are returned, so a partial measurement
   // (say context alone) never wipes the others.
@@ -213,6 +220,7 @@ function usagePart(u: any): Partial<Snapshot> {
   if (Array.isArray(u?.rateLimits)) {
     const five = u.rateLimits.find((r: any) => r?.kind === 'five_hour')
     out.rateUsed = typeof five?.percentUsed === 'number' ? five.percentUsed : null
+    out.rateResetsAt = resetEpochSec(five?.resetsAt ?? five?.resets_at ?? five?.resetAt)
   }
   if (u?.cost) out.costUsd = typeof u.cost.usd === 'number' ? u.cost.usd : null
   return out

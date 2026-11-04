@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, formatRunout, rateRunoutHours, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -610,7 +610,7 @@ test('details: lines in order: where, usage, jobs, autopilot, last prompt (no qu
   const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
   expect(lines.length).toBe(5)
   expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
-  expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 42% used │ API-equivalent cost $1.50')
+  expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50')
   expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')
   expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
   expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
@@ -652,7 +652,7 @@ test('details: every line fits the terminal at every width and the band row is u
 test('details: a narrow terminal cuts a line with an ellipsis and never abbreviates a label', async () => {
   const snap = () => fullSnap({ rateUsed: 42, costUsd: 1.5 })
   const full = detail(snap(), 140)
-  expect(full[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 42% used │ API-equivalent cost $1.50')
+  expect(full[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50')
   // 56 columns (width 54): the line is cut at the width, the labels stay in full
   const cut = detail(snap(), 56)[1]
   expect(cut.length).toBe(54)
@@ -670,9 +670,48 @@ test('details: a narrow terminal cuts a line with an ellipsis and never abbrevia
   expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d?…$/)
 })
 
+const RATE_NOW = 1_800_000_000_000
+const rateReset = (elapsedSec: number) => RATE_NOW / 1000 + 5 * 3600 - elapsedSec
+
+test('rateTone: red under 10 left, orange under 25, otherwise green', () => {
+  expect([100, 25, 24, 10, 9, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+})
+
+test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it outlasts the window or data is thin', () => {
+  // 50% in 1h: 1h more to full, 4h still in the window
+  expect(Math.round(rateRunoutHours(50, rateReset(3600), RATE_NOW)! * 1000)).toBe(1000)
+  // 80% in 2h: 0.5h to full
+  expect(Math.round(rateRunoutHours(80, rateReset(7200), RATE_NOW)! * 1000)).toBe(500)
+  // 10% in 2h: 18h to full, past the reset
+  expect(rateRunoutHours(10, rateReset(7200), RATE_NOW)).toBeNull()
+  expect(rateRunoutHours(50, null, RATE_NOW)).toBeNull() // no reset time
+  expect(rateRunoutHours(0, rateReset(3600), RATE_NOW)).toBeNull() // nothing used
+  expect(rateRunoutHours(50, rateReset(60), RATE_NOW)).toBeNull() // under 2 minutes elapsed: no projection
+  expect(rateRunoutHours(50, RATE_NOW / 1000 - 5, RATE_NOW)).toBeNull() // window already reset
+  expect(rateRunoutHours(100, rateReset(3600), RATE_NOW)).toBe(0)
+})
+
+test('formatRunout: 1.5h from an hour, 40m below, never 0m', () => {
+  expect([formatRunout(1.5), formatRunout(1), formatRunout(2.04), formatRunout(2 / 3), formatRunout(0.001)]).toEqual(['1.5h', '1h', '2h', '40m', '1m'])
+})
+
+test('rate cell: N% left in its tone, runout only when it would run dry before the reset; details spell it out', () => {
+  const rate = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
+  const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
+  expect(find(rate({ rateUsed: 35 }), /5h 65% left/)?.color).toBe('success')
+  expect(find(rate({ rateUsed: 80 }), /5h 20% left/)?.color).toBe('warning')
+  expect(find(rate({ rateUsed: 95 }), /5h 5% left/)?.color).toBe('error')
+  expect(text(rate({ rateUsed: 35 }))).not.toMatch(/out /)
+  expect(text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))).toContain('5h 50% left · out 1h')
+  expect(text(rate({ rateUsed: 10, rateResetsAt: rateReset(7200) }))).not.toMatch(/out /)
+  const d = (over: object) => detailRows(fullSnap(over) as any, NOCI, 200, RATE_NOW).map(r => r.map(g => g.text).join(''))[1]
+  expect(d({ rateUsed: 80, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 20% left · runs out in 30m')
+  expect(d({ rateUsed: 10, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 90% left')
+})
+
 test('details: the jobs line never lists the running jobs (the band already shows them); labels are spelled out', async () => {
   const lines = detail(fullSnap({ rateUsed: 4, costUsd: 693.75, ctxLeft: 88 }))
-  expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 4% used │ API-equivalent cost $693.75')
+  expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 96% left │ API-equivalent cost $693.75')
   const all = lines.join('\n')
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
   expect(lines[2]).toBe('WORKING (2) │ parked 2 │ total jobs 82')

@@ -294,7 +294,7 @@ test('a partial session.measure updates context and keeps the other units', asyn
   await $.session.measure({ context: { window: 200000, percent: 50 }, changed: ['context'] })
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /5h 42%/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /5h 58% left/ })).toBeDefined()
   await band.unmount()
 })
 
