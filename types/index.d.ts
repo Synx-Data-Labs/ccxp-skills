@@ -14,6 +14,13 @@ export type CiConfig = {
   repo?: string
 }
 
+/** Where the queue cell reads dev/TODO from: this clone's working tree (default) or the repo's default branch on origin (git object reads, no checkout). */
+export type QueueSource = 'working-tree' | 'default-branch'
+
+export type QueueConfig = {
+  source: QueueSource
+}
+
 export type HudConfig = {
   enabled: boolean
   userMessage: boolean
@@ -30,6 +37,8 @@ export type HudConfig = {
   version: boolean
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
+  /** Queue cell source; undefined means `{ source: 'working-tree' }` (the original behaviour). A project file's value replaces the user file's. */
+  queue?: QueueConfig
 }
 
 /** Rolling-24h and lifetime autopilot progress (`autopilot-state.sh stats`); absent when there is nothing to show. */
@@ -93,6 +102,10 @@ export type Queue = {
   revisited: number
   /** Tasks the autopilot parked since this run started; shown only when above 0. */
   autoparked: number
+  /** Set when the queue was read from origin/<branch> (queue.source `default-branch`): the cell then reads `queue@<branch>`. */
+  branch?: string
+  /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
+  fallback?: boolean
 }
 
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'

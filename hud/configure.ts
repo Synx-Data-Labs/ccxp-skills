@@ -1,7 +1,7 @@
 // ccxp-hud `/hud config` logic. No `$`: the register module passes the
 // few primitives in as `io`, so the unit tests can drive every branch with fakes.
 
-import type { CiConfig } from '../types'
+import type { CiConfig, QueueConfig } from '../types'
 import { CI_URL_EXAMPLE, cleanAnswer, ciFromAnswer, isRewritable, withConfig } from './config'
 import { FILL_COLOR_NAMES, FILL_DEFAULT, parseFillColor } from './fill'
 
@@ -12,6 +12,9 @@ export const SCOPE_PROJECT = 'this project'
 export const WRITE = 'write'
 export const VERSION_SHOW = 'show (default)'
 export const VERSION_HIDE = 'hide'
+export const QUEUE_DEFAULT_BRANCH = 'default branch (recommended)'
+export const QUEUE_WORKING_TREE = 'working tree'
+export const QUEUE_QUESTION = 'Queue source: working tree (this clone as it is on disk) or default branch (recommended; read from origin without a checkout, so a clone that is behind still shows what origin has)?'
 /** Option label of the default colour; the other palette names are offered as they are. */
 export const COLOR_DEFAULT = `${FILL_DEFAULT} (default)`
 /** The engine's `$.ui.ask` rejects more than this many options per question (the free-text "Other" is extra). */
@@ -43,8 +46,8 @@ function reason(e: unknown): string {
 const TRIES = 2
 
 /**
- * `/hud config`: CI workflow URL, fill colour, plugin version on/off, scope, then a confirmation that shows what is written.
- * Writes only the `ci`, `fillColor` and `version` keys, only after "write". An explicit cancel or a dismissed dialog writes nothing.
+ * `/hud config`: CI workflow URL, fill colour, plugin version on/off, queue source, scope, then a confirmation that shows what is written.
+ * Writes only the `ci`, `fillColor`, `version` and `queue` keys, only after "write". An explicit cancel or a dismissed dialog writes nothing.
  * An invalid answer is re-asked once; after a second invalid answer that setting is left unchanged and the dialog continues.
  */
 export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}): Promise<string> {
@@ -103,7 +106,17 @@ export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}
     else if (versionAnswer === VERSION_HIDE) version = false
     else notes.push('plugin version left unchanged (answer must be show or hide)')
 
-    if (ci === undefined && fillColor === undefined && version === undefined) return `ccxp-hud config: nothing to change (${notes.join('; ')}). Nothing written.`
+    let queue: QueueConfig | undefined
+    const queueAnswer = await io.ask(QUEUE_QUESTION, {
+      header: 'Queue source',
+      options: [QUEUE_DEFAULT_BRANCH, QUEUE_WORKING_TREE, CANCEL],
+    })
+    if (queueAnswer === CANCEL) return NOTHING
+    if (queueAnswer === QUEUE_DEFAULT_BRANCH) queue = { source: 'default-branch' }
+    else if (queueAnswer === QUEUE_WORKING_TREE) queue = { source: 'working-tree' }
+    else notes.push('queue source left unchanged (answer must be default branch or working tree)')
+
+    if (ci === undefined && fillColor === undefined && version === undefined && queue === undefined) return `ccxp-hud config: nothing to change (${notes.join('; ')}). Nothing written.`
 
     const scope = await io.ask('Where should it be saved?', { header: 'Scope', options: [SCOPE_USER, SCOPE_PROJECT, CANCEL] })
     if (scope === CANCEL) return NOTHING
@@ -115,11 +128,12 @@ export async function configureHud(rawIo: ConfigIo, preset: { ci?: string } = {}
       ci === undefined ? '"ci" unchanged' : `"ci": ${JSON.stringify(ci)}`,
       fillColor === undefined ? '"fillColor" unchanged' : `"fillColor": "${fillColor}"`,
       version === undefined ? '"version" unchanged' : `"version": ${version}`,
+      queue === undefined ? '"queue" unchanged' : `"queue": ${JSON.stringify(queue)}`,
     ]
     const ok = await io.ask(`Write ${parts.join(' and ')} to ${file}?`, { header: 'Confirm', options: [WRITE, CANCEL] })
     if (ok !== WRITE) return NOTHING
-    await io.write(file, withConfig(existing, { ci, fillColor, version }))
-    const what = [ci === undefined ? undefined : `ci ${ci ? 'set' : 'hidden'}`, fillColor === undefined ? undefined : `fill colour ${fillColor}`, version === undefined ? undefined : `version segment ${version ? 'shown' : 'hidden'}`].filter(Boolean).join(', ') || 'nothing changed'
+    await io.write(file, withConfig(existing, { ci, fillColor, version, queue }))
+    const what = [ci === undefined ? undefined : `ci ${ci ? 'set' : 'hidden'}`, fillColor === undefined ? undefined : `fill colour ${fillColor}`, version === undefined ? undefined : `version segment ${version ? 'shown' : 'hidden'}`, queue === undefined ? undefined : `queue source ${queue.source}`].filter(Boolean).join(', ') || 'nothing changed'
     return `ccxp-hud: ${what}, in ${file}.${notes.length ? ` Skipped: ${notes.join('; ')}.` : ''} The first CI result can take a couple of minutes (results are cached).`
   } catch (e) {
     // A dismissed or refused dialog rejects; nothing has been written at that point. Any other exception is a failure: say why.
