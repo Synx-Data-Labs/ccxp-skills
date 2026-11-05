@@ -1,6 +1,6 @@
 # Decisions log (`ledger.sh decision ...`)
 
-The ccxp-agent keeps the owner's standing decisions, so a compaction or restart does not lose "never do X" or "we chose Y". It sits next to the job ledger and is separate from `terms.json` (acronyms) and from Claude's auto-memory.
+The ccxp-agent keeps the owner's standing decisions, so a compaction or restart does not lose "never do X" or "we chose Y". It sits next to the job ledger and is separate from `wtf.json` (acronyms, "where to find") and from Claude's auto-memory.
 
 ## Where things live
 

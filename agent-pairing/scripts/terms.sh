@@ -21,32 +21,52 @@
 #   terms.sh import-glossary [FILE] [--dry-run]
 #                                   one-way import of "- TERM = expansion (tag)" lines from the owner's
 #                                   glossary rule (default: <profile>/rules/glossary.md); never edits FILE
-#   terms.sh path                   print the terms.json path
+#   terms.sh path                   print the wtf.json path
 # Repo options (lookup, expand, detect, add, choose, remove): --cwd DIR (default $PWD; the repo is its git
 # toplevel), --repo NAME and --repo-glossary FILE (override the derived name / glossary path).
 #
-# File: ${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/terms.json}
-# {"version":1,"updated_at","terms":{"WTF":{"defs":[{"text","context"|null,"scope":"global"|"repo:<name>",
+# File ("wtf" = where to find): ${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wtf.json}}
+# {"version":1,"updated_at","terms":{"wtf":{"defs":[{"text","context"|null,"scope":"global"|"repo:<name>",
 #   "default":bool,"pinned":bool,"hits":n,"added_at":"YYYY-MM-DD","last_hit":"YYYY-MM-DD",
 #   "origin":"glossary|captured|asked"}]}}}
 # origin: glossary = imported from the owner's glossary rule (always pinned), captured = the owner defined
 # it in a message, asked = added after the owner answered a question. scope: new captures are "global"
 # (personal); "repo:<name>" (the repo's name, see --cwd) keeps a term local to one repo.
 # Layers, nearest first: (1) <repo>/.claude/rules/glossary.md of the current repo, read-only, lines
-# "- TERM = expansion (context)"; (2) terms.json entries scoped to this repo; (3) global terms.json
+# "- TERM = expansion (context)"; (2) wtf.json entries scoped to this repo; (3) global wtf.json
 # entries (incl. the import of the owner's glossary rule). The first layer that knows the term decides;
-# other repos' scopes are invisible. Within a layer: one definition -> it; several -> a context tag
-# matching the repo/topic -> the default flag -> the untagged (general) one when alone -> a clear
-# most-used leader -> ambiguous (ask the owner).
-# Terms need 2-12 chars from [A-Za-z0-9&+/-] with at least 2 uppercase letters; text is one line, at
-# most 120 chars; at most 200 terms and 8 definitions per term. Lookup is case-sensitive, with a
-# case-insensitive fallback for terms of 3+ chars (so "rca" finds RCA but "cc" never finds CC).
-# Writes are atomic (temp file + mv) and keep the previous version as terms.json.bak; an unreadable
-# file is moved aside (terms.json.corrupt-<time>), never overwritten. Not locked: last write wins.
+# other repos' scopes are invisible. Within a layer several meanings are NORMAL (cc = claude code /
+# concurrency control): every one is returned, `text` is the likeliest and `texts` lists all, ordered by
+# a context tag matching the repo/topic, then the default flag, then untagged ones, then most-used.
+# Never "ambiguous": the order is only a hint, status is always "resolved".
+# Terms are stored and matched lowercase and case-insensitively ("CC", "Qbo" find cc, qbo): 2-12 chars
+# from [a-z0-9&+/-]; text is one line, at most 120 chars; at most 200 terms and 8 definitions per term.
+# Migration: when wtf.json is missing and a legacy terms.json sits next to it, wtf.json is created from
+# it (keys lowercased, definitions merged) and terms.json is renamed terms.json.migrated; from then on
+# only wtf.json is read.
+# Writes are atomic (temp file + mv) and keep the previous version as wtf.json.bak; an unreadable
+# file is moved aside (wtf.json.corrupt-<time>), never overwritten. Not locked: last write wins.
 # Definitions are shorthand only: NEVER store secrets. Exit: 0 ok, 1 not found, 2 usage/invalid, 3 limit.
 
 terms-file() {
-  printf '%s' "${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/terms.json}"
+  printf '%s' "${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wtf.json}}"
+}
+
+# One-time migration of a legacy terms.json (same dir) into a missing wtf.json; never loses data:
+# the old file is kept as terms.json.migrated. Silent no-op otherwise.
+terms-migrate() {
+  local f dir old tmp
+  f=$(terms-file); dir=$(dirname "$f"); old="$dir/terms.json"
+  [[ ! -e "$f" && -f "$old" ]] || return 0
+  jq -e . "$old" >/dev/null 2>&1 || return 0
+  tmp=$(mktemp "$f.XXXXXX") || return 0
+  if jq -c "$TERMS_LIB normalize" "$old" >"$tmp" 2>/dev/null; then
+    chmod 600 "$tmp" 2>/dev/null
+    mv "$tmp" "$f" && mv "$old" "$old.migrated"
+  else
+    unlink "$tmp" 2>/dev/null
+  fi
+  return 0
 }
 
 TERMS_EMPTY='{"version":1,"updated_at":"","terms":{}}'
@@ -59,45 +79,32 @@ def normalize:
   | {version: 1,
      updated_at: ($r.updated_at | strings // ""),
      terms: (($r.terms | if type == "object" then . else {} end)
-       | with_entries(select(.value | type == "object")
+       | to_entries | map(select(.value | type == "object")
+           | .key |= lc
            | .value = {defs: [(.value.defs // [])[]
                | select(type == "object" and (.text | strings | length > 0))
                | {text, context: (.context | strings // null), default: (.default == true),
-                  scope: (.scope | strings | select(. == "global" or test("^repo:[A-Za-z0-9._-]{1,60}$")) // "global"),
+                  scope: ((.scope | strings | select(. == "global" or test("^repo:[A-Za-z0-9._-]{1,60}$"))) // "global"),
                   pinned: (.pinned == true), hits: (.hits | numbers // 0), added_at: (.added_at | strings // ""),
                   last_hit: (.last_hit | strings // ""),
-                  origin: (.origin | strings | select(. == "glossary" or . == "asked") // "captured")}]})
-       | with_entries(select(.value.defs | length > 0)))};
+                  origin: ((.origin | strings | select(. == "glossary" or . == "asked")) // "captured")}]})
+       | map(select(.value.defs | length > 0))
+       | reduce .[] as $e ({}; .[$e.key].defs += $e.value.defs))};
 def ctxhit($ctx): (.context | lc) as $c | ($ctx | any(. == $c));
 def resolve($ctx):
   .defs as $d
-  | if ($d | length) == 1 then {status: "resolved", reason: "single", text: $d[0].text}
-    else
-      ($d | map(select(.context != null and ctxhit($ctx)))) as $cm
-      | ($cm | length) as $ncm
-      | (if $ncm > 0 then $cm else $d end) as $pool
-      | if $ncm == 1 then {status: "resolved", reason: "context", text: $cm[0].text}
-        else
-          ($pool | map(select(.default))) as $df
-          | if ($df | length) > 0 then {status: "resolved", reason: "default", text: $df[0].text}
-            else
-              (if $ncm > 0 then $pool
-               else (($pool | map(select(.context == null))) as $u | if ($u | length) > 0 then $u else $pool end)
-               end) as $p2
-              | if ($p2 | length) == 1 and $ncm == 0 then {status: "resolved", reason: "general", text: $p2[0].text}
-                else
-                  ($p2 | sort_by(-.hits)) as $s
-                  | ($s[1].hits // 0) as $second
-                  | if $s[0].hits >= 2 and ($s[0].hits - $second) >= 2 and $s[0].hits >= 2 * $second
-                    then {status: "resolved", reason: "most-used", text: $s[0].text}
-                    else {status: "ambiguous", candidates: ($p2 | map({text, context, hits}))}
-                    end
-                end
-            end
-        end
-    end;
-def pickkey($keys; $t):
-  ([$keys[] | select(. == $t)] + [$keys[] | select(($t | length) >= 3 and lc == ($t | lc))])[0];
+  | ($d | map(. + {_m: (.context != null and ctxhit($ctx))})
+        | sort_by([(if ._m then 0 else 1 end), (if .default then 0 else 1 end),
+                   (if .context == null then 0 else 1 end), -.hits])) as $s
+  | ($s[1].hits // 0) as $second
+  | {status: "resolved",
+     reason: (if ($s | length) == 1 then "single"
+              elif $s[0]._m then "context"
+              elif $s[0].default then "default"
+              elif $s[0].hits >= 2 and $s[0].hits > $second then "most-used"
+              else "several" end),
+     text: $s[0].text, texts: ($s | map(.text))};
+def pickkey($keys; $t): ([$keys[] | select(. == ($t | lc))])[0];
 # Scope tiers, nearest first: the current repo's glossary file ($rg: term -> defs, read-only), then
 # definitions scoped to this repo ("repo:<name>"), then global ones. Other repos' scopes are invisible.
 def resolved($t; $ctx; $repo; $rg):
@@ -189,18 +196,19 @@ def cand($acr; $text; $kind; $pat): {term: $acr, text: $text, kind: $kind, patte
 | map(select(.kind == "explicit" or ((.term | ascii_upcase) as $u | (deny | any(. == $u)) | not)))
 | unique_by([.term, (.text | ascii_downcase)])
 | map(. as $x
-      | ((($terms.terms[$x.term].defs // []) | map(select(.scope == "global" or .scope == "repo:" + $repo)))
-         + ($rg[$x.term] // [])) as $vis
+      | ((($terms.terms[$x.term | ascii_downcase].defs // []) | map(select(.scope == "global" or .scope == "repo:" + $repo)))
+         + ($rg[$x.term | ascii_downcase] // [])) as $vis
       | . + {known: (if ($vis | length) == 0 then "new"
                      elif ($vis | any((.text | ascii_downcase) == ($x.text | ascii_downcase))) then "same"
                      else "additional" end)})
 | map(select(.known != "same"))
+| map(.term |= ascii_downcase)
 | sort_by(if .kind == "explicit" then 0 else 1 end) | .[:3]
 EOF
 
 # Current file, normalized; the empty store when missing or unreadable.
 terms-read() {
-  local f; f=$(terms-file)
+  local f; terms-migrate; f=$(terms-file)
   jq -c "$TERMS_LIB normalize" "$f" 2>/dev/null || printf '%s' "$TERMS_EMPTY"
 }
 
@@ -211,9 +219,10 @@ terms-transform() {
     "$TERMS_LIB $filter | .version = 1 | .updated_at = \$now"
 }
 
-# Same, then write atomically, keeping the previous file as terms.json.bak.
+# Same, then write atomically, keeping the previous file as wtf.json.bak.
 terms-update() {
   local f dir tmp err
+  terms-migrate
   f=$(terms-file)
   # A symlinked store (shared between profiles) is written through the link, not replaced by it.
   local hops=0 target
@@ -249,11 +258,13 @@ terms-clean() {
 
 terms-check-term() {
   local t="${1:-}"
-  if [[ ! "$t" =~ ^[A-Za-z0-9][A-Za-z0-9\&+/-]{1,11}$ ]] || [[ "$(printf '%s' "$t" | tr -cd 'A-Z' | wc -c | tr -d ' ')" -lt 2 ]]; then
-    echo "terms: not a term (2-12 chars of A-Z a-z 0-9 & + / -, at least 2 uppercase): $t" >&2
+  if [[ ! "$t" =~ ^[a-z0-9][a-z0-9\&+/-]{1,11}$ ]]; then
+    echo "terms: not a term (2-12 chars of a-z 0-9 & + / -; stored lowercase): $t" >&2
     return 2
   fi
 }
+
+terms-lc() { printf '%s' "${1:-}" | tr 'A-Z' 'a-z'; }
 
 terms-check-text() {
   local x="${1:-}"
@@ -305,7 +316,7 @@ terms-parse-glossary() {
     | ($m.rest | gsub("^\\s+|\\s+$"; "")) as $r
     | (($r | capture("^(?<text>.*[^ ])\\s+\\((?<tag>[A-Za-z0-9._/-]{1,40})\\)$")?) // {text: $r, tag: null}) as $p
     | select(($m.term | [match("[A-Z]"; "g")] | length) >= 2 and ($p.text | length) >= 1 and ($p.text | length) <= 120)
-    | {term: $m.term, text: $p.text, context: ($p.tag | if . == null then null else ascii_downcase end)}]' "$1"
+    | {term: ($m.term | ascii_downcase), text: $p.text, context: ($p.tag | if . == null then null else ascii_downcase end)}]' "$1"
 }
 
 # The current repo's glossary file as {TERM: [defs]} (read-only; {} when absent).
@@ -324,7 +335,8 @@ terms-text-arg() {
 }
 
 terms-add() {
-  local term="${1:-}" text ctx="" def=false pin=false org="captured" scope=""
+  local term; term=$(terms-lc "${1:-}")
+  local text ctx="" def=false pin=false org="captured" scope=""
   [[ $# -gt 0 ]] && shift
   text=$(terms-clean "${1:-}"); [[ $# -gt 0 ]] && shift
   while [[ $# -gt 0 ]]; do
@@ -405,7 +417,7 @@ terms-expand() {
     | (gsub("```[\\s\\S]*?```"; " ") | gsub("`[^`]*`"; " ")) as $t
     | ([$t | scan("[A-Za-z0-9]+(?:[&+/-][A-Za-z0-9]+)*")]) as $tok
     | ($tok + [$tok[] | select(test("[&+/-]")) | splits("[&+/-]")]
-       + [$tok[] | select(test("^.*[A-Z0-9]s$")) | .[:-1]]) as $all
+       + [$tok[] | select(test("^.+[A-Za-z0-9]s$")) | .[:-1]]) as $all
     | ($ctx0 + ([$t | ascii_downcase | scan("[a-z0-9][a-z0-9._/-]{2,39}")] | unique | .[:300])) as $ctx
     | $terms
     | . as $store
@@ -430,7 +442,8 @@ terms-detect() {
 }
 
 terms-choose() {
-  local term="${1:-}" text def=false scope=""
+  local term text def=false scope=""
+  term=$(terms-lc "${1:-}")
   [[ $# -gt 0 ]] && shift
   text=$(terms-clean "${1:-}"); [[ $# -gt 0 ]] && shift
   while [[ $# -gt 0 ]]; do
@@ -458,7 +471,8 @@ terms-choose() {
 }
 
 terms-remove() {
-  local term="${1:-}" text="" scope=""
+  local term text="" scope=""
+  term=$(terms-lc "${1:-}")
   [[ $# -gt 0 ]] && shift
   if [[ $# -gt 0 && "$1" != --* ]]; then text=$(terms-clean "$1"); shift; fi
   while [[ $# -gt 0 ]]; do

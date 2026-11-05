@@ -1,45 +1,46 @@
-# Owner terms (`terms.sh`, `terms.json`)
+# Owner terms (`terms.sh`, `wtf.json`)
 
-The ccxp-agent learns the owner's acronyms and shorthand. Type "root cause analysis (RCA)" once; later a bare "RCA" is recognized and expanded, also in the prompts the dispatcher writes for background jobs (subagents never see the owner's glossary rule).
+The ccxp-agent learns the owner's acronyms and shorthand (`wtf` = where to find). Type "root cause analysis (RCA)" once; later a bare "RCA" (any case) is recognized and expanded, also in the prompts the dispatcher writes for background jobs (subagents never see the owner's glossary rule).
 
 ## Where things live
 
-- **Store**: `${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/terms.json}`, one per profile. Two profiles that should share terms symlink the file, like they do for `rules/glossary.md`.
-- **Writer**: only `agent-pairing/scripts/terms.sh` (atomic temp file + `mv`, previous version kept as `terms.json.bak`, an unreadable file moved aside as `terms.json.corrupt-<time>`, never overwritten). Not locked: last write wins.
+- **Store**: `${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/wtf.json}}`, one per profile (`CCXP_TERMS_FILE` is the older env name, still honoured).
+- **Migration**: when `wtf.json` is missing and a `terms.json` sits next to it, `terms.sh` creates `wtf.json` from it (keys lowercased) and renames the old file `terms.json.migrated`. Once `wtf.json` exists it is the only file read. Two profiles that should share terms symlink the file, like they do for `rules/glossary.md`.
+- **Writer**: only `agent-pairing/scripts/terms.sh` (atomic temp file + `mv`, previous version kept as `wtf.json.bak`, an unreadable file moved aside as `wtf.json.corrupt-<time>`, never overwritten). Not locked: last write wins.
 - **Hook**: `hooks/terms-hook.sh` (UserPromptSubmit), read-only.
 - **Agent rules**: the `## Terms` section of `assets/ccxp-agent.md`; the automatic persona refresh installs it.
 
 ## Layers (nearest first)
 
 1. **Repo glossary**: `<repo>/.claude/rules/glossary.md` of the current repo, read-only, lines `- TERM = expansion (context)`. Domain terms shared with the team.
-2. **Repo-scoped** `terms.json` entries (`scope: "repo:<name>"`). The name is the main checkout's directory name (a worktree resolves to its repo).
-3. **Global** `terms.json` entries (`scope: "global"`), including the one-way import of the owner's `~/.claude/rules/glossary.md`.
+2. **Repo-scoped** `wtf.json` entries (`scope: "repo:<name>"`). The name is the main checkout's directory name (a worktree resolves to its repo).
+3. **Global** `wtf.json` entries (`scope: "global"`), including the one-way import of the owner's `~/.claude/rules/glossary.md`.
 
 - The first layer that knows the term decides. Another repo's scope is invisible.
 - New captures are `global` (personal shorthand must not leak into a shared repo). `--scope repo` is for terms the owner says belong to this repo.
-- `terms.json` is the live store the agent can update mid-session; the hand-curated `glossary.md` is loaded only at session start and is never written by this feature.
+- `wtf.json` is the live store the agent can update mid-session; the hand-curated `glossary.md` is loaded only at session start and is never written by this feature.
 
 ## Schema (version 1)
 
 ```json
 {"version": 1, "updated_at": "2026-10-29T10:00:00Z",
- "terms": {"WTF": {"defs": [
-   {"text": "what the f**k", "context": null, "scope": "global", "default": false, "pinned": false,
+ "terms": {"cc": {"defs": [
+   {"text": "claude code", "context": null, "scope": "global", "default": false, "pinned": false,
     "hits": 1, "added_at": "2026-10-29", "last_hit": "2026-10-29", "origin": "captured"},
-   {"text": "want to find", "context": "search", "scope": "global", "default": false, "pinned": false,
+   {"text": "concurrency control", "context": "database", "scope": "global", "default": false, "pinned": false,
     "hits": 3, "added_at": "2026-10-29", "last_hit": "2026-10-29", "origin": "asked"}]}}}
 ```
 
 - `origin`: `glossary` (imported, always `pinned`), `captured` (the owner defined it in a message), `asked` (added after the owner said yes or answered).
 - `pinned`, `hits`, `last_hit` are recorded so a later owner-triggered export can choose what to keep (see Follow-ups).
-- Limits: term 2-12 chars from `A-Za-z0-9&+/-` with at least 2 uppercase letters; text one line, 120 chars; 200 terms; 8 definitions per term (exit 3 beyond that). Lookup is case-sensitive, with a case-insensitive fallback for terms of 3+ chars (`rca` finds `RCA`, `cc` never finds `CC`); plurals (`RCAs`) and hyphen parts (`RCA-style`) match too.
+- Limits: term 2-12 chars from `a-z0-9&+/-`; text one line, 120 chars; 200 terms; 8 definitions per term (exit 3 beyond that). Terms are stored lowercase (any case is accepted on input) and matched case-insensitively (`CC`, `Qbo` find `cc`, `qbo`); plurals (`RCAs`) and hyphen parts (`RCA-style`) match too. Definitions keep the owner's text. The same term may have several meanings (`cc` = claude code / concurrency control).
 
 ## Commands
 
 | Command | Does |
 |---------|------|
 | `add TERM text [--context C] [--scope global\|repo\|repo:NAME] [--default] [--pin] [--origin captured\|asked]` | Upsert a definition on term+text+scope; prints `noted: ...` |
-| `lookup TERM [--context a,b]` | Resolve one term to JSON (`resolved` with `reason`/`tier`, `ambiguous` with candidates, or `unknown`) |
+| `lookup TERM [--context a,b]` | Resolve one term to JSON (`resolved` with `text` = likeliest, `texts` = all meanings, `reason`/`tier`, or `unknown`) |
 | `expand [-\|TEXT]` | Every known term used in a message, resolved (read-only) |
 | `detect [-\|TEXT]` | Definition candidates in a message: `explicit` or `ask` (read-only) |
 | `choose TERM text [--default]` | The owner picked this meaning: `hits`+1, `--default` makes it the default |
@@ -49,14 +50,16 @@ The ccxp-agent learns the owner's acronyms and shorthand. Type "root cause analy
 
 Repo options on the resolving commands: `--cwd DIR` (default `$PWD`), `--repo NAME`, `--repo-glossary FILE`.
 
-## Resolution inside a layer
+## Several meanings inside a layer
 
-1. One definition: use it.
-2. A `context` tag equal (case-insensitive) to the repo name or a word of the message: use it.
-3. The `default` definition.
-4. The untagged definition when it is the only one.
-5. A clear most-used leader: at least 2 hits, at least 2 ahead, at least double the runner-up.
-6. Otherwise `ambiguous`: ask the owner one short question, then `choose` (the answer adds a hit, so two answers make the leader clear and the question stops; "always" sets `--default`).
+Several meanings per term are normal, never an error and never `ambiguous`: `lookup` and `expand` return all of them in `texts` (and the likeliest in `text`), and the hook prints `cc = claude code / concurrency control`. The order is only a hint:
+
+1. A `context` tag equal (case-insensitive) to the repo name or a word of the message comes first (`reason: context`; the hook adds `(here: ...)`).
+2. Then the `default` definition.
+3. Then untagged definitions before tagged ones.
+4. Then the most-used (`reason: most-used` when it has at least 2 hits and leads), else `reason: several`.
+
+The agent expands with all meanings and asks the owner only when the choice would change what the job does; `choose` records the answer (hits+1, `--default` for "always").
 
 ## Detection (what counts as a definition)
 
@@ -72,13 +75,13 @@ Repo options on the resolving commands: `--cwd DIR` (default `$PWD`), `--repo NA
 - **Why not SessionStart**: it would inject the whole store every session (grows without bound), goes stale after a mid-session `add`, and cannot see the current prompt.
 - **Why not lookup-on-demand alone**: it costs a tool call per prompt and depends on the model remembering to do it. The agent keeps it as the fallback when the hook is absent.
 - **Existing plugin hooks** (checked): a PreToolUse `Skill` hook (`skill-ask.sh`) and the HUD module; no prompt-time hook existed.
-- **Scope of the hook**: it fires for every session of the profile, but is silent unless a term matches. Capture hints appear only when the profile has a `terms.json` or defaults to `ccxp-agent` in `settings.json`, so other profiles never see the feature. It never writes.
+- **Scope of the hook**: it fires for every session of the profile, but is silent unless a term matches. Capture hints appear only when the profile has a `wtf.json` (or a legacy `terms.json` awaiting migration) or defaults to `ccxp-agent` in `settings.json`, so other profiles never see the feature. It never writes.
 
 ## Consent
 
 - The owner's own explicit definition counts as the instruction (the glossary rule's "never edit silently" is about silent edits): the agent records it and says so in one line afterwards.
 - Inferred or doubtful: ask first.
-- `remove` undoes; `terms.json.bak` holds the previous version.
+- `remove` undoes; `wtf.json.bak` holds the previous version.
 
 ## Setup
 
