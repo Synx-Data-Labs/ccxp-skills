@@ -122,7 +122,7 @@ right now."
 - `bg-jobs.md` — runbook for detached `claude --bg` jobs (`scripts/job-launch.sh`, `job-status.sh`, `job-resume.sh`)
 - `scripts/trash.sh` — the delete-by-trash helper behind the ccxp-agent "Deleting things" rule (`/usr/bin/trash`, else `mv` into `~/.Trash/<stamp>-<label>/` with a `MANIFEST.tsv`); tests: `bats tests/trash.bats`
 - `persona-refresh.md` — the persona refreshes itself after a `/plugin` update
-- `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `terms.json`, the UserPromptSubmit `hooks/terms-hook.sh`)
+- `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `wtf.json` ("where to find"), the UserPromptSubmit `hooks/terms-hook.sh`)
 - `decisions.md` — the agent's decisions log (`ledger.sh decision ...`, `ccxp-decisions.json`/`.md`)
 - `superpowers:dispatching-parallel-agents` — the general pattern this
   profile-level toggle is built on

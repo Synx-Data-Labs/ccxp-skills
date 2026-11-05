@@ -194,7 +194,7 @@ The plugin's `hooks/secret-guard.sh` PreToolUse hook (matcher `Bash`, next to `r
 
 ### Terms hook (ccxp-agent acronym memory)
 
-The plugin's `hooks/terms-hook.sh` (UserPromptSubmit, read-only) tells the model which of your acronyms from `terms.json` or the repo's `.claude/rules/glossary.md` a prompt uses, and how to record one you just defined ("root cause analysis (RCA)"). It is silent unless a term matches. Details: `agent-pairing/terms.md`.
+The plugin's `hooks/terms-hook.sh` (UserPromptSubmit, read-only) tells the model which of your acronyms from `wtf.json` ("where to find", terms lowercase, several meanings per term are fine; a legacy `terms.json` is migrated on first use) or the repo's `.claude/rules/glossary.md` a prompt uses, and how to record one you just defined ("root cause analysis (RCA)"). It is silent unless a term matches. Details: `agent-pairing/terms.md`.
 
 The plugin's `hooks/persona-check.sh` (SessionStart `startup` and UserPromptSubmit) keeps the installed `agents/ccxp-agent.md` in step with the plugin: after a `/plugin` update it runs the bundled `agent-pairing.sh update` once (timestamped `.bak` kept) and says so. There is no manual update command. Off switch: `CCXP_PERSONA_AUTO_REFRESH=0`. Details: `agent-pairing/SKILL.md`.
 
