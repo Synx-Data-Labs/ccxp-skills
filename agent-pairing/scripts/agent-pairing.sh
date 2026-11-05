@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # agent-pairing.sh <on|off|status|update> [--dry-run|-n] [--claude-dir DIR]
+# (`update` is internal: called by hooks/persona-check.sh; not a user-facing subcommand)
 #
 # Toggles the "ccxp-agent" main-session agent persona (a dispatcher) as a
 # Claude Code profile's default (~/.claude unless --claude-dir overrides
