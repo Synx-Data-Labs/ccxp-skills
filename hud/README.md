@@ -23,7 +23,7 @@ User file `~/.claude/ccxp-hud.json` (honours `CLAUDE_CONFIG_DIR`), optional per-
 | `band` | `true` | status band |
 | `userBorder` | `quote` | `single`, `double`, `round`, `bold`, `singleDouble`, `doubleSingle`, `classic`, `quote`; else no border |
 | `userColor` | `suggestion` | a theme key or a hex colour |
-| `fields` | `repo,branch,task,ap,ctx,jobs,queue,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. `queue` is the queue cell (below). Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`queue`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
+| `fields` | `repo,branch,task,ap,ctx,jobs,queue,nightly,ci,lastat` | switches cells on or off; the mode decides which can appear (see below). `repo` carries the branch, so `branch` only shows when `repo` is not listed. `jobs` is the READY / WORKING cell (below), not the old `jobs run N · park · tot` line. `lastat` shows `you HH:MM` (date added when not today) from the last prompt this session submitted; it needs the timestamp-only UserPromptSubmit hook `hud/scripts/last-input-hook.sh` registered (see "Last-input hook" below), otherwise it stays hidden. `queue` is the queue cell (below). `nightly` is the nightly last-7-days strip and 30-day red count cell ("Nightly cell"). Also `rate`, `cost` (opt-in extras, dropped first). The retired `last` is ignored. An old explicit `fields` list without `repo`/`jobs`/`queue`/`nightly`/`ci` hides those cells until you add them (and one that still names `jobs` now gets the new indicator) |
 | `ci` | unset (no CI cell) | `{ "workflow": "<file or id>", "branch": "<ref>", "repo": "<owner/name>" }`; only `workflow` is required. `branch` defaults to the repo's default branch, `repo` to the current repo. A bare string is a workflow. Invalid values (spaces, shell characters, bad `owner/name`) mean no CI cell. A project file's `"ci": null` switches a user-level `ci` off for that project. `/hud config` writes it for you from one workflow URL (repo and workflow derived; `branch` only when the URL carries one) |
 | `fillColor` | `gray` | colour of the always-on fill bar (see "Fill" below): `gray`, `blue`, `green`, `yellow`, `purple` or a `#rrggbb` hex; `/hud config` writes it. An old `fill` key is ignored |
 | `version` | `true` | shows the ccxp-skills version cell (see "Version cell" below); `false` hides it and stops the lookup. It is its own key, not a `fields` entry, so an old explicit `fields` list still shows it. `/hud config` writes it |
@@ -53,7 +53,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
  AP 2/6h 3 loops ✓2 merged │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day │ queue 30/44 │ ctx 64% │ WORKING (2)
 ```
 
-- Row 2 order: AP, the 24h cell, then queue (so AP and queue always share a row), then ctx, jobs, last input, version. Queue is never on the CI row.
+- Row 2 order: AP, the 24h cell, then queue (so AP and queue always share a row), then nightly, then ctx, jobs, last input, version. Queue is never on the CI row.
 - No `ci` (or no answer yet): row 2 alone, exactly as before.
 
 | Width | Tier | AP | ctx |
@@ -146,6 +146,15 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
   - Window maximum: the value in force at the window start counts (a queue that was 40 until 2 days ago and is 20 now still has a 7d max of 40), plus every point inside the window, plus the current length.
 - The render path is fast: the poll reads two small local files and one `sort | awk`; the git pass is detached and never blocks. Test hooks: `HUD_HWM_SYNC=1` (backfill in the foreground), `HUD_HWM_TTL`, `HUD_HWM_SAMPLE_CAP`, `HUD_HWM_NOW`.
 - Helper JSON: `queue.hwm` = `{"d180","d30","d7"}`, absent when unknown.
+
+## Nightly cell
+
+- What: the SynxDB nightly at a glance. Band: `nightly ++-++-+ · 30d: 7 red`. The strip is the last 7 UTC days, oldest to newest, one character per day (the last one is today): `+` green day (green), `-` red day (red), `.` a day with no completed nightly run (dim). `30d: 7 red` is the number of red days in the last 30 days (today and the 29 before; red when above 0, dim at 0); there is no green count. Squeezed to `nightly ++-++-+` and dropped (after the queue cell has shrunk, before the queue is dropped) when the row is tight. It sits right after the queue cell. Add or remove it with `fields` (`nightly`). The band only; `/hud details` does not repeat it.
+- Source: `gh run list` for the nightly orchestrator workflow, `Nightly Orchestrator` in `Synx-Data-Labs/synxdb-build-pipeline` (scheduled runs only, `--event schedule`, the latest 100), in `hud/scripts/hud-nightly.sh`. The repo and workflow can be overridden with `HUD_NIGHTLY_REPO` and `HUD_NIGHTLY_WORKFLOW`; `HUD_NIGHTLY_OFF=1` turns the lookup off. Without access to that repo `gh` fails and the cell is simply absent.
+- Counting, per UTC day: a day is GREEN when every nightly run of that day concluded success (the whole 24 hours were green); a day is RED when at least one run of that day concluded `failure` or `timed_out`, even if a later run that day succeeded. Cancelled, skipped and still-running runs are ignored; a day with no counted run is neither (a `.` in the strip, not in the red count). The counting is the pure function `sl-nightly-count` (a JSON list of runs in, `{red, strip}` out; no clock, no network).
+- No data (no day of the last 30 has a counted run, `gh` missing, signed out, offline, no access): no cell, and nothing is ever shown as an error.
+- Never blocks the band: like the CI cell, the helper answers from an on-disk cache (`${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-nightly/`) and starts one detached refresh when it is older than 30 minutes (`HUD_NIGHTLY_TTL`, seconds), 10 s timeout, lock dir. A failed refresh keeps the older answer and is not retried before the next 30 minutes. The JSON from `gh` is untrusted: only a count and a 7-character `+-.` strip survive.
+- Test hooks: `HUD_NIGHTLY_SYNC=1` (refresh in the foreground), `HUD_NIGHTLY_STATE_DIR`, `HUD_NIGHTLY_NOW` (fake epoch). Helper JSON: `nightly` = `{"red","strip"}`, `null` when unknown.
 
 ## Version cell
 

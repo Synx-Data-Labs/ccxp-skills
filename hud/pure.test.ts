@@ -1530,3 +1530,34 @@ test('queue source: the band reads queue@main, details queue (main); working tre
   expect(text(bandRows(fb as any, NOCI, 140))).toContain('queue@wt 44 = 30r 6h 3x')
   expect(detail(fb as any, 200).join('\n')).toContain('queue (working tree, origin unavailable) 44 = 30 ready')
 })
+
+test('nightly cell: parseHelper keeps one whole red count and a 7-character +-. strip, hides anything else', async () => {
+  const n = (x: unknown) => parseHelper(JSON.stringify({ ...BASE, nightly: x }))!.nightly
+  expect(n({ red: 7, strip: '++-++-+' })).toEqual({ red: 7, strip: '++-++-+' })
+  expect(n({ red: 0, strip: '.....++' })).toEqual({ red: 0, strip: '.....++' })
+  expect(n({ red: '7', strip: '++-++-+' })).toBeNull()
+  expect(n({ red: 7, strip: '++-++-' })).toBeNull()
+  expect(n({ red: 7, strip: '++x++-+' })).toBeNull()
+  expect(n({ red: -1, strip: '++-++-+' })).toBeNull()
+  expect(n(null)).toBeNull()
+})
+
+test('nightly cell: `nightly ++-++-+ · 30d: 7 red`, coloured per character, hidden without data or when switched off', async () => {
+  const rows = bandRows(withHelper({ nightly: { red: 7, strip: '++-.+-+' } }) as any, NOCI, 200)
+  expect(text(rows)).toContain('nightly ++-.+-+ · 30d: 7 red')
+  const segs = rows.flat()
+  expect(segs.filter(x => x.text === '-').every(x => x.color === 'error')).toBe(true)
+  expect(segs.filter(x => x.text === '+').every(x => x.color === 'success')).toBe(true)
+  expect(segs.find(x => x.text === '.')!.dim).toBe(true)
+  expect(segs.find(x => x.text === '7 red')!.color).toBe('error')
+  expect(text(bandRows(withHelper({ nightly: null }) as any, NOCI, 200))).not.toMatch(/nightly [-+.]/)
+  expect(text(bandRows(withHelper({ nightly: { red: 7, strip: '++-++-+' } }) as any, { ...NOCI, fields: ['repo'] }, 200))).not.toContain('nightly ++')
+})
+
+test('nightly cell: shrinks to the strip alone, and is dropped while the queue cell is still shown', async () => {
+  const s = withHelper({ nightly: { red: 7, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 } })
+  const rows: string[] = []
+  for (let w = 200; w >= 30; w -= 2) rows.push(text(bandRows(s as any, NOCI, w)))
+  expect(rows.some(t => t.includes('nightly ++-++-+') && !t.includes('30d:'))).toBe(true)
+  expect(rows.some(t => !t.includes('nightly ++') && t.includes('queue'))).toBe(true)
+})

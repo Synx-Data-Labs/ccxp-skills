@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Ledger, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -144,6 +144,13 @@ export function parseHelper(stdout: string): HelperData | null {
     const state = str((c as Record<string, unknown>).state)
     if (CI_STATES.includes(state as CiState)) ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
   }
+  const ni = r.nightly
+  let nightly: Nightly | null = null
+  if (typeof ni === 'object' && ni !== null && !Array.isArray(ni)) {
+    // Untrusted: one whole count (0-31) and a 7-character strip of + - . , nothing else is ever drawn.
+    const o = ni as Record<string, unknown>
+    if (typeof o.red === 'number' && Number.isFinite(o.red) && o.red >= 0 && typeof o.strip === 'string' && /^[-+.]{7}$/.test(o.strip)) nightly = { red: Math.min(31, Math.floor(o.red)), strip: o.strip }
+  }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
   if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
@@ -169,6 +176,7 @@ export function parseHelper(stdout: string): HelperData | null {
     ledger,
     queue,
     ci,
+    nightly,
     plugin,
     last_input_at: num(r.last_input_at),
   }
@@ -544,6 +552,10 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
       const q = h?.queue
       return q ? one(...queueVariants(q, false)) : null
     }
+    case 'nightly': {
+      const n = h?.nightly
+      return n ? one(...nightlyVariants(n)) : null
+    }
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
@@ -603,16 +615,25 @@ export function queueVariants(q: Queue, full: boolean): Variants {
   ]
 }
 
+/** `nightly ++-++-+ · 30d: 7 red` (+ green, - red, . dim), then `nightly ++-++-+`, then dropped. */
+export function nightlyVariants(n: Nightly): Variants {
+  const strip: Seg[] = [...n.strip].map((c): Seg => ({ text: c, color: c === '+' ? 'success' : c === '-' ? 'error' : undefined, dim: c === '.' }))
+  return [
+    [{ text: 'nightly ' }, ...strip, { text: ' · 30d: ', dim: true }, { text: `${n.red} red`, color: n.red > 0 ? 'error' : undefined, dim: n.red === 0 }],
+    [{ text: 'nightly ' }, ...strip],
+  ]
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'queue', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'nightly', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:nightly', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:nightly', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:nightly', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:nightly', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {

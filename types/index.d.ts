@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -127,6 +127,14 @@ export type Queue = {
 /** The largest queue length seen over the last 180 days, the last 30 days and the last 7 days. */
 export type QueueHwm = { d180: number; d30: number; d7: number }
 
+/** SynxDB nightly (hud-nightly.sh): red days in the last 30 UTC days, and the last 7 days as a strip. */
+export type Nightly = {
+  /** Days in the last 30 on which some nightly run failed or timed out. */
+  red: number
+  /** Last 7 UTC days, oldest to newest: `+` green day (every run succeeded), `-` red day, `.` no completed run. */
+  strip: string
+}
+
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
 
 export type Ci = {
@@ -169,6 +177,8 @@ export type HelperData = {
   queue: Queue | null
   /** Last run of the configured CI workflow (cached by the helper), null when unconfigured or unknown. */
   ci: Ci | null
+  /** Nightly last-7-days strip and 30-day red count (cached by the helper), null when unknown. */
+  nightly: Nightly | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */
   plugin: PluginVersion | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
