@@ -63,7 +63,8 @@ hni-refresh() {
     jq -c --argjson now "$now" '. + {fetched: $now}' <<<"$out" >"$tmp" 2>/dev/null && mv -f "$tmp" "$file"
   elif [ -r "$file" ]; then
     # Failed: keep the previous answer, only move the fetch time (so a failure is not retried every poll).
-    jq -c --argjson now "$now" '.fetched = $now' "$file" >"$tmp" 2>/dev/null && mv -f "$tmp" "$file"
+    { jq -c --argjson now "$now" '.fetched = $now' "$file" >"$tmp" 2>/dev/null && mv -f "$tmp" "$file"; } \
+      || { printf '{"fetched":%s}\n' "$now" >"$tmp" && mv -f "$tmp" "$file"; } # unreadable cache: start over, still not retried every poll
   else
     printf '{"fetched":%s}\n' "$now" >"$tmp" && mv -f "$tmp" "$file"
   fi

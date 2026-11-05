@@ -9,6 +9,7 @@ HUD="$REPO_ROOT/hud/scripts/hud-data.sh"
 
 setup() {
   isolate_claimant_state
+  export HUD_NIGHTLY_OFF=1 # no real gh lookup or state under ~/.claude
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
   export HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/hud-ci"

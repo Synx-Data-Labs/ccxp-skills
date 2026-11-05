@@ -102,8 +102,23 @@ _count() { bash -c "source '$NIGHTLY'; sl-nightly-count $NOW"; }
   [ "$output" = '{"red":0,"strip":"......+"}' ]
   GH_FAIL=1 HUD_NIGHTLY_NOW=$((NOW + 8000)) run bash -c "source '$NIGHTLY'; hud-nightly-json"
   [ "$output" = '{"red":0,"strip":"......+"}' ]
-  HUD_NIGHTLY_STATE_DIR="$BATS_TEST_TMPDIR/other" PATH="/usr/bin:/bin" run bash -c "source '$NIGHTLY'; hud-nightly-json"
+  # no gh on PATH: a bin dir with only the tools the helper needs (gh may live in /usr/bin)
+  mkdir -p "$BATS_TEST_TMPDIR/nogh"
+  for t in jq date cksum cut dirname mkdir find head cat mktemp mv rm printf rmdir; do ln -sf "$(command -v $t)" "$BATS_TEST_TMPDIR/nogh/$t" 2>/dev/null || true; done
+  HUD_NIGHTLY_STATE_DIR="$BATS_TEST_TMPDIR/other" PATH="$BATS_TEST_TMPDIR/nogh" run "$BASH" -c "source '$NIGHTLY'; hud-nightly-json"
   [ "$output" = 'null' ]
+}
+
+@test "json: an unreadable cache file is replaced, not retried on every poll" {
+  mkdir -p "$HUD_NIGHTLY_STATE_DIR"
+  f=$(bash -c "source '$NIGHTLY'; printf '%s' \"\$(hni-state-dir)/\$(printf '%s|%s' \"\$HNI_REPO_DEFAULT\" \"\$HNI_WORKFLOW_DEFAULT\" | cksum | cut -d' ' -f1).json\""
+  )
+  printf 'garbage' > "$f"
+  GH_FAIL=1 run bash -c "source '$NIGHTLY'; hud-nightly-json"
+  [ "$output" = 'null' ]
+  jq -e '.fetched > 0' "$f"
+  bash -c "source '$NIGHTLY'; hud-nightly-json" >/dev/null
+  [ "$(wc -l < "$GH_LOG" | tr -d ' ')" = 1 ]
 }
 
 @test "json: reaches hud-data.sh as .nightly" {
