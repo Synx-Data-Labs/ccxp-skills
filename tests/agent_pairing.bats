@@ -603,5 +603,6 @@ install_outdated_agent() {
   grep -q 'The context file is a briefing, not a one-liner' "$f"
   grep -q 'Stub check' "$f"
   grep -q 'refresh it at every milestone' "$f"
-  ! grep -q 'small context file\|write that small file' "$f"
+  run grep -q 'small context file\|write that small file' "$f"
+  [ "$status" -ne 0 ]
 }
