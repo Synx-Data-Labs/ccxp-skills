@@ -522,7 +522,7 @@ install_outdated_agent() {
   before="$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")"
   run bash "$SCRIPT" status --claude-dir "$CLAUDE_DIR"
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "OUTDATED -- run update"
+  echo "$output" | grep -q "OUTDATED -- refreshes automatically"
   [ "$(cat "$CLAUDE_DIR/agents/ccxp-agent.md")" = "$before" ]
 }
 

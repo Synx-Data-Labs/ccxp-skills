@@ -7,7 +7,7 @@ The ccxp-agent learns the owner's acronyms and shorthand. Type "root cause analy
 - **Store**: `${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/terms.json}`, one per profile. Two profiles that should share terms symlink the file, like they do for `rules/glossary.md`.
 - **Writer**: only `agent-pairing/scripts/terms.sh` (atomic temp file + `mv`, previous version kept as `terms.json.bak`, an unreadable file moved aside as `terms.json.corrupt-<time>`, never overwritten). Not locked: last write wins.
 - **Hook**: `hooks/terms-hook.sh` (UserPromptSubmit), read-only.
-- **Agent rules**: the `## Terms` section of `assets/ccxp-agent.md`; `/agent-pairing update` installs it.
+- **Agent rules**: the `## Terms` section of `assets/ccxp-agent.md`; the automatic persona refresh installs it.
 
 ## Layers (nearest first)
 
@@ -82,7 +82,7 @@ Repo options on the resolving commands: `--cwd DIR` (default `$PWD`), `--repo NA
 
 ## Setup
 
-1. Update the plugin, then run `/agent-pairing update` (installs the Terms section).
+1. Update the plugin with `/plugin`; the persona refresh installs the Terms section automatically.
 2. Optional seed: `bash <plugin>/agent-pairing/scripts/terms.sh import-glossary --dry-run`, then without `--dry-run`.
 
 ## Follow-ups (not built)
