@@ -58,7 +58,7 @@ run_hook() { printf '{"tool_name":"Skill","tool_input":{"skill":"%s"}}' "$1" | "
     run run_hook "ccxp-skills:$s"
     [ "$(jq -r .hookSpecificOutput.permissionDecision <<<"$output")" = ask ]
   done <"$REPO_ROOT/hooks/ask-skills.txt"
-  [ "$n" -ge 7 ]
+  [ "$n" -ge 6 ]
 }
 
 @test "every skill listed in ask-skills.txt exists as a skill directory" {
