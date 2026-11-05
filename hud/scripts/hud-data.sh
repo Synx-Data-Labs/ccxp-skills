@@ -28,6 +28,7 @@
 #                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
+#    "nightly": null | {"red","strip"},   # SynxDB nightly: red days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
@@ -46,6 +47,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-version.sh"
 # shellcheck source=hud-queue-hwm.sh
 . "$_HD_DIR/hud-queue-hwm.sh"
+# shellcheck source=hud-nightly.sh
+. "$_HD_DIR/hud-nightly.sh"
 
 hud-data() {
   local input cwd session_id ci_cfg ci_ttl show_version queue_source
@@ -109,6 +112,10 @@ hud-data() {
   ci=$(hud-ci-json "$repo_root" "$ci_cfg" "$ci_ttl" 2>/dev/null) || ci="null"
   [ -n "$ci" ] || ci="null"
 
+  local nightly
+  nightly=$(hud-nightly-json 2>/dev/null) || nightly="null"
+  [ -n "$nightly" ] || nightly="null"
+
   local plugin
   plugin=$(hud-version-json "$(cd "$_HD_DIR/../.." && pwd)" "$show_version" 2>/dev/null) || plugin="null"
   [ -n "$plugin" ] || plugin="null"
@@ -120,7 +127,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson nightly "$nightly" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -135,7 +142,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), stats: $apstats} end),
-       ledger: $ledger, queue: $queue, ci: $ci, plugin: $plugin,
+       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
 

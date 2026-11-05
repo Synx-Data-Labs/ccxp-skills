@@ -7,7 +7,7 @@ HUD="$REPO_ROOT/hud/scripts/hud-data.sh"
 SCRIPT="$REPO_ROOT/hud/scripts/hud-lib.sh"
 
 setup() {
-  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 # fetch stamps and the queue watermark never touch ~/.claude
+  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 HUD_NIGHTLY_OFF=1 # fetch stamps and the queue watermark never touch ~/.claude
   isolate_claimant_state
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
