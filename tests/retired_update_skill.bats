@@ -2,7 +2,7 @@
 # Guard: the /ccxp-skills:update skill, its scripts, its auto-update hook and the
 # `/agent-pairing update` subcommand were retired (the persona refreshes automatically via
 # hooks/persona-check.sh). No doc or script may point users at them again.
-# Migration notes may name them on a line that also says "removed" or "retired".
+# Migration notes may name them on a line that also says "was removed" or "retired".
 
 setup() { REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"; cd "$REPO_ROOT"; }
 
@@ -11,13 +11,12 @@ setup() { REPO_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"; cd "$REPO_ROOT"; }
   [ ! -e hooks/update-check.sh ]
   run jq -r '[.. | strings] | map(select(contains("update-check"))) | length' hooks/hooks.json
   [ "$output" = 0 ]
-  run grep -vE '^(#|$)' hooks/ask-skills.txt
-  ! grep -qx update <<<"$output"
+  [ -z "$(grep -vE '^(#|$)' hooks/ask-skills.txt | grep -x update)" ]
 }
 
 @test "no doc or script references the retired names (outside dev/ and removal notes)" {
   local pat='ccxp-skills:update|update/scripts|update-check|/agent-pairing update|(^|[^A-Za-z0-9_./-])/update( |$|`)'
-  run bash -c 'git ls-files -z -- . ":!dev" ":!tests/retired_update_skill.bats" | xargs -0 grep -nIE "$1" 2>/dev/null | grep -vE "removed|retired" || true' _ "$pat"
+  run bash -c 'git ls-files -z -- . ":!dev/JOURNAL" ":!tests/retired_update_skill.bats" | xargs -0 grep -nIE "$1" 2>/dev/null | grep -vE "(was|were) removed|retired" || true' _ "$pat"
   [ -z "$output" ] || { echo "$output"; false; }
 }
 

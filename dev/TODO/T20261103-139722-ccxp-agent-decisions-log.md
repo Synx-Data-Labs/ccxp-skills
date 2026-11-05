@@ -29,4 +29,4 @@ description: ccxp-agent decisions log (ledger.sh decision ...) - keep the owner'
 - [ ] `reply`/`render`/`show`/`check` integration without breaking existing output consumers.
 - [ ] Persona section, carve-out lists, docs written; the persona asset comparison tests pass.
 - [ ] bats tests for every new subcommand; full relevant suites, lint and skill score checks pass.
-- [ ] Maintainer step (separate PR, not part of this task's code change): bump the plugin version (MINOR: new subcommand), `claude plugin validate .` with zero warnings, tag, then `/update` and `/agent-pairing update` so installed sessions get the persona section.
+- [ ] Maintainer step (separate PR, not part of this task's code change): bump the plugin version (MINOR: new subcommand), `claude plugin validate .` with zero warnings, tag, then `/plugin update` (the persona refreshes automatically) so installed sessions get the persona section.
