@@ -40,24 +40,36 @@ function persona-check() {
   [ -n "$h" ] || return 0
   [ "$(jq -r '.lastHandled // empty' "$state" 2>/dev/null)" != "$h" ] || return 0   # this content already handled
 
+  # Never downgrade: when a newer ccxp-skills version is cached beside the running one (an older session, or
+  # `/update auto on` just installed one), that newer version's hook refreshes the persona; ours would undo it.
+  local me newest
+  me="$(basename "$here")"
+  if [[ "$me" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+    newest="$(ls "$(dirname "$here")" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)*$' | sort -V | tail -1)"
+    [ -z "$newest" ] || [ "$(printf '%s\n%s\n' "$me" "$newest" | sort -V | tail -1)" = "$me" ] || return 0
+  fi
+
   json="$(cat 2>/dev/null)"
   event="$(jq -r '.hook_event_name // empty' <<<"$json" 2>/dev/null)"
   [ "$event" = UserPromptSubmit ] || event=SessionStart
 
-  # Record first: whatever happens below, this content is never retried on every prompt.
-  local tmp
-  tmp="$(mktemp "$state.XXXXXX" 2>/dev/null)" || return 0
-  if [ -f "$state" ] && jq -e . "$state" >/dev/null 2>&1; then
-    jq --arg h "$h" '. + {schema:1, lastHandled:$h}' "$state" >"$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
-  else
-    jq -n --arg h "$h" '{schema:1, lastHandled:$h}' >"$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
-  fi
-  chmod 600 "$tmp"; mv "$tmp" "$state"
+  # record_handled: remember this content (state written after the attempt, so an interrupted run retries).
+  record_handled() {
+    local tmp; [ ! -d "$state" ] || return 1
+    tmp="$(mktemp "$state.XXXXXX" 2>/dev/null)" || return 1
+    if jq -n --arg h "$h" --slurpfile old <(cat "$state" 2>/dev/null; true) \
+         '(if ($old | length) > 0 and ($old[0] | type) == "object" then $old[0] else {} end) + {schema:1, lastHandled:$h}' >"$tmp" 2>/dev/null \
+       && chmod 600 "$tmp" && mv "$tmp" "$state"; then return 0; fi
+    rm -f "$tmp"; return 1
+  }
 
   if [ -f "$here/agent-pairing/scripts/agent-pairing.sh" ] \
      && bash "$here/agent-pairing/scripts/agent-pairing.sh" update --claude-dir "$dir" >/dev/null 2>&1; then
+    record_handled
     emit "$event" "ccxp-agent persona refreshed to match the installed ccxp-skills (previous copy kept as agents/ccxp-agent.md.bak-*). It usually shows in the next turn; if the new behavior does not show, restart Claude Code once no background jobs run."
   else
+    # Failure: one notice; without a writable state file stay silent rather than repeat it on every prompt.
+    record_handled || return 0
     emit "$event" "The installed ccxp-agent persona (agents/ccxp-agent.md) is outdated versus this ccxp-skills version and the automatic refresh failed. Run /agent-pairing update."
   fi
 }

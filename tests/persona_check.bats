@@ -112,6 +112,31 @@ baks() { ls "$P/agents" | grep -c '^ccxp-agent.md.bak-' || true; }
   run_prompt; [ -z "$output" ]
 }
 
+@test "never downgrades: a newer cached version beside the running one skips the refresh" {
+  C="$P/plugins/cache/ccxp-skills/ccxp-skills"
+  mkdir -p "$C/5.18.0" "$C/5.19.0"
+  cp -R "$PLUG/." "$C/5.18.0/"
+  HOOK="$C/5.18.0/hooks/persona-check.sh"
+  run_hook; [ "$status" -eq 0 ]; [ -z "$output" ]
+  [ "$(cat "$P/agents/ccxp-agent.md")" = "persona v1" ]
+  rm -rf "$C/5.19.0"
+  run_hook; [ -n "$output" ]
+  [ "$(cat "$P/agents/ccxp-agent.md")" = "persona v2" ]
+}
+
+@test "non-object state file does not disable the refresh" {
+  echo '[]' > "$P/ccxp-persona-check.json"
+  run_hook; [ "$status" -eq 0 ]
+  jq -e '.systemMessage | test("refreshed")' <<<"$output" >/dev/null
+  jq -e '.lastHandled' "$P/ccxp-persona-check.json" >/dev/null
+}
+
+@test "failed refresh with an unwritable state file stays silent" {
+  rm "$PLUG/agent-pairing/scripts/agent-pairing.sh"
+  mkdir "$P/ccxp-persona-check.json"
+  run_hook; [ "$status" -eq 0 ]; [ -z "$output" ]
+}
+
 @test "hooks.json registers persona-check.sh on SessionStart(startup) and UserPromptSubmit" {
   jq -e '[.hooks.SessionStart[] | select(.matcher == "startup") | .hooks[].command | select(contains("persona-check.sh"))] | length == 1' "$REPO_ROOT/hooks/hooks.json" >/dev/null
   jq -e '[.hooks.UserPromptSubmit[].hooks[].command | select(contains("persona-check.sh"))] | length == 1' "$REPO_ROOT/hooks/hooks.json" >/dev/null
