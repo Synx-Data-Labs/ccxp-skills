@@ -59,6 +59,9 @@ terms-migrate() {
   f=$(terms-file); dir=$(dirname "$f"); old="$dir/terms.json"
   [[ ! -e "$f" && -f "$old" ]] || return 0
   jq -e . "$old" >/dev/null 2>&1 || return 0
+  # A symlinked (shared) store stays shared: wtf.json becomes a link to the same target, the old name is
+  # left alone for the other profiles; normalize lowercases the keys on every read and write.
+  if [[ -L "$old" ]]; then ln -s "$(readlink "$old")" "$f" 2>/dev/null; return 0; fi
   tmp=$(mktemp "$f.XXXXXX") || return 0
   if jq -c "$TERMS_LIB normalize" "$old" >"$tmp" 2>/dev/null; then
     chmod 600 "$tmp" 2>/dev/null
@@ -258,6 +261,10 @@ terms-clean() {
 
 terms-check-term() {
   local t="${1:-}"
+  case "$t" in
+    to|of|in|on|is|it|at|by|or|an|as|be|we|he|me|my|do|go|if|no|so|up|us|am|and|the|for|are|you|not|but|can|all|any|has|had|was|one|out|see|use|now|new)
+      echo "terms: refused, too common a word to expand everywhere: $t" >&2; return 2 ;;
+  esac
   if [[ ! "$t" =~ ^[a-z0-9][a-z0-9\&+/-]{1,11}$ ]]; then
     echo "terms: not a term (2-12 chars of a-z 0-9 & + / -; stored lowercase): $t" >&2
     return 2
