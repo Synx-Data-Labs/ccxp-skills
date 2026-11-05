@@ -597,3 +597,11 @@ install_outdated_agent() {
   grep -q 'no background watcher exists' "$f"
   grep -q 'must not publish, promote, tag or release' "$f"
 }
+
+@test "asset: context files are briefings, refreshed at milestones, and stubs are checked" {
+  f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'The context file is a briefing, not a one-liner' "$f"
+  grep -q 'Stub check' "$f"
+  grep -q 'refresh it at every milestone' "$f"
+  ! grep -q 'small context file\|write that small file' "$f"
+}
