@@ -600,8 +600,8 @@ EOF
 }
 
 @test "a hand-written store with sparse definitions and keys differing only in case keeps every meaning" {
-  mkdir -p "$(dirname "$CCXP_TERMS_FILE")"
-  echo '{"terms":{"CC":{"defs":[{"text":"claude code"}]},"Cc":{"defs":[{"text":"concurrency control"}]}}}' > "$CCXP_TERMS_FILE"
+  mkdir -p "$(dirname "$CCXP_WTF_FILE")"
+  echo '{"terms":{"CC":{"defs":[{"text":"claude code"}]},"Cc":{"defs":[{"text":"concurrency control"}]}}}' > "$CCXP_WTF_FILE"
   run t lookup cc
   [ "$(jq -c '.texts | sort' <<<"$output")" = '["claude code","concurrency control"]' ]
   [ "$(jq -r .status <<<"$output")" = "resolved" ]
