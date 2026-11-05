@@ -606,3 +606,15 @@ EOF
   [ "$(jq -c '.texts | sort' <<<"$output")" = '["claude code","concurrency control"]' ]
   [ "$(jq -r .status <<<"$output")" = "resolved" ]
 }
+
+@test "add refuses very common words; a symlinked terms.json migrates to a shared wtf.json link" {
+  run t add to "toward"
+  [ "$status" -eq 2 ]
+  d="$BATS_TEST_TMPDIR/shared"; mkdir -p "$d" "$BATS_TEST_TMPDIR/profile"
+  echo '{"version":1,"terms":{"CC":{"defs":[{"text":"claude code"}]}}}' > "$d/terms.json"
+  ln -s "$d/terms.json" "$BATS_TEST_TMPDIR/profile/terms.json"
+  run t lookup cc
+  [ "$(jq -r .text <<<"$output")" = "claude code" ]
+  [ -L "$BATS_TEST_TMPDIR/profile/wtf.json" ]
+  [ -L "$BATS_TEST_TMPDIR/profile/terms.json" ]
+}

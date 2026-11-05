@@ -5,7 +5,7 @@ The ccxp-agent learns the owner's acronyms and shorthand (`wtf` = where to find)
 ## Where things live
 
 - **Store**: `${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-~/.claude}/wtf.json}}`, one per profile (`CCXP_TERMS_FILE` is the older env name, still honoured).
-- **Migration**: when `wtf.json` is missing and a `terms.json` sits next to it, `terms.sh` creates `wtf.json` from it (keys lowercased) and renames the old file `terms.json.migrated`. Once `wtf.json` exists it is the only file read. Two profiles that should share terms symlink the file, like they do for `rules/glossary.md`.
+- **Migration**: when `wtf.json` is missing and a `terms.json` sits next to it, `terms.sh` creates `wtf.json` from it (keys lowercased) and renames the old file `terms.json.migrated`. Once `wtf.json` exists it is the only file read. Two profiles that should share terms symlink the file (a symlinked `terms.json` migrates to a `wtf.json` link to the same target), like they do for `rules/glossary.md`.
 - **Writer**: only `agent-pairing/scripts/terms.sh` (atomic temp file + `mv`, previous version kept as `wtf.json.bak`, an unreadable file moved aside as `wtf.json.corrupt-<time>`, never overwritten). Not locked: last write wins.
 - **Hook**: `hooks/terms-hook.sh` (UserPromptSubmit), read-only.
 - **Agent rules**: the `## Terms` section of `assets/ccxp-agent.md`; the automatic persona refresh installs it.
@@ -33,7 +33,7 @@ The ccxp-agent learns the owner's acronyms and shorthand (`wtf` = where to find)
 
 - `origin`: `glossary` (imported, always `pinned`), `captured` (the owner defined it in a message), `asked` (added after the owner said yes or answered).
 - `pinned`, `hits`, `last_hit` are recorded so a later owner-triggered export can choose what to keep (see Follow-ups).
-- Limits: term 2-12 chars from `a-z0-9&+/-`; text one line, 120 chars; 200 terms; 8 definitions per term (exit 3 beyond that). Terms are stored lowercase (any case is accepted on input) and matched case-insensitively (`CC`, `Qbo` find `cc`, `qbo`); plurals (`RCAs`) and hyphen parts (`RCA-style`) match too. Definitions keep the owner's text. The same term may have several meanings (`cc` = claude code / concurrency control).
+- Limits: term 2-12 chars from `a-z0-9&+/-`; text one line, 120 chars; 200 terms; 8 definitions per term (exit 3 beyond that). Terms are stored lowercase (any case is accepted on input) and matched case-insensitively (`CC`, `Qbo` find `cc`, `qbo`); plurals (`RCAs`) and hyphen parts (`RCA-style`) match too. Definitions keep the owner's text. Because matching is case-insensitive, `add` refuses a short list of very common English words (`to`, `of`, `the`, ...). The same term may have several meanings (`cc` = claude code / concurrency control).
 
 ## Commands
 
