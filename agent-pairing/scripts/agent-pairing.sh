@@ -259,7 +259,7 @@ case "$ACTION" in
     fi
     case "$(agent_def_state)" in
       current) echo "agent-pairing: agent definition: up to date" ;;
-      outdated) echo "agent-pairing: agent definition: OUTDATED -- run update" ;;
+      outdated) echo "agent-pairing: agent definition: OUTDATED -- refreshes automatically" ;;
       missing) echo "agent-pairing: agent definition: not installed (run on)" ;;
     esac
     ;;

@@ -41,7 +41,7 @@ function persona-check() {
   [ "$(jq -r '.lastHandled // empty' "$state" 2>/dev/null)" != "$h" ] || return 0   # this content already handled
 
   # Never downgrade: when a newer ccxp-skills version is cached beside the running one (an older session, or
-  # `/update auto on` just installed one), that newer version's hook refreshes the persona; ours would undo it.
+  # a native auto-update just installed one), that newer version's hook refreshes the persona; ours would undo it.
   local me newest
   me="$(basename "$here")"
   if [[ "$me" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
@@ -70,7 +70,7 @@ function persona-check() {
   else
     # Failure: one notice; without a writable state file stay silent rather than repeat it on every prompt.
     record_handled || return 0
-    emit "$event" "The installed ccxp-agent persona (agents/ccxp-agent.md) is outdated versus this ccxp-skills version and the automatic refresh failed. Run /agent-pairing update."
+    emit "$event" "The installed ccxp-agent persona (agents/ccxp-agent.md) is outdated versus this ccxp-skills version and the automatic refresh failed. It is not retried for this persona version; fix the write problem (agents/ccxp-agent.md), then delete ccxp-persona-check.json to retry."
   fi
 }
 

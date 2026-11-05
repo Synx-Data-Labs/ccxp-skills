@@ -10,14 +10,14 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 53 skills in one step:
+so `/plugin` can install all 52 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
 /plugin install ccxp-skills@ccxp-skills
 ```
 
-Update later with `/plugin update ccxp-skills`, and remove with
+Update later with `/plugin update ccxp-skills` (the persona refreshes automatically; auto-update: `/plugin` marketplace toggle or `extraKnownMarketplaces.ccxp-skills.autoUpdate`), and remove with
 `/plugin uninstall ccxp-skills`. `/plugin` manages the clone for you.
 
 The skills live at the repo root rather than under `skills/`, which the
@@ -118,7 +118,6 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `gcpr` (alias `land`) | Commit & push uncommitted changes, open a PR, hand off to `address-pr` |
 | `address-pr` | Address PR review comments, verify CI + hard gate, merge or notify |
 | `cleanup-branch` | Post-merge branch cleanup — a specific branch, a PR-merge sweep, or a bulk prune |
-| `update` | Update the installed plugin from the public repo and refresh the `ccxp-agent` definition (`--check` previews; `/reload-plugins` and a restart stay manual); `/update auto on\|off\|status` opts in to a throttled SessionStart check that downloads new releases and tells you once per version what to do (default off) |
 | `retro` | Weekly retrospective — metrics, analysis, action items |
 | `memory-to-skill` | Review the current clone's auto-memory, prune stale entries, codify recurring ones into a skill/doc/hook |
 | `rca` | Diagnose/classify/track root cause for a failed GitHub Actions run |
@@ -168,7 +167,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 
 ### Ask-first skills (model-invoked, user-approved)
 
-`autopilot`, `memory-to-skill`, `agent-pairing`, `update`, `cleanup-branch`, `epic` and `to-task` are model-visible, but the plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) makes Claude Code prompt you before the model may run them. Typed `/skill` is unaffected. Edit `hooks/ask-skills.txt` to change the list. Headless `-p`, `dontAsk` and dispatched sub-agents cannot answer the prompt, so the call is denied there. Every other skill (including `bottom`, which autopilot's housekeeping calls every cycle) is model-invocable with no prompt.
+`autopilot`, `memory-to-skill`, `agent-pairing`, `cleanup-branch`, `epic` and `to-task` are model-visible, but the plugin's `hooks/skill-ask.sh` PreToolUse hook (matcher `Skill`) makes Claude Code prompt you before the model may run them. Typed `/skill` is unaffected. Edit `hooks/ask-skills.txt` to change the list. Headless `-p`, `dontAsk` and dispatched sub-agents cannot answer the prompt, so the call is denied there. Every other skill (including `bottom`, which autopilot's housekeeping calls every cycle) is model-invocable with no prompt.
 
 ### Delete guard (`rm-guard` hook)
 
@@ -197,7 +196,7 @@ The plugin's `hooks/secret-guard.sh` PreToolUse hook (matcher `Bash`, next to `r
 
 The plugin's `hooks/terms-hook.sh` (UserPromptSubmit, read-only) tells the model which of your acronyms from `terms.json` or the repo's `.claude/rules/glossary.md` a prompt uses, and how to record one you just defined ("root cause analysis (RCA)"). It is silent unless a term matches. Details: `agent-pairing/terms.md`.
 
-The plugin's `hooks/persona-check.sh` (SessionStart `startup` and UserPromptSubmit) keeps the installed `agents/ccxp-agent.md` in step with the plugin: after a `/plugin` update it runs the bundled `agent-pairing.sh update` once (timestamped `.bak` kept) and says so. `/update` and `/agent-pairing update` are manual fallbacks. Off switch: `CCXP_PERSONA_AUTO_REFRESH=0`. Details: `agent-pairing/SKILL.md`.
+The plugin's `hooks/persona-check.sh` (SessionStart `startup` and UserPromptSubmit) keeps the installed `agents/ccxp-agent.md` in step with the plugin: after a `/plugin` update it runs the bundled `agent-pairing.sh update` once (timestamped `.bak` kept) and says so. There is no manual update command. Off switch: `CCXP_PERSONA_AUTO_REFRESH=0`. Details: `agent-pairing/SKILL.md`.
 
 ## Reference docs
 
@@ -368,3 +367,8 @@ stay invisible as skills). Current set:
 - There is intentionally no per-repo customization mechanism — this pool
   is a union and every machine gets all of it. Revisit if the pool grows
   past ~50 skills or you need per-project pinning.
+
+## Migration notes
+
+- `/ccxp-skills:update` was removed in the next release; use `/plugin`. The `ccxp-agent` persona refreshes automatically (`hooks/persona-check.sh`), so the `/agent-pairing update` subcommand was removed too (`/agent-pairing on|off|status` stay).
+- The opt-in auto-update hook (`/update auto on|off|status`) was removed with it; use the marketplace auto-update toggle in `/plugin` or the `extraKnownMarketplaces.ccxp-skills.autoUpdate` settings key.

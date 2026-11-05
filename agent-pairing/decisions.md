@@ -8,7 +8,7 @@ The ccxp-agent keeps the owner's standing decisions, so a compaction or restart 
 - **Rendered view**: `ccxp-decisions.md` beside it (same base name), rewritten after every write and by `render`. Never edit it by hand.
 - **Archive**: `ccxp-decisions-archive.json`. Once more than 200 entries exist, superseded/retired ones closed over 90 days ago move there. Active entries never move. `decision show <ref>` still finds archived refs.
 - **Writer**: only `hud/scripts/ledger.sh decision ...` (atomic temp file + `mv`, serialized by a `<file>.lock` directory so concurrent jobs do not lose entries or reuse a ref; a lock older than a minute is stale; the ledger itself is still unlocked). A file that is not valid JSON is never overwritten; a newer schema is refused.
-- **Persona**: the `## Decisions log` section of `assets/ccxp-agent.md`; `/agent-pairing update` installs it.
+- **Persona**: the `## Decisions log` section of `assets/ccxp-agent.md`; the automatic persona refresh installs it.
 
 ## Commands
 

@@ -105,10 +105,10 @@ baks() { ls "$P/agents" | grep -c '^ccxp-agent.md.bak-' || true; }
   [ "$(cat "$P/agents/ccxp-agent.md")" = "persona v2" ]
 }
 
-@test "failed refresh gives a manual-fallback notice once, no retry loop" {
+@test "failed refresh gives a one-time notice with the retry hint, no retry loop" {
   rm "$PLUG/agent-pairing/scripts/agent-pairing.sh"
   run_hook; [ "$status" -eq 0 ]
-  jq -e '.systemMessage | test("failed") and test("/agent-pairing update")' <<<"$output" >/dev/null
+  jq -e '.systemMessage | test("failed") and test("ccxp-persona-check.json")' <<<"$output" >/dev/null
   run_prompt; [ -z "$output" ]
 }
 
