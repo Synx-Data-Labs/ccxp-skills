@@ -1586,6 +1586,19 @@ test('details: the nightly line spells out the 7-day strip and the 30-day green 
   expect(segs.find(x => x.text === '14 red ✗')!.color).toBe('error')
 })
 
+test('details: the nightly line sits directly after the CI line (first when there is no CI), never after queue', async () => {
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+  const helper = { ...fullSnap().helper, queue: q, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
+  const withCi = detail(withHelper(helper), 200, CI)
+  expect(withCi[0]).toMatch(/^CI \(nightly\.yml\)/)
+  expect(withCi[1]).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
+  expect(withCi[2]).toContain('acme/widgets')
+  expect(withCi.filter(l => l.startsWith('nightly ')).length).toBe(1)
+  const noCi = detail(withHelper({ ...helper, ci: null }), 200, NOCI)
+  expect(noCi[0]).toMatch(/^nightly /)
+  expect(noCi[1]).toContain('acme/widgets')
+})
+
 // --- /hud details is a SUPERSET of /hud: every cell the band can show has a counterpart in details ---
 // A new Field (or band-only cell) added without a details counterpart fails here, so cells cannot be forgotten.
 const SUPERSET_MARK: Record<string, RegExp> = {
