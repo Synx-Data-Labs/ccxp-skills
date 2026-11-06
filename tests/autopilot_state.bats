@@ -1240,3 +1240,196 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run grep -n 'never starts, stops, pauses or dispatches' "$REPO_ROOT/autopilot/SKILL.md"
   [ "$status" -eq 0 ]
 }
+
+# --- max_dop: parallel cycles (T20261106-971582) ------------------------------
+
+_ap_on() { _ap start >/dev/null; }
+
+@test "max_dop: default 1, range 1-16, set/show/reset like the other keys" {
+  run _ap config-show; [[ "$output" == *"max_dop"*"1"*"default"*"1 (1-16)"* ]]
+  run _ap config-set max_dop 8; [ "$status" -eq 0 ]
+  run _ap config-show --json; [ "$(jq -r .settings.max_dop.value <<<"$output")" = 8 ]
+  [ "$(jq -r .settings.max_dop.source <<<"$output")" = override ]
+  run _ap config-set max_dop 0; [ "$status" -eq 2 ]
+  run _ap config-set max_dop 17; [ "$status" -eq 2 ]
+  run _ap config-set max_dop abc; [ "$status" -eq 2 ]
+  run _ap config-reset max_dop; [ "$status" -eq 0 ]
+  run _ap config-show --json; [ "$(jq -r .settings.max_dop.value <<<"$output")" = 1 ]
+  run _ap config-set max_dop 16; [ "$status" -eq 0 ]
+}
+
+@test "slots: busy on/off per slot; bare off clears all; the legacy mirror follows the oldest slot" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  AUTOPILOT_NOW="2026-10-28T10:05:00Z" _ap busy on T20261106-000002 --slot 2
+  run _ap slots
+  [ "$(wc -l <<<"$output" | tr -d ' ')" = 2 ]
+  [[ "$output" == *"1"*"T20261106-000001"* ]]
+  [ "$(_j .busy_since)" = "2026-10-28T10:00:00Z" ]
+  [ "$(_j .current_task)" = T20261106-000001 ]
+  _ap busy off --slot 1
+  [ "$(_j '.slots | keys | join(",")')" = 2 ]
+  [ "$(_j .current_task)" = T20261106-000002 ]
+  _ap busy off
+  [ "$(_j '.slots | length')" = 0 ]
+  [ "$(_j .busy_since)" = null ]
+}
+
+@test "slots: a task already in another slot is refused (exit 3); re-marking the same slot is allowed" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  run _ap busy on T20261106-000001 --slot 2; [ "$status" -eq 3 ]
+  run _ap busy on T20261106-000003 --slot 1; [ "$status" -eq 0 ]
+  run _ap busy on T20261106-000003 --slot 17; [ "$status" -eq 2 ]
+}
+
+@test "slots: a pre-slots state file (busy_since only) reads as slot 1 busy and migrates on write" {
+  _ap_on
+  jq 'del(.slots) | .busy_since = "2026-10-28T09:30:00Z" | .current_task = "T20261106-000001"' "$AUTOPILOT_STATE_FILE" > "$BATS_TEST_TMPDIR/t" && mv "$BATS_TEST_TMPDIR/t" "$AUTOPILOT_STATE_FILE"
+  run _ap slots; [[ "$output" == "1"$'\t'"T20261106-000001"$'\t'"2026-10-28T09:30:00Z" ]]
+  run _ap start; [ "$output" = already-on ]
+  _ap busy on T20261106-000002 --slot 2
+  [ "$(_j '.slots | keys | join(",")')" = "1,2" ]
+  _ap record progress 0 T20261106-000001 "" --slot 1 >/dev/null
+  [ "$(_j '.slots | keys | join(",")')" = 2 ]
+}
+
+@test "slots: a mark older than 3 h is stale and drops out of the in-flight set" {
+  _ap_on
+  AUTOPILOT_NOW="2026-10-28T05:00:00Z" _ap busy on T20261106-000001 --slot 2
+  run _ap slots; [ -z "$output" ]
+}
+
+@test "record --slot: clears only its slot; counters stay global" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  _ap busy on T20261106-000002 --slot 2
+  _ap record progress 1 T20261106-000002 "" --slot 2 >/dev/null
+  [ "$(_j '.slots | keys | join(",")')" = 1 ]
+  [ "$(_j .cycle_count)" = 1 ]
+  [ "$(_j .merged_count)" = 1 ]
+  [ "$(_j .current_task)" = T20261106-000001 ]
+  _ap record progress 0 T20261106-000001 "" >/dev/null
+  [ "$(_j '.slots | length')" = 0 ]
+  [ "$(_j .cycle_count)" = 2 ]
+}
+
+@test "start/resume: due with a free slot, already-on when every slot is busy; max_dop=1 unchanged" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  run _ap start; [ "$output" = already-on ]
+  _ap config-set max_dop 2 >/dev/null
+  run _ap start; [ "$output" = dispatch ]
+  _ap busy on T20261106-000002 --slot 2
+  run _ap start; [ "$output" = already-on ]
+  _ap pause >/dev/null
+  run _ap resume; [ "$output" = busy ]
+  _ap busy off --slot 2
+  _ap pause >/dev/null
+  run _ap resume; [ "$output" = dispatch ]
+}
+
+@test "start (off then on) carries the busy slots over" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  _ap busy on T20261106-000002 --slot 2
+  _ap off >/dev/null
+  run _ap start; [ "$output" = busy ]
+  [ "$(_j '.slots | keys | join(",")')" = "1,2" ]
+}
+
+@test "cap: cycles in flight count against daily_cycle_cap" {
+  _ap_on
+  _ap config-set daily_cycle_cap 2 >/dev/null
+  _ap busy on T20261106-000001 --slot 1
+  run _ap cap; [ "$output" = ok ]
+  _ap busy on T20261106-000002 --slot 2
+  run _ap cap; [ "$output" = "capped:cycles" ]
+}
+
+@test "clone-path: slot 1 is unchanged, other slots get a distinct -sN path" {
+  run _ap clone-path /work/repo; p1="$output"
+  run _ap clone-path /work/repo --slot 1; [ "$output" = "$p1" ]
+  run _ap clone-path /work/repo --slot 3; [ "$output" = "${p1}-s3" ]
+  run _ap clone-path /work/repo --slot 0; [ "$status" -eq 2 ]
+}
+
+@test "set-clone / off: the extra slot clones are printed after the slot-1 line" {
+  _ap_on
+  _ap set-clone 1 /tmp/autopilot-clone-x
+  _ap set-clone 2 /tmp/autopilot-clone-x-s2
+  run _ap off
+  [ "${lines[0]}" = "off /tmp/autopilot-clone-x" ]
+  [ "${lines[1]}" = "clone /tmp/autopilot-clone-x-s2" ]
+  [ "$(_j '.dispatch_clone_paths | length')" = 0 ]
+}
+
+@test "top --nth and in-flight: the next slot gets a different task, Blocked-by-in-flight is skipped" {
+  _nh_repo
+  echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+  _nh_task T20260101-000001 "Open" a
+  _nh_task T20260101-000002 "Blocked by T20260101-000001" b
+  _nh_task T20260101-000003 "Open" c
+  _nh_task T20260101-000004 "Open" d
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000001 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 2; [ "$output" = T20260101-000003 ]  # the Blocked-by task is gated and skipped
+  _ap_on
+  _ap busy on T20260101-000001 --slot 1
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]
+  _ap busy on T20260101-000003 --slot 2
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000004 ]
+  _ap busy on T20260101-000004 --slot 3
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
+}
+
+@test "guard: ok when memory and load are fine; holds with the reason otherwise; fails closed" {
+  AUTOPILOT_GUARD_MEM_FREE_PCT=60 AUTOPILOT_GUARD_LOAD=2.0 AUTOPILOT_GUARD_NCPU=8 run _ap guard
+  [ "$status" -eq 0 ]; [ "$output" = ok ]
+  AUTOPILOT_GUARD_MEM_FREE_PCT=12 AUTOPILOT_GUARD_LOAD=2.0 AUTOPILOT_GUARD_NCPU=8 run _ap guard
+  [ "$status" -eq 1 ]; [ "$output" = "hold free memory 12% is under 20%" ]
+  AUTOPILOT_GUARD_MEM_FREE_PCT=60 AUTOPILOT_GUARD_LOAD=14 AUTOPILOT_GUARD_NCPU=8 run _ap guard
+  [ "$status" -eq 1 ]; [[ "$output" == "hold load 1.75 per CPU is over 1.5" ]]
+  AUTOPILOT_GUARD_MEM_FREE_PCT=oops AUTOPILOT_GUARD_LOAD=1 AUTOPILOT_GUARD_NCPU=8 run _ap guard
+  [ "$status" -eq 1 ]; [[ "$output" == "hold free memory unreadable" ]]
+  AUTOPILOT_GUARD_MEM_MIN_PCT=5 AUTOPILOT_GUARD_MEM_FREE_PCT=12 AUTOPILOT_GUARD_LOAD=1 AUTOPILOT_GUARD_NCPU=8 run _ap guard
+  [ "$output" = ok ]
+}
+
+@test "guard: the real probe on this machine prints ok or hold <reason> (never errors)" {
+  run _ap guard
+  [[ "$output" == ok || "$output" == hold\ * ]]
+}
+
+@test "hold: sets the wake time and last_hold without counting a cycle; refuses bad seconds" {
+  _ap_on
+  run _ap hold 300 "free memory 12% is under 20%"; [ "$output" = 300 ]
+  [ "$(_j .next_wake_at)" = "2026-10-28T10:05:00Z" ]
+  [ "$(_j .last_hold.reason)" = "free memory 12% is under 20%" ]
+  [ "$(_j .cycle_count)" = 0 ]
+  run _ap hold 0 x; [ "$status" -eq 2 ]
+  run _ap delay held; [ "$output" = 300 ]
+}
+
+@test "report: slots line only when max_dop > 1" {
+  _ap_on
+  run _ap report; [[ "$output" != *"slots:"* ]]
+  _ap config-set max_dop 4 >/dev/null
+  _ap busy on T20261106-000001 --slot 1
+  run _ap report; [[ "$output" == *"slots: 1 of 4 running"* ]]; [[ "$output" == *"slot 1: T20261106-000001"* ]]
+}
+
+@test "state lock: a stale lock directory is broken; two writers both land" {
+  _ap_on
+  mkdir "$AUTOPILOT_STATE_FILE.lock"; touch -t 202001010000 "$AUTOPILOT_STATE_FILE.lock"
+  run _ap busy on T20261106-000001 --slot 1; [ "$status" -eq 0 ]
+  ( _ap busy on T20261106-000002 --slot 2 & _ap busy on T20261106-000003 --slot 3 & wait )
+  [ "$(_j '.slots | keys | join(",")')" = "1,2,3" ]
+}
+
+@test "SKILL.md documents max_dop (default 1, example of raising to 8), the guard and per-slot dispatch" {
+  grep -q 'max_dop' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q 'config set max_dop 8' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q 'autopilot-state.sh guard' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q -- '--slot' "$REPO_ROOT/autopilot/SKILL.md"
+}

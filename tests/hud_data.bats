@@ -107,6 +107,20 @@ EOT
   [ "$(jq -r .autopilot.next_wake_at <<<"$output")" = "0" ]
 }
 
+@test "--json: autopilot.busy_slots counts the parallel cycles (0 when none, 1 for a legacy busy mark)" {
+  local repo; repo=$(_make_repo r-slots)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"slots\":{\"1\":{\"task\":null,\"since\":\"$(_iso_ago 5)\"},\"2\":{\"task\":null,\"since\":\"$(_iso_ago 6)\"}}}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_slots <<<"$output")" = "2" ]
+  [ "$(jq -r .autopilot.busy <<<"$output")" = "true" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":\"$(_iso_ago 5)\"}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_slots <<<"$output")" = "1" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_slots <<<"$output")" = "0" ]
+}
+
 @test "--json: autopilot.busy and current_task follow the state file" {
   local repo; repo=$(_make_repo r-busy)
   _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":\"$(_iso_ago 5)\",\"current_task\":\"T20261028-151063\"}"

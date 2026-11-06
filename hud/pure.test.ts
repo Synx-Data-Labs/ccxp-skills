@@ -778,6 +778,14 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apWith([...rows, { job: 598, title: 'older', flags: 'detached,autopilot' }], busy)).toMatch(/running r598$/)
   expect(apWith(rows, { ...busy, next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/running r596$/)
   expect(apWith(rows, { ...busy, current_task: '' })).toMatch(/running r596$/)
+  // parallel cycles (busy_slots > 1): name that many autopilot rows, highest numbers, ascending
+  const par = { ...busy, busy_slots: 2 }
+  const prow = [{ job: 596, title: 'autopilot cycle', flags: 'autopilot' }, { job: 597, title: 'autopilot cycle s2', flags: 'autopilot' }, { job: 599, title: 'x', flags: 'detached' }]
+  expect(apWith(prow, par)).toBe('AP on 2/6h 3 loops ✓2 merged │ running r596,r597')
+  expect(apWith([{ job: 590, title: 'old', flags: 'autopilot' }, ...prow], par)).toMatch(/running r596,r597$/)
+  expect(apWith([{ job: 596, title: 'a', flags: 'autopilot' }], par)).toMatch(/running r596$/)
+  expect(apWith(prow, { ...busy, busy_slots: 1 })).toMatch(/running r597$/)
+  expect(apWith(prow, { ...busy, busy_slots: 3 })).toMatch(/running r596,r597$/)
   expect(apWith([{ job: 599, title: 'x', flags: 'detached' }], busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
   expect(apWith([], busy)).toMatch(/│ running$/)
   expect(apWith(rows, { next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')

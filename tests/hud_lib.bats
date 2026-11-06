@@ -411,6 +411,28 @@ _ap_ago() { date -u -v-"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$1 m
   [ "$(_f 13)" = 1 ]; [ -z "$(_f 14)" ]
 }
 
+@test "sl-autopilot-fields: field 15 is the number of parallel cycles (slots); legacy busy_since counts as 1" {
+  local repo; repo=$(_make_repo repo-ap-slots)
+  _f() { awk -F$'\x1f' -v n="$1" '{print $n}' <<<"$output"; }
+  local base="\"schema\": 2, \"status\": \"on\", \"started_at\": \"$(_ap_ago 300)\", \"stuck_count\": 0, \"cycle_count\": 1"
+  # two fresh slots plus a stale one: 2 running
+  _ap_state "$repo" "{$base, \"slots\": {\"1\": {\"task\": \"T20261028-151063\", \"since\": \"$(_ap_ago 5)\"}, \"2\": {\"task\": null, \"since\": \"$(_ap_ago 9)\"}, \"3\": {\"task\": null, \"since\": \"$(_ap_ago 200)\"}}, \"busy_since\": \"$(_ap_ago 9)\", \"current_task\": \"T20261028-151063\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(_f 13)" = 1 ]; [ "$(_f 15)" = 2 ]
+  # slots object present and empty is authoritative over a leftover busy_since: not busy
+  _ap_state "$repo" "{$base, \"slots\": {}, \"busy_since\": \"$(_ap_ago 5)\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$(_f 13)" ]; [ -z "$(_f 15)" ]
+  # legacy file (no slots key): one busy cycle
+  _ap_state "$repo" "{$base, \"busy_since\": \"$(_ap_ago 5)\"}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ "$(_f 13)" = 1 ]; [ "$(_f 15)" = 1 ]
+  # idle: empty
+  _ap_state "$repo" "{$base}"
+  run bash -c "source '$SCRIPT'; sl-autopilot-fields '$repo'"
+  [ -z "$(_f 15)" ]
+}
+
 # --- sl-queue-json: the queue breakdown (every queued task in exactly one bucket) ---
 
 # _task <repo> <n> <status> [extra frontmatter line] [title]: dev/TODO/T20260101-00000<n>-t.md

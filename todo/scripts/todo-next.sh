@@ -8,12 +8,16 @@
 # requires reading and interpreting free-form task-body prose, a judgment
 # call this token-free script can't make.
 #
-#   todo-next.sh [--skip-gated] [--check]
+#   todo-next.sh [--skip-gated] [--check] [--exclude T<id>[,T<id>...]] [--nth N]
 #     --skip-gated  also skip gated tasks (the SUPERVISED/BLOCKED/needs manual/sign-off
 #                   words, or a `Blocked by` status; see todo-gated in _lib.sh). Used by
 #                   /drive's auto-pick; the default listing still shows them.
 #     --check       print nothing; exit 0 when at least one task would be listed,
 #                   1 when none
+#     --exclude     skip these task ids (in flight in another autopilot slot) and every task whose
+#                   status is `Blocked by` one of them
+#     --nth N       list only the Nth survivor (1-based) instead of the first 3; with --check,
+#                   exit 0 only when at least N survive
 set -euo pipefail
 
 TODO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -24,12 +28,14 @@ TODO_QUEUE_DIR="${TODO_QUEUE_DIR:-.}"
 QUEUE_FILE="$TODO_QUEUE_DIR/dev/TODO/queue.md"
 
 function todo-next-main() {
-  local skip_gated=0 check=0
+  local skip_gated=0 check=0 exclude="" nth=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --skip-gated) skip_gated=1 ;;
       --check) check=1 ;;
-      *) printf 'usage: todo-next.sh [--skip-gated] [--check]\n' >&2; return 2 ;;
+      --exclude) [ $# -ge 2 ] || { printf 'usage: --exclude needs a comma list of task ids\n' >&2; return 2; }; exclude=",$2,"; shift ;;
+      --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { printf 'usage: --nth needs a positive integer\n' >&2; return 2; }; nth="$2"; shift ;;
+      *) printf 'usage: todo-next.sh [--skip-gated] [--check] [--exclude T<id>,...] [--nth N]\n' >&2; return 2 ;;
     esac
     shift
   done
@@ -66,6 +72,12 @@ function todo-next-main() {
       Done*|Revisit*|Parked*) continue ;;
     esac
     if [ "$skip_gated" = 1 ] && todo-gated "$status"; then continue; fi
+    if [ -n "$exclude" ]; then
+      case "$exclude" in *",$id,"*) continue ;; esac
+      if [[ "$status" =~ ^Blocked\ by\ (T[0-9-]+) ]]; then
+        case "$exclude" in *",${BASH_REMATCH[1]},"*) continue ;; esac
+      fi
+    fi
 
     claim="$(todo-claim-state "$id" "$TODO_LIB_REPO_ROOT")"
     case "$claim" in
@@ -73,7 +85,12 @@ function todo-next-main() {
     esac
 
     picked=$((picked+1))
-    [ "$check" = 1 ] && return 0
+    if [ "$nth" -gt 0 ]; then
+      [ "$picked" -ge "$nth" ] || continue
+      [ "$check" = 1 ] && return 0
+    elif [ "$check" = 1 ]; then
+      return 0
+    fi
     printf '#%d of %d: %s — %s\n' "$total" "$total_entries" "$id" "$title"
     printf '  Status: %s\n' "$status"
 
@@ -100,10 +117,11 @@ function todo-next-main() {
       fi
     fi
 
+    if [ "$nth" -gt 0 ]; then break; fi
     [ "$picked" -ge 3 ] && break
   done
 
-  if [ "$picked" -eq 0 ]; then
+  if [ "$picked" -eq 0 ] || { [ "$nth" -gt 0 ] && [ "$picked" -lt "$nth" ]; }; then
     [ "$check" = 1 ] && return 1
     printf 'No actionable tasks in the queue (all skipped: Done/Revisit/Parked/peer-claimed).\n'
   fi

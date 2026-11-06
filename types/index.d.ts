@@ -74,6 +74,8 @@ export type Autopilot = {
   busy: boolean
   /** Task id the running cycle drives (`current_task`); "" when idle or not recorded. */
   current_task: string
+  /** Parallel cycles running (`max_dop` > 1); 0 when none, 1 for a single cycle. */
+  busy_slots: number
   stats: ApStats | null
 }
 

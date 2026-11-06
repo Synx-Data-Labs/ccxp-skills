@@ -103,7 +103,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | Skill | Purpose |
 |-------|---------|
 | `ccxp` | Day-or-week orchestrator — daily standup, Monday IPM, focused work, Friday retro |
-| `autopilot` | `/autopilot on\|off\|pause\|resume\|status\|config` — keep running `/drive` in the background until switched off; Slack once when nothing is drivable, retry later; `config` shows or sets the daily caps, idle retry and visit limit |
+| `autopilot` | `/autopilot on\|off\|pause\|resume\|status\|config` — keep running `/drive` in the background until switched off; Slack once when nothing is drivable, retry later; `config` shows or sets the daily caps, idle retry, visit limit and `max_dop` (how many `/drive` cycles run at once, 1-16, default 1; `/autopilot config set max_dop 8` runs up to eight, each in its own clone on a different task, behind a free-memory and load guard) |
 | `drive` | Pick ONE task, drive it to done — recurse into blockers, never switch laterally |
 | `todo` | List open tasks, pick the next actionable, reorder/clean up the backlog |
 | `claim` | Claim/check/release a task outside the full `/drive` loop |
