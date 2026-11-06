@@ -56,11 +56,11 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ -f "$md" ]
   grep -q '^## Running (1)$' "$md"
   grep -Eq '^- r8 \[[0-9]{2}:[0-9]{2}\] job$' "$md"
-  grep -q '^  /ctx/a.md$' "$md"
+  grep -q '^  context: file:///ctx/a.md$' "$md"
   grep -q '^- n1 q$' "$md"
-  grep -q '^  /ctx/n.md$' "$md"
+  grep -q '^  context: file:///ctx/n.md$' "$md"
   grep -q '^- k3 Parked thing$' "$md"
-  grep -q '^  /ctx/p.md$' "$md"
+  grep -q '^  context: file:///ctx/p.md$' "$md"
   bash "$LEDGER" finish 8
   grep -q '^## Running (0)$' "$md"
 }
@@ -279,13 +279,13 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   run bash "$LEDGER" render
   [ "${lines[0]}" = "Next:" ]
   [ "${lines[1]}" = "**n1** ask me" ]
-  [ "${lines[2]}" = "  /c/n.md" ]
+  [ "${lines[2]}" = "  file:///c/n.md" ]
   [ "${lines[3]}" = "Running:" ]
   [[ "${lines[4]}" =~ ^r8\ \[[0-9]{2}:[0-9]{2}\]\ job\ eight$ ]]
-  [ "${lines[5]}" = "  /c/8.md" ]
+  [ "${lines[5]}" = "  file:///c/8.md" ]
   [ "${lines[6]}" = "Parked:" ]
   [ "${lines[7]}" = "**k3** Parked thing" ]
-  [ "${lines[8]}" = "  /c/p.md" ]
+  [ "${lines[8]}" = "  file:///c/p.md" ]
   [ "${lines[9]}" = "**k4**" ]
   [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
 }
@@ -386,7 +386,7 @@ allow: pr-merge" >> "$f"
   [ "$status" -ne 0 ]
 }
 
-@test "ccxp-ledger.md: every row has a file:// link plus the plain path, empty context is (none)" {
+@test "ccxp-ledger.md: every row has ONE plain file:// url (no markdown link, no repeated path), empty context is (none)" {
   bash "$LEDGER" start 6 "run" --context "/tmp/my dir/r 6.md"
   bash "$LEDGER" start 7 "run nocontext"
   bash "$LEDGER" next add "ask" --context /ctx/n1.md >/dev/null
@@ -395,16 +395,16 @@ allow: pr-merge" >> "$f"
   bash "$LEDGER" park k4
   md="$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
   grep -qF -- '- r6 [' "$md"
-  grep -qF 'context: [context](file:///tmp/my%20dir/r%206.md)' "$md"
-  grep -qxF '  /tmp/my dir/r 6.md' "$md"
-  grep -qF 'context: [context](file:///ctx/n1.md)' "$md"
-  grep -qxF '  /ctx/n1.md' "$md"
-  grep -qF 'context: [context](file:///ctx/p%203.md)' "$md"
-  grep -qxF '  /ctx/p 3.md' "$md"
+  grep -qxF '  context: file:///tmp/my%20dir/r%206.md' "$md"
+  grep -qxF '  context: file:///ctx/n1.md' "$md"
+  grep -qxF '  context: file:///ctx/p%203.md' "$md"
+  run grep -cE '\]\(file://|^  /' "$md"
+  [ "$output" = "0" ]
   [ "$(grep -c 'context: (none)' "$md")" = "3" ]
-  grep -qF "Ledger: [ledger](file://$(dirname "$CCXP_LEDGER_FILE" | sed 's/ /%20/g')/ledger.md)" "$md"
+  grep -qxF "Ledger: file://$(dirname "$CCXP_LEDGER_FILE" | sed 's/ /%20/g')/ledger.md" "$md"
   run bash "$LEDGER" render
-  [[ "$output" == *$'  /tmp/my dir/r 6.md'* ]]
+  [[ "$output" == *$'\n  file:///tmp/my%20dir/r%206.md'* ]]
+  [[ "$output" != *'/tmp/my dir/r 6.md'* ]]
 }
 
 @test "--started-at on start and set-started override the start time; format is validated" {
@@ -432,13 +432,13 @@ allow: pr-merge" >> "$f"
   [ "${lines[0]}" = "TL;DR: all good" ]
   [ "${lines[1]}" = "Running:" ]
   [[ "${lines[2]}" =~ ^r8\ \[[0-9:-]{5}\]\ job\ eight$ ]]
-  [ "${lines[3]}" = "  /c/8.md" ]
+  [ "${lines[3]}" = "  file:///c/8.md" ]
   [ "${lines[4]}" = "Next:" ]
   [ "${lines[5]}" = "n1 ask me" ]
-  [ "${lines[6]}" = "  /c/n.md" ]
+  [ "${lines[6]}" = "  file:///c/n.md" ]
   [ "${lines[7]}" = "Parked:" ]
   [ "${lines[8]}" = "k3 Parked thing" ]
-  [ "${lines[9]}" = "  /c/p.md" ]
+  [ "${lines[9]}" = "  file:///c/p.md" ]
   [ "${lines[-1]}" = "Ledger: $(dirname "$CCXP_LEDGER_FILE")/ledger.md" ]
   [[ "$output" != *'**'* && "$output" != *'|'* ]]
   run bash "$LEDGER" reply --bogus
@@ -482,7 +482,7 @@ allow: pr-merge" >> "$f"
   run bash "$LEDGER" reply
   [[ "$output" == *$'r8 '*$'\n  context: MISSING'* ]]
   [[ "$output" == *$'n1 ask me\n  context: MISSING'* ]]
-  [[ "$output" == *$'n2 fine\n  /c/n.md'* ]]
+  [[ "$output" == *$'n2 fine\n  file:///c/n.md'* ]]
   bash "$LEDGER" reply > "$BATS_TEST_TMPDIR/r.txt"
   run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"
   [ "$status" -eq 1 ]
@@ -661,7 +661,7 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   grep -Eq '^- d2 \[[0-9-]{10}\] repo rule - retired: obsolete \([0-9-]{10}\)$' "$md"
   bash "$LEDGER" decision add "with ctx" --quote "owner words" --context "/ctx/a b.md" >/dev/null
   grep -q '^  quote: "owner words"$' "$md"
-  grep -q '^  context: \[context\](file:///ctx/a%20b.md) /ctx/a b.md$' "$md"
+  grep -q '^  context: file:///ctx/a%20b.md$' "$md"
 }
 
 @test "decision: archive moves old closed entries past 200 to ccxp-decisions-archive.json, keeps active and recent ones" {

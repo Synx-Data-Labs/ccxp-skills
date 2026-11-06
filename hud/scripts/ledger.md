@@ -69,7 +69,7 @@ A restart ends running subagents but leaves their `running` rows. `start` can re
 ```
 
 - `started_at` is HH:MM local time of the first `start` for that job (a re-start keeps it). `done` holds the last 20 closed Next items.
-- `render` prints `Next:`, `Running:` and `Parked:` (empty ones omitted): `**n3** text`, `r6 [14:09] title`, `**k7** title`, each with its context path on the next line, then `Ledger: <abs path of ccxp-ledger.md>`.
+- `render` prints `Next:`, `Running:` and `Parked:` (empty ones omitted): `**n3** text`, `r6 [14:09] title`, `**k7** title`, each with its context on the next line as ONE plain `file://<url-encoded abs path>` URL (or `context: MISSING`), then `Ledger: <abs path of ccxp-ledger.md>`.
 - `running`, `next` and `parked` are each one array; a count is the array length.
 - `context` is the absolute path of a context file (`""` when none). `--context` must be absolute; the script only stores the path, it never creates or moves the file. A repeated `start` without `--context` keeps the stored one; a repeated `park` updates only what is passed.
 - `ref_counters` (`n`, `s`, `k`): highest number ever used, never lowered. `park <k>` also bumps `k`; `next done` on an unknown ref is a no-op.
@@ -82,7 +82,7 @@ A restart ends running subagents but leaves their `running` rows. `start` can re
 
 ## Markdown view
 
-Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows `context: [context](file:///abs/path)` (path percent-encoded) and the plain absolute path on the next line so a terminal can cmd-click it; an empty context shows `context: (none)`. The header has a `Ledger:` link to the file itself. `render` (the reply text) prints full absolute paths. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
+Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows `context: file:///abs/path` (path percent-encoded): one plain URL, no markdown link and no repeated path, cmd-clickable in vscode or a terminal; an empty context shows `context: (none)`. The header has a plain `Ledger: file://...` line for the file itself. `render` and `reply` print the same plain `file://` URL on the row's second line. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
 
 ## Migration
 
