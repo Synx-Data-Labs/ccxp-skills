@@ -19,8 +19,8 @@
 #   ledger.sh next set <ref> [--text <t>] [--context <abs-path>]   edit an open item
 #   ledger.sh set-counter <n|s|k> <value>   set a ref counter exactly (to initialise it)
 #   ledger.sh render              print Next / Running / Parked as the reply sections + a "Ledger:" line
-#   ledger.sh reply [--tldr "<text>"]   the reply tail, plain text, to paste verbatim: Running (r<n> [HH:MM] title, context path),
-#                                 Next: (n<k>, context path), Parked: (k<n>, context path), then "Ledger: <abs path of ccxp-ledger.md>"
+#   ledger.sh reply [--tldr "<text>"]   the reply tail, plain text, to paste verbatim: Running (r<n> [HH:MM] title, context file:// url),
+#                                 Next: (n<k>, context file:// url), Parked: (k<n>, context file:// url), then "Ledger: <abs path of ccxp-ledger.md>"
 #   ledger.sh check <replyfile|->   compare the r<n>/n<k>/k<n> refs that open a line of a draft reply with the ledger;
 #                                 prints each MISSING (in ledger, not in reply) / EXTRA (in reply, not in ledger) ref, and each
 #                                 NO-CONTEXT ref (a running, next or parked item with an empty context); exit 1 on any
@@ -45,7 +45,7 @@
 # The JSON is the source of truth: compose replies from `render`/`show`, change it only via this script.
 # context = absolute path of a context file ("" when none); this script only stores it.
 # After every write, ccxp-ledger.md (same dir, same base name) is re-rendered: running, Next and
-# parked items, each with a file:// link and the plain absolute context path (cmd-clickable in a terminal).
+# parked items, each with ONE plain file:// URL (url-encoded absolute context path; cmd-clickable in vscode/terminal).
 # Migration (first write onto an older file): the old file is copied to
 # <file>.bak-<UTC timestamp>-<pid>, parked_ids become parked items with empty context, inputs/actions
 # merge into next (legacy refs kept), the parked count and i/a counters are dropped. A legacy
@@ -177,10 +177,10 @@ ledger-render() {
   if printf '%s' "$1" | jq -r --arg md "$md" --argjson az "$(authz-effective-if-file)" '
       def enc: split("/") | map(@uri) | join("/");
       def item($head): "- " + $head + "\n  context: "
-        + (if .context != "" then "[context](file://" + (.context | enc) + ")\n  " + .context else "(none)" end);
+        + (if .context != "" then "file://" + (.context | enc) else "(none)" end);
       def sect($name; $items): "## " + $name + " (" + ($items | length | tostring) + ")\n"
         + (if ($items | length) == 0 then "- none" else ($items | join("\n")) end) + "\n";
-      "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\nLedger: [ledger](file://" + ($md | enc) + ") " + $md + "\n\n"
+      "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\nLedger: file://" + ($md | enc) + "\n\n"
       + sect("Running"; [.running[] | item("r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)")]) + "\n"
       + sect("Next"; [.next[] | item("\(.ref) \(.text)")]) + "\n"
       + sect("Parked"; [.parked[] | item(.id + (if .title then " " + .title else "" end))])
@@ -344,7 +344,8 @@ ledger-render-text() {
   dec=$(decisions-summary)
   decisions-render-file
   ledger-read | jq -r --arg md "$md" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
-    def ctx: if .context != "" then "\n  " + .context else "" end;
+    def enc: split("/") | map(@uri) | join("/");
+    def ctx: if .context != "" then "\n  file://" + (.context | enc) else "" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     sect("Next:"; [.next[] | "**\(.ref)** \(.text)" + ctx]),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
@@ -361,7 +362,8 @@ ledger-reply() {
   [[ "$md" == /* ]] || md="$(pwd)/$md"
   [[ "${2:-}" == "no" ]] || dec=$(decisions-summary)
   ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
-    def ctx: if .context != "" then "\n  " + .context else "\n  context: MISSING" end;
+    def enc: split("/") | map(@uri) | join("/");
+    def ctx: if .context != "" then "\n  file://" + (.context | enc) else "\n  context: MISSING" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     (if $tldr != "" then "TL;DR: " + $tldr + "\n" else empty end),
     sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
@@ -528,11 +530,11 @@ decisions-render-file() {
       def day: .added_at[0:10];
       def item: "- " + .ref + " [" + day + "] " + .text
         + (if .quote != "" then "\n  quote: \"" + .quote + "\"" else "" end)
-        + (if .context != "" then "\n  context: [context](file://" + (.context | enc) + ") " + .context else "" end);
+        + (if .context != "" then "\n  context: file://" + (.context | enc) else "" end);
       def num: .ref[1:] | tonumber;
       [.decisions[] | select(.status == "active")] as $act
       | [.decisions[] | select(.status != "active")] as $old
-      | "# CCXP decisions\n\nUpdated: " + .updated_at + "\n\nDecisions: [decisions](file://" + ($md | enc) + ") " + $md + "\n\n"
+      | "# CCXP decisions\n\nUpdated: " + .updated_at + "\n\nDecisions: file://" + ($md | enc) + "\n\n"
         + "## Active (" + ($act | length | tostring) + ")\n"
         + (if ($act | length) == 0 then "- none\n" else
             ([$act[].scope] | unique | map(
