@@ -136,13 +136,13 @@ ap-status() {
 }
 
 # Atomic write: jq filter applied to the current state via temp file + mv.
-# Serialized with a mkdir lock (pid file inside; a lock older than 30 s is a crashed writer and is
-# broken), so two cycles finishing close together never interleave read-modify-write.
+# Serialized with a mkdir lock (pid file inside; a lock older than 5 s (a write takes milliseconds) is a
+# crashed writer and is broken, inside the 10 s a waiter retries), so two cycles finishing close together never interleave read-modify-write.
 _ap_lock() {
   local f lock i=0 age; f=$(ap-state-file); lock="$f.lock"
   while ! mkdir "$lock" 2>/dev/null; do
     age=$(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || date +%s) ))
-    if [ "$age" -gt 30 ]; then rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; continue; fi
+    if [ "$age" -gt 5 ]; then rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; continue; fi
     i=$(( i + 1 )); [ "$i" -le 200 ] || return 1
     sleep 0.05
   done
@@ -153,7 +153,7 @@ _ap_unlock() { local lock; lock="$(ap-state-file).lock"; rm -f "$lock/pid" 2>/de
 _ap_update() {
   local f tmp rc=0; f=$(ap-state-file); tmp="$f.tmp.$$"
   _ap_lock || { echo "autopilot-state: could not lock $f" >&2; return 1; }
-  if jq "$@" "$f" > "$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; rc=1; fi
+  if jq "$@" "$f" > "$tmp" && mv "$tmp" "$f"; then :; else rm -f "$tmp"; rc=1; fi
   _ap_unlock
   return $rc
 }
