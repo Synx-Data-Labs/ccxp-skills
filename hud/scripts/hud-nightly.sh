@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nightly green/red day counts for the ccxp-hud band (hud-data.sh sources this).
 #
-# hud-nightly-json  prints {"red":N,"strip":"++-++-+"} or "null".
+# hud-nightly-json  prints {"red":N,"green":M,"strip":"++-++-+"} or "null" (an older cache without "green" prints without it).
 #
 # Source: `gh run list` for the SynxDB nightly orchestrator workflow ("Nightly Orchestrator" in
 # Synx-Data-Labs/synxdb-build-pipeline), scheduled runs only. Counted per UTC day over the last 30 days
@@ -9,7 +9,7 @@
 #   green day = at least one completed run, every one of them concluded success;
 #   red day   = at least one run that day concluded failure or timed_out, even if a later run succeeded.
 # Cancelled, skipped and still-running runs are ignored; a day with no counted run is neither.
-# Output: `red` = red days in the last 30 days (today and the 29 before); `strip` = the last 7 days, oldest to
+# Output: `red` / `green` = red / green days in the last 30 days (today and the 29 before); `strip` = the last 7 days, oldest to
 # newest, one character each: + green day, - red day, . no counted run. Nothing when no day in the 30 counts.
 #
 # Never blocks the caller: it prints the cached answer at once and, when the cache is older than
@@ -32,7 +32,7 @@ HNI_TIMEOUT=10
 hni-state-dir() { printf '%s' "${HUD_NIGHTLY_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-nightly}"; }
 
 # $1 now (epoch), stdin: JSON list of runs (gh run list --json status,conclusion,event,createdAt)
-# -> {"red":N,"strip":"++-++-+"}; nothing when no day of the 30 counts. Pure: no clock, no network.
+# -> {"red":N,"green":M,"strip":"++-++-+"}; nothing when no day of the 30 counts. Pure: no clock, no network.
 sl-nightly-count() {
   jq -c --argjson now "$1" '
     ($now - 29 * 86400 | strftime("%Y-%m-%d")) as $from
@@ -45,6 +45,7 @@ sl-nightly-count() {
     | ($runs | group_by(.d) | map({key: .[0].d, value: any(.[]; .red)}) | from_entries) as $days
     | if ($days | length) == 0 then empty else
         {red: ($days | map(select(.)) | length),
+         green: ($days | map(select(. | not)) | length),
          strip: ([range(6; -1; -1) | ($now - . * 86400 | strftime("%Y-%m-%d")) as $d | if $days[$d] == null then "." elif $days[$d] then "-" else "+" end] | join(""))}
       end' 2>/dev/null
 }
@@ -99,6 +100,6 @@ hud-nightly-json() {
     fi
   fi
   local out=""
-  [ -z "$cached" ] || out=$(jq -c 'select((.red | type) == "number" and (.strip | type) == "string" and (.strip | test("^[-+.]{7}$"))) | {red: (.red | floor), strip}' <<<"$cached" 2>/dev/null | head -n1) || out=""
+  [ -z "$cached" ] || out=$(jq -c 'select((.red | type) == "number" and (.strip | type) == "string" and (.strip | test("^[-+.]{7}$"))) | {red: (.red | floor)} + (if (.green | type) == "number" and .green >= 0 then {green: (.green | floor)} else {} end) + {strip}' <<<"$cached" 2>/dev/null | head -n1) || out=""
   printf '%s' "${out:-null}"
 }

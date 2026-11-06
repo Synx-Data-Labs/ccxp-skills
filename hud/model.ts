@@ -147,9 +147,12 @@ export function parseHelper(stdout: string): HelperData | null {
   const ni = r.nightly
   let nightly: Nightly | null = null
   if (typeof ni === 'object' && ni !== null && !Array.isArray(ni)) {
-    // Untrusted: one whole count (0-31) and a 7-character strip of + - . , nothing else is ever drawn.
+    // Untrusted: whole red and (optional) green counts (0-31) and a 7-character strip of + - . , nothing else is ever drawn.
     const o = ni as Record<string, unknown>
-    if (typeof o.red === 'number' && Number.isFinite(o.red) && o.red >= 0 && typeof o.strip === 'string' && /^[-+.]{7}$/.test(o.strip)) nightly = { red: Math.min(31, Math.floor(o.red)), strip: o.strip }
+    if (typeof o.red === 'number' && Number.isFinite(o.red) && o.red >= 0 && typeof o.strip === 'string' && /^[-+.]{7}$/.test(o.strip)) {
+      const green = typeof o.green === 'number' && Number.isFinite(o.green) && o.green >= 0 ? Math.min(31, Math.floor(o.green)) : undefined
+      nightly = { red: Math.min(31, Math.floor(o.red)), ...(green !== undefined ? { green } : {}), strip: o.strip }
+    }
   }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
@@ -554,7 +557,7 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
     }
     case 'nightly': {
       const n = h?.nightly
-      return n ? one(...nightlyVariants(n)) : null
+      return n ? one(...nightlyVariants(n, false)) : null
     }
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
@@ -615,11 +618,30 @@ export function queueVariants(q: Queue, full: boolean): Variants {
   ]
 }
 
-/** `nightly ++-++-+ · 30d: 7 red` (+ green, - red, . dim), then `nightly ++-++-+`, then dropped. */
-export function nightlyVariants(n: Nightly): Variants {
+/**
+ * The nightly cell. Band: `nightly ++-++-+ · 30d: 16✓ 14✗` (+ green, - red, . dim; ✓ green days in the last 30 UTC days
+ * in the success colour, ✗ red days in the error colour, a zero dim), then `nightly ++-++-+ 16✓ 14✗`, then `nightly ++-++-+`
+ * (the strip and counts survive as long as possible; the cell is dropped last). Details (`full`) spells it out and never
+ * abbreviates: `nightly ++-++-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗`. A cache written before the green count
+ * existed has no `green`: the count reads `14✗` (band) / `14 red ✗` (details), the green part is simply absent. The glyphs
+ * stay with NO_COLOR (only the colour drops).
+ */
+export function nightlyVariants(n: Nightly, full = false): Variants {
   const strip: Seg[] = [...n.strip].map((c): Seg => ({ text: c, color: c === '+' ? 'success' : c === '-' ? 'error' : undefined, dim: c === '.' }))
+  const g = n.green
+  const counts = (gTxt: string, rTxt: string): Seg[] => [
+    ...(g !== undefined ? [{ text: gTxt, color: g > 0 ? ('success' as const) : undefined, dim: g === 0 }] : []),
+    ...(g !== undefined ? [{ text: ' ' }] : []),
+    { text: rTxt, color: n.red > 0 ? ('error' as const) : undefined, dim: n.red === 0 },
+  ]
+  if (full) {
+    const red: Seg = { text: `${n.red} red ✗`, color: n.red > 0 ? 'error' : undefined, dim: n.red === 0 }
+    const both: Seg[] = g === undefined ? [red] : [{ text: `${g} green ✓`, color: g > 0 ? 'success' : undefined, dim: g === 0 }, { text: ' / ', dim: true }, red]
+    return [[{ text: 'nightly ' }, ...strip, { text: ' (last 7 days) · last 30 days: ', dim: true }, ...both]]
+  }
   return [
-    [{ text: 'nightly ' }, ...strip, { text: ' · 30d: ', dim: true }, { text: `${n.red} red`, color: n.red > 0 ? 'error' : undefined, dim: n.red === 0 }],
+    [{ text: 'nightly ' }, ...strip, { text: ' · 30d: ', dim: true }, ...counts(`${g}✓`, `${n.red}✗`)],
+    [{ text: 'nightly ' }, ...strip, { text: ' ' }, ...counts(`${g}✓`, `${n.red}✗`)],
     [{ text: 'nightly ' }, ...strip],
   ]
 }
@@ -632,8 +654,8 @@ const ORDER = {
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:nightly', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:nightly', 'drop:queue', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:nightly', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'drop:nightly', 'drop:queue', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -779,20 +801,23 @@ const DETAIL_STEPS = {
   jobs: [],
   ap: [],
   queue: [],
+  nightly: [],
   you: ['drop:url'],
 } as const
 
 /**
- * `/hud details`: the band expanded to up to seven live lines, each cut to the terminal width (with an ellipsis,
+ * `/hud details`: the band expanded to up to eight live lines, each cut to the terminal width (with an ellipsis,
  * never abbreviated). Lines with nothing to say are left out, none is reserved.
  *   0 CI (first, alone; highlighted when red)
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit left, API-equivalent cost
  *   3 jobs state, parked, last 24h jobs / average per day (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
  *   4 autopilot, next loop time (or overdue), 24h cell
  *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
- *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
- * Without `ci` that is six lines at most, with `ci` seven. Labels are spelled out in full here; the one-row band
- * keeps the short forms (ctx, 5h, $, queue 30r 6h). It ignores `fields`: the lines are the view. [] when there is no data at all.
+ *   6 the nightly: 7-day strip and the last 30 days' green and red counts, labels in full
+ *   7 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
+ * Without `ci` that is seven lines at most, with `ci` eight. Labels are spelled out in full here; the one-row band
+ * keeps the short forms (ctx, 5h, $, queue 30r 6h). It ignores `fields`: the lines are the view. Details is a SUPERSET of the band:
+ * every cell the band can show has its full-form counterpart here (pinned by the superset test in pure.test.ts). [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const h = snap.helper
@@ -877,7 +902,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // 5. the queue breakdown on its own line right after the AP line (labels in full)
   if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
 
-  // 6. you: the last prompt, stamp and age
+  // 6. the nightly, spelled out: the band's cell with its labels in full (7-day strip, 30-day green and red days)
+  if (h?.nightly) add([one('nightly', ...nightlyVariants(h.nightly, true))], DETAIL_STEPS.nightly)
+
+  // 7. you: the last prompt, stamp and age
   const at = h?.last_input_at
   const verItem = pick('ver')
   // The plugin's GitHub location, as a bare URL (terminals make it cmd-clickable; no OSC 8, the renderer draws plain text).

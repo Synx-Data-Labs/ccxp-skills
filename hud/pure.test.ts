@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
+import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
 import { type Seg, EMPTY, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
@@ -1531,10 +1531,13 @@ test('queue source: the band reads queue@main, details queue (main); working tre
   expect(detail(fb as any, 200).join('\n')).toContain('queue (working tree, origin unavailable) 44 = 30 ready')
 })
 
-test('nightly cell: parseHelper keeps one whole red count and a 7-character +-. strip, hides anything else', async () => {
+test('nightly cell: parseHelper keeps whole red and optional green counts and a 7-character +-. strip, hides anything else', async () => {
   const n = (x: unknown) => parseHelper(JSON.stringify({ ...BASE, nightly: x }))!.nightly
-  expect(n({ red: 7, strip: '++-++-+' })).toEqual({ red: 7, strip: '++-++-+' })
-  expect(n({ red: 0, strip: '.....++' })).toEqual({ red: 0, strip: '.....++' })
+  expect(n({ red: 7, green: 16, strip: '++-++-+' })).toEqual({ red: 7, green: 16, strip: '++-++-+' })
+  expect(n({ red: 7, strip: '++-++-+' })).toEqual({ red: 7, strip: '++-++-+' }) // an older cache without green still renders
+  expect(n({ red: 0, green: 0, strip: '.....++' })).toEqual({ red: 0, green: 0, strip: '.....++' })
+  expect(n({ red: 7, green: 'x', strip: '++-++-+' })).toEqual({ red: 7, strip: '++-++-+' })
+  expect(n({ red: 7, green: -1, strip: '++-++-+' })).toEqual({ red: 7, strip: '++-++-+' })
   expect(n({ red: '7', strip: '++-++-+' })).toBeNull()
   expect(n({ red: 7, strip: '++-++-' })).toBeNull()
   expect(n({ red: 7, strip: '++x++-+' })).toBeNull()
@@ -1542,22 +1545,94 @@ test('nightly cell: parseHelper keeps one whole red count and a 7-character +-. 
   expect(n(null)).toBeNull()
 })
 
-test('nightly cell: `nightly ++-++-+ · 30d: 7 red`, coloured per character, hidden without data or when switched off', async () => {
-  const rows = bandRows(withHelper({ nightly: { red: 7, strip: '++-.+-+' } }) as any, NOCI, 200)
-  expect(text(rows)).toContain('nightly ++-.+-+ · 30d: 7 red')
+test('nightly cell: `nightly ++-++-+ · 30d: 16✓ 14✗`, coloured per character, hidden without data or when switched off', async () => {
+  const rows = bandRows(withHelper({ nightly: { red: 14, green: 16, strip: '++-.+-+' } }) as any, NOCI, 200)
+  expect(text(rows)).toContain('nightly ++-.+-+ · 30d: 16✓ 14✗')
   const segs = rows.flat()
   expect(segs.filter(x => x.text === '-').every(x => x.color === 'error')).toBe(true)
   expect(segs.filter(x => x.text === '+').every(x => x.color === 'success')).toBe(true)
   expect(segs.find(x => x.text === '.')!.dim).toBe(true)
-  expect(segs.find(x => x.text === '7 red')!.color).toBe('error')
+  expect(segs.find(x => x.text === '14✗')!.color).toBe('error')
+  expect(segs.find(x => x.text === '16✓')!.color).toBe('success')
+  const zero = bandRows(withHelper({ nightly: { red: 0, green: 0, strip: '.......' } }) as any, NOCI, 200).flat()
+  expect(zero.find(x => x.text === '0✓')!.dim).toBe(true)
+  expect(zero.find(x => x.text === '0✗')!.dim).toBe(true)
+  // an older cache without green: only the red count, as before
+  expect(text(bandRows(withHelper({ nightly: { red: 7, strip: '++-.+-+' } }) as any, NOCI, 200))).toContain('nightly ++-.+-+ · 30d: 7✗')
   expect(text(bandRows(withHelper({ nightly: null }) as any, NOCI, 200))).not.toMatch(/nightly [-+.]/)
-  expect(text(bandRows(withHelper({ nightly: { red: 7, strip: '++-++-+' } }) as any, { ...NOCI, fields: ['repo'] }, 200))).not.toContain('nightly ++')
+  expect(text(bandRows(withHelper({ nightly: { red: 7, green: 16, strip: '++-++-+' } }) as any, { ...NOCI, fields: ['repo'] }, 200))).not.toContain('nightly ++')
 })
 
-test('nightly cell: shrinks to the strip alone, and is dropped while the queue cell is still shown', async () => {
-  const s = withHelper({ nightly: { red: 7, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 } })
+test('nightly cell: shrinks strip+counts, then strip alone, and is dropped only after the queue cell', async () => {
+  const s = withHelper({ nightly: { red: 14, green: 16, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 } })
   const rows: string[] = []
-  for (let w = 200; w >= 30; w -= 2) rows.push(text(bandRows(s as any, NOCI, w)))
-  expect(rows.some(t => t.includes('nightly ++-++-+') && !t.includes('30d:'))).toBe(true)
-  expect(rows.some(t => !t.includes('nightly ++') && t.includes('queue'))).toBe(true)
+  for (let w = 200; w >= 20; w -= 1) rows.push(text(bandRows(s as any, NOCI, w)))
+  expect(rows.some(t => t.includes('nightly ++-++-+ 16✓ 14✗') && !t.includes('30d:'))).toBe(true)
+  expect(rows.some(t => t.includes('nightly ++-++-+') && !t.includes('✓'))).toBe(true)
+  // never dropped while the queue cell is still there; once the counts are gone the strip is
+  for (const t of rows) if (t.includes('queue')) expect(t).toContain('nightly ++')
+  // the counts stay as long as the strip is wider than the bare cell would be
+  for (const t of rows) if (t.includes('✓')) expect(t).toContain('nightly ++-++-+')
+  expect(rows.some(t => !t.includes('nightly ++') && !t.includes('queue'))).toBe(true)
+})
+
+test('details: the nightly line spells out the 7-day strip and the 30-day green and red days', async () => {
+  const lines = (n: object | null) => linesOf({ nightly: n })
+  expect(lines({ red: 14, green: 16, strip: '+-++.-+' })).toContain('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
+  expect(lines({ red: 14, strip: '+-++.-+' })).toContain('nightly +-++.-+ (last 7 days) · last 30 days: 14 red ✗')
+  expect(lines(null).some(l => l.startsWith('nightly '))).toBe(false)
+  const segs = detailRows(withHelper({ ci: null, nightly: { red: 14, green: 16, strip: '+-++.-+' } }) as any, DEFAULTS, 240, DETAIL_NOW).flat()
+  expect(segs.find(x => x.text === '16 green ✓')!.color).toBe('success')
+  expect(segs.find(x => x.text === '14 red ✗')!.color).toBe('error')
+})
+
+// --- /hud details is a SUPERSET of /hud: every cell the band can show has a counterpart in details ---
+// A new Field (or band-only cell) added without a details counterpart fails here, so cells cannot be forgotten.
+const SUPERSET_MARK: Record<string, RegExp> = {
+  repo: /acme\/widgets @ /,
+  branch: /t20261021-354035-decouple/, // the branch rides on the repo line
+  task: /T20261021-354035 /,
+  ap: /^AP /,
+  apstats: /last 24h: \d+ merged/,
+  stall: /next loop overdue/,
+  ctx: /context \d+% left/,
+  jobs: /READY|WORKING/,
+  queue: /^queue /,
+  nightly: /^nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
+  ci: /^CI \(/,
+  rate: /5-hour limit/,
+  cost: /API-equivalent cost \$/,
+  lastat: /^you \d/,
+  ver: /ccxp/,
+  stale: /stale/,
+}
+
+test('details is a superset of the band: every band cell has a details counterpart', async () => {
+  const stalled = Math.floor(DETAIL_NOW / 1000) - 86400
+  const s = {
+    ...fullSnap({ rateUsed: 40, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, costUsd: 1.23, stale: true }),
+  } as any
+  s.helper = {
+    ...s.helper,
+    autopilot: { ...AP, next_wake_at: stalled, stats: STATS },
+    queue: AP_Q,
+    nightly: { red: 14, green: 16, strip: '+-++.-+' },
+    plugin: PLUGIN_NEW,
+    ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
+  }
+  const cfgAll = { ...CI, fields: [...ALL_FIELDS] }
+  const det = detailRows(s, cfgAll, 400, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
+  // The band's own cell ids, in both modes, must all be covered by a marker (a new one has to be added above).
+  const band = (snapOver: any) => bandRows(snapOver, cfgAll, 400, DETAIL_NOW)
+  const bandIds = new Set<string>()
+  const apOff = { ...s, helper: { ...s.helper, autopilot: null } }
+  for (const f of ALL_FIELDS) bandIds.add(f)
+  for (const f of ['apstats', 'stall', 'ver', 'stale']) bandIds.add(f)
+  for (const id of bandIds) {
+    expect(SUPERSET_MARK[id], `no details marker registered for band cell "${id}"`).toBeDefined()
+    expect(det.some(l => SUPERSET_MARK[id].test(l)), `/hud details lacks the "${id}" cell`).toBe(true)
+  }
+  // And the band really does draw these cells with this fixture (so the check above is not vacuous).
+  const bandText = text(band(s)) + '\n' + text(band(apOff))
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })

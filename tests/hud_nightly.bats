@@ -30,33 +30,37 @@ _count() { bash -c "source '$NIGHTLY'; sl-nightly-count $NOW"; }
 @test "count: red days over 30 days; the strip is the last 7 UTC days, oldest to newest" {
   run _count <<<"[$(_run 2026-11-05 failure),$(_run 2026-11-04 success),$(_run 2026-11-03 success),$(_run 2026-10-20 failure),$(_run 2026-10-19 success)]"
   [ "$status" -eq 0 ]
-  [ "$output" = '{"red":2,"strip":"....++-"}' ]
+  [ "$output" = '{"red":2,"green":3,"strip":"....++-"}' ]
 }
 
 @test "count: a missing day shows as a dot inside the strip" {
   run _count <<<"[$(_run 2026-11-05 success),$(_run 2026-11-04 failure),$(_run 2026-11-02 success),$(_run 2026-11-01 success),$(_run 2026-10-30 success)]"
-  [ "$output" = '{"red":1,"strip":"+.++.-+"}' ]
+  [ "$output" = '{"red":1,"green":4,"strip":"+.++.-+"}' ]
 }
 
 @test "count: strip order is oldest first, newest last" {
   run _count <<<"[$(_run 2026-10-30 failure),$(_run 2026-10-31 success),$(_run 2026-11-05 success)]"
-  [ "$output" = '{"red":1,"strip":"-+....+"}' ]
+  [ "$output" = '{"red":1,"green":2,"strip":"-+....+"}' ]
 }
 
 @test "count: failure then success on the same day is red (the day was red at some moment)" {
   run _count <<<"[$(_run 2026-11-05 failure 00),$(_run 2026-11-05 success 30),$(_run 2026-11-04 success)]"
-  [ "$output" = '{"red":1,"strip":".....+-"}' ]
+  [ "$output" = '{"red":1,"green":1,"strip":".....+-"}' ]
 }
 
-@test "count: only the red count is reported (no green count); several successes in a day are one green day; timed_out is red" {
+@test "count: several successes in a day are one green day; timed_out is red; days without a counted run are neither" {
   run _count <<<"[$(_run 2026-11-04 success 00),$(_run 2026-11-04 success 30),$(_run 2026-11-03 timed_out)]"
-  [ "$output" = '{"red":1,"strip":"....-+."}' ]
-  [[ "$output" != *green* ]]
+  [ "$output" = '{"red":1,"green":1,"strip":"....-+."}' ]
+}
+
+@test "count: green and red days over the 30-day window add up to the days that had a counted run" {
+  run _count <<<"[$(_run 2026-11-05 success),$(_run 2026-11-04 failure),$(_run 2026-11-04 success 30),$(_run 2026-10-20 success),$(_run 2026-10-19 success),$(_run 2026-10-18 failure)]"
+  [ "$output" = '{"red":2,"green":3,"strip":".....-+"}' ]
 }
 
 @test "count: cancelled, skipped, in-progress and non-scheduled runs are not counted" {
   run _count <<<"[$(_run 2026-11-04 cancelled),$(_run 2026-11-03 '' 01 in_progress),$(_run 2026-11-02 skipped),$(_run 2026-11-01 failure 01 completed workflow_dispatch),$(_run 2026-10-31 success)]"
-  [ "$output" = '{"red":0,"strip":".+....."}' ]
+  [ "$output" = '{"red":0,"green":1,"strip":".+....."}' ]
 }
 
 @test "count: only cancelled runs, an empty list or garbage prints nothing" {
@@ -70,13 +74,13 @@ _count() { bash -c "source '$NIGHTLY'; sl-nightly-count $NOW"; }
 
 @test "count: the 30-day window is today plus the 29 days before (UTC); older and future runs are left out" {
   run _count <<<"[$(_run 2026-10-07 failure),$(_run 2026-10-06 failure),$(_run 2026-11-06 failure),$(_run 2026-11-05 success)]"
-  [ "$output" = '{"red":1,"strip":"......+"}' ]
+  [ "$output" = '{"red":1,"green":1,"strip":"......+"}' ]
 }
 
 @test "json: a refresh asks gh for the orchestrator's scheduled runs, caches the counts, and the cell is silent when off" {
   printf '[%s,%s]' "$(_run 2026-11-05 failure)" "$(_run 2026-11-04 success)" > "$GH_FIXTURE"
   run bash -c "source '$NIGHTLY'; hud-nightly-json"
-  [ "$output" = '{"red":1,"strip":".....+-"}' ]
+  [ "$output" = '{"red":1,"green":1,"strip":".....+-"}' ]
   grep -q -- '--repo Synx-Data-Labs/synxdb-build-pipeline --workflow Nightly Orchestrator --event schedule' "$GH_LOG"
   HUD_NIGHTLY_OFF=1 run bash -c "source '$NIGHTLY'; hud-nightly-json"
   [ "$output" = 'null' ]
@@ -99,9 +103,9 @@ _count() { bash -c "source '$NIGHTLY'; sl-nightly-count $NOW"; }
   [ "$output" = 'null' ]
   printf '[%s]' "$(_run 2026-11-05 success)" > "$GH_FIXTURE"
   HUD_NIGHTLY_NOW=$((NOW + 4000)) run bash -c "source '$NIGHTLY'; hud-nightly-json"
-  [ "$output" = '{"red":0,"strip":"......+"}' ]
+  [ "$output" = '{"red":0,"green":1,"strip":"......+"}' ]
   GH_FAIL=1 HUD_NIGHTLY_NOW=$((NOW + 8000)) run bash -c "source '$NIGHTLY'; hud-nightly-json"
-  [ "$output" = '{"red":0,"strip":"......+"}' ]
+  [ "$output" = '{"red":0,"green":1,"strip":"......+"}' ]
   # no gh on PATH: a bin dir with only the tools the helper needs (gh may live in /usr/bin)
   mkdir -p "$BATS_TEST_TMPDIR/nogh"
   for t in jq date cksum cut dirname mkdir find head cat mktemp mv rm printf rmdir; do ln -sf "$(command -v $t)" "$BATS_TEST_TMPDIR/nogh/$t" 2>/dev/null || true; done
@@ -125,5 +129,18 @@ _count() { bash -c "source '$NIGHTLY'; sl-nightly-count $NOW"; }
   printf '[%s]' "$(_run 2026-11-05 success)" > "$GH_FIXTURE"
   export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/hud-ci" HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hud-version" HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/none" CCXP_HUD_CACHE_DIR="$BATS_TEST_TMPDIR/hud-cache" LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/li" CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   run bash -c "echo '{\"cwd\":\"$BATS_TEST_TMPDIR\"}' | bash '$REPO_ROOT/hud/scripts/hud-data.sh' | jq -c .nightly"
-  [ "$output" = '{"red":0,"strip":"......+"}' ]
+  [ "$output" = '{"red":0,"green":1,"strip":"......+"}' ]
+}
+
+@test "json: a cache written before the green count (no green) is still served, without green" {
+  mkdir -p "$HUD_NIGHTLY_STATE_DIR"
+  f=$(bash -c "source '$NIGHTLY'; printf '%s' \"\$(hni-state-dir)/\$(printf '%s|%s' \"\$HNI_REPO_DEFAULT\" \"\$HNI_WORKFLOW_DEFAULT\" | cksum | cut -d' ' -f1).json\"")
+  printf '{"red":14,"strip":"+-++.-+","fetched":%s}\n' "$NOW" > "$f"
+  run bash -c "source '$NIGHTLY'; hud-nightly-json"
+  [ "$output" = '{"red":14,"strip":"+-++.-+"}' ]
+  [ ! -e "$GH_LOG" ]
+  # after the TTL the refresh writes the new shape
+  printf '[%s]' "$(_run 2026-11-05 success)" > "$GH_FIXTURE"
+  HUD_NIGHTLY_NOW=$((NOW + 1900)) run bash -c "source '$NIGHTLY'; hud-nightly-json"
+  [ "$output" = '{"red":0,"green":1,"strip":"......+"}' ]
 }
