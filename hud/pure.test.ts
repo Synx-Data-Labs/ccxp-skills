@@ -1589,11 +1589,11 @@ test('details: the nightly line spells out the 7-day strip and the 30-day green 
 test('details: the nightly line sits directly after the CI line (first when there is no CI), never after queue', async () => {
   const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
   const helper = { ...fullSnap().helper, queue: q, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
-  const withCi = detail(withHelper(helper), 200, CI)
-  expect(withCi[0]).toMatch(/^CI \(nightly\.yml\)/)
-  expect(withCi[1]).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
-  expect(withCi[2]).toContain('acme/widgets')
-  expect(withCi.filter(l => l.startsWith('nightly ')).length).toBe(1)
+  const ciOn = detail(withHelper(helper), 200, CI)
+  expect(ciOn[0]).toMatch(/^CI \(nightly\.yml\)/)
+  expect(ciOn[1]).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
+  expect(ciOn[2]).toContain('acme/widgets')
+  expect(ciOn.filter(l => l.startsWith('nightly ')).length).toBe(1)
   const noCi = detail(withHelper({ ...helper, ci: null }), 200, NOCI)
   expect(noCi[0]).toMatch(/^nightly /)
   expect(noCi[1]).toContain('acme/widgets')
