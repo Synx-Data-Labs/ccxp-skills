@@ -990,3 +990,12 @@ LOG() { printf '%s' "${CCXP_LEDGER_FILE%.json}-starts.log"; }
   [ "$(jq -c '{approx, jobs_24h}' <<<"$output")" = '{"approx":true,"jobs_24h":0}' ]
   [ ! -e "$(LOG)" ]
 }
+
+@test "reply url-encodes a context path with spaces and non-ascii; decisions md header is a plain file:// url" {
+  bash "$LEDGER" start 8 "job" --context "/c/a b/é%.md"
+  run bash "$LEDGER" reply
+  [[ "$output" == *$'\n  file:///c/a%20b/%C3%A9%25.md'* ]]
+  bash "$LEDGER" decision add "d" --context "/ctx/x.md" >/dev/null
+  run grep -c "^Decisions: file://" "$(dj | sed "s/\.json\$/.md/")"
+  [ "$output" = "1" ]
+}
