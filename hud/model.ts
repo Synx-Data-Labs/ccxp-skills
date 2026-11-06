@@ -93,6 +93,7 @@ export function parseHelper(stdout: string): HelperData | null {
       next_wake_at: num(a.next_wake_at),
       busy: a.busy === true,
       current_task: str(a.current_task),
+      busy_slots: num(a.busy_slots),
       stats: parseStats(a.stats),
     }
   }
@@ -887,8 +888,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
   } else if (ap?.busy) {
     // A cycle is running: name its job (the running ledger row flagged autopilot, highest number) rather than a due time that is stale until the cycle ends.
-    const cycle = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).reduce((m, j) => Math.max(m, j.job), 0)
-    wakeItem = one('wake', [{ text: cycle > 0 ? `running r${cycle}` : 'running' }])
+    // With parallel cycles (busy_slots > 1) name that many rows, the highest-numbered ones, ascending: `running r596,r597`.
+    const rows = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).map(j => j.job).sort((a, b) => b - a)
+    const shown = rows.slice(0, Math.max(1, ap.busy_slots || 0)).sort((a, b) => a - b)
+    wakeItem = one('wake', [{ text: shown.length > 0 ? `running ${shown.map(n => `r${n}`).join(',')}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
     const late = stalledFor(ap, nowMs)
     if (late > 0) {

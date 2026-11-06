@@ -18,6 +18,7 @@
 #                         "stuck_reason","stop_reason","merged",
 #                         "next_wake_at",   # epoch secs of the next loop, 0 = none/unknown
 #                         "busy","current_task",   # busy: a cycle is running; current_task: its task id ("" = unknown)
+#                         "busy_slots",   # parallel cycles running (max_dop > 1), 0 when none, 1 for a single cycle
 #                         "stats"},   # null | {"has_history","approx","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
@@ -141,7 +142,7 @@ hud-data() {
          last_outcome: $f[6], last_task: $f[7],
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
-         busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), stats: $apstats} end),
+         busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), stats: $apstats} end),
        ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, plugin: $plugin,
        last_input_at: $last_input_at}'
 }

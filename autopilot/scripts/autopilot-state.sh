@@ -9,11 +9,20 @@
 #   start                       print started|busy|dispatch|already-on|paused
 #   pause | off                 transitions; print paused | "off <clone-path>" | noop
 #   resume                      print dispatch|busy (a cycle is still finishing: do nothing)|noop
-#   busy on [<task-id>]|off     mark a dispatched cycle running (optionally which
-#                               task it drives, T<yyyymmdd>-<6 digits>; an invalid
-#                               id is ignored; informational; the HUD shows "running r<n>" from the ledger) / finished
+#   busy on [<task-id>] [--slot N]|off [--slot N]
+#                               mark a dispatched cycle running in slot N (default 1; 1-16)
+#                               (optionally which task it drives, T<yyyymmdd>-<6 digits>; an
+#                               invalid id is ignored; the HUD shows "running r<n>" from the
+#                               ledger) / finished; bare `off` clears every slot. `on` re-marks a
+#                               busy slot (as before) but exits 3 when the task is in another slot.
+#   slots                       "<slot><TAB><task><TAB><since>" per busy slot (fresh: under 3 h)
+#   guard                       ok | hold <reason> (exit 0 / 1): free memory and load, for a slot
+#                               beyond the first running one (see ap-guard)
+#   hold <seconds> <reason>     wake again in <seconds> without recording a cycle (a guard hold,
+#                               a ramp wake); prints the seconds
+#   set-clone <slot> <path>     remember the slot's dispatch clone (slot 1 = dispatch_clone_path)
 #   cap                         print ok | capped:<cycles|merges>  (rolls the day)
-#   record <outcome> [merged] [task-id] [reason]
+#   record <outcome> [merged] [task-id] [reason] [--slot N]
 #                               outcome: progress|idle|stuck|waiting|bottomed|capped;
 #                               bottomed = a cycle that only stalled on tasks (leaves the
 #                               stuck/waiting counters and the notice flags alone, wakes in 60 s);
@@ -31,8 +40,8 @@
 #                               (todo-next.sh --skip-gated --check), drift =
 #                               nothing pickable but `todo-sweep.sh plan` has mechanical
 #                               findings (a /drive sweep would fix them), none = idle
-#   top [repo-root]             the id of the first task todo-next.sh --skip-gated lists
-#                               (what /drive will pick), or nothing
+#   top [repo-root] [--nth N]   the id of the first (Nth) task todo-next.sh --skip-gated lists
+#                               that is not in flight in a busy slot (nor Blocked by one), or nothing
 #   plan <file|-> [--fallback T<id>]
 #                               one "<task-id><TAB>advanced|stalled<TAB><reason><TAB><source>"
 #                               line per task a /drive report names (MERGED:/ADVANCED: =
@@ -63,7 +72,9 @@
 #                               report line is recognized
 #   attention <file|->          one "<task-id><TAB><reason>" line per
 #                               NEEDS-ATTENTION entry of a report
-#   clone-path [repo-root]      deterministic dispatch-clone path for a repo
+#   clone-path [repo-root] [--slot N]
+#                               deterministic dispatch-clone path for a repo (slot 1, the
+#                               default, unchanged; slot N>=2 appends -sN)
 #   done                        "- Merged T<id> (<slug>)[ — PR #<n>]" per journal
 #                               file added since started_at ("- No tasks merged
 #                               this run" when none); needs a git repo
@@ -74,11 +85,12 @@
 #                               and the config file path (read-only)
 #   config-set <key> <value>    validate, then atomically write one override (keeps other keys,
 #                               file mode 600); exit 2 on a bad key/value, state untouched
-#   config-reset [<key>]        drop one override, or all four settings' overrides
-# Env (tests): AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
+#   config-reset [<key>]        drop one override, or all five settings' overrides
+# Env (tests): AUTOPILOT_GUARD_MEM_FREE_PCT, AUTOPILOT_GUARD_LOAD, AUTOPILOT_GUARD_NCPU, AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 # Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
-#   max_visits (no-progress visits before a task is parked, default 4).
+#   max_visits (no-progress visits before a task is parked, default 4), max_dop (cycles at the
+#   same time, 1-16, default 1: one task at a time).
 
 set -euo pipefail
 
@@ -100,6 +112,13 @@ _ap_iso() {
   date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
 }
 
+# max_dop: the configured number of cycles at the same time, clamped to 1-16 (default 1).
+ap-max-dop() {
+  local v; v=$(ap-config max_dop 1)
+  if [ "$v" -gt 16 ]; then v=16; fi
+  printf '%s' "$v"
+}
+
 # Config value with default; a missing file, key or non-positive-integer gives the default.
 ap-config() {
   local key="$1" def="$2" f v=""
@@ -117,9 +136,26 @@ ap-status() {
 }
 
 # Atomic write: jq filter applied to the current state via temp file + mv.
+# Serialized with a mkdir lock (pid file inside; a lock older than 30 s is a crashed writer and is
+# broken), so two cycles finishing close together never interleave read-modify-write.
+_ap_lock() {
+  local f lock i=0 age; f=$(ap-state-file); lock="$f.lock"
+  while ! mkdir "$lock" 2>/dev/null; do
+    age=$(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || date +%s) ))
+    if [ "$age" -gt 30 ]; then rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; continue; fi
+    i=$(( i + 1 )); [ "$i" -le 200 ] || return 1
+    sleep 0.05
+  done
+  printf '%s' "$$" > "$lock/pid" 2>/dev/null || true
+}
+_ap_unlock() { local lock; lock="$(ap-state-file).lock"; rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; }
+
 _ap_update() {
-  local f tmp; f=$(ap-state-file); tmp="$f.tmp.$$"
-  if jq "$@" "$f" > "$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; return 1; fi
+  local f tmp rc=0; f=$(ap-state-file); tmp="$f.tmp.$$"
+  _ap_lock || { echo "autopilot-state: could not lock $f" >&2; return 1; }
+  if jq "$@" "$f" > "$tmp"; then mv "$tmp" "$f"; else rm -f "$tmp"; rc=1; fi
+  _ap_unlock
+  return $rc
 }
 
 # A fresh run zeroes the run counters but never the lifetime baseline: the
@@ -141,19 +177,48 @@ _ap_fresh() {
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
     visits: ($carry.visits // {}), parked: ($carry.parked // []),
-    dispatch_clone_path: null, idle_notified: false, stuck_notified: false,
+    dispatch_clone_path: null, dispatch_clone_paths: {}, slots: {}, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
     next_wake_at: null, busy_since: null, current_task: null}' > "$f.tmp.$$" && mv "$f.tmp.$$" "$f"
 }
 
-# 0 when a cycle is marked busy and the mark is under 3 h old (else crashed/stale).
-_ap_is_busy() {
-  local f b be now; f=$(ap-state-file)
-  b=$(jq -r '.busy_since // empty' "$f" 2>/dev/null || true)
-  [ -n "$b" ] || return 1
-  be=$(_ap_epoch "$b"); now=$(_ap_epoch "$(ap-now)")
-  [ -n "$be" ] && [ -n "$now" ] && [ $(( now - be )) -lt 10800 ]
+# jq prelude: the state with `.slots` materialized. A file from before slots (no `.slots` key) that
+# has a busy_since reads as slot 1 busy; once `.slots` exists it alone is authoritative.
+AP_JQ_MIGRATE='(if (.slots | type) == "object" then . else
+    .slots = (if ((.busy_since | strings) // "") != "" then {"1": {task: .current_task, since: .busy_since}} else {} end) end)'
+
+# Busy slots (fresh: marked under 3 h ago, else a crashed cycle), one "<slot><TAB><task><TAB><since>" each.
+_ap_slots() {
+  local f now; f=$(ap-state-file)
+  [ -f "$f" ] || return 0
+  now=$(_ap_epoch "$(ap-now)"); [[ "$now" =~ ^[0-9]+$ ]] || return 0
+  jq -r --argjson now "$now" "$AP_JQ_MIGRATE"' | .slots | to_entries
+    | map(select((.value | type) == "object" and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and ($now - $e) < 10800)))
+    | sort_by(.key | tonumber)[] | [.key, (.value.task // ""), .value.since] | @tsv' "$f" 2>/dev/null || true
+}
+
+_ap_busy_count() { _ap_slots | grep -c . || true; }
+
+# 0 when any cycle is marked busy.
+_ap_is_busy() { [ "$(_ap_busy_count)" -gt 0 ]; }
+
+# The legacy fields mirror the oldest busy slot, so a pre-slots reader keeps working.
+AP_JQ_MIRROR='(.slots | to_entries | sort_by(.value.since // "") | .[0].value) as $o
+    | .busy_since = ($o.since // null) | .current_task = ($o.task // null)'
+
+# Comma list of the task ids in flight (busy slots with a task).
+_ap_inflight() { _ap_slots | cut -f2 | grep . | paste -sd, - || true; }
+
+# --slot N parser: sets AP_SLOT (default 1) and leaves the other args in AP_REST.
+_ap_parse_slot() {
+  AP_SLOT=1; AP_REST=()
+  while [ $# -gt 0 ]; do
+    if [ "$1" = --slot ]; then
+      [[ "${2:-}" =~ ^([1-9]|1[0-6])$ ]] || { echo "--slot takes 1-16, got '${2:-}'" >&2; return 2; }
+      AP_SLOT="$2"; shift 2
+    else AP_REST+=("$1"); shift; fi
+  done
 }
 
 ap-remaining() {
@@ -166,7 +231,7 @@ ap-remaining() {
 
 # Shared by start (when on) and resume: dispatch only if due and not busy.
 _ap_due() {
-  if _ap_is_busy; then echo already-on; return 0; fi
+  if [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo already-on; return 0; fi
   if [ "$(ap-remaining)" -gt 30 ]; then echo already-on; else echo dispatch; fi  # 30 s tolerance: a wake may fire slightly early
 }
 
@@ -175,12 +240,12 @@ ap-start() {
     on) _ap_due ;;
     paused) echo paused ;;
     off)
-      local busy="" ctask=""
+      local busy="" carry_slots=""
       if [ -f "$(ap-state-file)" ] && _ap_is_busy; then
-        busy=$(jq -r '.busy_since' "$(ap-state-file)"); ctask=$(jq -r '.current_task // empty' "$(ap-state-file)")
+        busy=1; carry_slots=$(jq -c "$AP_JQ_MIGRATE | .slots" "$(ap-state-file)")
       fi
       _ap_fresh
-      if [ -n "$busy" ]; then _ap_update --arg b "$busy" --arg t "$ctask" '.busy_since = $b | .current_task = (if $t == "" then null else $t end)'; echo busy; else echo started; fi ;;
+      if [ -n "$busy" ]; then _ap_update --argjson sl "$carry_slots" '.slots = $sl | '"$AP_JQ_MIRROR"; echo busy; else echo started; fi ;;
   esac
 }
 
@@ -200,7 +265,7 @@ ap-resume() {
     _ap_update --arg ns "$(_ap_iso $(( se + now - pe )))" '.started_at = $ns'
   fi
   _ap_update '.status = "on" | .paused_at = null | .next_wake_at = null'
-  if _ap_is_busy; then echo busy; else echo dispatch; fi
+  if [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo busy; else echo dispatch; fi
 }
 
 # Prints the dispatch clone path for the caller to remove, and clears the state's copy.
@@ -208,20 +273,44 @@ ap-off() {
   local f clone=""; f=$(ap-state-file)
   [ "$(ap-status)" = off ] && { echo noop; return 0; }
   clone=$(jq -r '.dispatch_clone_path // empty' "$f" 2>/dev/null || true)
-  _ap_update '.status = "off" | .paused_at = null | .dispatch_clone_path = null | .next_wake_at = null'
+  local extra; extra=$(jq -r '(.dispatch_clone_paths | objects // {}) | to_entries | sort_by(.key | tonumber)[] | .value | strings' "$f" 2>/dev/null || true)
+  _ap_update '.status = "off" | .paused_at = null | .dispatch_clone_path = null | .dispatch_clone_paths = {} | .next_wake_at = null'
   printf 'off %s\n' "$clone"
+  local c; while IFS= read -r c; do [ -z "$c" ] || printf 'clone %s\n' "$c"; done <<< "$extra"
 }
 
 ap-busy() {
   [ -f "$(ap-state-file)" ] || return 0
-  case "${1:-}" in
+  local mode="${1:-}"; shift || true
+  _ap_parse_slot "$@" || return 2
+  case "$mode" in
     on)
       # An id that is not a task id is ignored (the cycle is still marked busy), never an error.
-      local t="${2:-}"; [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || t=""
-      [ "$(ap-status)" = off ] || _ap_update --arg now "$(ap-now)" --arg t "$t" '.busy_since = $now | .current_task = (if $t == "" then null else $t end)' ;;
-    off) _ap_update '.busy_since = null | .current_task = null' ;;
-    *) echo "busy on [<task-id>]|off" >&2; return 2 ;;
+      local t="${AP_REST[0]:-}" inflight
+      [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || t=""
+      [ "$(ap-status)" = off ] && return 0
+      inflight=$(_ap_slots | awk -F'\t' -v s="$AP_SLOT" -v t="$t" 't != "" && $2 == t && $1 != s {f=1} END {exit !f}' && echo yes || true)
+      if [ -n "$inflight" ]; then echo "busy: $t is already in flight in another slot" >&2; return 3; fi
+      _ap_update --arg now "$(ap-now)" --arg t "$t" --arg s "$AP_SLOT" "$AP_JQ_MIGRATE"' | .slots[$s] = {task: (if $t == "" then null else $t end), since: $now} | '"$AP_JQ_MIRROR" ;;
+    off)
+      if [ ${#AP_REST[@]} -eq 0 ] && ! printf '%s ' "$@" | grep -q -- '--slot'; then
+        _ap_update "$AP_JQ_MIGRATE"' | .slots = {} | '"$AP_JQ_MIRROR"
+      else
+        _ap_update --arg s "$AP_SLOT" "$AP_JQ_MIGRATE"' | .slots |= del(.[$s]) | '"$AP_JQ_MIRROR"
+      fi ;;
+    *) echo "busy on [<task-id>] [--slot N]|off [--slot N]" >&2; return 2 ;;
   esac
+}
+
+ap-slots() { _ap_slots; }
+
+# set-clone <slot> <path>: remember a slot's dispatch clone (slot 1 is dispatch_clone_path).
+ap-set-clone() {
+  local slot="${1:-}" path="${2:-}"
+  [[ "$slot" =~ ^([1-9]|1[0-6])$ ]] && [ -n "$path" ] || { echo "set-clone <slot 1-16> <path>" >&2; return 2; }
+  [ -f "$(ap-state-file)" ] || return 0
+  if [ "$slot" = 1 ]; then _ap_update --arg p "$path" '.dispatch_clone_path = $p'
+  else _ap_update --arg s "$slot" --arg p "$path" '.dispatch_clone_paths = (((.dispatch_clone_paths | objects // {})) | .[$s] = $p)'; fi
 }
 
 _ap_roll_day() {
@@ -232,7 +321,9 @@ ap-cap() {
   [ "$(ap-status)" = on ] || { echo ok; return 0; }
   _ap_roll_day
   local f cc mc; f=$(ap-state-file)
-  cc=$(jq -r '.cycles_today // 0' "$f"); mc=$(jq -r '.merges_today // 0' "$f")
+  # Cycles in flight count against the cycle cap, so parallel dispatch cannot overshoot it. A merge is
+  # only counted once it lands, so the merge cap can be exceeded by at most max_dop-1 merges.
+  cc=$(( $(jq -r '.cycles_today // 0' "$f") + $(_ap_busy_count) )); mc=$(jq -r '.merges_today // 0' "$f")
   if [ "$cc" -ge "$(ap-config daily_cycle_cap 64)" ]; then echo capped:cycles
   elif [ "$mc" -ge "$(ap-config daily_merge_cap 64)" ]; then echo capped:merges
   else echo ok; fi
@@ -244,6 +335,7 @@ ap-delay() {
     progress|bottomed) echo 60 ;;
     idle) echo $(( $(ap-config idle_retry_minutes 32) * 60 )) ;;
     capped) echo 3600 ;;
+    held) echo 300 ;;
     stuck|waiting)
       key=waiting_count; [ "$outcome" = stuck ] && key=stuck_count
       n=$(jq -r --arg k "$key" '.[$k] // 1' "$f" 2>/dev/null || echo 1)
@@ -253,6 +345,62 @@ ap-delay() {
       echo "$d" ;;
     *) echo "bad outcome: $outcome" >&2; return 1 ;;
   esac
+}
+
+# hold <seconds> <reason>: wake again in <seconds> without recording a cycle (a guard hold, a ramp wake).
+ap-hold() {
+  local sec="${1:-}" reason="${2:-}" f nw
+  [[ "$sec" =~ ^[0-9]+$ ]] && [ "$sec" -ge 1 ] && [ "$sec" -le 3600 ] || { echo "hold <seconds 1-3600> <reason>" >&2; return 2; }
+  f=$(ap-state-file)
+  if [ "$(ap-status)" = on ]; then
+    reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | cut -c1-200)
+    nw=$(( $(_ap_epoch "$(ap-now)") + sec ))
+    _ap_update --arg w "$(_ap_iso "$nw")" --arg r "$reason" --arg now "$(ap-now)" '.next_wake_at = $w | .last_hold = {at: $now, reason: $r}'
+  fi
+  echo "$sec"
+}
+
+# guard: ok | hold <reason> (exit 0 / 1). Used for a slot beyond the first running one only. Holds when free
+# memory is under AUTOPILOT_GUARD_MEM_MIN_PCT (default 20) percent of the total, or the 1-minute load
+# per CPU is over AUTOPILOT_GUARD_LOAD_MAX (default 1.5); when a probe cannot be read it holds too
+# (fail closed: an extra slot is optional). Tests inject AUTOPILOT_GUARD_MEM_FREE_PCT / _LOAD / _NCPU.
+_ap_mem_free_pct() {
+  if [ -n "${AUTOPILOT_GUARD_MEM_FREE_PCT:-}" ]; then printf '%s' "$AUTOPILOT_GUARD_MEM_FREE_PCT"; return 0; fi
+  local total pages ps free insp spec avail
+  if [ -r /proc/meminfo ]; then
+    awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} END {if (t > 0 && a != "") printf "%d", a * 100 / t}' /proc/meminfo; return 0
+  fi
+  if command -v vm_stat >/dev/null 2>&1 && command -v sysctl >/dev/null 2>&1; then
+    total=$(sysctl -n hw.memsize 2>/dev/null) || return 0
+    pages=$(vm_stat 2>/dev/null) || return 0
+    ps=$(printf '%s\n' "$pages" | sed -nE 's/.*page size of ([0-9]+) bytes.*/\1/p' | head -1)
+    free=$(printf '%s\n' "$pages" | sed -nE 's/^Pages free: +([0-9]+)\./\1/p')
+    insp=$(printf '%s\n' "$pages" | sed -nE 's/^Pages inactive: +([0-9]+)\./\1/p')
+    spec=$(printf '%s\n' "$pages" | sed -nE 's/^Pages speculative: +([0-9]+)\./\1/p')
+    [[ "$total" =~ ^[0-9]+$ && "$ps" =~ ^[0-9]+$ && "$free" =~ ^[0-9]+$ ]] || return 0
+    avail=$(( (free + ${insp:-0} + ${spec:-0}) * ps ))
+    printf '%d' $(( avail * 100 / total ))
+  fi
+}
+_ap_load_per_cpu() {
+  local load ncpu
+  load="${AUTOPILOT_GUARD_LOAD:-}"
+  if [ -z "$load" ]; then
+    if [ -r /proc/loadavg ]; then load=$(awk '{print $1}' /proc/loadavg)
+    else load=$(sysctl -n vm.loadavg 2>/dev/null | awk '{gsub(/[{}]/, ""); print $1}') || load=""; fi
+  fi
+  ncpu="${AUTOPILOT_GUARD_NCPU:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)}"
+  [[ "$load" =~ ^[0-9]+(\.[0-9]+)?$ && "$ncpu" =~ ^[1-9][0-9]*$ ]] || return 0
+  awk -v l="$load" -v n="$ncpu" 'BEGIN {printf "%.2f", l / n}'
+}
+ap-guard() {
+  local min="${AUTOPILOT_GUARD_MEM_MIN_PCT:-20}" max="${AUTOPILOT_GUARD_LOAD_MAX:-1.5}" mem load
+  mem=$(_ap_mem_free_pct) || mem=""; load=$(_ap_load_per_cpu) || load=""
+  if ! [[ "$mem" =~ ^[0-9]+$ ]]; then echo "hold free memory unreadable"; return 1; fi
+  if ! [[ "$load" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then echo "hold load unreadable"; return 1; fi
+  if [ "$mem" -lt "$min" ]; then echo "hold free memory ${mem}% is under ${min}%"; return 1; fi
+  if awk -v l="$load" -v m="$max" 'BEGIN {exit !(l > m)}'; then echo "hold load ${load} per CPU is over ${max}"; return 1; fi
+  echo "ok"
 }
 
 # Appends one JSON line {ts, outcome, merged, task} to the history log. One
@@ -427,6 +575,8 @@ ap-stats() {
 
 # record <outcome> [merged] [task-id] [reason] -> notice kind (or none)
 ap-record() {
+  _ap_parse_slot "$@" || return 2
+  set -- ${AP_REST[@]+"${AP_REST[@]}"}
   local outcome="${1:?outcome}" merged="${2:-0}" task="${3:-}" reason="${4:-}" f notice=none
   case "$outcome" in progress|idle|stuck|waiting|bottomed|capped) ;; *) echo "bad outcome: $outcome" >&2; return 1 ;; esac
   [[ "$merged" =~ ^[0-9]+$ ]] || merged=0
@@ -437,7 +587,7 @@ ap-record() {
   was_idle=$(jq -r '.idle_notified' "$f"); was_stuck=$(jq -r '.stuck_notified' "$f")
   was_wait=$(jq -r '.waiting_notified' "$f"); was_capped=$(jq -r '.capped_notified' "$f")
   [ "$outcome" = capped ] && cycle=0   # a capped tick dispatched nothing
-  _ap_update --arg o "$outcome" --arg now "$(ap-now)" --arg t "$task" --arg r "$reason" --argjson m "$merged" --argjson c "$cycle" '
+  _ap_update --arg o "$outcome" --arg now "$(ap-now)" --arg t "$task" --arg r "$reason" --argjson m "$merged" --argjson c "$cycle" --arg slot "$AP_SLOT" '
     (.lifetime_started_at //= .started_at) | (.lifetime_cycles //= .cycle_count) | (.lifetime_merged //= .merged_count)
     | .lifetime_cycles += $c | .lifetime_merged += $m
     | .cycle_count += $c | .cycles_today += $c | .merged_count += $m | .merges_today += $m
@@ -446,7 +596,7 @@ ap-record() {
     | .last_stuck_reason = (if $o == "stuck" and $r != "" then $r else null end)
     | .stuck_count = (if $o == "stuck" then .stuck_count + 1 elif $o == "waiting" or $o == "bottomed" then .stuck_count else 0 end)
     | .waiting_count = (if $o == "waiting" then .waiting_count + 1 elif $o == "bottomed" then .waiting_count else 0 end)
-    | .busy_since = null | .current_task = null'
+    | '"$AP_JQ_MIGRATE"' | .slots |= del(.[$slot]) | '"$AP_JQ_MIRROR"
   ap-history-append "$outcome" "$merged" "$task"
   case "$outcome" in
     progress)
@@ -491,20 +641,35 @@ ap-work-root() {
   if [ -n "$c" ] && [ -d "$c/dev/TODO" ]; then printf '%s' "$c"; else _ap_root; fi
 }
 
-# top [repo-root]: the id /drive will pick (first task todo-next.sh --skip-gated lists), or nothing.
+# top [repo-root] [--nth N]: the id of the first (Nth) task todo-next.sh --skip-gated lists that is not in
+# flight in a busy slot (nor Blocked by one), or nothing. With no slot busy it is the id bare /drive picks.
 ap-top() {
-  local root="${1:-$(ap-work-root)}" first id
-  first=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" --skip-gated 2>/dev/null) || return 0
+  local root="" nth="" inflight a
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "top [repo-root] [--nth N]" >&2; return 2; }; nth="$2"; shift 2 ;;
+      *) root="$1"; shift ;;
+    esac
+  done
+  [ -n "$root" ] || root=$(ap-work-root)
+  inflight=$(_ap_inflight); local -a args=(--skip-gated)
+  [ -z "$inflight" ] || args+=(--exclude "$inflight")
+  [ -z "$nth" ] || args+=(--nth "$nth")
+  local first id
+  first=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || return 0
   id=$(printf '%s\n' "$first" | sed -nE 's/^#[0-9]+ of [0-9]+: (T[0-9]+(-[0-9]+)?) .*/\1/p' | head -1)
   [[ "$id" =~ $AP_TASK_ID_RE ]] && printf '%s\n' "$id"
   return 0
 }
 
-# pickable [repo-root]: pick | drift | none (see the usage header).
+# pickable [repo-root]: pick | drift | none (see the usage header). Tasks in flight in a busy slot are
+# not pickable; drift (a /drive sweep would fix mechanical findings) only counts when no slot is busy.
 ap-pickable() {
-  local root="${1:-$(ap-work-root)}" scripts plan
+  local root="${1:-$(ap-work-root)}" scripts plan inflight; local -a args=(--skip-gated --check)
   scripts="$(_ap_dir)/../../todo/scripts"
-  if (cd "$root" && bash "$scripts/todo-next.sh" --skip-gated --check) 2>/dev/null; then echo pick; return 0; fi
+  inflight=$(_ap_inflight); [ -z "$inflight" ] || args+=(--exclude "$inflight")
+  if (cd "$root" && bash "$scripts/todo-next.sh" "${args[@]}") 2>/dev/null; then echo pick; return 0; fi
+  if _ap_is_busy; then echo none; return 0; fi
   plan=$(bash "$scripts/todo-sweep.sh" plan --root "$root" 2>/dev/null || true)
   if printf '%s\n' "$plan" | grep -qE $'^(ADD|REMOVE|UNBLOCK|CLOSE_DONE|ORDER_VIOLATION)\t'; then echo drift; else echo none; fi
 }
@@ -535,7 +700,13 @@ ap-report() {
   while IFS=$'\t' read -r aid areason; do
     if [ -n "$aid" ]; then printf 'parked by autopilot: %s — %s\n' "$aid" "$areason"; fi
   done < <(ap-parked-list 2>/dev/null || true)
-  if [ "$st" = on ] && ! _ap_is_busy; then
+  if [ "$(ap-max-dop)" -gt 1 ] || [ "$(_ap_busy_count)" -gt 1 ]; then
+    echo "slots: $(_ap_busy_count) of $(ap-max-dop) running"
+    local sl stask ssince
+    while IFS=$'\t' read -r sl stask ssince; do [ -z "$sl" ] || printf '  slot %s: %s since %s\n' "$sl" "${stask:-a cycle}" "$ssince"; done < <(_ap_slots)
+    jq -r 'select(.last_hold) | "last hold \(.last_hold.at): \(.last_hold.reason)"' "$f" 2>/dev/null || true
+  fi
+  if [ "$st" = on ] && [ "$(_ap_busy_count)" -lt "$(ap-max-dop)" ] && ! _ap_is_busy; then
     local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
     if [ -n "$we" ] && [ -n "$now" ] && [ $(( now - we )) -gt 600 ]; then echo "overdue: no wake fired since $w — type /autopilot on to recover"; fi
   fi
@@ -690,10 +861,12 @@ _ap_sha256() {
 }
 
 ap-clone-path() {
-  local root="${1:-}" hash
+  _ap_parse_slot "$@" || return 2
+  local root="${AP_REST[0]:-}" hash suffix=""
   [ -n "$root" ] || root=$(_ap_root)
+  [ "$AP_SLOT" = 1 ] || suffix="-s$AP_SLOT"
   hash=$(printf '%s' "$root" | _ap_sha256 | cut -c1-8)
-  printf '/tmp/autopilot-clone-%s-%s\n' "$(basename "$root")" "$hash"
+  printf '/tmp/autopilot-clone-%s-%s%s\n' "$(basename "$root")" "$hash" "$suffix"
 }
 
 # --- final report -------------------------------------------------------------
@@ -778,7 +951,7 @@ ap-final-report() {
 # Config settings: key<TAB>default<TAB>min<TAB>max. The only source of the valid keys and ranges.
 _ap_config_spec() {
   printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 64 1 1000 daily_merge_cap 64 1 1000 \
-    idle_retry_minutes 32 30 60 max_visits 4 1 20
+    idle_retry_minutes 32 30 60 max_visits 4 1 20 max_dop 1 1 16
 }
 
 # The raw override for a key ("" when absent or not a positive integer).
@@ -858,6 +1031,7 @@ autopilot-state() {
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
+    slots) ap-slots ;; guard) ap-guard ;; hold) ap-hold "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;

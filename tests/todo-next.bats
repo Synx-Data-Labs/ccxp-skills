@@ -246,3 +246,34 @@ append_queue_line() {
   run bash "$SCRIPT" --skip-needs-human
   [ "$status" -eq 2 ]
 }
+
+# --- --exclude / --nth (T20261106-971582: parallel autopilot slots) -----
+
+@test "--exclude skips in-flight ids and tasks Blocked by one of them" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "first" "Open"
+  write_task T2 "second" "Blocked by T1"
+  write_task T3 "third" "Open"
+  for i in T1 T2 T3; do append_queue_line "$i" "x"; done
+  run bash "$SCRIPT" --exclude T1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T3"* ]]
+  [[ "$output" != *"T1 —"* ]]
+  [[ "$output" != *"T2 —"* ]]
+  run bash "$SCRIPT" --exclude T1,T3 --check
+  [ "$status" -eq 1 ]
+}
+
+@test "--nth lists only the Nth survivor; --check needs N survivors" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  for i in T1 T2 T3; do write_task "$i" "t$i" "Open"; append_queue_line "$i" "t$i"; done
+  run bash "$SCRIPT" --nth 2
+  [ "$status" -eq 0 ]
+  [[ "$output" == "#2 of 3: T2 — "* ]]
+  [ "$(grep -c '^#' <<<"$output")" -eq 1 ]
+  run bash "$SCRIPT" --nth 3 --check; [ "$status" -eq 0 ]
+  run bash "$SCRIPT" --nth 4 --check; [ "$status" -eq 1 ]
+  run bash "$SCRIPT" --nth 4; [[ "$output" == *"No actionable tasks"* ]]
+  run bash "$SCRIPT" --nth 0; [ "$status" -eq 2 ]
+  run bash "$SCRIPT" --exclude; [ "$status" -eq 2 ]
+}
