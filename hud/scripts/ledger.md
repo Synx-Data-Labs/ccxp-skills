@@ -69,7 +69,7 @@ A restart ends running subagents but leaves their `running` rows. `start` can re
 ```
 
 - `started_at` is HH:MM local time of the first `start` for that job (a re-start keeps it). `done` holds the last 20 closed Next items.
-- `render` prints `Next:`, `Running:` and `Parked:` (empty ones omitted): `**n3** text`, `r6 [14:09] title`, `**k7** title`, each with its context on the next line as ONE plain `file://<url-encoded abs path>` URL (or `context: MISSING`), then `Ledger: <abs path of ccxp-ledger.md>`.
+- `render` prints `Next:`, `Running:` and `Parked:` (empty ones omitted): `**n3** text`, `r6 [14:09] title`, `**k7** title`, each with its context on the next line as ONE plain `file://<url-encoded abs path>` URL (`reply` shows `context: MISSING` when there is none; `render` shows no line), then `Ledger: <abs path of ccxp-ledger.md>`.
 - `running`, `next` and `parked` are each one array; a count is the array length.
 - `context` is the absolute path of a context file (`""` when none). `--context` must be absolute; the script only stores the path, it never creates or moves the file. A repeated `start` without `--context` keeps the stored one; a repeated `park` updates only what is passed.
 - `ref_counters` (`n`, `s`, `k`): highest number ever used, never lowered. `park <k>` also bumps `k`; `next done` on an unknown ref is a no-op.
