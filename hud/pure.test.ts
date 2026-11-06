@@ -573,7 +573,7 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
   expect(text(bandRows(withHelper(ledgerOf(2)), NOCI, 60))).toMatch(/WORKING/)
 })
 
-// --- /hud details: the band expanded to live lines (six at most, seven with a CI row) ---
+// --- /hud details: the band expanded to live lines (seven at most, eight with a CI row) ---
 
 const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
 const detail = (s: object, cols = 140, cfg: typeof CI | typeof NOCI = NOCI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
@@ -1603,7 +1603,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   rate: /5-hour limit/,
   cost: /API-equivalent cost \$/,
   lastat: /^you \d/,
-  ver: /ccxp/,
+  ver: /ccxp \d/,
   stale: /stale/,
 }
 
