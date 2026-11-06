@@ -193,7 +193,7 @@ EOF
   grep -q 'Resolve the repo before dispatch' "$f"
   grep -q 'Repo: <owner/repo>' "$f"
   grep -q 'Path: <abs path>' "$f"
-  grep -q 'Before anything else, Read <path>/CLAUDE.md' "$f"
+  grep -q 'After your first (ledger) action, Read <path>/CLAUDE.md' "$f"
   grep -q 'If the CLAUDE.md is missing, say so in your report' "$f"
   grep -q 'ask one question instead of guessing' "$f"
   grep -q 'gh auth status' "$f"
@@ -234,13 +234,14 @@ EOF
   grep -q 'bash "\$L" park <n>' "$f"
   grep -q '`unpark <n>`' "$f"
   grep -q 'only `start`, `finish`, `reconcile`, `resumed`, `set-started`, `park`, `unpark`, `next`, `ref`, `set-counter`, `render`, `reply`, `check`, `decision`, `authz` (`list`/`show` freely; `set` only on the owner.s typed words) and `show`' "$f"
-  grep -q 'Bash is read-only only' "$f"
+  grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
 }
 
 @test "asset: reply format is one Next: section with n refs, no Needs input / Needs your action" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
   grep -q '^- \*\*Next:\*\*' "$f"
-  grep -q 'Section order: Next, Running, Parked' "$f"
+  grep -q 'Section order: Running, Next, Parked' "$f"
+  run grep -q 'Section order: Next, Running' "$f"; [ "$status" -ne 0 ]
   grep -q '`n<n>` item under Next' "$f"
   grep -q 'bash "\$L" next add' "$f"
   grep -q 'ref bump n22' "$f"
@@ -605,4 +606,31 @@ install_outdated_agent() {
   grep -q 'refresh it at every milestone' "$f"
   run grep -q 'small context file\|write that small file' "$f"
   [ "$status" -ne 0 ]
+}
+
+@test "asset: ledger items are one factual sentence, the decision lives in the context file (T20261106-735630)" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'one complete sentence of facts, under about 280 characters' "$f"
+  grep -q '## Decision needed' "$f"
+  grep -q 'plain `file://` URL line' "$f"
+  run grep -q 'the exact decision or action' "$f"; [ "$status" -ne 0 ]
+  # the order the persona states is the order ledger.sh reply prints
+  export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
+  L="$REPO_ROOT/hud/scripts/ledger.sh"
+  bash "$L" start 1 t --context /tmp/c.md
+  bash "$L" next add "x" --context /tmp/c.md
+  run bash "$L" reply
+  [ "$(grep -n '^Running:' <<<"$output" | cut -d: -f1)" -lt "$(grep -n '^Next:' <<<"$output" | cut -d: -f1)" ]
+}
+
+@test "asset: consistency pass (bash carve-outs, load, delete-ban wording, autopilot, repo boundary, retired names)" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
+  grep -q 'read-only `uptime`, `memory_pressure`, `vm_stat`' "$f"
+  grep -q 'Never delete with the shell' "$f"
+  run grep -q 'Never run `rm`' "$f"; [ "$status" -ne 0 ]
+  grep -q 'Autopilot runs one cycle at a time' "$f"
+  grep -q '\*\*Boundary\*\*' "$f"
+  grep -q 'wtf.json' "$f"
+  run grep -q 'agent-pairing update\|ccxp-skills:update' "$f"; [ "$status" -ne 0 ]
 }
