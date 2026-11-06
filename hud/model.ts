@@ -809,12 +809,12 @@ const DETAIL_STEPS = {
  * `/hud details`: the band expanded to up to eight live lines, each cut to the terminal width (with an ellipsis,
  * never abbreviated). Lines with nothing to say are left out, none is reserved.
  *   0 CI (first, alone; highlighted when red)
+ *   0b the nightly right after CI (first when there is no CI): 7-day strip and the last 30 days' green and red counts, labels in full
  *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit left, API-equivalent cost
  *   3 jobs state, parked, last 24h jobs / average per day (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
  *   4 autopilot, next loop time (or overdue), 24h cell
  *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
- *   6 the nightly: 7-day strip and the last 30 days' green and red counts, labels in full
- *   7 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
+ *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
  * Without `ci` that is seven lines at most, with `ci` eight. Labels are spelled out in full here; the one-row band
  * keeps the short forms (ctx, 5h, $, queue 30r 6h). It ignores `fields`: the lines are the view. Details is a SUPERSET of the band:
  * every cell the band can show has its full-form counterpart here (pinned by the superset test in pure.test.ts). [] when there is no data at all.
@@ -833,6 +833,9 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // 0. CI first, alone (highlighted when red); only when `ci` is set and answered
   const top = ciRow(snap, cfg, width, nowMs)
   if (top && top.length > 0) lines.push(top)
+
+  // 0b. the nightly right after CI, so the two build-health signals read together: the band's cell with its labels in full (7-day strip, 30-day green and red days)
+  if (h?.nightly) add([one('nightly', ...nightlyVariants(h.nightly, true))], DETAIL_STEPS.nightly)
 
   // 1. where you are
   add(
@@ -902,10 +905,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // 5. the queue breakdown on its own line right after the AP line (labels in full)
   if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
 
-  // 6. the nightly, spelled out: the band's cell with its labels in full (7-day strip, 30-day green and red days)
-  if (h?.nightly) add([one('nightly', ...nightlyVariants(h.nightly, true))], DETAIL_STEPS.nightly)
-
-  // 7. you: the last prompt, stamp and age
+  // 6. you: the last prompt, stamp and age
   const at = h?.last_input_at
   const verItem = pick('ver')
   // The plugin's GitHub location, as a bare URL (terminals make it cmd-clickable; no OSC 8, the renderer draws plain text).
