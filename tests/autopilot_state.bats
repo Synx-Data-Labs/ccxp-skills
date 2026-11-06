@@ -1427,9 +1427,12 @@ _ap_on() { _ap start >/dev/null; }
   [ "$(_j '.slots | keys | join(",")')" = "1,2,3" ]
 }
 
-@test "SKILL.md documents max_dop (default 1, example of raising to 8), the guard and per-slot dispatch" {
+@test "SKILL.md and parallel.md document max_dop (default 1, raising to 8), the guard and per-slot dispatch" {
   grep -q 'max_dop' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q 'config set max_dop 8' "$REPO_ROOT/autopilot/SKILL.md"
-  grep -q 'autopilot-state.sh guard' "$REPO_ROOT/autopilot/SKILL.md"
-  grep -q -- '--slot' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q 'autopilot/parallel.md' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q 'autopilot-state.sh guard' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q -- '--slot' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q -- '--flags autopilot' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q '/drive T<id> --auto-selected' "$REPO_ROOT/autopilot/parallel.md"
 }
