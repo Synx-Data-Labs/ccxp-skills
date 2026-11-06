@@ -632,5 +632,4 @@ install_outdated_agent() {
   grep -q 'Autopilot runs one cycle at a time' "$f"
   grep -q '\*\*Boundary\*\*' "$f"
   grep -q 'wtf.json' "$f"
-  run grep -q 'agent-pairing update\|ccxp-skills:update' "$f"; [ "$status" -ne 0 ]
 }

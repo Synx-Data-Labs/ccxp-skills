@@ -571,9 +571,9 @@ EOF
   grep -qi 'you may offer, never silently do' "$f"
   grep -q 'personal shorthand never goes into a shared repo' "$f"
   grep -q 'only `add`, `choose`, `remove`' "$f"
-  grep -q 'and the `terms.sh` calls' "$f"
+  grep -q '`terms.sh` add/choose/remove' "$f"
   # the ledger carve-out and the read-only Bash rule survive
-  grep -q 'Bash is read-only only' "$f"
+  grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
 }
 
 @test "asset: the T= lookup line in the agent definition resolves a plugin cache layout and runs terms.sh" {
