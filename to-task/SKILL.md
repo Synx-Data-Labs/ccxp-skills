@@ -97,6 +97,8 @@ Mint the ID and write the file as `/new-task` steps 3-4 do (`status: Open`, `est
 - Body, designated-support-repo branch: `## Problem` starting with `- **Type**: support` and the reporter's words in a fenced block; then empty `## Customer summary`, `## Repro`, `## Regression test` headings for the design phase to fill.
 - Body, other branches: `## Problem` with the fetched (or user-supplied) title/summary in a fenced block; no `Type: support`, no regression-test headings (those are `/customer-support`/support-fix-path-specific).
 
+**Alias before writing:** never paste raw email/chat text verbatim; replace customer, prospect and partner names, emails and domains with aliases (customer A / partner B) before writing the task file, the `source:` field, the commit message or the PR. This covers the reporter's words quoted in the fenced block.
+
 ### 6. Stage and hand off
 
 Invoke `/stage T<id>`, then end with: "Run `/drive T<id>`." Do not claim or drive the task here.

@@ -1,5 +1,5 @@
 ---
-status: In Progress
+status: Review
 estimation: 1
 source: Owner standing rule on customer/partner confidentiality, 2026-11-07
 description: Intake skills must alias names; /gcpr gets a local-denylist sensitivity check
@@ -28,7 +28,7 @@ scheduled: 2026-11-02
   - scans added diff lines (working tree, index and `B...HEAD`) and commit messages
   - hit output is `file:line` (or `commit <sha8> message`) plus a count, never the term
   - unset or unreadable list: warn and exit 0 (fail-soft)
-- Reuse: `repo-conventions/scripts/lint_identifiers.py` already has the committed-never env/file deny-list design; it matches substrings and prints terms, so the new verb has its own whole-word matcher and does not call it.
+- Reuse: `repo-conventions/scripts/lint_identifiers.py` already has the committed-never env/file deny-list design; it matches substrings and prints terms, so the new verb uses its own small stdlib engine (`gcpr/scripts/sensitivity_check.py`, same env/file posture) instead of calling it.
 
 ## Test plan
 
