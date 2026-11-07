@@ -37,6 +37,7 @@ retro_gap() {
     [ -e "$f" ] || continue
     d="$(basename "$f")"; d="${d%%-retro-weekly.md}"
     [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+    _rg_days "$d" >/dev/null || continue   # skip impossible dates (2026-99-99)
     if [ -z "$newest" ] || [[ "$d" > "$newest" ]]; then newest="$d"; fi
   done
   if [ -z "$newest" ]; then
