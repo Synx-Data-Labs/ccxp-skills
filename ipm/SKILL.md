@@ -110,7 +110,7 @@ Do not second-guess that ordering, and do not re-derive a ranking the queue alre
 
 **Cron-mode eligibility filter.**
 
-- When `CCXP_CRON_MODE=1`, drop any `Open` candidate (no interactive pre-IPM design pass ran; step 3 is skipped). Eligible: `status: Design` with a non-empty `estimation`, or `Open` whose `source:` begins "Retro" with a non-empty `estimation` (`/retro` Phase 4 already writes root cause, definition of done and test plan). Every other `Open` task stays excluded.
+- When `CCXP_CRON_MODE=1`, drop any `Open` candidate (no interactive pre-IPM design pass ran; step 3 is skipped). Eligible: `status: Design` with a non-empty `estimation`, or `Open` whose `source:` begins "Retro" with a non-empty `estimation` (`/retro` Phase 4 writes the definition of done and context itself). Every other `Open` task stays excluded.
 - A thin pool goes under `## Notes` (e.g. "3 candidates skipped, still `Open`"); never fill the gap from other `Open` tasks.
 - Interactive runs (`CCXP_CRON_MODE` unset/`0`) skip this filter and proceed straight to step 3.
 
