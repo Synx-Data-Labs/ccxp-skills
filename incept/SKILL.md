@@ -113,6 +113,7 @@ On confirmation, edit `dev/TODO/T<id>-*.md`:
   transition, per `lifecycle.md`. Leave any other status (`In Progress`,
   `Review`, `Blocked by T{id}`, etc.) untouched — grilling doesn't reopen
   or rewind a task already past `Design`.
+- **Alias before writing:** never paste raw email/chat text verbatim; replace customer, prospect and partner names, emails and domains with aliases (customer A / partner B) before writing the Design section, the commit message or the PR.
 - Do **not** change `claimed_by:` or `scheduled:` — the caller owns claim
   lifecycle (`/ipm` step 3.4 claims; `/drive` Phase 2 does its own).
 - Lint the touched file, scoped, never repo-wide:

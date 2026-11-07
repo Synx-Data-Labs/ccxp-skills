@@ -58,6 +58,8 @@ Ask about these only when they plausibly apply — don't force them:
 that isn't clearly inferable from the conversation — ask instead of
 guessing.** A vague or wrong task file is worse than one more question.
 
+**Alias before writing:** never paste raw email/chat text verbatim; replace customer, prospect and partner names, emails and domains with aliases (customer A / partner B) before writing the task file, the `source:` field, the commit message or the PR.
+
 ### 3. Mint the ID and write the file
 
 ```bash

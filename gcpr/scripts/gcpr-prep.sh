@@ -37,6 +37,15 @@
 #       text) and SECRETS=clean|blocked. Exit 0 clean, 1 blocked, 2 could not run
 #       (also a block). Binary files other than known media, symlinks and
 #       unreadable files are blocked as unscannable.
+#   gcpr-prep.sh sensitivity-check [--base B] [--message-file F]...
+#       Customer/partner-name check against a private deny-list (env
+#       SENSITIVE_NAMES_DENYLIST_FILE path, or SENSITIVE_NAMES_DENYLIST inline;
+#       newline-separated, whole-word, case-insensitive). Scans added lines
+#       (working tree, and every commit in B..HEAD) and commit messages, plus
+#       each --message-file (drafted commit/PR text). Prints HIT <file:line>
+#       rows and SENSITIVITY=clean|blocked|skipped, never the term. Exit 0
+#       clean or no deny-list configured (fail-soft, warns), 1 hits, 2 could
+#       not run. Engine: sensitivity_check.py.
 #   gcpr-prep.sh body --summary-file F [--pre F] [--post F] [--task-url U] [--footer TEXT]
 #       Prints the PR body skeleton: Summary (+ `Task:` line), Test plan with both
 #       ### Pre-merge and ### Post-merge (an empty or absent file becomes N/A).
@@ -339,6 +348,27 @@ gp_secrets_check() {
   printf 'SECRETS=clean files=%s\n' "$n"
 }
 
+# --- sensitivity-check -----------------------------------------------------
+
+gp_sensitivity_check() {
+  local base="" ref=""
+  local -a args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --base) [ $# -ge 2 ] || _gp_die "--base needs a value"; base="$2"; shift 2 ;;
+      --message-file) [ $# -ge 2 ] || _gp_die "--message-file needs a value"; args+=(--message-file "$2"); shift 2 ;;
+      *) _gp_die "sensitivity-check: unknown argument: $1" ;;
+    esac
+  done
+  git rev-parse --git-dir >/dev/null 2>&1 || { echo "SENSITIVITY=blocked reason=not-a-git-repo"; return 2; }
+  if [ -n "$base" ]; then
+    ref="$(_gp_resolve_base "$base")" || { echo "SENSITIVITY=blocked reason=base-not-found"; return 2; }
+    args+=(--base-ref "$ref")
+  fi
+  command -v python3 >/dev/null 2>&1 || { echo "SENSITIVITY=blocked reason=no-python3"; return 2; }
+  python3 "$GP_DIR/sensitivity_check.py" ${args[@]+"${args[@]}"}
+}
+
 # --- body ------------------------------------------------------------------
 
 _gp_section() {  # <file> -> its content, or N/A when absent or blank
@@ -394,8 +424,9 @@ main() {
     branch-name) gp_branch_name "$@" ;;
     review-flip) gp_review_flip "$@" ;;
     secrets-check) gp_secrets_check "$@" ;;
+    sensitivity-check) gp_sensitivity_check "$@" ;;
     body) gp_body "$@" ;;
-    *) _gp_die "usage: gcpr-prep.sh assess|changed|lint|branch-name|review-flip|secrets-check|body (see the header)" ;;
+    *) _gp_die "usage: gcpr-prep.sh assess|changed|lint|branch-name|review-flip|secrets-check|sensitivity-check|body (see the header)" ;;
   esac
 }
 

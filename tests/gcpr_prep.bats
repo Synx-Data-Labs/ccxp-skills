@@ -473,7 +473,7 @@ Task: https://github.com/o/r/blob/main/dev/TODO/T20000101-000001-x.md
 }
 
 @test "gcpr/SKILL.md cites every gcpr-prep verb it relies on, and each exists in the script" {
-  for v in assess lint branch-name review-flip secrets-check body; do
+  for v in assess lint branch-name review-flip secrets-check sensitivity-check body; do
     grep -q "gcpr-prep.sh $v" "$REPO_ROOT/gcpr/SKILL.md"
     grep -qE "^ +$v\) " "$PREP"
   done

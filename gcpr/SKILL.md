@@ -60,6 +60,13 @@ Policy is **check-then-continue**: `lint` always exits 0 and a violation surface
 
 Run `/secrets-check` before pushing; advisory, report masked findings, never auto-fix.
 
+### 1.7 Sensitivity check
+
+Run `bash <skills-root>/gcpr/scripts/gcpr-prep.sh sensitivity-check --base main [--message-file F]` (F = drafted commit/PR text). It scans added lines and commit messages against a private deny-list of customer/partner names: `SENSITIVE_NAMES_DENYLIST_FILE` (path) or `SENSITIVE_NAMES_DENYLIST` (same content inline); newline-separated, whole-word, case-insensitive.
+
+- Exit 1 prints `HIT <file:line>` and a count, never the term: alias the names (customer A / partner B), re-run, never quote the match.
+- No deny-list: warns and exits 0 (fail-soft); say so in the report.
+
 ### 2. Group into logical commits
 
 This is the critical step. Analyze ALL uncommitted changes and split them into logical groups. Each group becomes one commit.
