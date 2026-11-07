@@ -170,6 +170,16 @@ bash <skills-root>/_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref =
 - **Unattended (ccxp loop):** do not block the merge — proceed, but file a follow-up doc-conformance task (`bash <skills-root>/_taskid/new.sh --check ./dev`) for the unaddressed flags so drift is tracked, not lost.
 - It's a **follow-up**, so stamp its `scheduled:` into the **next** iteration after writing the file: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next` (token-free; update-forward-only). Docs-only PRs are exempt (the change *is* the docs). Same change-kind heuristic as the verification step above.
 
+- **Review threads (before the pre-merge check).** A ruleset with `required_review_thread_resolution` makes every unresolved thread merge-blocking, yet `gh pr merge` only says "the base branch policy prohibits the merge" (`reviewDecision` stays empty). Check them first:
+
+  ```bash
+  bash <skills-root>/address-pr/scripts/review-threads.sh list <number>      # TSV of unresolved threads; exit 0 = none
+  ```
+
+  - For each bot-opened row apply step d's discipline: fix the code, then `review-threads.sh reply <number> <thread-id> --fixed <sha>` (the sha must touch the thread's file), or push back with `reply ... --pushback <file>` giving the specific constraint, never a style preference.
+  - Then `bash <skills-root>/address-pr/scripts/review-threads.sh resolve <number>`: it resolves only bot-opened threads carrying one of those markers (pushback resolutions capped at 5 per run) and prints what remains. Never resolve a thread without fixing it or arguing it.
+  - Exit `10` (bot-opened threads remain) counts as `BLOCKED`: loop under the §2.f valve. Exit `11` (only human-opened threads remain): stop and report to the owner, do not loop. Exit `3`: gh failure, stop. Contract and tests: `tests/address_pr_review_threads.bats`.
+
 - Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification.
 - (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found.
 - The actual enforcement of Claude Code review findings is step d's own in-loop discipline (fix or justify before continuing), not a persisted, externally-checkable state.
@@ -331,7 +341,7 @@ When the hard gate passes (pre-merge-check.sh outputs ALL CHECKS PASSED):
    - Test plan status (all checked / N items need manual verification)
    - Current branch
 
-3. **Follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused); `--auto` returns before the merge happens, so run `bash <skills-root>/address-pr/scripts/wait-merged.sh <number>` (read-only poll, `WAIT_MERGED_TRIES` x `WAIT_MERGED_INTERVAL`, default 30 x 10s) and continue to step 4 and any branch cleanup only on exit `0` (`merged`); `11` still open, `12` closed unmerged, `4` state unreadable: stop and report, never assume merged. Or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
+3. **Before arming the merge, run `review-threads.sh list <number>`** (with `--auto` GitHub waits silently, so a thread-blocked merge would otherwise stall without a stated cause); re-run it whenever a merge is refused with "base branch policy prohibits" or has not landed after `wait-merged.sh`, to tell unresolved threads apart from a missing approval. Then **follow the merge policy in `dev/guidelines.md`** — tiered merge, pipeline verification on branch, main must always be green. Use `bash <skills-root>/_gh/gh.sh pr merge --auto --rebase --delete-branch` when a bot approval landed in step d (falling back to plain `pr merge --rebase --delete-branch` if `--auto` is refused); `--auto` returns before the merge happens, so run `bash <skills-root>/address-pr/scripts/wait-merged.sh <number>` (read-only poll, `WAIT_MERGED_TRIES` x `WAIT_MERGED_INTERVAL`, default 30 x 10s) and continue to step 4 and any branch cleanup only on exit `0` (`merged`); `11` still open, `12` closed unmerged, `4` state unreadable: stop and report, never assume merged. Or plain `pr merge --rebase --delete-branch` for the auto-merge tier, or notify for wait-for-approval tier.
 
 4. **Status=Done** (after merge succeeds):
 
