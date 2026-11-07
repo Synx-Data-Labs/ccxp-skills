@@ -247,7 +247,7 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 1. **Find the alert message.** The alert is posted via a bare webhook, whose response carries no usable `ts` — nothing stashes the alert's `channel_id`/`message_ts` for a later tick to look up directly, so this is a **search**, not a lookup (same shape as `/slack-check-reply` Step 4's fallback):
 
-   The composite action's run URL button is not in Slack's text index, so it also appends a plain mrkdwn `<…/actions/runs/<run-id>|run <run-id>>` link to the context block and top-level text (synxdb-build-pipeline T20260812-322724); that link is what this search matches. Alerts posted before that change will not match.
+   The alert's run-URL button is not text-indexed, so the action also posts a plain `<…/actions/runs/<run-id>|run <run-id>>` link; that is what this search matches (older alerts will not match).
 
    ```bash
    bash <skills-root>/_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"
