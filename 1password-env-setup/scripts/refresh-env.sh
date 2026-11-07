@@ -68,10 +68,14 @@ re-drift-keys() {
 # Run `op inject` with a bounded wait. Returns 124 on timeout.
 re-run-op() {
   local tpl="$1" out="$2" errf="$3" tmo="${REFRESH_ENV_OP_TIMEOUT:-60}"
-  local -a acct=()
-  [ -n "${OP_ACCOUNT:-}" ] && acct=(--account "$OP_ACCOUNT")
-  op inject -i "$tpl" -o "$out" "${acct[@]}" >/dev/null 2>"$errf" &
+  # No empty-array expansion: bash 3.2 (macOS) fails on it under set -u.
+  if [ -n "${OP_ACCOUNT:-}" ]; then
+    op inject -i "$tpl" -o "$out" --account "$OP_ACCOUNT" >/dev/null 2>"$errf" &
+  else
+    op inject -i "$tpl" -o "$out" >/dev/null 2>"$errf" &
+  fi
   local pid=$! ticks=0 max=$((tmo * 10))
+  _RE_PID=$pid
   while kill -0 "$pid" 2>/dev/null; do
     if [ "$ticks" -ge "$max" ]; then
       kill "$pid" 2>/dev/null || true
@@ -123,7 +127,8 @@ re-do-refresh() {
   if [ "$rc" -eq 124 ]; then
     re-unlock-msg "$dir"; rm -f "$tmp" "$errf"; return 75
   elif [ "$rc" -ne 0 ]; then
-    if grep -qiE 'sign.?in|authori[sz]|unlock|biometric|session expired|not signed' "$errf"; then
+    if ! grep -q "isn't a vault in this account" "$errf" \
+       && grep -qiE 'not signed in|sign in|unlock|biometric|session expired|authentication required' "$errf"; then
       re-unlock-msg "$dir"; rm -f "$tmp" "$errf"; return 75
     fi
     echo "failed: op inject for $dir/.env.tpl" >&2
@@ -172,7 +177,19 @@ refresh-env() {
   fi
   echo "refresh-env: refreshing $dir/.env (reason: $reason)" >&2
   re-lock "$dir" || { echo "refresh-env: another refresh holds $dir/.env.refresh.lock; try again shortly" >&2; return 75; }
+  # Killed mid-refresh (Ctrl-C, direnv abort, SIGTERM): drop temp files holding
+  # resolved secrets, the lock, and the orphaned op.
+  _RE_PID=""
+  trap 'kill "${_RE_PID:-0}" 2>/dev/null; rm -f "'"$dir"'"/.env.tmp.* "'"$dir"'"/.env.err.*; re-unlock "'"$dir"'"; exit 75' INT TERM HUP
+  # Another caller may have refreshed while we waited for the lock.
+  reason="$(re-stale-reason "$dir")" || reason="error"
+  if [ "$mode" != "force" ] && [ -z "$reason" ]; then
+    trap - INT TERM HUP; re-unlock "$dir"
+    echo "unchanged: $dir/.env fresh (refreshed by another caller)"
+    return 0
+  fi
   re-do-refresh "$dir" || rc=$?
+  trap - INT TERM HUP
   re-unlock "$dir"
   return "$rc"
 }

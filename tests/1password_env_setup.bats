@@ -563,3 +563,34 @@ EOF
   [ -s "$REPO/.env.tpl.sha256" ]
   grep -q "./refresh-env ." "$REPO/.envrc"
 }
+
+@test "refresh-env works under macOS /bin/bash 3.2 semantics with OP_ACCOUNT unset (no empty-array expansion)" {
+  _re_setup
+  [ -x /bin/bash ] || skip "no /bin/bash"
+  cp "$REFRESH" "$REPO/refresh-env"
+  run env -u OP_ACCOUNT PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" /bin/bash "$REPO/refresh-env" 2>&1
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.env" ]
+}
+
+@test "refresh-env wrong-account vault error is a plain failure (exit 1), not an unlock request" {
+  _re_setup
+  _stub_op_failing vault
+  _run_re "'$REPO'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"OP_ACCOUNT"* ]]
+}
+
+@test "refresh-env killed mid-refresh removes temp files and the lock" {
+  _re_setup
+  printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$STUB_BIN/op"; chmod +x "$STUB_BIN/op"
+  env PATH="$STUB_BIN" REFRESH_ENV_OP_TIMEOUT=30 bash -c "source '$REFRESH'; refresh-env '$REPO'" >/dev/null 2>&1 &
+  local pid=$! i
+  for i in $(seq 1 50); do [ -d "$REPO/.env.refresh.lock" ] && break; sleep 0.1; done
+  sleep 0.3
+  kill -TERM "$pid"
+  wait "$pid" 2>/dev/null || true
+  sleep 0.3
+  [ ! -d "$REPO/.env.refresh.lock" ]
+  ! ls "$REPO"/.env.tmp.* "$REPO"/.env.err.* 2>/dev/null
+}
