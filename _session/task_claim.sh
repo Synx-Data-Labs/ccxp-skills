@@ -616,7 +616,7 @@ _tc_release_others() {
   #   - `Blocked by T<id>` (the compound blocked status): resetting it to Open
   #     would re-inject a still-blocked task and destroy the blocker linkage
   #     /todo + the lint board-pass rely on.
-  # `Review` (a live PR drives it), and the terminal Done/Closed/Parked.
+  #   - `Review` (a live PR drives it), and the terminal Done/Closed/Parked.
   # Prints "released:<id>" per freed task (nothing if none).
   local except="${1:-}" mine dir f status b id except_file=""
   mine="$(_tc_claimant_id)"
