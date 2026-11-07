@@ -117,3 +117,45 @@ _commit() { git add -A && git commit -q -m "$1"; }
     grep -q 'customer A' "$REPO_ROOT/$s/SKILL.md"
   done
 }
+
+@test "sensitivity-check: added lines starting with ++ are still scanned" {
+  export SENSITIVE_NAMES_DENYLIST_FILE="$DL"
+  printf 'a\n' > t.md; _commit t
+  printf 'a\n++ %s\n+++ %s\n' "$TERM1" "$TERM1" > t.md
+  git add t.md
+  _sens
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"HIT t.md:2"* ]]
+  [[ "$output" == *"HIT t.md:3"* ]]
+}
+
+@test "sensitivity-check: a matching filename is flagged and never printed" {
+  export SENSITIVE_NAMES_DENYLIST_FILE="$DL"
+  echo "clean content" > "notes-$TERM1.md"
+  printf 'x\n%s\n' "$TERM1" > "plan-$TERM1.txt"
+  _sens
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"file#"* ]]
+  [[ "$output" != *"$TERM1"* ]]
+  [[ "$output" != *"zorblax"* ]]
+}
+
+@test "sensitivity-check: a matching name in a committed path is flagged under --base" {
+  export SENSITIVE_NAMES_DENYLIST_FILE="$DL"
+  git checkout -q -b feat
+  echo ok > "$TERM1.md"; _commit "add doc"
+  _sens --base main
+  [ "$status" -eq 1 ]
+  [[ "$output" == *":name"* ]]
+  [[ "$output" != *"$TERM1"* ]]
+}
+
+@test "sensitivity-check: paths with spaces and quotes report the right file" {
+  export SENSITIVE_NAMES_DENYLIST_FILE="$DL"
+  printf 'a\n' > 'my file.txt'; printf 'a\n' > 'q"x.txt'; _commit t
+  printf 'a\nb %s\n' "$TERM1" > 'my file.txt'; printf 'a\nb %s\n' "$TERM1" > 'q"x.txt'
+  _sens
+  [ "$status" -eq 1 ]
+  [[ "$output" == *'HIT my file.txt:2'* ]]
+  [[ "$output" == *'HIT q"x.txt:2'* ]]
+}
