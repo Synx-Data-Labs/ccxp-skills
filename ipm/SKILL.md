@@ -111,6 +111,7 @@ Do not second-guess that ordering, and do not re-derive a ranking the queue alre
 **Cron-mode eligibility filter.**
 
 - When `CCXP_CRON_MODE=1`, drop any candidate whose `status:` is still `Open` (it hasn't been through an interactive pre-IPM design pass — step 3 is skipped this run). Only `status: Design` candidates with a non-empty `estimation` are eligible for this week's commit.
+- **Second admission path (retro-filed items).** An `Open` candidate is also eligible when its `source:` starts with `Retro ` (e.g. `Retro 2026-08-21`) AND its `estimation` is non-empty. `/retro` Phase 4 files action items with the root cause, definition of done and a test plan already written, so that template is the trusted scoping signal. Every other `Open` task stays excluded.
 - If the filtered pool is thin, record it under `## Notes` (e.g. "3 candidates skipped — still `Open`, awaiting a pre-IPM pass") rather than reaching into `Open` tasks to fill the gap.
 - Interactive runs (`CCXP_CRON_MODE` unset/`0`) skip this filter and proceed straight to step 3.
 
