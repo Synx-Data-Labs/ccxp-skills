@@ -15,7 +15,6 @@ scheduled: 2026-11-02
 - **Problem**: the generated `.envrc` (and the skill script) refresh `.env` by mtime only, so a hand-edited or later-written `.env` looks fresh forever; launchd and Claude Code processes never trigger direnv at all
 - **Solution**: refresh by content (sha256 of `.env.tpl` plus of the generated `.env`), report drift by key name, fail loudly when `op` needs the owner's unlock, and ship a standalone `refresh-env` helper any process can call
 
-
 ## Problem
 
 - **Type**: bug
