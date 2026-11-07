@@ -237,7 +237,7 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 ##### 1.2.2a Reply RCA in the original alert thread
 
-- The `./.github/actions/slack-notify` composite action (and the reusable `_slack-notify.yml` in callers that still use it) fires an immediate, unclassified alert to `#acme-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note).
+- The `./.github/actions/slack-notify` composite action in synxdb-build-pipeline fires an immediate, unclassified alert to `#acme-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note).
 - Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in `#acme-dev-notifications`, a different channel.
 - **Design rationale**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2, check whether it has a matching alert and reply on it:
 
@@ -247,7 +247,7 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 1. **Find the alert message.** The alert is posted via a bare webhook, whose response carries no usable `ts` — nothing stashes the alert's `channel_id`/`message_ts` for a later tick to look up directly, so this is a **search**, not a lookup (same shape as `/slack-check-reply` Step 4's fallback):
 
-   The alert's run-URL button is not text-indexed, so the action also posts a plain `<…/actions/runs/<run-id>|run <run-id>>` link; that is what this search matches (older alerts will not match).
+   The alert's run-URL button is not text-indexed, so synxdb-build-pipeline's action also posts a plain `<…/actions/runs/<run-id>|run <run-id>>` link; that is what this search matches (older alerts will not match).
 
    ```bash
    bash <skills-root>/_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"
@@ -294,7 +294,7 @@ Hold onto this tick's nightly-health facts — **do not write them to a file yet
 
 - Previously a standalone "Slack the nightly health result" step posted a second, separate message, because Phase 1.5 used to run *after* the standup Slack post (1.4) had already gone out (T20260704 finding) — there was no other way for nightly results to reach Slack same-tick.
 - Now that this whole check runs *before* 1.4 (as 1.2), the results are already in-hand when 1.4 composes the single unified standup message (see 1.4's `*🌙 Nightly*` section) — no second post needed.
-- This is a **distinct signal from the `slack-notify` composite action's alert**, unchanged: that workflow fires an immediate, unclassified "build failed" ping at CI-failure time for a handful of release/build workflows and doesn't cover every workflow on `main` (e.g. `Upstream Sync`); expect some nights to see both a same-night raw alert from the `slack-notify` action and this tick's classified summary in the standup — they answer different questions ("is it red right now" vs. "what actually broke and is someone tracking it").
+- This is a **distinct signal from the `slack-notify` composite action's alert**, unchanged: that action fires an immediate, unclassified "build failed" ping at CI-failure time for a handful of release/build workflows and doesn't cover every workflow on `main` (e.g. `Upstream Sync`); expect some nights to see both a same-night raw alert from the `slack-notify` action and this tick's classified summary in the standup — they answer different questions ("is it red right now" vs. "what actually broke and is someone tracking it").
 
 #### 1.2a Gather PRs needing dev's attention
 
