@@ -13,6 +13,10 @@
 #   status    frontmatter `status: Done`
 #   claim     frontmatter `claimed_by:` absent or empty (body text is ignored)
 #   closed    a `## Closed (` section exists
+#   quality   when dev/quality/metrics.jsonl at HEAD has a record for the id whose
+#             delta regressed, the `## Closed (` section carries a
+#             `- Quality regression ...: <explanation>` line (skipped when there is
+#             no scoreboard/record or no jq; notes go to stderr)
 #
 # stdout: `ok <journal-path>` (exit 0), or one `FAIL <check>: <detail>` line per
 # failure (exit 1). Exit 2 usage, 3 not a git repository.
@@ -82,6 +86,21 @@ if [ -n "$file" ]; then
   cb="$(printf '%s\n' "$fm" | sed -n 's/^claimed_by:[[:space:]]*//p' | head -n1 | tr -d "\"'" | sed 's/[[:space:]]*$//')"
   case "$cb" in ""|null|~) ;; *) fail claim "claimed_by is still '$cb'; clear it with _session/task_claim.sh release $id Done" ;; esac
   printf '%s\n' "$blob" | grep -qE '^## Closed \(' || fail closed "no '## Closed (YYYY-MM-DD)' section"
+  # quality: every scoreboard record for this exact id, a later clean re-run must not mask an earlier regression.
+  mf="$(git show HEAD:dev/quality/metrics.jsonl 2>/dev/null || true)"
+  if [ -n "$mf" ]; then
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "verify-close.sh: skip quality check: jq not installed" >&2
+    else
+      regs="$(printf '%s\n' "$mf" | jq -R -r --arg id "$id" -L "$(dirname "${BASH_SOURCE[0]}")/../../quality-probe/scripts" \
+        'include "regress"; (fromjson? // empty) | select(type == "object" and .task == $id) | (.delta // {}) | qp_regressed | split(" ")[0]' 2>/dev/null | sort -u | paste -sd, -)"
+      if [ -n "$regs" ]; then
+        note="$(printf '%s\n' "$blob" | awk '/^## Closed \(/{f=1; next} /^## /{f=0} f' \
+          | sed -nE 's/^- Quality regression[^:]*:[[:space:]]*(.*[^[:space:]])[[:space:]]*$/\1/p' | grep -v -e '<your explanation>' -e '<one-line explanation>' | head -n1)"
+        [ -n "$note" ] || fail quality "scoreboard shows a regression ($regs) with no '- Quality regression (...): <explanation>' line in the ## Closed section"
+      fi
+    fi
+  fi
 fi
 
 if [ "${#fails[@]}" -gt 0 ]; then

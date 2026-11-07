@@ -99,6 +99,12 @@ idempotently. Record shape:
   *fall*; every other metric (lint findings, dup, secrets, code-scanning, LOC,
   function size) regresses when it *rises*. A regression prints a loud
   `WARNING:` line; the merge still proceeds.
+- **Explained at close** — a regression also prints an `EXPLAIN-AT-CLOSE:` hint
+  with the exact line to write in the task's `## Closed` note
+  (`- Quality regression (<metrics>): <explanation>`). The direction rule lives in
+  `scripts/regress.jq`, shared with `drive/scripts/verify-close.sh`, which fails a
+  close whose committed scoreboard has a regressed record for the task but no such
+  line (T20260820-989935). The probe itself still never blocks.
 
 ## ccxp hooks (wired)
 
