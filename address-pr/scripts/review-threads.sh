@@ -15,8 +15,10 @@
 # resolve: closes a thread only when ALL hold:
 #   - its first comment is by a Bot (a human-opened thread is never auto-resolved);
 #   - viewerCanResolve is true;
-#   - our latest comment in it starts with a marker; for `Addressed in <sha>` the
-#     sha is an ancestor of the PR head and its diff touches the thread's path;
+#   - OUR comment is the LAST one in the thread (a later reply re-opens the
+#     question) and starts with a marker (a thread of 50+ comments is never
+#     resolved: the window may hide the latest); for `Addressed in <sha>` the
+#     sha is a commit of this PR (in base..head) whose diff touches the path;
 #   - `Not changing:` resolutions are capped at --max-pushback per run (default 5).
 #   `isOutdated` alone never resolves a thread. Then it prints what remains.
 #
@@ -77,7 +79,9 @@ function unresolved_rows() {
   printf '%s' "$1" | jq -c --arg me "$2" '
     .[] | select(.isResolved == false)
     | (.comments.nodes) as $c
-    | ([$c[] | select(.author.login == $me)] | last // null) as $mine
+    | (if ($c | length) >= 50 then null
+       else (([$c[] | select(.author.login == $me)] | last // null) as $m
+             | if $m != null and $m == ($c | last) then $m else null end) end) as $mine
     | {id, canResolve: (.viewerCanResolve // false),
        kind: (if ($c[0].author.__typename // "") == "Bot" then "bot" else "human" end),
        outdated: (if .isOutdated then "outdated" else "current" end),
@@ -127,17 +131,21 @@ function cmd_reply() {
   echo "replied $tid"
 }
 
-function sha_ok() { # <sha> <path> <head>
-  git merge-base --is-ancestor "$1" "$3" >/dev/null 2>&1 || return 1
+function sha_ok() { # <sha> <path> <head> <base>: a commit of THIS PR (in base..head) touching <path>
+  local full
+  full="$(git rev-parse --verify --quiet "${1}^{commit}" 2>/dev/null)" || return 1
+  git rev-list "$4..$3" 2>/dev/null | grep -Fxq -- "$full" || return 1
   git diff-tree --root --no-commit-id --name-only -r -m "$1" 2>/dev/null | grep -Fxq -- "$2"
 }
 
 function cmd_resolve() {
-  local pr="$1" cap="$2" threads me head rows row id kind canres marker sha path pushed=0 ok
+  local pr="$1" cap="$2" threads me head base rows row id kind canres marker sha path pushed=0 ok
   threads="$(fetch_threads "$pr")" || exit $?
   me="$(current_user)" || exit $?
   head="$(gh_ pr view "$pr" --json headRefOid --jq .headRefOid 2>/dev/null)" || head=""
   [[ "$head" =~ ^[0-9a-f]{7,40}$ ]] || fail "could not read the head commit of PR #$pr"
+  base="$(gh_ pr view "$pr" --json baseRefOid --jq .baseRefOid 2>/dev/null)" || base=""
+  [[ "$base" =~ ^[0-9a-f]{7,40}$ ]] || fail "could not read the base commit of PR #$pr"
   rows="$(unresolved_rows "$threads" "$me")" || fail "could not classify the threads"
   local resolved_ids=" "
   while IFS= read -r row; do
@@ -147,7 +155,7 @@ function cmd_resolve() {
     [ "$kind" = bot ] && [ "$canres" = true ] || continue
     ok=0
     case "$marker" in
-      fixed) sha_ok "$sha" "$path" "$head" && ok=1 ;;
+      fixed) sha_ok "$sha" "$path" "$head" "$base" && ok=1 ;;
       pushback) if [ "$pushed" -lt "$cap" ]; then ok=1; pushed=$((pushed + 1)); fi ;;
     esac
     [ "$ok" = 1 ] || continue

@@ -13,12 +13,13 @@ setup() {
   FX="$BATS_TEST_TMPDIR/fx"; mkdir -p "$FX"
   LOG="$BATS_TEST_TMPDIR/calls.log"; : > "$LOG"
   export FX LOG
-  # throwaway repo: c1 touches a.txt, c2 touches b.txt (HEAD)
+  # throwaway repo: c0 (base) touches a.txt, c1 touches a.txt, c2 touches b.txt (HEAD)
   R="$BATS_TEST_TMPDIR/repo"; mkdir -p "$R"; git -C "$R" init -q -b main; git_identity "$R"
+  echo 0 > "$R/a.txt"; git -C "$R" add -A; git -C "$R" commit -q -m c0; C0="$(git -C "$R" rev-parse HEAD)"
   echo 1 > "$R/a.txt"; git -C "$R" add -A; git -C "$R" commit -q -m c1; C1="$(git -C "$R" rev-parse HEAD)"
   echo 2 > "$R/b.txt"; git -C "$R" add -A; git -C "$R" commit -q -m c2; C2="$(git -C "$R" rev-parse HEAD)"
-  export C1 C2
-  echo "$C2" > "$FX/head"
+  export C0 C1 C2
+  echo "$C2" > "$FX/head"; echo "$C0" > "$FX/base"
   echo '{"login":"me"}' > "$FX/user.json"
   cat > "$BATS_TEST_TMPDIR/gh-sh.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -31,6 +32,7 @@ case "$args" in
   "repo view"*"--jq .owner.login") echo acme ;;
   "repo view"*"--jq .name") echo repo ;;
   "api user") cat "$FX/user.json" ;;
+  "pr view"*baseRefOid*) cat "$FX/base" ;;
   "pr view"*headRefOid*) cat "$FX/head" ;;
   *resolveReviewThread*) echo "resolve ${args#*tid=}" | cut -d' ' -f1-2 >> "$LOG"; echo '{}' ;;
   *addPullRequestReviewThreadReply*) echo "reply $args" >> "$LOG"; echo '{}' ;;
@@ -124,6 +126,28 @@ resolves() { grep -c '^resolve' "$LOG" || true; }
 @test "resolve: sha that is not an ancestor of head is not enough" {
   git checkout -q -b side "$C1"; echo 3 > a.txt; git add -A; git commit -q -m c3; S="$(git rev-parse HEAD)"; git checkout -q main
   p1 "$(th T1 false false a.txt true copilot Bot "Addressed in $S")"
+  run bash "$RT" resolve 7
+  [ "$status" -eq 10 ]; [ "$(resolves)" -eq 0 ]
+}
+
+@test "resolve: a sha already on the base branch is not a fix of this PR" {
+  p1 "$(th T1 false false a.txt true copilot Bot "Addressed in $C0")"
+  run bash "$RT" resolve 7
+  [ "$status" -eq 10 ]; [ "$(resolves)" -eq 0 ]
+}
+
+@test "resolve: a later bot reply after our marker keeps the thread open" {
+  jq -nc --arg m "Addressed in $C1" '{id:"T1",isResolved:false,isOutdated:false,viewerCanResolve:true,path:"a.txt",line:3,
+    comments:{nodes:[{body:"f",author:{login:"copilot",__typename:"Bot"}},{body:$m,author:{login:"me",__typename:"User"}},{body:"still wrong",author:{login:"copilot",__typename:"Bot"}}]}}' > "$FX/t1"
+  p1 "$(cat "$FX/t1")"
+  run bash "$RT" resolve 7
+  [ "$status" -eq 10 ]; [ "$(resolves)" -eq 0 ]
+}
+
+@test "resolve: a thread of 50+ comments is never resolved" {
+  jq -nc --arg m "Addressed in $C1" '{id:"T1",isResolved:false,isOutdated:false,viewerCanResolve:true,path:"a.txt",line:3,
+    comments:{nodes:([{body:"f",author:{login:"copilot",__typename:"Bot"}}] + [range(48) | {body:"x",author:{login:"copilot",__typename:"Bot"}}] + [{body:$m,author:{login:"me",__typename:"User"}}])}}' > "$FX/t1"
+  p1 "$(cat "$FX/t1")"
   run bash "$RT" resolve 7
   [ "$status" -eq 10 ]; [ "$(resolves)" -eq 0 ]
 }
