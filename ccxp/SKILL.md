@@ -336,6 +336,7 @@ Judgment keys (full schema in the script header; all optional except `top5`):
 - `top5[]` — from 1.2b (`/todo next`'s top 5, reporting only): `"<…|Tid> — one-line what + why it's next"`.
 - `weekly_focus{shipped,total,in_flight,not_started,trend,table}` — from the IPM table; omit when `ipm_file` is empty (IPM is opt-in). `trend` is On-track / Slipping / At-risk from remaining days vs remaining cumulative estimate.
 - `links{<thread key>: "<…|Tid>"}` — mrkdwn links for Blockers.
+- `retro_gap` — **Friday ticks only** (`TZ=America/Chicago date +%u` = 5): run `bash <skills-root>/_session/retro_gap.sh` (reads `./dev/JOURNAL`) and pass its one line verbatim; silent output means omit the key. Detector-only visibility for a missed Friday retro (newest `*-retro-weekly.md` more than 7 days old, or none); it never changes Phase 2b, which still runs `/retro` regardless. See `_session/retro_gap.sh` + `tests/retro_gap.bats`.
 
 The journal doc renders Resolved, Nightly health, PRs needing attention, Top 5 next, Epic progress (verbatim `epic-status.sh render`; never omitted), Weekly focus progress, Task attribution by location (omitted on a no-data day), Open escalations and Housekeeping. A failed data section renders "unavailable", never as a clean answer. To act on an epic rather than report it, see `/epic`.
 
@@ -501,7 +502,7 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
    strictly read-only. Skip silently when there's nothing to propose; never
    block the retro on this step.
 
-**If a Friday session is missed**, the next Friday's retro covers the gap (it always looks at the last 7 days).
+**If a Friday session is missed**, the next Friday's retro covers the gap (it always looks at the last 7 days). A missed Friday is no longer silent: Phase 1.3's `retro_gap` line surfaces it in the standup (T20260813-392025).
 
 ### Phase 3: Focused work (supervised loop) — interactive only, skipped when `CCXP_CRON_MODE=1`
 

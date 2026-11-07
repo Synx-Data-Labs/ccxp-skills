@@ -117,6 +117,15 @@ A claim whose owning agent died (crash / kill / reboot) is freed two ways. **Sam
 
 The sweep never frees this session's own claim (self-guard), and a reclaim is never silent (each freed task is logged + Slacked).
 
+### Detecting a missed Friday retro (`retro_gap.sh`)
+
+`_session/retro_gap.sh [journal-dir]` (T20260813-392025) prints one line
+when the newest `YYYY-MM-DD-retro-weekly.md` in `./dev/JOURNAL` is more than 7
+days old (or none exists), measured in `America/Chicago`, and is silent
+otherwise. Detector only: it never runs `/retro` and never mutates anything.
+`/ccxp` Phase 1.3 passes the line into the standup as `retro_gap`. See
+`tests/retro_gap.bats`.
+
 ### Detecting never-claimed active tasks (`claim_gap.sh`)
 
 The complementary gap (T20260610-248248): a task whose `status:` is `In
