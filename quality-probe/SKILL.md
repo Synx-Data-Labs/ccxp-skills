@@ -104,7 +104,7 @@ idempotently. Record shape:
   (`- Quality regression (<metrics>): <explanation>`). The direction rule lives in
   `scripts/regress.jq`, shared with `drive/scripts/verify-close.sh`, which fails a
   close whose committed scoreboard has a regressed record for the task but no such
-  line (T20260820-989935). The probe itself still never blocks.
+  line. The probe itself still never blocks.
 
 ## ccxp hooks (wired)
 
