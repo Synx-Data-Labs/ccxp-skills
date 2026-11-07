@@ -176,9 +176,9 @@ bash <skills-root>/_docs/doc-impact.sh "origin/${base_ref:-main}"   # base_ref =
   bash <skills-root>/address-pr/scripts/review-threads.sh list <number>      # TSV of unresolved threads; exit 0 = none
   ```
 
-  - For each bot-opened row apply step d's discipline: fix the code, then `review-threads.sh reply <number> <thread-id> --fixed <sha>` (the sha must touch the thread's file), or push back with `reply ... --pushback <file>` giving the specific constraint, never a style preference.
+  - For each bot-opened row apply step d's discipline: fix the code, then `review-threads.sh reply <number> <thread-id> --fixed <sha>` (the sha must be a commit of this PR touching the thread's file; the marker must be the last comment in the thread), or push back with `reply ... --pushback <file>` giving the specific constraint, never a style preference.
   - Then `bash <skills-root>/address-pr/scripts/review-threads.sh resolve <number>`: it resolves only bot-opened threads carrying one of those markers (pushback resolutions capped at 5 per run) and prints what remains. Never resolve a thread without fixing it or arguing it.
-  - Exit `10` (bot-opened threads remain) counts as `BLOCKED`: loop under the §2.f valve. Exit `11` (only human-opened threads remain): stop and report to the owner, do not loop. Exit `3`: gh failure, stop. Contract and tests: `tests/address_pr_review_threads.bats`.
+  - Exit `10` (bot-opened threads remain, including ones the token cannot resolve) counts as `BLOCKED`: loop under the §2.f valve, and stop and report once the valve trips. Exit `11` (only human-opened threads remain): stop and report to the owner, do not loop. Exit `3`: gh failure, stop. Contract and tests: `tests/address_pr_review_threads.bats`.
 
 - Then run the pre-merge check script. It is the single source of truth for CI, test plan, and pipeline verification.
 - (Repos without the script — e.g. ccxp-skills — fall back to the manual gate: CI, mergeability, test-plan boxes.) **Note on review-comment enforcement**: pre-merge-check.sh's own "review comments" check (where it exists) was written against Copilot's native `reviewThreads` — it does not see the plain PR comments step d now posts, so it will report "0 unresolved" trivially regardless of what step d found.
