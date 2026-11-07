@@ -14,7 +14,7 @@ setup() {
 
 @test "filter admits Design + estimation and Open + Retro source + estimation" {
   [[ "$LINE" == *'`status: Design` with a non-empty `estimation`'* ]]
-  [[ "$LINE" == *'`Open` whose `source:` begins "Retro" with a non-empty `estimation`'* ]]
+  [[ "$LINE" == *'`Open` whose `source:` begins "Retro" with a non-empty `estimation` and no `Category: quality` tag'* ]]
 }
 
 @test "filter still excludes every other Open task" {
