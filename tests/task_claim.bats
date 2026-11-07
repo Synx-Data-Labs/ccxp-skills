@@ -495,7 +495,7 @@ print('ok')
   [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-demo.md" claimed_by)" ]
 }
 
-@test "release-others preserves Blocked/Review/terminal status, frees only In Progress/Design" {
+@test "release-others preserves Blocked/Review/terminal status, frees only In Progress" {
   TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
   _mk_task_file "$TASK_CLAIM_DIR/T1-in-progress.md"
   _mk_task_file "$TASK_CLAIM_DIR/T2-blocked.md"
@@ -513,11 +513,27 @@ print('ok')
   for f in T1-in-progress T2-blocked T3-review T4-done; do
     [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/$f.md" claimed_by)" ]
   done
-  # ... but only In Progress/Design return to the pool; the rest keep their status
+  # ... but only In Progress returns to the pool; the rest keep their status
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-in-progress.md" status)"  = "Open" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T2-blocked.md" status)" = "Blocked by T20251111-999999" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T3-review.md" status)"  = "Review" ]
   [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T4-done.md" status)"    = "Done" ]
+}
+
+@test "release-others keeps status Design (completed design pass), still resets In Progress to Open (T20260730-256265)" {
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-in-progress.md"
+  _mk_task_file "$TASK_CLAIM_DIR/T2-design.md"
+  _tc_claimant_id() { printf 'box:/clone'; }
+  for t in T1 T2; do _tc_acquire "$t" >/dev/null; done
+  _tc_fm_set "$TASK_CLAIM_DIR/T2-design.md" status "Design"
+  run _tc_release_others
+  [ "$status" -eq 0 ]
+  for f in T1-in-progress T2-design; do
+    [ -z "$(_tc_fm_get "$TASK_CLAIM_DIR/$f.md" claimed_by)" ]
+  done
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T1-in-progress.md" status)" = "Open" ]
+  [ "$(_tc_fm_get "$TASK_CLAIM_DIR/T2-design.md" status)" = "Design" ]
 }
 
 @test "release-others scans PARKING: frees a self-held parked task (status preserved)" {

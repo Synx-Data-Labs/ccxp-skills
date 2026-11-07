@@ -609,9 +609,10 @@ _tc_release_others() {
   # resumed is protected, and so the short task-ids used in tests work too.
   #
   # Status handling: only an actively-claimed-but-now-abandoned task
-  # (In Progress / Design) is returned to the
+  # (In Progress) is returned to the
   # pickable pool (→ Open). Every other status is
-  # PRESERVED, just shorn of its claim — critically `Blocked by T<id>` (the
+  # PRESERVED, just shorn of its claim — critically `Design` (a completed design
+  # pass is durable progress and the IPM Tier-2 marker, T20260730-256265), `Blocked by T<id>` (the
   # compound blocked status: resetting it to Open would re-inject a still-blocked
   # task and destroy the blocker linkage /todo + the lint board-pass rely on),
   # `Review` (a live PR drives it), and the terminal Done/Closed/Parked.
@@ -627,7 +628,7 @@ _tc_release_others() {
       if [ -n "$except_file" ] && [ "$f" -ef "$except_file" ]; then continue; fi
       [ "$(_tc_fm_get "$f" claimed_by)" = "$mine" ] || continue
       status="$(_tc_fm_get "$f" status)"
-      case "$status" in "In Progress"|Design) status="Open" ;; *) : ;; esac
+      case "$status" in "In Progress") status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
       _tc_fm_set "$f" claimed_role ""      || return 1   # same clear-on-close contract as _tc_release
       _tc_fm_set "$f" status "$status"     || return 1
