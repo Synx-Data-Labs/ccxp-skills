@@ -22,6 +22,7 @@ count. Exit 0 clean or not configured (fail-soft, warns on stderr), 1 hits.
 Usage: sensitivity_check.py [--base-ref REF] [--message-file F]...
 """
 import argparse
+import hashlib
 import os
 import re
 import subprocess
@@ -54,28 +55,61 @@ def build_regex(terms):
     return re.compile(r"(?<!\w)(?:%s)(?!\w)" % alts, re.IGNORECASE)
 
 
-def git(*args):
+class GitError(Exception):
+    pass
+
+
+def git(*args, check=True):
     r = subprocess.run(["git", "-c", "core.quotepath=off", *args],
                        capture_output=True, text=True, errors="replace")
+    if check and r.returncode != 0:
+        raise GitError(args[0])
     return r.returncode, r.stdout
 
 
+_UNQUOTE = {"\\\\": "\\", '\\"': '"', "\\t": "\t", "\\n": "\n"}
+
+
+def clean_path(p):
+    p = p.split("\t")[0] if not p.startswith('"') else p
+    if p.startswith('"') and p.endswith('"'):
+        p = re.sub(r'\\[\\"tn]', lambda m: _UNQUOTE[m.group(0)], p[1:-1])
+    return p
+
+
 def added_lines(diff_text):
-    """Yield (path, lineno, text, sha_or_None) for each added line of a unified -U0 diff."""
+    """Yield (path, lineno, text, sha_or_None) for each added line of a -U0 diff.
+
+    Hunk lengths from the @@ header decide which rows are content, so an added
+    line that itself starts with "++" or "+++ " is still scanned.
+    """
     path, ln, sha = None, 0, None
+    rem_add = rem_del = 0
     for row in diff_text.split("\n"):
+        if rem_add or rem_del:
+            if row.startswith("-") and rem_del:
+                rem_del -= 1
+                continue
+            if row.startswith("+") and rem_add:
+                rem_add -= 1
+                if path:
+                    yield path, ln, row[1:], sha
+                ln += 1
+                continue
+            if row.startswith("\\"):
+                continue
+            rem_add = rem_del = 0
         if row.startswith("COMMIT "):
-            sha = row[7:15]
-            path = None
+            sha, path = row[7:15], None
         elif row.startswith("+++ "):
-            p = row[4:].split("\t")[0]
+            p = clean_path(row[4:])
             path = None if p == "/dev/null" else (p[2:] if p.startswith("b/") else p)
         elif row.startswith("@@"):
-            m = re.match(r"@@ -\S+ \+(\d+)", row)
-            ln = int(m.group(1)) if m else 0
-        elif row.startswith("+") and not row.startswith("+++") and path:
-            yield path, ln, row[1:], sha
-            ln += 1
+            m = re.match(r"@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", row)
+            if m:
+                rem_del = int(m.group(1)) if m.group(1) is not None else 1
+                ln = int(m.group(2))
+                rem_add = int(m.group(3)) if m.group(3) is not None else 1
 
 
 def main(argv=None):
@@ -94,38 +128,60 @@ def main(argv=None):
     rx = build_regex(terms)
     hits = []
 
-    def scan(where, text):
+    def label(path):
+        # A path that itself matches is never printed: an opaque id stands in.
+        if rx.search(path):
+            return "file#" + hashlib.sha1(path.encode()).hexdigest()[:8]
+        return path
+
+    def scan(path, ln, text, sha=None):
+        where = f"{label(path)}:{ln}" + (f" ({sha})" if sha else "")
         if rx.search(text):
             hits.append(where)
 
-    rc, _ = git("rev-parse", "--verify", "-q", "HEAD")
-    head = "HEAD" if rc == 0 else EMPTY_TREE
-    _, diff = git("diff", "-U0", "--no-color", "--no-ext-diff", head)
-    for path, ln, text, _ in added_lines(diff):
-        scan(f"{path}:{ln}", text)
+    def scan_name(path, sha=None):
+        if rx.search(path):
+            hits.append(f"{label(path)}:name" + (f" ({sha})" if sha else ""))
 
-    _, untracked = git("ls-files", "-o", "--exclude-standard", "-z")
-    for path in filter(None, untracked.split("\0")):
-        try:
-            with open(path, "rb") as fh:
-                data = fh.read()
-        except OSError:
-            continue
-        if b"\0" in data:
-            continue
-        for i, text in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
-            scan(f"{path}:{i}", text)
+    try:
+        rc, _ = git("rev-parse", "--verify", "-q", "HEAD", check=False)
+        head = "HEAD" if rc == 0 else EMPTY_TREE
+        _, diff = git("diff", "-U0", "--no-color", "--no-ext-diff", head)
+        for path, ln, text, _ in added_lines(diff):
+            scan(path, ln, text)
+        _, names = git("diff", "--name-only", "-z", "--diff-filter=ACMR", head)
+        _, untracked = git("ls-files", "-o", "--exclude-standard", "-z")
+        for path in filter(None, (names + untracked).split("\0")):
+            scan_name(path)
+        for path in filter(None, untracked.split("\0")):
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                continue
+            if b"\0" in data:
+                continue
+            for i, text in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+                scan(path, i, text)
 
-    if args.base_ref:
-        _, log = git("log", "--no-merges", "-p", "-U0", "--no-color", "--no-ext-diff",
-                     "--format=COMMIT %H", f"{args.base_ref}..HEAD")
-        for path, ln, text, sha in added_lines(log):
-            scan(f"{path}:{ln} ({sha})", text)
-        _, msgs = git("log", "--format=%h%x1f%B%x1e", f"{args.base_ref}..HEAD")
-        for rec in filter(str.strip, msgs.split("\x1e")):
-            sha, _, body = rec.strip().partition("\x1f")
-            for i, text in enumerate(body.splitlines(), 1):
-                scan(f"commit {sha} message:{i}", text)
+        if args.base_ref:
+            _, log = git("log", "--no-merges", "-p", "-U0", "--no-color",
+                         "--no-ext-diff", "--format=COMMIT %H", f"{args.base_ref}..HEAD")
+            for path, ln, text, sha in added_lines(log):
+                scan(path, ln, text, sha)
+            _, cnames = git("log", "--no-merges", "--name-only", "-z", "--diff-filter=ACMR",
+                            "--format=", f"{args.base_ref}..HEAD")
+            for path in filter(None, cnames.split("\0")):
+                scan_name(path)
+            _, msgs = git("log", "--format=%h%x1f%B%x1e", f"{args.base_ref}..HEAD")
+            for rec in filter(str.strip, msgs.split("\x1e")):
+                sha, _, body = rec.strip().partition("\x1f")
+                for i, text in enumerate(body.splitlines(), 1):
+                    if rx.search(text):
+                        hits.append(f"commit {sha} message:{i}")
+    except GitError as e:
+        print(f"SENSITIVITY=blocked reason=git-{e}-failed")
+        return 2
 
     for mf in args.message_file:
         try:
@@ -135,7 +191,8 @@ def main(argv=None):
             print("sensitivity-check: WARNING message file unreadable", file=sys.stderr)
             continue
         for i, text in enumerate(lines, 1):
-            scan(f"message-file:{i}", text)
+            if rx.search(text):
+                hits.append(f"message-file:{i}")
 
     hits = list(dict.fromkeys(hits))
     for h in hits:
