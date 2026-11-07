@@ -4,14 +4,19 @@
 
 load test_helper
 
-@test "cron eligibility filter admits Open + source Retro + non-empty estimation" {
-  run grep -n 'begins "Retro"' "$REPO_ROOT/ipm/SKILL.md"
-  [ "$status" -eq 0 ]
-  run grep -n 'begins "Retro"' "$REPO_ROOT/ipm/SKILL.md"
-  [ "$status" -eq 0 ]
+setup() {
+  LINE="$(grep -n 'When `CCXP_CRON_MODE=1`, drop any `Open` candidate' "$REPO_ROOT/ipm/SKILL.md" | head -1)"
 }
 
-@test "cron eligibility filter still excludes every other Open task" {
-  run grep -n 'Every other `Open` task stays excluded' "$REPO_ROOT/ipm/SKILL.md"
-  [ "$status" -eq 0 ]
+@test "filter bullet exists" {
+  [ -n "$LINE" ]
+}
+
+@test "filter admits Design + estimation and Open + Retro source + estimation" {
+  [[ "$LINE" == *'`status: Design` with a non-empty `estimation`'* ]]
+  [[ "$LINE" == *'`Open` whose `source:` begins "Retro" with a non-empty `estimation`'* ]]
+}
+
+@test "filter still excludes every other Open task" {
+  [[ "$LINE" == *'Every other `Open` task stays excluded'* ]]
 }
