@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Owner standing rule on customer/partner confidentiality, 2026-11-07
 description: Intake skills must alias names; /gcpr gets a local-denylist sensitivity check
+claimed_by: cc1-50ac6891:c5d4ccbae8a9b691
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261107-132909: Sensitive-names guard in intake skills and /gcpr
