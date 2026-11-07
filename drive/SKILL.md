@@ -413,6 +413,7 @@ bash <skills-root>/quality-probe/scripts/probe.sh \
 - **The append ships in this PR.** The new `dev/quality/metrics.jsonl` line is staged in Phase 4 so the scoreboard is durable on `main` and `/retro` Phase 4d can read the trend. (First run in a repo creates the dir/file idempotently.)
 - **`--design-score N`** — pass the Phase 2 design-score so the leading + trailing indicators share one record; omit when unknown (recorded `null`). A missing scanner records that field `null` + logs a skip — never an error.
 - **Carry the summary forward.** Copy the probe's one-line summary into the task's close note / JOURNAL entry so the trend is human-readable, not only in the JSONL.
+- **A regression must be explained at close.** When the probe prints `EXPLAIN-AT-CLOSE`, add a line `- Quality regression (<metrics>): <one-line explanation>` to the task's `## Closed` section (Phase 7.0). `verify-close.sh` fails the close (`FAIL quality`) when the committed scoreboard has a regressed record for the task and that line is missing, empty or still the placeholder. Cross-repo: the check cannot see the target repo's scoreboard from the hub close, so copy the probe's warning and your explanation into the hub `## Closed` by hand.
 - **Cross-repo:** run in `$TARGET`; the scoreboard lives in the target repo and lands in the target PR (not the hub).
 
 ### Phase 4: Create PR
@@ -516,6 +517,7 @@ After merge (auto or approved):
 
 **Final verification.** Before declaring the goal-task done, invoke `superpowers:verification-before-completion` once more from the merged-on-main perspective. Common catches: a follow-up cross-repo PR still needed (the hub journal-move PR); a source GitHub issue not yet closed; a memory rule worth saving from this task's surprises; unchecked "Done when" items.
 
+- **Quality regression note** (Phase 3.8): if the probe flagged a regression, the `## Closed` section must carry `- Quality regression (<metrics>): <explanation>`; `verify-close.sh` enforces it.
 - **Write the `## Closed (YYYY-MM-DD)` section** (standardized name — **not** "Resolution"/"Outcome"/"Done", so `/retro` and greps find it predictably) per [`repo-conventions/templates/design-doc.md`](../repo-conventions/templates/design-doc.md): shipped-in **PR #N** + run/evidence links, what's met, what's external/unverified and when it'll be confirmed, and any **follow-up tasks filed** (T-ids) — file each as a **follow-up** staged into the **next** iteration (`bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md next`) and promoted to the front of the queue (`/top <id>`; see Important Notes).
 
 Then **append a "Skills invoked" block to the task body** before the close (Phase 4/Phase 7 `status: Done` flip or immediate journal move), so `/retro` Phase 4c can grade compliance by grepping JOURNAL:

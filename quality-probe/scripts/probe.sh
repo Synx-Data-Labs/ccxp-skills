@@ -341,15 +341,9 @@ qp-compute-delta() {
 # else -> higher is worse.
 qp-warnings() {
   local delta="$1"
-  jq -r '
-    to_entries[]
-    | .key as $k | .value as $v
-    | if ($k == "coverage_pct" or $k == "design_score") then
-        (if $v < 0 then "\($k) \($v)" else empty end)
-      else
-        (if $v > 0 then "\($k) \($v)" else empty end)
-      end
-  ' <<<"$delta" | while read -r metric dv; do
+  # Direction rule lives in regress.jq, shared with drive/scripts/verify-close.sh.
+  jq -r -L "$(dirname "${BASH_SOURCE[0]}")" 'include "regress"; qp_regressed' <<<"$delta" \
+  | while read -r metric dv; do
     [[ -z "$metric" ]] && continue
     printf 'WARNING: %s regressed (delta %s)\n' "$metric" "$dv"
   done
@@ -490,7 +484,10 @@ quality-probe() {
     "$task" "$rec_date" "${#files[@]}" \
     "$(jq -c . <<<"$shellcheck_json")" "$dup" "$secrets" "$coverage" \
     "$(jq -c . <<<"$cs_json")" "$design_score"
-  if [[ -n "$warns" ]]; then printf '%s\n' "$warns"; fi
+  if [[ -n "$warns" ]]; then printf '%s\n' "$warns";
+    printf 'EXPLAIN-AT-CLOSE: write one line in the task'"'"'s ## Closed note: "- Quality regression (%s): <your explanation>"\n' \
+      "$(sed -n 's/^WARNING: \([^ ]*\) regressed.*/\1/p' <<<"$warns" | paste -sd, -)"
+  fi
 
   if [[ "$json" -eq 1 ]]; then
     printf '%s\n' "$record"

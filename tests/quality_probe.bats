@@ -428,3 +428,23 @@ _mk_git_repo() {
   run grep -c '\.claude/skills/_gh' "$PROBE"
   [ "$status" -ne 0 ]
 }
+
+# --- close-time explanation hint (T20260820-989935) --------------------------
+
+@test "a regression also prints the EXPLAIN-AT-CLOSE hint naming the metric" {
+  mkdir -p "$TARGET/dev/quality"
+  printf '%s\n' '{"task":"T0","date":"2026-06-01","files":["x.sh"],"shellcheck":{"error":0,"warning":0,"info":0,"style":0},"coverage_pct":99.0,"max_fn_lines":2,"file_loc":1,"dup_pct":0,"secrets":0,"code_scanning":null,"design_score":null,"delta":{}}' \
+    > "$TARGET/dev/quality/metrics.jsonl"
+  run bash "$PROBE" --task T20260101-000011 --files "$FIX/touched.sh" \
+      --repo-root "$TARGET" --date 2026-06-18
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"EXPLAIN-AT-CLOSE"* ]]
+  [[ "$output" == *"Quality regression ("*"file_loc"* ]]
+}
+
+@test "a run with no regression prints no EXPLAIN-AT-CLOSE hint" {
+  run bash "$PROBE" --task T20260101-000012 --files "$FIX/touched.sh" \
+      --repo-root "$TARGET" --date 2026-06-18
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"EXPLAIN-AT-CLOSE"* ]]
+}

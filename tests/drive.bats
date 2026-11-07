@@ -408,3 +408,71 @@ _close() { # [status] [claimed_by] [closed:yes|no] [mode:mv-edit|mv-only] — ta
   grep -q '_threads/threads.sh' "$REPO_ROOT/drive/SKILL.md"
   grep -q '_threads/threads.sh' "$REPO_ROOT/retro/SKILL.md"
 }
+
+# --- verify-close: quality regression explained (T20260820-989935) ------------
+
+_quality_close() { # <note-line or ""> <delta-json> [extra metrics line] — a Done close plus a scoreboard at HEAD
+  local note="$1" delta="$2" extra="${3:-}"
+  _task TODO "x"; git add -A; git commit -q -m "add task"
+  git checkout -q -b close
+  local j="dev/JOURNAL/2026-01-01-$ID-thing.md"
+  git mv "dev/TODO/$ID-thing.md" "$j"
+  { printf -- '---\nstatus: Done\nclaimed_by:\n---\n\n# %s\n\n## Closed (2026-01-01)\n\nShipped.\n' "$ID"
+    [ -n "$note" ] && printf '%s\n' "$note"
+    printf '\n## Skills invoked\n\n- none\n'; } > "$j"
+  mkdir -p dev/quality
+  printf '{"task":"%s","date":"2026-01-01","delta":%s}\n' "$ID" "$delta" > dev/quality/metrics.jsonl
+  [ -z "$extra" ] || printf '%s\n' "$extra" >> dev/quality/metrics.jsonl
+  git add -A; git commit -q -m close
+}
+
+@test "verify-close quality: a design_score drop with no note fails" {
+  _quality_close "" '{"design_score":-9}'
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL quality"* ]]; [[ "$output" == *"design_score"* ]]
+}
+
+@test "verify-close quality: a non-empty explanation in Closed passes" {
+  _quality_close "- Quality regression (design_score): doc-only task, structure intentionally minimal" '{"design_score":-9}'
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 0 ]
+}
+
+@test "verify-close quality: the probe's placeholder pasted unedited does not count" {
+  _quality_close "- Quality regression (design_score): <your explanation>" '{"design_score":-9}'
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL quality"* ]]
+}
+
+@test "verify-close quality: a note placed outside the Closed section does not count" {
+  _quality_close "" '{"design_score":-9}'
+  printf '\n- Quality regression (design_score): in the wrong section\n' >> "dev/JOURNAL/2026-01-01-$ID-thing.md"
+  git add -A; git commit -q -m edit
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL quality"* ]]
+}
+
+@test "verify-close quality: a rise in design_score or a fall in file_loc is not a regression" {
+  _quality_close "" '{"design_score":5,"file_loc":-3}'
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 0 ]
+}
+
+@test "verify-close quality: a later clean re-run does not mask an earlier regression" {
+  _quality_close "" '{"design_score":-9}' "{\"task\":\"$ID\",\"date\":\"2026-01-02\",\"delta\":{}}"
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 1 ]; [[ "$output" == *"FAIL quality"* ]]
+}
+
+@test "verify-close quality: records of another task and malformed lines are ignored" {
+  _quality_close "" '{}' "{\"task\":\"T20000101-000099\",\"delta\":{\"design_score\":-20}}"
+  printf 'not json\n' >> dev/quality/metrics.jsonl; git add -A; git commit -q -m bad
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 0 ]
+}
+
+@test "verify-close quality: no scoreboard means the check is skipped" {
+  _close
+  run bash "$VCLOSE" "$ID"
+  [ "$status" -eq 0 ]; [ "$output" = "ok $VC_FILE" ]
+}
