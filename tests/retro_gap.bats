@@ -85,3 +85,9 @@ RENDER="$REPO_ROOT/ccxp/scripts/render-standup.sh"
   run bash "$RENDER" "$FX_DIR/data.json" "$FX_DIR/judgment.json" --format journal
   [[ "$output" != *"Retro cadence"* ]]
 }
+
+@test "an impossible-date filename never masks a real gap" {
+  touch "$J/2026-99-99-retro-weekly.md" "$J/2026-10-22-retro-weekly.md"
+  run retro_gap "$J"
+  [[ "$output" == "retro-gap 8d — last retro-weekly 2026-10-22"* ]]
+}
