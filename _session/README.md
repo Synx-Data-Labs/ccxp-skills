@@ -145,7 +145,7 @@ claim-based coordination there. Verified live: most of a previously-flagged
 
 `claim_gap_changed` (the entry point `_session/claim_gap.sh` dispatches to
 directly) additionally dedups: it remembers the last-posted gap list's hash
-in `.claude/state/claim-gap-last.json` and stays silent on a repeat call with
+in a durable per-user, per-repo file (`~/.claude/state/claim-gap/<origin-hash>.json`, shared by every clone of the repo; `CLAIM_GAP_STATE_FILE` overrides) and stays silent on a repeat call with
 an unchanged list, so a caller that Slacks non-empty stdout won't re-post the
 same finding every tick. Run once per `/ccxp` Phase-0 tick alongside the
 reclaim sweep; see `ccxp/SKILL.md`'s Phase-0 tick section.

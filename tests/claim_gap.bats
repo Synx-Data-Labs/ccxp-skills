@@ -213,3 +213,50 @@ _cgc_stdout_only() { claim_gap_changed 2>/dev/null; }
   claim_gap_changed > "$outfile" 2>/dev/null
   [ ! -s "$outfile" ]
 }
+
+# --- durable per-repo default state path (T20260821-196067) -----------------
+
+_cg_mk_repo() {
+  # $1 dir  $2 origin url
+  mkdir -p "$1" && git -C "$1" init -q && git -C "$1" remote add origin "$2"
+}
+
+@test "default state file lives under CLAIMANT_STATE_DIR, not the working tree" {
+  unset CLAIM_GAP_STATE_FILE
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/cstate"
+  _cg_mk_repo "$BATS_TEST_TMPDIR/a" "git@example.com:o/r.git"
+  cd "$BATS_TEST_TMPDIR/a"
+  run _cg_state_file
+  [ "$status" -eq 0 ]
+  [[ "$output" == "$CLAIMANT_STATE_DIR/claim-gap/"*.json ]]
+}
+
+@test "two clones of the same origin share dedup state" {
+  unset CLAIM_GAP_STATE_FILE
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/cstate"
+  _cg_mk_repo "$BATS_TEST_TMPDIR/a" "git@example.com:o/r.git"
+  _cg_mk_repo "$BATS_TEST_TMPDIR/b" "git@example.com:o/r.git"
+  _mk_task T20260101-101010 "In Progress" ""
+  cd "$BATS_TEST_TMPDIR/a"
+  [ -n "$(claim_gap_changed 2>/dev/null)" ]
+  cd "$BATS_TEST_TMPDIR/b"
+  [ -z "$(claim_gap_changed 2>/dev/null)" ]
+}
+
+@test "clones of different origins do not share dedup state" {
+  unset CLAIM_GAP_STATE_FILE
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/cstate"
+  _cg_mk_repo "$BATS_TEST_TMPDIR/a" "git@example.com:o/r.git"
+  _cg_mk_repo "$BATS_TEST_TMPDIR/b" "git@example.com:o/other.git"
+  _mk_task T20260101-101010 "In Progress" ""
+  cd "$BATS_TEST_TMPDIR/a"
+  [ -n "$(claim_gap_changed 2>/dev/null)" ]
+  cd "$BATS_TEST_TMPDIR/b"
+  [ -n "$(claim_gap_changed 2>/dev/null)" ]
+}
+
+@test "CLAIM_GAP_STATE_FILE override still wins over the durable default" {
+  export CLAIMANT_STATE_DIR="$BATS_TEST_TMPDIR/cstate"
+  run _cg_state_file
+  [ "$output" = "$CLAIM_GAP_STATE_FILE" ]
+}
