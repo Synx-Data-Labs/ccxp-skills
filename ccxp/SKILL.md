@@ -117,7 +117,7 @@ bash <skills-root>/_session/claim_gap.sh
 - Verified live: 3 of a previously-flagged set of 4 `Design`-status tasks had simply never been claimed at all (`claimed_by` empty since their seed-migration commit, untouched since) — flagging those was the bug, not a symptom of one.
 - `In Progress` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
 
-- No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup — the script now remembers the last-posted list's hash in `.claude/state/claim-gap-last.json` and stays silent on a repeat).
+- No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup — the script now remembers the last-posted list's hash in a durable per-user, per-repo file under `~/.claude/state/claim-gap/`, shared by every clone of the repo, and stays silent on a repeat).
 - Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into.
 - See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
 

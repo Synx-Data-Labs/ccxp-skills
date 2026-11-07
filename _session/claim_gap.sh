@@ -87,9 +87,28 @@ claim_gap() {
 # Where the last-posted gap list's hash is remembered, so callers can skip
 # re-Slacking an unchanged finding every tick (T20260809-310724 root cause C:
 # the sweep re-Slacked the same 7-task list 4+ consecutive ticks in one day).
-# Repo-relative, same convention as TASK_CLAIM_DIR — override for tests.
+#
+# Default is a durable per-user, per-repo file (T20260821-196067), NOT a path
+# inside the working tree: a cwd-relative default meant every tick that ran in
+# a fresh clone/worktree started with no state and re-Slacked an unchanged
+# finding (20+ repeat posts over 2026-09-11..14). The key is the sha256 of the
+# origin URL (fallback: toplevel path, then cwd) so all clones of one repo
+# share one record and different repos never collide.
+# CLAIM_GAP_STATE_FILE overrides everything (tests, explicit control).
+_cg_repo_key() {
+  local id
+  id="$(git remote get-url origin 2>/dev/null)" || id=""
+  [ -n "$id" ] || id="$(git rev-parse --show-toplevel 2>/dev/null)" || id=""
+  [ -n "$id" ] || id="$PWD"
+  printf '%s' "$id" | claimant_sha256 | cut -c1-16
+}
+
 _cg_state_file() {
-  printf '%s' "${CLAIM_GAP_STATE_FILE:-.claude/state/claim-gap-last.json}"
+  if [ -n "${CLAIM_GAP_STATE_FILE:-}" ]; then
+    printf '%s' "$CLAIM_GAP_STATE_FILE"
+    return 0
+  fi
+  printf '%s/claim-gap/%s.json' "$CLAIMANT_STATE_DIR" "$(_cg_repo_key)"
 }
 
 # Hash just the flagged task IDs (sorted, deduped) — not full lines — so a
