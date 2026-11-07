@@ -56,6 +56,15 @@ scheduled: 2026-11-02
 - **Helper**: `1password-env-setup/scripts/refresh-env.sh`, sourceable and function-wrapped; the skill copies it to `<dir>/refresh-env` (self-contained, executable, idempotent) so launchd, session hooks and scripts call `<dir>/refresh-env`.
 - **.envrc template** calls `./refresh-env .` and runs `dotenv .env` only when it succeeds; otherwise `log_error` with the same message.
 - **Skill script**: `pes-materialize-env` delegates to the same function, mapping exit 10 (op missing) to the existing skip-with-guidance behaviour.
+- **Hardening (from independent review)**:
+  - Portability: `shasum -a 256`, falling back to `sha256sum`; the op wait is a background `op` plus a watchdog `kill` (uses `timeout`/`gtimeout` when present; 124 maps to 75).
+  - Concurrency: a `mkdir` lock (`.env.refresh.lock`); a caller that finds it held waits briefly, then exits 75 without touching the cache. The temp file is created with `mktemp` in the same directory under `umask 077`, removed by a `trap` on every exit path. Both hashes are written before the final `mv`, so a reader never sees a mismatch on a healthy cache.
+  - Secrets: state files are mode 0600; `op` stderr is shown only as its first line with any line quoting a template value dropped; the `.env` hash is kept because edit detection needs it (the values are high-entropy tokens, and the file is 0600 and local).
+  - Exit codes: 0 fresh or refreshed; 1 internal error; 10 `op` missing; 75 needs unlock, timeout or lock held; `--check` uses 0 fresh, 3 stale, so stale is distinct from an error. A non-interactive caller (launchd, `set -e`) treats any non-zero as "do not load the cache", and 75 means retry after the owner unlocks.
+  - `--force` refreshes regardless of hashes, covering a vault value rotated with the template unchanged (hashes cannot see that; stated non-goal).
+  - First run: no state means stale, so the first call after upgrading costs one biometric approval. Adopting an existing `.env` as fresh is rejected because the existing cache may be exactly the drifted one.
+  - Drift report scope: simple `KEY=value` lines only (optional `export`, comments skipped); multi-line values are out of scope.
+  - Already-deployed `.envrc` files keep the old mtime logic until the skill is re-run; the owner must re-run it.
 - **Alternatives rejected**: hashing `op://` resolved values (stores secret-derived data); comparing `.env` values to `op read` (needs biometric on every check); keeping mtime and adding hash only for the template (misses the hand-edit case in this incident).
 
 ## Test plan
@@ -63,6 +72,7 @@ scheduled: 2026-11-02
 - [ ] BATS (fake `op` stub only, fake values): tpl hash change refreshes; outside edit of `.env` refreshes; missing hash file refreshes; unchanged skips without calling `op`
 - [ ] BATS: `op` failure and timeout exit 75, keep the old `.env`, record no hash, print the unlock message
 - [ ] BATS: `--check` reports key names only (no values) for missing or unresolved keys
+- [ ] BATS: `--force`; lock held; stale lock-free retry; `--check` exit 3 vs error 1; empty template; unwritable dir
 - [ ] BATS: generated `.envrc` content and that the skill copies an executable `refresh-env`
 - [ ] CI: `bats` job green on the PR
 - [ ] Post-merge, owner: re-run `/1password-env-setup` on `~/.claude`, approve the biometric prompt once
