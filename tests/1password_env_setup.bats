@@ -20,7 +20,7 @@ setup() {
   STUB_BIN="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_BIN"
   local tool src
-  for tool in bash sh cat printf env rm mkdir dirname head wc; do
+  for tool in bash sh cat printf env rm mkdir dirname basename head wc cut mktemp mv chmod cp cmp grep sleep kill shasum sha256sum perl tr sed; do
     src="$(command -v "$tool" 2>/dev/null || true)"
     [ -n "$src" ] && ln -sf "$src" "$STUB_BIN/$tool"
   done
@@ -82,9 +82,10 @@ EOF
 @test "pes-envrc-content emits the skip-if-populated template" {
   run env PATH="$STUB_BIN" bash -c "source '$SCRIPT'; pes-envrc-content"
   [ "$status" -eq 0 ]
-  [[ "$output" == *'if [ -f .env ] && [ .env -nt .env.tpl ]; then'* ]]
-  [[ "$output" == *'op inject -i .env.tpl -o .env'* ]]
+  [[ "$output" == *'./refresh-env .'* ]]
   [[ "$output" == *'dotenv .env'* ]]
+  [[ "$output" == *'log_error'* ]]
+  [[ "$output" != *'-nt'* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -112,7 +113,7 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == "wrote: $REPO/.envrc" ]]
   [ -f "$REPO/.envrc" ]
-  grep -q "op inject -i .env.tpl -o .env" "$REPO/.envrc"
+  grep -q "./refresh-env ." "$REPO/.envrc"
 }
 
 @test "pes-write-envrc is idempotent when content already matches" {
@@ -134,16 +135,6 @@ EOF
 # pes-materialize-env
 # ---------------------------------------------------------------------------
 
-@test "pes-materialize-env skips when .env is already newer than .env.tpl" {
-  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
-  sleep 1.1
-  echo "FOO=bar" >"$REPO/.env"
-  run env PATH="$STUB_BIN" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO'"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"already newer than .env.tpl"* ]]
-  [ "$(cat "$REPO/.env")" = "FOO=bar" ]
-}
-
 @test "pes-materialize-env prints install guidance and skips when op is not installed" {
   echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
   run env PATH="$STUB_BIN" bash -c "source '$SCRIPT'; pes-materialize-env '$REPO' 2>&1"
@@ -160,7 +151,7 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"materialized: $REPO/.env"* ]]
   [ -f "$REPO/.env" ]
-  grep -q "inject -i $REPO/.env.tpl -o $REPO/.env" "$OP_CALLS"
+  grep -q "inject -i $REPO/.env.tpl -o $REPO/.env.tmp." "$OP_CALLS"
 }
 
 # A fake `op` whose `inject` always fails (T20260918-214522). $1, when set to
@@ -220,7 +211,7 @@ EOF
 echo "op \$*" >>"$OP_CALLS"
 if [ "\$1" = "inject" ]; then
   echo "[WARNING] some benign op warning" >&2
-  echo "materialized" >"$REPO/.env"
+  [ "\$2" = "-i" ] && echo "materialized" >"\$5"
 fi
 EOF
   chmod +x "$STUB_BIN/op"
@@ -307,4 +298,268 @@ EOF
   run env PATH="$STUB_BIN" bash -c "cd '$REPO' && source '$SCRIPT' && 1password-env-setup 2>&1"
   [ "$status" -eq 0 ]
   [ -f "$REPO/.envrc" ]
+}
+
+# ---------------------------------------------------------------------------
+# refresh-env (T20261107-939110): content-hash freshness, drift, unlock message
+# ---------------------------------------------------------------------------
+
+REFRESH="$REPO_ROOT/1password-env-setup/scripts/refresh-env.sh"
+
+# Run refresh-env (sourced) with the stubbed PATH; extra env as leading args.
+_re() { env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" "$@" ; }
+_run_re() {
+  local args="$*"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" bash -c "source '$REFRESH'; refresh-env $args 2>&1"
+}
+
+_re_setup() {
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  : >"$OP_CALLS"
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  _stub_op
+}
+
+@test "refresh-env first run (no state) refreshes, records both hashes, mode 0600" {
+  _re_setup
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reason: missing"* ]]
+  [[ "$output" == *"materialized: $REPO/.env"* ]]
+  [ -s "$REPO/.env.tpl.sha256" ]
+  [ -s "$REPO/.env.sha256" ]
+  [ "$(stat -c %a "$REPO/.env" 2>/dev/null || stat -f %Lp "$REPO/.env")" = "600" ]
+}
+
+@test "refresh-env skips op when template and cache hashes match" {
+  _re_setup
+  _run_re "'$REPO'"
+  : >"$OP_CALLS"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"unchanged: $REPO/.env fresh"* ]]
+  [ ! -s "$OP_CALLS" ]
+}
+
+@test "refresh-env refreshes when .env.tpl content changes even if .env is newer" {
+  _re_setup
+  _run_re "'$REPO'"
+  echo "BAR=op://vault/item/other" >>"$REPO/.env.tpl"
+  touch -t 203001010000 "$REPO/.env"   # .env looks newer than the template
+  : >"$OP_CALLS"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reason: tpl-changed"* ]]
+  grep -q "inject" "$OP_CALLS"
+}
+
+@test "refresh-env refreshes when .env was edited outside the generator (the incident)" {
+  _re_setup
+  _run_re "'$REPO'"
+  echo "FOO=fake-literal-value" >"$REPO/.env"   # hand edit, newer than the template
+  : >"$OP_CALLS"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reason: env-edited-outside-generator"* ]]
+  grep -q "inject" "$OP_CALLS"
+  [ "$(cat "$REPO/.env")" = "materialized" ]
+}
+
+@test "refresh-env treats a populated .env with no hash files as stale (no-state)" {
+  _re_setup
+  echo "FOO=fake" >"$REPO/.env"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reason: no-state"* ]]
+  grep -q "inject" "$OP_CALLS"
+}
+
+@test "refresh-env --force refreshes even when hashes match" {
+  _re_setup
+  _run_re "'$REPO'"
+  : >"$OP_CALLS"
+  _run_re "--force '$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"reason: forced"* ]]
+  grep -q "inject" "$OP_CALLS"
+}
+
+@test "refresh-env --check reports fresh with exit 0 and never calls op" {
+  _re_setup
+  _run_re "'$REPO'"
+  : >"$OP_CALLS"
+  _run_re "--check '$REPO'"
+  [ "$status" -eq 0 ]
+  [ "$output" = "fresh" ]
+  [ ! -s "$OP_CALLS" ]
+}
+
+@test "refresh-env --check reports stale (exit 3) with drift key NAMES only, no values" {
+  _re_setup
+  printf 'FOO=op://vault/item/field\nBAR=op://vault/item/b\nBAZ=plain\n' >"$REPO/.env.tpl"
+  printf 'FOO=fake-secret-literal\nBAZ=plain\n' >"$REPO/.env"
+  _run_re "--check '$REPO'"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"stale: no-state"* ]]
+  [[ "$output" == *"drift: BAR"* ]]            # missing from .env
+  [[ "$output" != *"drift: FOO"* ]]            # resolved literal is normal
+  [[ "$output" != *"fake-secret-literal"* ]]   # values never printed
+  [ ! -s "$OP_CALLS" ]
+}
+
+@test "refresh-env --check flags a key left as an unresolved op:// string" {
+  _re_setup
+  echo "FOO=op://vault/item/field" >"$REPO/.env"
+  _run_re "--check '$REPO'"
+  [ "$status" -eq 3 ]
+  [[ "$output" == *"drift: FOO"* ]]
+}
+
+@test "refresh-env errors (exit 2) when .env.tpl is missing" {
+  _re_setup
+  rm "$REPO/.env.tpl"
+  _run_re "'$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *".env.tpl not found"* ]]
+}
+
+@test "refresh-env exits 10 with install guidance when op is missing and a refresh is needed" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  _run_re "'$REPO'"
+  [ "$status" -eq 10 ]
+  [[ "$output" == *"op (1Password CLI) not installed"* ]]
+  [ ! -f "$REPO/.env" ]
+}
+
+@test "refresh-env op needing unlock: clear message, exit 75, old cache and hashes untouched" {
+  _re_setup
+  _run_re "'$REPO'"
+  cp "$REPO/.env.sha256" "$BATS_TEST_TMPDIR/env.sha.before"
+  echo "FOO=fake-edited" >"$REPO/.env"
+  cat >"$STUB_BIN/op" <<'EOF'
+#!/usr/bin/env bash
+echo "[ERROR] you are not signed in; unlock 1Password to authorize" >&2
+exit 1
+EOF
+  chmod +x "$STUB_BIN/op"
+  _run_re "'$REPO'"
+  [ "$status" -eq 75 ]
+  [[ "$output" == *"needs your unlock"* ]]
+  [[ "$output" == *"NOT changed"* ]]
+  [ "$(cat "$REPO/.env")" = "FOO=fake-edited" ]
+  cmp -s "$REPO/.env.sha256" "$BATS_TEST_TMPDIR/env.sha.before"
+  # next call still sees it as stale (hash not recorded), so it retries
+  _run_re "--check '$REPO'"
+  [ "$status" -eq 3 ]
+}
+
+@test "refresh-env op hanging past REFRESH_ENV_OP_TIMEOUT exits 75 with the unlock message" {
+  _re_setup
+  cat >"$STUB_BIN/op" <<'EOF'
+#!/usr/bin/env bash
+exec sleep 30
+EOF
+  chmod +x "$STUB_BIN/op"
+  run env PATH="$STUB_BIN" REFRESH_ENV_OP_TIMEOUT=1 bash -c "source '$REFRESH'; refresh-env '$REPO' 2>&1"
+  [ "$status" -eq 75 ]
+  [[ "$output" == *"needs your unlock"* ]]
+  [ ! -f "$REPO/.env" ]
+  [ ! -f "$REPO/.env.tpl.sha256" ]
+}
+
+@test "refresh-env generic op failure exits 1, keeps old cache, leaves no temp files" {
+  _re_setup
+  _stub_op_failing generic
+  echo "FOO=fake-old" >"$REPO/.env"
+  _run_re "'$REPO'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed: op inject"* ]]
+  [ "$(cat "$REPO/.env")" = "FOO=fake-old" ]
+  ! ls "$REPO"/.env.tmp.* "$REPO"/.env.err.* 2>/dev/null
+  [ ! -d "$REPO/.env.refresh.lock" ]
+}
+
+@test "refresh-env does not echo template-quoting op stderr lines" {
+  _re_setup
+  cat >"$STUB_BIN/op" <<'EOF'
+#!/usr/bin/env bash
+echo "could not resolve FOO=op://vault/item/field" >&2
+echo "[ERROR] plain failure line" >&2
+exit 1
+EOF
+  chmod +x "$STUB_BIN/op"
+  _run_re "'$REPO'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"plain failure line"* ]]
+  [[ "$output" != *"op://vault/item/field"* ]]
+}
+
+@test "refresh-env exits 75 when another live refresh holds the lock, cache untouched" {
+  _re_setup
+  mkdir "$REPO/.env.refresh.lock"
+  echo "$$" >"$REPO/.env.refresh.lock/pid"   # this bats process is alive
+  run env PATH="$STUB_BIN" REFRESH_ENV_LOCK_WAIT=1 bash -c "source '$REFRESH'; refresh-env '$REPO' 2>&1"
+  [ "$status" -eq 75 ]
+  [[ "$output" == *"holds"* ]]
+  [ ! -f "$REPO/.env" ]
+}
+
+@test "refresh-env breaks a stale lock left by a dead process" {
+  _re_setup
+  mkdir "$REPO/.env.refresh.lock"
+  echo "999999" >"$REPO/.env.refresh.lock/pid"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.env" ]
+  [ ! -d "$REPO/.env.refresh.lock" ]
+}
+
+@test "refresh-env fails cleanly (exit 1) when op produces an empty file" {
+  _re_setup
+  printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_BIN/op"
+  chmod +x "$STUB_BIN/op"
+  _run_re "'$REPO'"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"empty file"* ]]
+  [ ! -f "$REPO/.env.tpl.sha256" ]
+}
+
+@test "refresh-env rejects an unknown flag with usage (exit 2)" {
+  _re_setup
+  _run_re "--bogus '$REPO'"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"usage:"* ]]
+}
+
+@test "refresh-env executed directly works (standalone, no argument defaults to its own dir when named refresh-env)" {
+  _re_setup
+  cp "$REFRESH" "$REPO/refresh-env"
+  chmod +x "$REPO/refresh-env"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" "$REPO/refresh-env"
+  [ "$status" -eq 0 ]
+  [ -f "$REPO/.env" ]
+}
+
+@test "pes-install-helper copies an executable refresh-env and is idempotent" {
+  run env PATH="$STUB_BIN" bash -c "source '$SCRIPT'; pes-install-helper '$REPO'"
+  [ "$status" -eq 0 ]
+  [[ "$output" == "wrote: $REPO/refresh-env" ]]
+  [ -x "$REPO/refresh-env" ]
+  run env PATH="$STUB_BIN" bash -c "source '$SCRIPT'; pes-install-helper '$REPO'"
+  [[ "$output" == "unchanged: $REPO/refresh-env" ]]
+}
+
+@test "1password-env-setup end to end installs refresh-env and a hash-based .envrc" {
+  echo "FOO=op://vault/item/field" >"$REPO/.env.tpl"
+  _stub_op
+  _stub_direnv
+  OP_CALLS="$BATS_TEST_TMPDIR/op_calls"
+  DIRENV_CALLS="$BATS_TEST_TMPDIR/direnv_calls"
+  run env PATH="$STUB_BIN" OP_CALLS="$OP_CALLS" DIRENV_CALLS="$DIRENV_CALLS" \
+    bash -c "source '$SCRIPT'; 1password-env-setup '$REPO'"
+  [ "$status" -eq 0 ]
+  [ -x "$REPO/refresh-env" ]
+  [ -s "$REPO/.env.tpl.sha256" ]
+  grep -q "./refresh-env ." "$REPO/.envrc"
 }

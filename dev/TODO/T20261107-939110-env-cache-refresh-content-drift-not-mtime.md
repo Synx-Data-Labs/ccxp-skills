@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 3
 source: Owner report 2026-11-07 (job 1010) - ~/.claude/.env stayed stale though .env.tpl defines the OAuth token as an op:// reference
 claimed_by: cc1-50ac6891:c4176cd40b4c22cc

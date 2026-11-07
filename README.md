@@ -136,7 +136,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `slack` | Send a Slack notification to a configured channel |
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
-| `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a skip-if-populated `.envrc` |
+| `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a content-hash `.envrc` and a standalone `refresh-env` helper |
 | `secrets-check` | Pre-PR secret-handling check: runs the repo's `scripts/lint-secret-handling.sh --diff` and reports masked findings |
 
 ### General-purpose utility

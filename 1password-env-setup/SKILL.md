@@ -1,6 +1,6 @@
 ---
 name: 1password-env-setup
-description: Use when the user explicitly asks to bootstrap or refresh a repo's 1Password-backed .env — generates the skip-if-populated .envrc and materializes .env from .env.tpl via op inject
+description: Use when the user explicitly asks to bootstrap or refresh a repo's 1Password-backed .env — installs the refresh-env helper, generates a hash-checking .envrc, and materializes .env from .env.tpl via op inject
 argument-hint: "[path]"
 ---
 
@@ -13,7 +13,8 @@ reference file your repo defines against your own 1Password vault):
 materializes `.env` via `op inject`, and writes a `.envrc` (direnv) that
 re-materializes it automatically on every `cd` into the repo — but skips the
 1Password round-trip (and any interactive unlock prompt it can trigger) when
-`.env` is already populated and not stale relative to `.env.tpl`.
+`.env` is fresh **by content**: the sha256 of `.env.tpl` and of the generated
+`.env` still match the hashes recorded at the last refresh. mtime is not used.
 
 This skill owns the **bootstrap mechanism only** — the `op://` reference
 list inside `.env.tpl` is repo-specific and out of scope here. An adopting
@@ -34,17 +35,15 @@ directory.
    bootstraps `.env`/`.envrc` from an existing `.env.tpl`; the `op://`
    reference list itself must already be written (design your own vault
    layout and reference format — see "Cross-references" below).
-3. Write `<path>/.envrc` with the skip-if-populated template (below).
-   Idempotent — a no-op if the file already has this exact content.
-4. Materialize `<path>/.env` via `op inject -i .env.tpl -o .env`, unless
-   `.env` is already newer than `.env.tpl` (same staleness check as the
-   `.envrc` itself performs on every `cd`). If the `op` CLI isn't installed,
-   skip with install guidance rather than failing. A failed `op inject`
-   (wrong signed-in account, network, etc.) is reported as a failure — not
-   silently printed as "materialized" — and stops the workflow
+3. Install the standalone helper as `<path>/refresh-env` (executable copy of
+   `scripts/refresh-env.sh`; idempotent), then write `<path>/.envrc` calling it
+   (below). Idempotent — a no-op if the content is already identical.
+4. Materialize `<path>/.env` through `refresh-env` (content-hash check, then
+   `op inject` only if stale). If the `op` CLI isn't installed, skip with
+   install guidance rather than failing. A failed `op inject` (wrong account,
+   network, etc.) is reported as a failure and stops the workflow
    (T20260918-214522). Set `OP_ACCOUNT` (e.g. `OP_ACCOUNT=my.1password.com`)
-   to pass `--account` through to `op inject` when the signed-in account
-   doesn't have the vault `.env.tpl` references.
+   to pass `--account` through to `op inject`.
 5. Run `direnv allow` in `<path>` so the new `.envrc` takes effect
    immediately. If `direnv` isn't installed, skip with install guidance.
 
@@ -57,18 +56,41 @@ bash <skills-root>/1password-env-setup/scripts/1password-env-setup.sh [path]
 ### The `.envrc` template
 
 ```bash
-if [ -f .env ] && [ .env -nt .env.tpl ]; then
-  : # already materialized and newer than the template -- skip the 1Password round-trip
+if ./refresh-env .; then
+  dotenv .env
 else
-  op inject -i .env.tpl -o .env
+  log_error "refresh-env failed -- .env NOT loaded (see message above); then run ./refresh-env"
 fi
-dotenv .env
 ```
 
-The mtime check (`.env` newer than `.env.tpl`) is a cheap, correct-enough
-staleness signal — a rotation always touches `.env.tpl`'s freshness relative
-to the last materialization, so a newer `.env` means nothing has changed
-since.
+### The `refresh-env` helper
+
+Callable by any process (direnv, launchd, a Claude Code hook, a script):
+`<path>/refresh-env [--check|--force] [dir]` (the installed copy defaults to
+its own directory).
+
+- **Freshness by content** — `.env.tpl.sha256` (template hash at last refresh)
+  and `.env.sha256` (hash of the `.env` the generator wrote), both mode 0600,
+  hashes only, never values. Stale reasons: `missing`, `no-state`,
+  `tpl-changed`, `env-edited-outside-generator` (a hand edit, even one newer
+  than the template, is caught).
+- **`--check`** — no `op` call; prints `fresh` (exit 0) or `stale: <reason>`
+  (exit 3) plus `drift: <KEY>` lines: keys `.env.tpl` defines as `op://`
+  references whose `.env` line is missing or still an unresolved `op://`.
+  Key names only.
+- **`--force`** — refresh regardless of hashes (a vault value rotated while the
+  template did not change cannot be seen by hashes).
+- **Unlock** — `op inject` runs with a bounded wait (`REFRESH_ENV_OP_TIMEOUT`,
+  default 60s). Timeout or an auth/sign-in failure prints a clear "1Password
+  needs your unlock" message naming the command to run, exits 75, leaves the old
+  cache and hashes untouched, and callers must not load the stale cache.
+- **Safety** — `mkdir` lock with stale-lock recovery, `mktemp` temp file under
+  `umask 077` moved into place only on success, hashes written before the move.
+- **Exit codes** — 0 fresh/refreshed, 1 error, 2 usage or no `.env.tpl`,
+  3 stale (`--check`), 10 `op` missing, 75 unlock needed, timed out or lock held.
+- **First run after upgrade** — no recorded state counts as stale, so the first
+  call costs one biometric approval. A `.envrc` deployed before this change keeps
+  its old mtime logic until the skill is re-run.
 
 ## Important Notes
 
@@ -79,7 +101,7 @@ since.
   needs additional `.envrc` logic beyond this template, add it by hand after
   running this skill, not before.
 - Helper functions (`pes-envrc-content`, `pes-check-env-tpl`,
-  `pes-write-envrc`, `pes-materialize-env`, `pes-direnv-allow`) are
+  `pes-install-helper`, `pes-write-envrc`, `pes-materialize-env`, `pes-direnv-allow`) are
   function-wrapped and BASH_SOURCE-guarded (see
   `quality-probe/scripts/probe.sh` for the same pattern), so
   BATS can source the script and unit-test each step without invoking `op`
