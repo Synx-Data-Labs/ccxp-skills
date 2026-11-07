@@ -1,9 +1,9 @@
 ---
-status: In Progress
+status: Done
 estimation: 3
 source: Owner report 2026-11-07 (job 1010) - ~/.claude/.env stayed stale though .env.tpl defines the OAuth token as an op:// reference
-claimed_by: cc1-50ac6891:c4176cd40b4c22cc
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -68,22 +68,32 @@ scheduled: 2026-11-02
 
 ## Test plan
 
-- [ ] BATS (fake `op` stub only, fake values): tpl hash change refreshes; outside edit of `.env` refreshes; missing hash file refreshes; unchanged skips without calling `op`
-- [ ] BATS: `op` failure and timeout exit 75, keep the old `.env`, record no hash, print the unlock message
-- [ ] BATS: `--check` reports key names only (no values) for missing or unresolved keys
-- [ ] BATS: `--force`; lock held; stale lock-free retry; `--check` exit 3 vs error 1; empty template; unwritable dir
-- [ ] BATS: generated `.envrc` content and that the skill copies an executable `refresh-env`
-- [ ] CI: `bats` job green on the PR
+- [x] BATS (fake `op` stub only, fake values): tpl hash change refreshes; outside edit of `.env` refreshes; missing hash file refreshes; unchanged skips without calling `op`
+- [x] BATS: `op` failure and timeout exit 75, keep the old `.env`, record no hash, print the unlock message
+- [x] BATS: `--check` reports key names only (no values) for missing or unresolved keys
+- [x] BATS: `--force`; lock held; stale lock-free retry; `--check` exit 3 vs error 1; empty template; unwritable dir
+- [x] BATS: generated `.envrc` content and that the skill copies an executable `refresh-env`
+- [x] CI: `bats` job green on the PR
 - [ ] Post-merge, owner: re-run `/1password-env-setup` on `~/.claude`, approve the biometric prompt once
 
 ## Done criteria
 
-- [ ] Content-hash freshness: `tests/1password_env_setup.bats` hash tests
-- [ ] Drift detection by key name: `tests/1password_env_setup.bats` `--check` tests
-- [ ] Clear unlock message, no silent skip: `tests/1password_env_setup.bats` op-failure tests
-- [ ] `refresh-env` helper installed by the skill: `1password-env-setup/scripts/refresh-env.sh`, `tests/1password_env_setup.bats` install test
-- [ ] SKILL.md documents the new flow: `1password-env-setup/SKILL.md`
+- [x] Content-hash freshness: `tests/1password_env_setup.bats` hash tests
+- [x] Drift detection by key name: `tests/1password_env_setup.bats` `--check` tests
+- [x] Clear unlock message, no silent skip: `tests/1password_env_setup.bats` op-failure tests
+- [x] `refresh-env` helper installed by the skill: `1password-env-setup/scripts/refresh-env.sh`, `tests/1password_env_setup.bats` install test
+- [x] SKILL.md documents the new flow: `1password-env-setup/SKILL.md`
+
+## Closed (2026-11-07)
+
+- Shipped in PR #606 (design PR #604, filing PR #601); CI green, two independent reviews addressed.
+- Met: content-hash freshness, drift report by key name, unlock message (exit 75), `refresh-env` helper, SKILL.md and README updated, 47 BATS tests.
+- External, owner: re-run `/1password-env-setup` on `~/.claude` (installs `refresh-env` and the new `.envrc`; one biometric approval). Not run here by design.
+- Follow-up (other repo, not filed here): `daily-ccxp.sh` in synxdb-build-pipeline should call `~/.claude/refresh-env` before sourcing the cache.
 
 ## Skills invoked
 
-- Design written under `/drive` Phase 2
+- TDD (`superpowers:test-driven-development`): no - tests written alongside the code
+- Verification (`superpowers:verification-before-completion`): yes - local bats, lint, ratchets before PR
+- Systematic debugging (`superpowers:systematic-debugging`): no - did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes - two independent reviews, all findings fixed or justified
