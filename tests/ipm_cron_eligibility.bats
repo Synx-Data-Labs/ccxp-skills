@@ -5,9 +5,9 @@
 load test_helper
 
 @test "cron eligibility filter admits Open + source Retro + non-empty estimation" {
-  run grep -n 'Second admission path (retro-filed items)' "$REPO_ROOT/ipm/SKILL.md"
+  run grep -n 'begins "Retro"' "$REPO_ROOT/ipm/SKILL.md"
   [ "$status" -eq 0 ]
-  run grep -n 'source:` starts with `Retro `' "$REPO_ROOT/ipm/SKILL.md"
+  run grep -n 'begins "Retro"' "$REPO_ROOT/ipm/SKILL.md"
   [ "$status" -eq 0 ]
 }
 

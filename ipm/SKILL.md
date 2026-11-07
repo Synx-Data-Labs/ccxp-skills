@@ -9,7 +9,7 @@ The Iteration Planning Meeting commits a slice of the week's focused work. `dev/
 
 Output is a single `ipm-weekly.md` file that the daily standup grades against and the Friday retro grades final on.
 
-- **Optional, ad-hoc tool — not an automatic step.** T20260924-252293 retired the mandatory Monday commit ceremony: continuous `/todo next` + `/drive` off `queue.md` is the documented day-to-day planning loop, and `/ccxp` no longer invokes this skill automatically (neither cron nor interactive mode day-of-week-triggers it — see `ccxp/SKILL.md` Phase 2a). `/ipm` stays available for a deliberate iteration re-plan — e.g. a repo that wants an explicit weekly commit snapshot in `dev/JOURNAL/` — invoked directly, any day.
+- **Optional, ad-hoc tool — not an automatic step.** T20260924-252293 retired the mandatory Monday commit ceremony: continuous `/todo next` + `/drive` off `queue.md` is the documented day-to-day planning loop, and `/ccxp` no longer invokes this skill (see `ccxp/SKILL.md` Phase 2a). `/ipm` stays available for a deliberate iteration re-plan (e.g. an explicit weekly commit snapshot in `dev/JOURNAL/`), invoked directly, any day.
 - **Callable ad hoc, any day** — re-scope after a design changes, or re-commit after a priority shift. This skill has no day-of-week check of its own; "Monday" below just names the conventional cadence for a repo that chooses to run it weekly.
 - **Missed Monday** (for a repo that does run it weekly) — the next Monday's IPM covers the gap by default (no automatic mid-week catch-up); invoke `/ipm` directly for a deliberate ad-hoc re-plan.
 - **Cron vs. interactive mode** — reads `CCXP_CRON_MODE` from the environment (inherited, no argument needed), same branching `/ccxp`'s own "Cron mode vs. interactive mode" section describes. Step 3 (pre-IPM design pass) is interactive-only, skipped when `CCXP_CRON_MODE=1`.
@@ -110,9 +110,8 @@ Do not second-guess that ordering, and do not re-derive a ranking the queue alre
 
 **Cron-mode eligibility filter.**
 
-- When `CCXP_CRON_MODE=1`, drop any candidate whose `status:` is still `Open` (it hasn't been through an interactive pre-IPM design pass — step 3 is skipped this run). Only `status: Design` candidates with a non-empty `estimation` are eligible for this week's commit.
-- **Second admission path (retro-filed items).** An `Open` candidate is also eligible when its `source:` starts with `Retro ` (e.g. `Retro 2026-08-21`) AND its `estimation` is non-empty. `/retro` Phase 4 files action items with the root cause, definition of done and a test plan already written, so that template is the trusted scoping signal. Every other `Open` task stays excluded.
-- If the filtered pool is thin, record it under `## Notes` (e.g. "3 candidates skipped — still `Open`, awaiting a pre-IPM pass") rather than reaching into `Open` tasks to fill the gap.
+- When `CCXP_CRON_MODE=1`, drop any `Open` candidate (no interactive pre-IPM design pass ran; step 3 is skipped). Eligible: `status: Design` with a non-empty `estimation`, or `Open` whose `source:` begins "Retro" with a non-empty `estimation` (`/retro` Phase 4 already writes root cause, definition of done and test plan). Every other `Open` task stays excluded.
+- A thin pool goes under `## Notes` (e.g. "3 candidates skipped, still `Open`"); never fill the gap from other `Open` tasks.
 - Interactive runs (`CCXP_CRON_MODE` unset/`0`) skip this filter and proceed straight to step 3.
 
 ### 3 Pre-IPM design pass — interactive only (skipped when `CCXP_CRON_MODE=1`)
