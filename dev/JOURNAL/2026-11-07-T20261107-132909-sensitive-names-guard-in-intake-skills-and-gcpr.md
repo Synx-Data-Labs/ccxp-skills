@@ -1,10 +1,10 @@
 ---
-status: Review
+status: Done
 estimation: 1
 source: Owner standing rule on customer/partner confidentiality, 2026-11-07
 description: Intake skills must alias names; /gcpr gets a local-denylist sensitivity check
-claimed_by: cc1-50ac6891:c5d4ccbae8a9b691
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -38,3 +38,17 @@ scheduled: 2026-11-02
 ## Done criteria
 
 - Both changes merged, tests green, no release or tag cut.
+
+## Closed
+
+- Implemented in [PR #603](https://github.com/Synx-Data-Labs/ccxp-skills/pull/603) (claim [PR #602](https://github.com/Synx-Data-Labs/ccxp-skills/pull/602), stage [PR #599](https://github.com/Synx-Data-Labs/ccxp-skills/pull/599)); close PR separate.
+- Fix:
+  - `/new-task`, `/to-task`, `/incept` carry an "alias before writing" rule (customer A / partner B).
+  - `/gcpr` step 1.7 runs `gcpr-prep.sh sensitivity-check` (engine `gcpr/scripts/sensitivity_check.py`), fail-soft when no deny-list is set.
+- Review findings fixed before merge:
+  - added lines starting with `++` were skipped (now hunk-length parsing)
+  - filenames could leak a term (now scanned and redacted as `file#<hash>`)
+  - git failures read as clean (now exit 2)
+- Tests: `tests/gcpr_sensitivity.bats` (13) plus the verb check in `tests/gcpr_prep.bats`.
+- Not done: no version bump or release (guidelines make that a separate maintainer PR).
+- Follow-ups (cosmetic): pass `--src-prefix/--dst-prefix` for `diff.mnemonicPrefix`; unescape octal-quoted control-char paths.
