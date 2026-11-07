@@ -609,12 +609,13 @@ _tc_release_others() {
   # resumed is protected, and so the short task-ids used in tests work too.
   #
   # Status handling: only an actively-claimed-but-now-abandoned task
-  # (In Progress) is returned to the
-  # pickable pool (→ Open). Every other status is
-  # PRESERVED, just shorn of its claim — critically `Design` (a completed design
-  # pass is durable progress and the IPM Tier-2 marker, T20260730-256265), `Blocked by T<id>` (the
-  # compound blocked status: resetting it to Open would re-inject a still-blocked
-  # task and destroy the blocker linkage /todo + the lint board-pass rely on),
+  # (In Progress) is returned to the pickable pool (→ Open). Every other status
+  # is PRESERVED, just shorn of its claim:
+  #   - `Design`: a completed design pass is durable progress and the IPM Tier-2
+  #     eligibility marker (T20260730-256265).
+  #   - `Blocked by T<id>` (the compound blocked status): resetting it to Open
+  #     would re-inject a still-blocked task and destroy the blocker linkage
+  #     /todo + the lint board-pass rely on.
   # `Review` (a live PR drives it), and the terminal Done/Closed/Parked.
   # Prints "released:<id>" per freed task (nothing if none).
   local except="${1:-}" mine dir f status b id except_file=""

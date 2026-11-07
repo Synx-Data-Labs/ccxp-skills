@@ -59,7 +59,7 @@ scheduled: 2026-10-19
 | `_tc_decide` (`:240`) | `none` (empty), `mine` (exact string equality with my id), else `other`. "Mine" therefore means same machine and same clone path, not same session |
 | `acquire` / `_tc_acquire` (`:552-575`) | `mine`: prints `mine`, rc 0. `none`: sets `claimed_by`, `claimed_role`, `status: In Progress`, stamps `scheduled`, prints `acquired`. `other`: prints `claimed:<cur>` and returns **rc 3**. A legacy plaintext self-claim is re-stamped in place |
 | `release` / `_tc_release` (`:583`) | clears `claimed_by` and `claimed_role`, sets the given status (default Open) |
-| `release-others` (`:592-640`) | release-on-pickup: frees every task in `dev/TODO` and `dev/PARKING` whose `claimed_by` equals my id, except the kept id; `In Progress` and `Design` fall back to `Open`, other statuses are kept. Enforces at most one claim per clone |
+| `release-others` (`:592-640`) | release-on-pickup: frees every task in `dev/TODO` and `dev/PARKING` whose `claimed_by` equals my id, except the kept id; `In Progress` falls back to `Open`, other statuses (incl. `Design`, per T20260730-256265) are kept. Enforces at most one claim per clone |
 | `read` | prints `status` and `claimed_by` |
 | `reclaimable` / `_tc_reclaimable` (`:642`) | gathers `commit_days`, `pr_days`, and a CI live-run signal, then calls `_tc_reclaim_decide` |
 | `_tc_reclaim_decide` (`:250-337`) | pure: `live` unless status is `In Progress` or `Review`, `claimed_by` is session-shaped (current `cc1-` form or legacy `<sid>@<machine>`; a human override like `Alex` is never reclaimable), no CI run is live, and **both** `commit_days >= stale` and `pr_days >= stale` (`TASK_CLAIM_STALE_DAYS`, default 2) |
