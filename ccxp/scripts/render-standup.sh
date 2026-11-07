@@ -27,6 +27,8 @@
 #   weekly_focus        {shipped, total, in_flight, not_started, trend, table?}
 #                                    absent = the Weekly focus block is omitted
 #   links               {<thread key>: "<url|Tid>"}   mrkdwn links for Blockers
+#   retro_gap           string, the one line from _session/retro_gap.sh (Friday
+#                                    ticks only); absent = nothing rendered
 #
 # Omit rules (as in SKILL.md 1.4): Weekly focus (no weekly_focus), Epic
 # progress (no epic lines) and Attribution (no ccxp/interactive rows) vanish;
@@ -117,7 +119,8 @@ render_slack() { # $1 = trim level 0|1|2
   [ \"\", \"*🚧 Blockers*\" ] +
   ( if unavail(\"threads\") then [\"• unavailable (escalation read failed)\"]
     elif (\$d.threads|length)==0 then [\"• None\"]
-    else (\$d.threads | map(\"• \((\$j.links[.key]) // .key) — \(.summary | esc)\")) end )
+    else (\$d.threads | map(\"• \((\$j.links[.key]) // .key) — \(.summary | esc)\")) end ) +
+  ( if (\$j.retro_gap // \"\") != \"\" then [\"\", \"*🗓 Retro cadence*\", \"• \(\$j.retro_gap | esc)\"] else [] end )
   | join(\"\n\")"
 }
 
@@ -161,7 +164,8 @@ render_journal() {
   [ \"\", \"## Open escalations\" ] +
   ( if unavail(\"threads\") then [\"- Unavailable — escalation read failed.\"]
     elif (\$d.threads|length)==0 then [\"- None\"] else (\$d.threads | map(\"- \(.key) — \(.summary)\")) end ) +
-  [ \"\", \"## Housekeeping\", \"- No claim housekeeping needed (one session per clone)\" ]
+  [ \"\", \"## Housekeeping\", \"- No claim housekeeping needed (one session per clone)\" ] +
+  ( if (\$j.retro_gap // \"\") != \"\" then [\"- Retro cadence: \(\$j.retro_gap)\"] else [] end )
   | join(\"\n\")"
 }
 
