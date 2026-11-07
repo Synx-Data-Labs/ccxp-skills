@@ -1,7 +1,10 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Owner report 2026-11-07 (job 1010) - ~/.claude/.env stayed stale though .env.tpl defines the OAuth token as an op:// reference
+claimed_by: cc1-50ac6891:c4176cd40b4c22cc
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261107-939110: 1password-env-setup .envrc refreshes by mtime only; a hand-edited or later-written .env is never refreshed
