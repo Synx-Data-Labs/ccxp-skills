@@ -8,6 +8,8 @@
 #   --repo-root   repo to read (default: cwd); gh runs inside it
 # Env: METRICS_GH   gh command (default `bash <skills-root>/_gh/gh.sh`)
 #      METRICS_RUN_LIMIT  run fetch cap (default 1000, gh's API cap)
+#      METRICS_MIN_SPAN_SECS  smallest window still bisected (default 3600)
+#      METRICS_MAX_FETCHES    gh run list call budget (default 64)
 #      THREADS_FILE drive-threads.json (default .claude/state/... in the repo)
 #      NOW pins the clock (stale-PR cutoff), see _date/date.sh
 #
@@ -20,12 +22,14 @@
 #   ci{total (completed runs, incl. skipped/cancelled), green (conclusion
 #      success), failed (failure, timed_out or startup_failure),
 #      pass_rate_pct (null when total is 0), top_failing[{name,failures}] top 3,
-#      oldest_created, run_limit, truncated},
+#      oldest_created, run_limit, fetches, truncated},
 #   escalations{sent (sent_at in the window), resolved (of those sent)}
 # PRs are windowed by mergedAt >= since (to the second); commits likewise; JOURNAL
 # entries and the merged search by whole calendar days from since's date.
-# truncated=true means the run list hit the fetch cap, so older runs in the
-# window were dropped: report the gap, never the rate as complete.
+# A run list that hits the cap is re-fetched by bisecting the window (disjoint
+# halves, merged). truncated=true means a window too small to split (or the
+# call budget) was still capped, so runs were dropped: report the gap, never the
+# rate as complete. fetches is the number of gh run list calls (1 on a normal week).
 # Exit: 0 ok, 2 usage, 3 any gh/git/jq failure (nothing partial is printed),
 #       4 malformed drive-threads file.
 set -uo pipefail
@@ -43,6 +47,10 @@ done
   || { echo "metrics.sh: --since must be YYYY-MM-DDTHH:MM:SSZ, got '$since'" >&2; exit 2; }
 limit="${METRICS_RUN_LIMIT:-1000}"
 [[ "$limit" =~ ^[0-9]+$ ]] && [ "$limit" -ge 1 ] || { echo "metrics.sh: bad METRICS_RUN_LIMIT" >&2; exit 2; }
+min_span="${METRICS_MIN_SPAN_SECS:-3600}"; max_fetches="${METRICS_MAX_FETCHES:-64}"
+[[ "$min_span" =~ ^[0-9]+$ && "$max_fetches" =~ ^[0-9]+$ ]] && [ "$max_fetches" -ge 1 ] \
+  || { echo "metrics.sh: bad METRICS_MIN_SPAN_SECS or METRICS_MAX_FETCHES" >&2; exit 2; }
+[ "$min_span" -ge 2 ] || min_span=2   # a split needs mid+1s <= hi
 [ -d "$repo" ] || { echo "metrics.sh: not a directory: $repo" >&2; exit 3; }
 command -v jq >/dev/null 2>&1 || { echo "metrics.sh: jq is required" >&2; exit 3; }
 cd "$repo" || exit 3
@@ -81,14 +89,38 @@ for f in dev/PARKING/*.md; do [ -f "$f" ] && parking=$((parking + 1)); done
 merged_raw="$("${gh_cmd[@]}" pr list --state merged --search "merged:>=$since_date" \
   --json number,title,mergedAt,createdAt,additions,deletions --limit 500)" || fail "gh pr list (merged)"
 open_raw="$("${gh_cmd[@]}" pr list --state open --json number,title,createdAt --limit 500)" || fail "gh pr list (open)"
-runs_raw="$("${gh_cmd[@]}" run list --created ">=$since" --limit "$limit" --json conclusion,name,createdAt)" || fail "gh run list"
+# fetch_runs LO HI -> appends run arrays to $runs_file, one JSON array per line.
+# HI empty = open-ended (">=LO"). A result under the cap is kept as is; a capped
+# one is bisected at the midpoint into disjoint halves (LO..MID, MID+1s..HI)
+# while the span is above min_span and the call budget lasts. A capped window
+# that cannot be split further sets capped=1 (the gap is then reported).
+fetches=0; capped=0; runs_file="$(mktemp)" || fail "mktemp"
+trap 'rm -f "$runs_file"' EXIT
+fetch_runs() {
+  local lo="$1" hi="$2" q out n lo_e hi_e mid_e
+  if [ -n "$hi" ]; then q="$lo..$hi"; else q=">=$lo"; fi
+  fetches=$((fetches + 1))
+  out="$("${gh_cmd[@]}" run list --created "$q" --limit "$limit" --json conclusion,name,createdAt)" || fail "gh run list"
+  n="$(printf '%s' "$out" | jq 'length')" || fail "gh run list (parse)"
+  if [ "$n" -lt "$limit" ]; then printf '%s\n' "$out" | jq -c . >> "$runs_file"; return 0; fi
+  lo_e="$(jq -rn --arg t "$lo" '$t | fromdateiso8601')" || fail "time maths"
+  hi_e="$(jq -rn --arg t "${hi:-$now_iso}" '$t | fromdateiso8601')" || fail "time maths"
+  if [ $((hi_e - lo_e)) -le "$min_span" ] || [ $((fetches + 2)) -gt "$max_fetches" ]; then
+    capped=1; printf '%s\n' "$out" | jq -c . >> "$runs_file"; return 0
+  fi
+  mid_e=$(((lo_e + hi_e) / 2))
+  fetch_runs "$lo" "$(jq -rn --argjson e "$mid_e" '$e | todate')" || return 1
+  fetch_runs "$(jq -rn --argjson e "$((mid_e + 1))" '$e | todate')" "$hi" || return 1
+}
+fetch_runs "$since" "" || fail "gh run list"
+runs_raw="$(jq -s 'add // []' "$runs_file")" || fail "merging runs"
 
 esc="$(bash "$ROOT/_threads/threads.sh" list)"; rc=$?
 [ "$rc" -eq 0 ] || { echo "metrics.sh: drive-threads file unreadable or malformed" >&2; exit 4; }
 
 jq -n -c --arg since "$since" --arg until "$now_iso" --arg stale "$stale_cut" \
   --argjson commits "$commits" --argjson tasks "$tasks" --argjson todo "$todo" --argjson parking "$parking" \
-  --argjson limit "$limit" --slurpfile merged <(printf '%s' "$merged_raw") \
+  --argjson limit "$limit" --argjson fetches "$fetches" --argjson capped "$capped" --slurpfile merged <(printf '%s' "$merged_raw") \
   --slurpfile open <(printf '%s' "$open_raw") --slurpfile runs <(printf '%s' "$runs_raw") \
   --arg esc "$esc" '
   ($merged[0] | map(select(.mergedAt >= $since))) as $m
@@ -113,6 +145,6 @@ jq -n -c --arg since "$since" --arg until "$now_iso" --arg stale "$stale_cut" \
           top_failing: ($fails | group_by(.name) | map({name: .[0].name, failures: length})
                         | sort_by(-.failures, .name) | .[:3]),
           oldest_created: ($r | map(.createdAt) | min // null),
-          run_limit: $limit, truncated: (($r | length) >= $limit)},
+          run_limit: $limit, fetches: $fetches, truncated: ($capped == 1)},
      escalations: {sent: ($e | length), resolved: ($e | map(select(.[1] == "true")) | length)}}
 ' || fail "assembling JSON"

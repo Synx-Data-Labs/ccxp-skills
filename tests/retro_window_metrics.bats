@@ -184,14 +184,76 @@ J
 @test "metrics: a run list that hits the cap is reported truncated" {
   seed
   jq -n '[range(0;1000) | {conclusion:"success",name:"CI",createdAt:"2026-10-29T00:00:00Z"}]' > "$FX/run_list.json"
+  export METRICS_MIN_SPAN_SECS=999999999
   run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.ci.truncated == true and .ci.total == 1000 and .ci.pass_rate_pct == 100'
 }
 
+# Bisect fixtures: since 2026-10-23T12:00:00Z, NOW 2026-10-30T12:00:00Z, so the
+# window is 604800s and the midpoint epoch splits it at 2026-10-27T00:00:00Z.
+bisect_fixtures() {
+  seed
+  local lim="--limit 3 --json conclusion,name,createdAt"
+  jq -n '[range(0;3) | {conclusion:"success",name:"CI",createdAt:"2026-10-29T00:00:00Z"}]' \
+    > "$FX/run_list_created_2026_10_23T12_00_00Z_limit_3.json"
+  jq -n '[{conclusion:"failure",name:"Old",createdAt:"2026-10-24T00:00:00Z"},
+          {conclusion:"success",name:"CI",createdAt:"2026-10-27T00:00:00Z"}]' \
+    > "$FX/run_list_created_2026_10_23T12_00_00Z_2026_10_27T00_00_00Z_limit_3.json"
+  jq -n '[{conclusion:"success",name:"CI",createdAt:"2026-10-27T00:00:01Z"},
+          {conclusion:"failure",name:"New",createdAt:"2026-10-29T00:00:00Z"}]' \
+    > "$FX/run_list_created_2026_10_27T00_00_01Z_limit_3.json"
+}
+
+@test "metrics: a capped window is bisected and the halves are merged" {
+  bisect_fixtures
+  METRICS_RUN_LIMIT=3 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.total == 4 and .ci.green == 2 and .ci.failed == 2 and .ci.fetches == 3
+    and .ci.truncated == false and .ci.oldest_created == "2026-10-24T00:00:00Z"
+    and .ci.top_failing == [{name:"New",failures:1},{name:"Old",failures:1}]'
+  assert_calls "$FAKE_GH_LOG" '^run list --created 2026-10-23T12:00:00Z..2026-10-27T00:00:00Z --limit 3 '
+  assert_calls "$FAKE_GH_LOG" '^run list --created >=2026-10-27T00:00:01Z --limit 3 '
+}
+
+@test "metrics: a run at the midpoint and one at mid+1s are each counted once" {
+  bisect_fixtures
+  METRICS_RUN_LIMIT=3 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.total == 4'
+}
+
+@test "metrics: normal week makes a single run list call" {
+  seed
+  run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.fetches == 1 and .ci.truncated == false'
+  [ "$(grep -c '^run list' "$FAKE_GH_LOG")" -eq 1 ]
+}
+
+@test "metrics: capped leaf under the minimum span is reported truncated" {
+  bisect_fixtures
+  METRICS_RUN_LIMIT=3 METRICS_MIN_SPAN_SECS=999999999 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.truncated == true and .ci.fetches == 1 and .ci.total == 3'
+}
+
+@test "metrics: call-budget exhaustion on a capped window reports truncated" {
+  bisect_fixtures
+  METRICS_RUN_LIMIT=3 METRICS_MAX_FETCHES=2 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.truncated == true and .ci.fetches == 1'
+}
+
+@test "metrics: bad METRICS_MIN_SPAN_SECS is a usage error" {
+  seed
+  METRICS_MIN_SPAN_SECS=abc run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 2 ]
+}
+
 @test "metrics: METRICS_RUN_LIMIT is the cap used" {
   seed
-  METRICS_RUN_LIMIT=7 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  METRICS_MIN_SPAN_SECS=999999999 METRICS_RUN_LIMIT=7 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.ci.truncated == true and .ci.run_limit == 7'
   assert_calls "$FAKE_GH_LOG" '--limit 7 '
@@ -313,4 +375,11 @@ J
   METRICS_GH="bash $BATS_TEST_TMPDIR/wrapgh.sh --tag x" run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
   [ "$status" -eq 0 ]
   echo "$output" | jq -e '.prs.merged == 2'
+}
+
+@test "metrics: METRICS_MIN_SPAN_SECS below 2 is clamped so splitting terminates" {
+  bisect_fixtures
+  METRICS_RUN_LIMIT=3 METRICS_MIN_SPAN_SECS=0 run bash "$METRICS" --since 2026-10-23T12:00:00Z --repo-root "$R"
+  [ "$status" -eq 0 ]
+  echo "$output" | jq -e '.ci.total == 4 and .ci.truncated == false'
 }
