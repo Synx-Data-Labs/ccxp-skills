@@ -744,6 +744,24 @@ print('ok')
   [ "$(_tc_pr_owner 123)" = "owned:otherbox:/home/other/clone" ]
 }
 
+@test "pr-owner: our OWN legacy <host>:<path> claim -> mine (T20260914-293476)" {
+  session_pr_task_id()        { printf 'T20260622-404636'; }
+  _tc_resolve_task_location() { printf 'O/R\tdev/TODO/T20260622-404636-x.md'; }
+  _tc_claimant_id()           { printf 'cc1-9a4074da:6c43e8c778f8967b'; }
+  claimant_clone_path()       { printf '/home/ci/clone'; }
+  _tc_fetch_fm_field()        { printf 'oldhost:/home/ci/clone'; }
+  [ "$(_tc_pr_owner 123)" = "mine" ]
+}
+
+@test "pr-owner: a legacy claim from a DIFFERENT clone still defers (T20260914-293476)" {
+  session_pr_task_id()        { printf 'T20260622-404636'; }
+  _tc_resolve_task_location() { printf 'O/R\tdev/TODO/T20260622-404636-x.md'; }
+  _tc_claimant_id()           { printf 'cc1-9a4074da:6c43e8c778f8967b'; }
+  claimant_clone_path()       { printf '/home/ci/clone'; }
+  _tc_fetch_fm_field()        { printf 'oldhost:/home/other/clone'; }
+  [ "$(_tc_pr_owner 123)" = "owned:oldhost:/home/other/clone" ]
+}
+
 @test "pr-owner: task location unresolvable -> unknown (fail-safe: caller defers)" {
   session_pr_task_id()        { printf 'T20260622-404636'; }
   _tc_resolve_task_location() { return 1; }             # could not resolve repo/path

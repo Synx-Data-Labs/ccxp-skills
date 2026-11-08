@@ -958,6 +958,12 @@ _tc_pr_owner() {
   if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine" "$(claimant_clone_path)"; then
     decision="mine"
   fi
+  # T20260914-293476: our own pre-migration "<host>:<path>" claim reads as mine
+  # here too (acquire and verify-landed already do), else a legitimate close-out
+  # PR stalls as owned:<legacy> until someone re-acquires.
+  if [ "$decision" = "other" ] && _tc_is_legacy_self_claim "$claimed_by" "$(claimant_clone_path)"; then
+    decision="mine"
+  fi
   case "$decision" in
     none)  if [ "$via_head" = 1 ]; then printf 'new\n'; else printf 'free\n'; fi ;;
     mine)  printf 'mine\n' ;;
