@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 3
 source: owner request in this conversation, 2026-11-08
 related: T20260911-698434
-claimed_by: cc1-9f320372:3be9260d500b0fcc
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -70,19 +70,19 @@ scheduled: 2026-11-02
 
 ## Test plan
 
-- [ ] Unit: `tests/profile_dir.bats` covers each resolution step, a set-but-missing `CLAUDE_CONFIG_DIR`, a symlinked cache path (expects the profile before the link), a path with spaces, a trailing slash, an unset `HOME`, and `ccxp_env_files`
-- [ ] Isolation: with `CLAUDE_CONFIG_DIR` and `HOME` both temp dirs, run `claimant-id.sh`, `last-input-hook.sh`, `hud-lib.sh` helpers, `_lib.sh` `session_cc_session_id` and assert `$HOME/.claude` is never created
-- [ ] Backward compat: with `CLAUDE_CONFIG_DIR` unset and a clone path outside the cache, state lands in `$HOME/.claude/state` exactly as before
-- [ ] Lint: `tests/profile_dir_lint.bats` passes on the tree and fails on a planted `$HOME/.claude` line
-- [ ] CI: the full `bats tests/` suite and the repo lints are green on the PR
+- [x] Unit: `tests/profile_dir.bats` covers each resolution step, a set-but-missing `CLAUDE_CONFIG_DIR`, a symlinked cache path (expects the profile before the link), a path with spaces, a trailing slash, an unset `HOME`, and `ccxp_env_files`
+- [x] Isolation: with `CLAUDE_CONFIG_DIR` and `HOME` both temp dirs, run `claimant-id.sh`, `last-input-hook.sh`, `hud-lib.sh` helpers, `_lib.sh` `session_cc_session_id` and assert `$HOME/.claude` is never created
+- [x] Backward compat: with `CLAUDE_CONFIG_DIR` unset and a clone path outside the cache, state lands in `$HOME/.claude/state` exactly as before
+- [x] Lint: `tests/profile_dir_lint.bats` passes on the tree and fails on a planted `$HOME/.claude` line
+- [x] CI: the full `bats tests/` suite and the repo lints are green on the PR
 
 ## Done criteria
 
-- [ ] One helper, no other shell code line holds a bare profile literal: `_session/lint_profile_dir.sh`, `tests/profile_dir_lint.bats`
-- [ ] The three named defaults honor the profile: `_session/claimant-id.sh`, `hud/scripts/hud-lib.sh`, `hud/scripts/last-input-hook.sh`, tested in `tests/profile_dir.bats`
-- [ ] No `~/.claude` is created under a temp `HOME` when `CLAUDE_CONFIG_DIR` is set: `tests/profile_dir.bats`
-- [ ] Unset `CLAUDE_CONFIG_DIR` behaves as before: `tests/profile_dir.bats` backward-compat case
-- [ ] No release, tag or version bump in the PR: diff of `.claude-plugin/plugin.json` is empty
+- [x] One helper, no other shell code line holds a bare profile literal: `_session/lint_profile_dir.sh`, `tests/profile_dir_lint.bats`
+- [x] The three named defaults honor the profile: `_session/claimant-id.sh`, `hud/scripts/hud-lib.sh`, `hud/scripts/last-input-hook.sh`, tested in `tests/profile_dir.bats`
+- [x] No `~/.claude` is created under a temp `HOME` when `CLAUDE_CONFIG_DIR` is set: `tests/profile_dir.bats`
+- [x] Unset `CLAUDE_CONFIG_DIR` behaves as before: `tests/profile_dir.bats` backward-compat case
+- [x] No release, tag or version bump in the PR: diff of `.claude-plugin/plugin.json` is empty
 
 ## Repo file references
 
@@ -98,3 +98,21 @@ scheduled: 2026-11-02
 | `hooks/*.sh`, `hooks/secret-guard.py`, `repo-conventions/scripts/lint_refs.py` | 22-28, 271, 296 | hook config and log paths |
 | `agent-pairing/assets/ccxp-agent.md`, `retro/SKILL.md` | 466, 469 | agent-executed prose with a bare `~/.claude` |
 | other hud, agent-pairing, eta, repos, memory-to-skill scripts | see lint output | inline fallbacks moved to the helper |
+
+## Closed (2026-11-08)
+
+- Shipped in PR #613 (design in #612, claim in #611); CI green on head a9b3b88
+- Met: one helper `_session/profile-dir.sh`; the three named defaults and about 25 other sites use it; lint `_session/lint_profile_dir.sh`; `tests/profile_dir.bats` (temp HOME and CLAUDE_CONFIG_DIR create no `~/.claude`) and `tests/profile_dir_lint.bats`
+- Added beyond the design after review: one-time carry-over of the claimant and session identity state from the legacy `~/.claude/state` (`ccxp_adopt_legacy_state`), so named profiles keep their claims
+- Not done / noted
+  - Quality probe was not run for this task
+  - No release, tag or version bump: the owner decides the next plugin version
+  - A script copied out of the plugin tree without `_session/` gets an empty `CCXP_PROFILE_DIR` (documented, unsupported)
+  - `.env` loaders still fall back to the legacy `~/.claude/.env`: a named profile can read a default profile's `.env` when its own is missing
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, tests written after the code in the same PR
+- Verification (`superpowers:verification-before-completion`): partial, CI gates and independent review rounds on #613
+- Systematic debugging (`superpowers:systematic-debugging`): no, failures were direct (PATH-restricted dirname, source-time resolution in tests)
+- Receiving code review (`superpowers:receiving-code-review`): yes, /address-pr step d on #611, #612 and #613
