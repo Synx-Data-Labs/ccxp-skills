@@ -54,4 +54,3 @@ reprioritize.
 - [T20261103-169088](T20261103-169088-autopilot-config-and-raise-default-caps.md): Add /autopilot config and raise autopilot default caps
 - [T20261103-139722](T20261103-139722-ccxp-agent-decisions-log.md): ccxp-agent decisions log (`ledger.sh decision ...`)
 - [T20261107-228304](T20261107-228304-daily-ccxp-inside-ccxp-agent.md): Daily ccxp (standup, ipm, retro) runs from ccxp-agent on any platform
-- [T20261108-315759](T20261108-315759-plugin-scripts-detect-active-profile-dir.md): Plugin scripts must detect the active profile dir instead of assuming ~/.claude
