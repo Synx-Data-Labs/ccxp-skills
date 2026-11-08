@@ -1,6 +1,6 @@
 ---
 status: Design
-estimation: 1
+estimation: 3
 source: owner request in this conversation, 2026-11-08
 related: T20260911-698434
 claimed_by: cc1-9f320372:3be9260d500b0fcc
@@ -48,14 +48,18 @@ scheduled: 2026-11-02
 
 ## Solution
 
-- New `_session/profile-dir.sh` (sourceable, no `set`, no I/O at source time) defining `ccxp_profile_dir`, which prints the first match of
+- New `_session/profile-dir.sh` (sourceable, no `set`, no writes, no exports, tolerates unset `HOME`) defines `ccxp_profile_dir`; it computes once into `CCXP_PROFILE_DIR` and later calls print the cached value, so a HUD poll or prompt hook never forks twice. Resolution order, first match wins
   - `CLAUDE_CONFIG_DIR` when set and an existing directory
-  - the helper's own resolved path, when it contains `/plugins/cache/` or `/plugins/marketplaces/`: everything before that segment
-  - `$HOME/.claude` (unchanged legacy default; the one place the literal may appear)
-- Every script that needs the folder sources the helper by a path relative to itself (`<dir>/../_session/profile-dir.sh`) and calls `ccxp_profile_dir`; explicit overrides (`CLAIMANT_STATE_DIR`, `LAST_INPUT_STATE_DIR`, `CCXP_LEDGER_FILE`, ...) still win, so tests and callers are unaffected
-- `secret-guard.py` takes the log path from `secret-guard.sh` (which resolves it through the helper) instead of guessing `~` itself
-- Audit rule: fix code lines; leave comment-only and docs-only mentions (README, SKILL.md prose) alone; update user-facing error messages to name the resolved dir
-- Lint `_session/lint_profile_dir.sh`: fails on a bare `$HOME/.claude`, `${HOME}/.claude` or `~/.claude` on a non-comment line of any shell script outside the helper; run from BATS so CI enforces it
+  - the helper's own logical absolute path (`cd && pwd`, never `-P` or `readlink -f`, so a symlinked cache keeps its `/plugins/cache/` segment) when it contains `/plugins/cache/`: everything before the last such segment (hooks run from `${{CLAUDE_PLUGIN_ROOT}}`, which is inside the cache)
+  - `CLAUDE_CONFIG_DIR` when set but not yet a directory (never `~/.claude` when the owner named a profile)
+  - `$HOME/.claude` (the legacy default; the only place the literal may appear, with the lint allowlist marker)
+- Trailing slashes are stripped; `/private/var` vs `/var` is left to the caller (the test compares resolved paths)
+- Callers source the helper by a path relative to their own location (`../_session/` from `hooks`, `_slack`, `slack/scripts`; `../../_session/` from `hud/scripts` and `agent-pairing/scripts`) with a bare `[ -r ] && .` so a missing helper fails open in hooks; the legacy `$HOME/.claude/skills/_session/` fallback loops (`hud-lib.sh:30`, `eta.sh:22`) are dropped: the plugin always ships `_session/` beside them, and the literal cannot survive the lint
+- `.env` loaders (`_session/_lib.sh`, `task_claim.sh`, `attribution.sh`, `_slack/webapi.sh`, `slack-send.sh`) read `<profile>/.env` first, then the helper's `ccxp_env_files` also yields the legacy `$HOME/.claude/.env` when it differs, so an owner with a relocated profile and an old `.env` loses nothing; BATS reaches them through the existing `ENV_FILE` hook plus a direct `ccxp_env_files` test
+- `hooks/secret-guard.sh` exports `CCXP_SECRET_GUARD_LOG` (resolved through the helper) before `python3 -I`; `secret-guard.py:271` and `lint_refs.py:296` fall back to `CLAUDE_CONFIG_DIR` then `~/.claude` on a line carrying the marker `profile-dir-ok`, because Python cannot source the helper
+- Audit rule: fix every code line; fix agent-executed prose too (`agent-pairing/assets/ccxp-agent.md`, `retro/SKILL.md:466,469`: give the `${{CLAUDE_CONFIG_DIR:-$HOME/.claude}}` form); leave explanatory comments and README prose; update user-facing error messages to name the resolved dir
+- Lint `_session/lint_profile_dir.sh`: scans `*.sh` and `*.py` outside `tests/`; flags `$HOME/.claude`, `${{HOME}}/.claude`, `~/.claude` and `Path.home() / ".claude"` followed by a non-word, non-hyphen character (so `.claude-work`, `.claude-plugin` and repo-relative `.claude/state` pass) on non-comment lines, including every inline `${{CLAUDE_CONFIG_DIR:-$HOME/.claude}}`; the helper file and lines with the `profile-dir-ok` marker are exempt; run from BATS so CI enforces it
+- Env/path disagreement: `CLAUDE_CONFIG_DIR` wins over the script path (the running session is authoritative); the path derivation covers hooks and cron with no env
 - Alternatives rejected
   - Each script keeps its inline `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`: the owner asked for detection of the running session, and the path-derivation step would be copied about 25 times
   - Read the profile from the Claude Code process environment or `ps`: not portable, and a hook subprocess already inherits `CLAUDE_CONFIG_DIR` when it is set
@@ -63,7 +67,7 @@ scheduled: 2026-11-02
 
 ## Test plan
 
-- [ ] Unit: `tests/profile_dir.bats` covers all three resolution steps, a set-but-missing `CLAUDE_CONFIG_DIR`, a symlinked cache path, and a path with spaces
+- [ ] Unit: `tests/profile_dir.bats` covers each resolution step, a set-but-missing `CLAUDE_CONFIG_DIR`, a symlinked cache path (expects the profile before the link), a path with spaces, a trailing slash, an unset `HOME`, and `ccxp_env_files`
 - [ ] Isolation: with `CLAUDE_CONFIG_DIR` and `HOME` both temp dirs, run `claimant-id.sh`, `last-input-hook.sh`, `hud-lib.sh` helpers, `_lib.sh` `session_cc_session_id` and assert `$HOME/.claude` is never created
 - [ ] Backward compat: with `CLAUDE_CONFIG_DIR` unset and a clone path outside the cache, state lands in `$HOME/.claude/state` exactly as before
 - [ ] Lint: `tests/profile_dir_lint.bats` passes on the tree and fails on a planted `$HOME/.claude` line
@@ -88,5 +92,6 @@ scheduled: 2026-11-02
 | `hud/scripts/last-input-hook.sh` | 27 | last-input dir default |
 | `_session/_lib.sh`, `task_claim.sh`, `attribution.sh`, `lint_frozen.sh` | see Root cause | `.env` loaders, session-id, lint path |
 | `_slack/webapi.sh`, `slack/scripts/slack-send.sh` | 54, 49 | `.env` lookup and messages |
-| `hooks/*.sh`, `hooks/secret-guard.py` | 22-28, 271 | hook config and log paths |
+| `hooks/*.sh`, `hooks/secret-guard.py`, `repo-conventions/scripts/lint_refs.py` | 22-28, 271, 296 | hook config and log paths |
+| `agent-pairing/assets/ccxp-agent.md`, `retro/SKILL.md` | 466, 469 | agent-executed prose with a bare `~/.claude` |
 | other hud, agent-pairing, eta, repos, memory-to-skill scripts | see lint output | inline fallbacks moved to the helper |
