@@ -190,6 +190,14 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [[ "$output" == *"401"* && "$output" == *"max 400"* ]]
 }
 
+@test "next text that looks like a credential is rejected, nothing written" {
+  bash "$LEDGER" start 1 t
+  before=$(cat "$CCXP_LEDGER_FILE")
+  run -2 bash "$LEDGER" next add "see token ghp_$(printf 'a%.0s' $(seq 1 24)) here"
+  [[ "$output" == *"credential"* ]]
+  [ "$(cat "$CCXP_LEDGER_FILE")" = "$before" ]
+}
+
 @test "titles are still clipped at 120, not rejected" {
   long=$(printf 't%.0s' $(seq 1 130))
   bash "$LEDGER" start 1 "$long"
