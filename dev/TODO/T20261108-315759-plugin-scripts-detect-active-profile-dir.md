@@ -1,7 +1,10 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request in this conversation, 2026-11-08
+claimed_by: cc1-9f320372:3be9260d500b0fcc
+claimed_role: interactive
+scheduled: 2026-11-02
 ---
 
 # T20261108-315759: Plugin scripts must detect the active profile dir instead of assuming ~/.claude
