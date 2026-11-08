@@ -559,7 +559,7 @@ _tc_warn_local_only() {
   # $1 task-id. `acquire` only edits the working-tree file; the lock exists once
   # the claim merges to `main` (T20260826-280188). stderr, so stdout parsers keep working.
   [ -z "${TASK_CLAIM_QUIET:-}" ] || return 0   # test hook: keeps older `run` assertions on $output exact
-  _session_log "task_claim: local-only: the claim on $1 is not held until the claim PR merges to main (verify with: task_claim.sh verify-landed $1 [--repo <hub-owner/repo>])"
+  _session_log "task_claim: local-only: the claim on $1 is not held until the claim PR merges to main (already merged? then ignore; verify with: task_claim.sh verify-landed $1 [--repo <hub-owner/repo>])"
 }
 
 _tc_acquire() {
@@ -993,7 +993,7 @@ _tc_verify_landed() {
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
-      --repo) repo="${2:-}"; [ -n "$repo" ] || { printf 'unknown\n'; return 4; }; shift 2 ;;
+      --repo) repo="${2:-}"; [ -n "$repo" ] || { _session_log "task_claim: verify-landed: --repo needs a value"; return 64; }; shift 2 ;;
       *) _session_log "task_claim: verify-landed: unknown argument $1"; return 64 ;;
     esac
   done
