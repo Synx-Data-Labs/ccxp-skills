@@ -53,6 +53,12 @@
 #                                    "acquired"        (was free, now mine)
 #                                    "mine"            (already mine; idempotent)
 #                                    "claimed:<by>"    (held by another; exit 3)
+#                                  LOCAL-ONLY: acquire edits the working-tree file and
+#                                  warns on stderr; the lock exists only once the claim
+#                                  PR merges to main (T20260826-280188). Check with:
+#   verify-landed <id> [--repo <hub>] → landed (0) | not-landed (1) | claimed:<by> (3) | unknown (4)
+#                                    reads the claim on `main` via the API; branch on the
+#                                    stdout token (acquire also uses exit 1)
 #   read    <task-id>            → prints "<status>\t<claimed_by>" (empty if none)
 #   release <task-id> [status]   → clear claimed_by, set status (default Open). Prints "released"
 #   release-others [except-id]   → release-on-pickup: clear EVERY task held by this
@@ -549,6 +555,13 @@ _tc_claimed_role() {
   printf 'interactive'
 }
 
+_tc_warn_local_only() {
+  # $1 task-id. `acquire` only edits the working-tree file; the lock exists once
+  # the claim merges to `main` (T20260826-280188). stderr, so stdout parsers keep working.
+  [ -z "${TASK_CLAIM_QUIET:-}" ] || return 0   # test hook: keeps older `run` assertions on $output exact
+  _session_log "task_claim: local-only: the claim on $1 is not held until the claim PR merges to main (verify with: task_claim.sh verify-landed $1 [--repo <hub-owner/repo>])"
+}
+
 _tc_acquire() {
   local id="$1" file cur mine decision
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id under $(_tc_task_dir)"; return 2; }
@@ -560,16 +573,18 @@ _tc_acquire() {
     _session_log "task_claim: migrating legacy claim on $id to the current format"
     _tc_fm_set "$file" claimed_by "$mine" || return 1
     _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
+    _tc_warn_local_only "$id"
     printf 'mine\n'; return 0
   fi
   case "$decision" in
-    mine)  printf 'mine\n'; return 0 ;;
+    mine)  _tc_warn_local_only "$id"; printf 'mine\n'; return 0 ;;
     other) printf 'claimed:%s\n' "$cur"; return 3 ;;
     none)
       _tc_fm_set "$file" claimed_by "$mine" || return 1
       _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
       _tc_fm_set "$file" status "In Progress" || return 1
       _tc_stamp_scheduled_if_needed "$file" || return 1
+      _tc_warn_local_only "$id"
       printf 'acquired\n'; return 0 ;;
   esac
 }
@@ -950,6 +965,65 @@ _tc_pr_owner() {
   esac
 }
 
+_tc_resolve_task_location_by_id() {
+  # $1 owner/repo  $2 task-id → echo "<path>" of the task file on `main` (TODO,
+  # then PARKING), or empty (+ nonzero). Id-only counterpart of the same-repo
+  # branch of _tc_resolve_task_location, for callers with no PR.
+  local repo="$1" id="$2" dir name
+  for dir in "$(_tc_task_dir)" "$(_tc_parking_dir)"; do
+    name="$(_session_gh api "/repos/$repo/contents/$dir?ref=main" \
+            --jq ".[] | select(.name | startswith(\"$id\")) | .name" 2>/dev/null \
+            | _tc_filter_task_filename "$id" \
+            | head -1)"
+    [ -n "$name" ] && { printf '%s/%s' "$dir" "$name"; return 0; }
+  done
+  return 1
+}
+
+_tc_verify_landed() {
+  # $1 task-id  [--repo <owner/repo>] → verdict on stdout, exit code:
+  #   landed          0  our claim is on `main`
+  #   not-landed      1  task absent on `main`, or claimed_by empty there
+  #   claimed:<by>    3  another agent holds it on `main`
+  #   unknown         4  the API call failed (fail closed)
+  # `--repo` names the hub repo (cross-repo callers: a `*-target` clone's origin
+  # is the target repo, not the hub). Default: $PWD's origin.
+  local id="${1:-}" repo="" claimed_by mine decision path
+  [ -n "$id" ] || { _session_log "usage: task_claim.sh verify-landed <task-id> [--repo <owner/repo>]"; return 64; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --repo) repo="${2:-}"; [ -n "$repo" ] || { printf 'unknown\n'; return 4; }; shift 2 ;;
+      *) _session_log "task_claim: verify-landed: unknown argument $1"; return 64 ;;
+    esac
+  done
+  if [ -z "$repo" ]; then
+    repo="$(_session_gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || true)"
+  fi
+  [ -n "$repo" ] || { printf 'unknown\n'; return 4; }
+  mine="$(_tc_claimant_id)" || { printf 'unknown\n'; return 4; }
+  if ! path="$(_tc_resolve_task_location_by_id "$repo" "$id")"; then
+    # Distinguish "absent" from "API down": a listing of the task dir must work.
+    if _session_gh api "/repos/$repo/contents/$(_tc_task_dir)?ref=main" --jq 'length' >/dev/null 2>&1; then
+      printf 'not-landed\n'; return 1
+    fi
+    printf 'unknown\n'; return 4
+  fi
+  claimed_by="$(_tc_fetch_fm_field "$repo" "$path" claimed_by)" || { printf 'unknown\n'; return 4; }
+  decision="$(_tc_decide "$claimed_by" "$mine")"
+  if [ "$decision" = "other" ] && _tc_is_own_cross_repo_clone "$id" "$claimed_by" "$mine" "$(claimant_clone_path)"; then
+    decision="mine"
+  fi
+  if [ "$decision" = "other" ] && _tc_is_legacy_self_claim "$claimed_by" "$(claimant_clone_path)"; then
+    decision="mine"
+  fi
+  case "$decision" in
+    mine)  printf 'landed\n'; return 0 ;;
+    none)  printf 'not-landed\n'; return 1 ;;
+    other) printf 'claimed:%s\n' "$claimed_by"; return 3 ;;
+  esac
+}
+
 _tc_main() {
   local verb="${1:-}"; shift || true
   case "$verb" in
@@ -959,9 +1033,10 @@ _tc_main() {
     release-others) _tc_release_others "$@" ;;
     release-mine)   _tc_release_others "$@" ;;  # deprecated alias, T20260720-113930
     pr-owner)       _tc_pr_owner "$@" ;;
+    verify-landed)  _tc_verify_landed "$@" ;;
     reclaimable)    _tc_reclaimable "$@" ;;
     claimant-id)    _tc_claimant_id; printf '\n' ;;
-    *) _session_log "usage: task_claim.sh <acquire|read|release|release-others|pr-owner|reclaimable|claimant-id> [task-id|pr-number] [args]"; return 64 ;;
+    *) _session_log "usage: task_claim.sh <acquire|read|release|release-others|pr-owner|verify-landed|reclaimable|claimant-id> [task-id|pr-number] [args]"; return 64 ;;
   esac
 }
 

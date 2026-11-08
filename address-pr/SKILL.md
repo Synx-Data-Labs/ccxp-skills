@@ -105,7 +105,7 @@ The gate (§1) already resolved the owner via `_session/task_claim.sh pr-owner <
 1. `$TASK_ID` is already resolved from §1.5. On a fresh `t<id>-claim` branch off `main`: `bash <skills-root>/_session/task_claim.sh release-others <id>` (free any stale claim this clone holds), then `bash <skills-root>/_session/task_claim.sh acquire <id>`, plus the status-preserve step below.
 2. Commit (pure frontmatter change — status + `claimed_by`), push, `gh pr create`, and drive *that* claim PR through this same `/address-pr` loop to merge (it's docs-only, auto-merge-eligible under the status-change tier).
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
-4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, then continue to §2 on the *original* PR you were addressing.
+4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, run `bash <skills-root>/_session/task_claim.sh verify-landed <id> [--repo <hub-owner/repo>]` (bare `acquire` is local-only; branch on the stdout token: only `landed` proceeds), then continue to §2 on the *original* PR you were addressing.
 
 **Status-preserve (both `free` and `new`).** `task_claim.sh acquire` hard-sets `status: In Progress` (`_session/task_claim.sh:569`), so a task already at `Design` (e.g. just recorded by `/incept`) would be silently demoted in the claim commit. Capture the status first, restore it after:
 

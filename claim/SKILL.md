@@ -116,6 +116,10 @@ mode note there is kept in sync with this one.
    bash <skills-root>/_session/task_claim.sh acquire T<id>
    ```
 
+   Bare `acquire` is **local-only**: the lock exists once the claim PR merges to
+   `main`. After the merge, `bash <skills-root>/_session/task_claim.sh verify-landed T<id>`
+   must print `landed` before any other work (branch on the stdout token).
+
    `release-others` frees every task this `cc1-<machine-id>:<path-hash>` identity
    currently holds except `T<id>` (release-on-pickup — keeps the claim count
    at ≤1 per clone); `acquire` sets `T<id>`'s `claimed_by` and flips

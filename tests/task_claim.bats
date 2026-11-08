@@ -18,6 +18,9 @@ setup() {
   # Dispatch block is guarded by [ "${BASH_SOURCE[0]}" = "${0}" ], so sourcing
   # is side-effect-free.
   source "$REPO_ROOT/_session/task_claim.sh"
+  # Older tests assert on exact `run` output (stdout+stderr merged); the
+  # local-only warning has its own tests below, which unset this.
+  export TASK_CLAIM_QUIET=1
 }
 
 _mk_task_file() {
@@ -1358,4 +1361,113 @@ CC_B_HUB='cc1-bbbbbbbb:1111111111111111'      # machine B, hub clone
 @test "_tc_has_live_run: gh failure -> empty (fail toward the pre-existing staleness behavior)" {
   _session_gh() { return 1; }
   [ -z "$(_tc_has_live_run T20260724-312324)" ]
+}
+
+# --- T20260826-280188: acquire is local-only; verify-landed checks main -------
+
+@test "acquire warns on stderr that the claim is local-only, stdout unchanged" {
+  bats_require_minimum_version 1.5.0
+  unset TASK_CLAIM_QUIET
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
+  _tc_claimant_id() { printf 'sidA@h'; }
+  run --separate-stderr _tc_acquire T1
+  [ "$status" -eq 0 ]; [ "$output" = "acquired" ]
+  [[ "$stderr" == *"local-only"* ]]
+  [[ "$stderr" == *"verify-landed T1"* ]]
+}
+
+@test "acquire re-run on an own unlanded claim (mine) also warns" {
+  bats_require_minimum_version 1.5.0
+  unset TASK_CLAIM_QUIET
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
+  _tc_claimant_id() { printf 'sidA@h'; }
+  _tc_acquire T1 >/dev/null 2>&1
+  run --separate-stderr _tc_acquire T1
+  [ "$output" = "mine" ]
+  [[ "$stderr" == *"local-only"* ]]
+}
+
+@test "acquire stays silent for a task held by another (claimed:, no warning)" {
+  bats_require_minimum_version 1.5.0
+  unset TASK_CLAIM_QUIET
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-demo.md"
+  _tc_claimant_id() { printf 'sidA@h'; }
+  _tc_acquire T1 >/dev/null 2>&1
+  _tc_claimant_id() { printf 'sidB@h'; }
+  run --separate-stderr _tc_acquire T1
+  [ "$status" -eq 3 ]
+  [[ "$stderr" != *"local-only"* ]]
+}
+
+# verify-landed: stub the gh API layer with a fake `main` (a directory of task files).
+_vl_setup() {
+  FAKE_MAIN="$BATS_TEST_TMPDIR/fakemain"; mkdir -p "$FAKE_MAIN/dev/TODO" "$FAKE_MAIN/dev/PARKING"
+  _session_gh() {
+    # api /repos/<r>/contents/<path>?ref=main [--jq expr]
+    [ "${FAKE_API_DOWN:-}" = 1 ] && return 1
+    [ "$1" = repo ] && { printf 'hub/repo'; return 0; }
+    local p="${2#/repos/*/contents/}"; p="${p%%\?*}"
+    if [ -d "$FAKE_MAIN/$p" ]; then
+      case "$*" in
+        *length*) ls "$FAKE_MAIN/$p" | wc -l | tr -d ' ' ;;
+        *) ls "$FAKE_MAIN/$p" ;;
+      esac
+    elif [ -f "$FAKE_MAIN/$p" ]; then base64 < "$FAKE_MAIN/$p" | tr -d '\n'
+    else return 1; fi
+  }
+  _tc_claimant_id() { printf 'sidA@h'; }
+}
+
+@test "verify-landed: not-landed (1) when the task on main has no claim" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/TODO/T9-demo.md"
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 1 ]; [ "$output" = "not-landed" ]
+}
+
+@test "verify-landed: not-landed (1) when the task file is absent from main" {
+  _vl_setup
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 1 ]; [ "$output" = "not-landed" ]
+}
+
+@test "verify-landed: landed (0) once our claim is on main" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/TODO/T9-demo.md"
+  _tc_fm_set "$FAKE_MAIN/dev/TODO/T9-demo.md" claimed_by "sidA@h"
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 0 ]; [ "$output" = "landed" ]
+}
+
+@test "verify-landed: finds a parked task and defaults the repo to origin" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/PARKING/T9-demo.md"
+  _tc_fm_set "$FAKE_MAIN/dev/PARKING/T9-demo.md" claimed_by "sidA@h"
+  run _tc_verify_landed T9
+  [ "$status" -eq 0 ]; [ "$output" = "landed" ]
+}
+
+@test "verify-landed: claimed:<by> (3) when another agent holds it on main" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/TODO/T9-demo.md"
+  _tc_fm_set "$FAKE_MAIN/dev/TODO/T9-demo.md" claimed_by "sidB@h"
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 3 ]; [ "$output" = "claimed:sidB@h" ]
+}
+
+@test "verify-landed: unknown (4) when the API is down (fail closed)" {
+  _vl_setup
+  FAKE_API_DOWN=1
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 4 ]; [ "$output" = "unknown" ]
+}
+
+@test "verify-landed: usage errors exit 64" {
+  run _tc_verify_landed
+  [ "$status" -eq 64 ]
+  run _tc_verify_landed T9 --bogus
+  [ "$status" -eq 64 ]
 }
