@@ -74,3 +74,16 @@ setup() {
   run bash "$LINT" "$FIX/nope"
   [ "$status" -eq 2 ]
 }
+
+@test "a quoted \"\$HOME\"/.claude form fails" {
+  printf '%s\n' 'x="$HOME"/.claude/state' > "$FIX/s/a.sh"
+  run bash "$LINT" "$FIX"
+  [ "$status" -eq 1 ]
+}
+
+@test "a checkout living under a tests/ directory is still scanned" {
+  mkdir -p "$BATS_TEST_TMPDIR/tests/co/s"
+  printf '%s\n' 'x="$HOME/.claude"' > "$BATS_TEST_TMPDIR/tests/co/s/a.sh"
+  run bash "$LINT" "$BATS_TEST_TMPDIR/tests/co"
+  [ "$status" -eq 1 ]
+}

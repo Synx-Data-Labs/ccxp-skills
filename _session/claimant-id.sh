@@ -68,6 +68,12 @@ _claimant_cached() {
   # assigning any of them, so "$name" would still be empty if $file were
   # declared on the line above.
   file="$CLAIMANT_STATE_DIR/$name"
+  # Default state dir only: carry an identity created under the legacy ~/.claude
+  # over, so claims already on `main` keep matching (see profile-dir.sh).
+  if [ -n "${CCXP_PROFILE_DIR:-}" ] && [ "$CLAIMANT_STATE_DIR" = "$CCXP_PROFILE_DIR/state" ] \
+     && declare -F ccxp_adopt_legacy_state >/dev/null 2>&1; then
+    ccxp_adopt_legacy_state "state/$name" "$file"
+  fi
   if [ -r "$file" ]; then
     val="$(tr -d ' \t\n' < "$file" 2>/dev/null)"
     [ -n "$val" ] && { printf '%s' "$val"; return 0; }

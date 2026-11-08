@@ -20,7 +20,7 @@ lint-profile-dir-scan() {
   # Home-relative forms followed by `/.claude` then (non-word, non-hyphen | EOL),
   # and python's quoted component.
   # shellcheck disable=SC2016 # the regex is literal, never expanded
-  local re='(\$HOME|\$\{HOME(:-[^}]*)?\}|~|expanduser\("~"\))/\.claude([^A-Za-z0-9_-]|$)|Path\.home\(\) */ *"\.claude"|"\.claude",|, *"\.claude"\)'
+  local re='(\$HOME"?|\$\{HOME(:-[^}]*)?\}"?|~|expanduser\("~"\))/\.claude([^A-Za-z0-9_-]|$)|Path\.home\(\) */ *"\.claude"|"\.claude",|, *"\.claude"\)'
   while IFS= read -r f; do
     case "$f" in
       */_session/profile-dir.sh|*/_session/lint_profile_dir.sh) continue ;;
@@ -30,8 +30,8 @@ lint-profile-dir-scan() {
       printf '%s\n' "$hits" | sed "s|^|${f#"$root"/}:|"
       rc=1
     fi
-  done < <(find "$root" -type f \( -name '*.sh' -o -name '*.py' \) \
-             -not -path '*/tests/*' -not -path '*/.git/*' -not -path '*/node_modules/*' | sort)
+  done < <(cd "$root" && find . -type f \( -name '*.sh' -o -name '*.py' \) \
+             -not -path '*/tests/*' -not -path '*/.git/*' -not -path '*/node_modules/*' | sort | sed "s|^\.|$root|")
   return "$rc"
 }
 
