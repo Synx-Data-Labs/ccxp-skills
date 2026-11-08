@@ -452,9 +452,12 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
 
 #### 1.4a Same-tick completion check (every tick that posts or journals)
 
-Applies to full standups (1.4), hold ticks (1.1a) and addendum ticks alike. A tick can end between the doc commit, the doc-PR merge and the Slack send, in either order (T20260905-297910: 11 misses, both directions), so a tick is **not finished** until this check passes.
+- Applies to full standups (1.4), hold ticks (1.1a) and addendum ticks alike.
+- A tick can end between the doc commit, the doc-PR merge and the Slack send, in either order, so it is **not finished** until this check passes.
+- Order: commit the doc, post to Slack, run step 1, then step 2 (so the doc can record the verified outcome).
+- Marker: the `*hold HH:MMZ*` header, the `Standup addendum (HH:MMZ)` title, or for a full standup its `Daily Standup (YYYY-MM-DD)` title.
 
-1. **Slack read-back, right after the send.** Read the standup thread back (`slack_read_thread`, or `bash <skills-root>/_slack/webapi.sh thread-replies <channel_id> <parent_ts>` in cron) and require a reply carrying this tick's `HH:MMZ` marker (the `*hold HH:MMZ*` header, or the `Standup addendum (HH:MMZ)` title).
+1. **Slack read-back, right after the send.** Read the standup thread back (`slack_read_thread`, or `bash <skills-root>/_slack/webapi.sh thread-replies <channel_id> <parent_ts>` in cron) and require a message carrying this tick's marker (above).
    - Missing: retry the send once, then use the 1.4 webhook fallback, then re-check.
    - After a webhook fallback there is no `ts` and the post lands in the channel, not the thread: verify it with `bash <skills-root>/_slack/webapi.sh find-by-text <channel_id> "<HH:MMZ marker>"`, or accept the fallback script's exit status as the verification.
    - Still missing: write `Slack post UNVERIFIED (HH:MMZ)` in the session output and the day's journal doc.
