@@ -1471,3 +1471,35 @@ _vl_setup() {
   run _tc_verify_landed T9 --bogus
   [ "$status" -eq 64 ]
 }
+
+@test "verify-landed: --repo without a value is a usage error (64)" {
+  run _tc_verify_landed T9 --repo
+  [ "$status" -eq 64 ]
+}
+
+@test "verify-landed: unknown (4) when no --repo and gh repo view fails" {
+  _vl_setup
+  _session_gh() { return 1; }
+  run _tc_verify_landed T9
+  [ "$status" -eq 4 ]; [ "$output" = "unknown" ]
+}
+
+@test "verify-landed: our claim from an ephemeral *-target clone reads landed" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/TODO/T9-demo.md"
+  _tc_fm_set "$FAKE_MAIN/dev/TODO/T9-demo.md" claimed_by "sidA@h:hubpath"
+  _tc_claimant_id() { printf 'sidA@h:targetpath'; }
+  claimant_clone_path() { printf '/tmp/T9-demo-target'; }
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 0 ]; [ "$output" = "landed" ]
+}
+
+@test "verify-landed: a different task's *-target clone does not rescue a foreign claim" {
+  _vl_setup
+  _mk_task_file "$FAKE_MAIN/dev/TODO/T9-demo.md"
+  _tc_fm_set "$FAKE_MAIN/dev/TODO/T9-demo.md" claimed_by "sidA@h:hubpath"
+  _tc_claimant_id() { printf 'sidA@h:targetpath'; }
+  claimant_clone_path() { printf '/tmp/T8-other-target'; }
+  run _tc_verify_landed T9 --repo hub/repo
+  [ "$status" -eq 3 ]
+}

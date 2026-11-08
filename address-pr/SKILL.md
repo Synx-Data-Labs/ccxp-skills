@@ -107,7 +107,7 @@ The gate (§1) already resolved the owner via `_session/task_claim.sh pr-owner <
 3. **Conflict on the `claimed_by:` line = you lost the race** — another session claimed the task in the same window. `git checkout main && git pull && git remote prune origin`, re-run `task_claim.sh pr-owner <number>`; it should now read `owned:<other>` — defer per that case.
 4. Once the claim PR merges, `git checkout main && git pull && git remote prune origin`, run `bash <skills-root>/_session/task_claim.sh verify-landed <id> [--repo <hub-owner/repo>]` (bare `acquire` is local-only; branch on the stdout token: only `landed` proceeds), then continue to §2 on the *original* PR you were addressing.
 
-**Status-preserve (both `free` and `new`).** `task_claim.sh acquire` hard-sets `status: In Progress` (`_session/task_claim.sh:569`), so a task already at `Design` (e.g. just recorded by `/incept`) would be silently demoted in the claim commit. Capture the status first, restore it after:
+**Status-preserve (both `free` and `new`).** `task_claim.sh acquire` hard-sets `status: In Progress` (`_tc_acquire`'s `none` branch in `_session/task_claim.sh`), so a task already at `Design` (e.g. just recorded by `/incept`) would be silently demoted in the claim commit. Capture the status first, restore it after:
 
 ```bash
 PRE=$(bash <skills-root>/_session/task_claim.sh read <id> | cut -f1)   # before acquire
