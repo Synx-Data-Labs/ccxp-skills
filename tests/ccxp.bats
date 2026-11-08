@@ -178,7 +178,6 @@ JSON
 
 @test "ccxp SKILL: hold-tick and addendum paths reference 1.4a" {
   f="$REPO_ROOT/ccxp/SKILL.md"
-  run grep -c '1\.4a' "$f"
-  [ "$status" -eq 0 ]
-  [ "$output" -ge 3 ]
+  grep -q 'Run the 1.4a completion check' "$f"
+  grep -q 'owes \*\*1.4a\*\* too' "$f"
 }
