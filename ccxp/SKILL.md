@@ -453,8 +453,8 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
 #### 1.4a Same-tick completion check (every tick that posts or journals)
 
 - Applies to full standups (1.4), hold ticks (1.1a) and addendum ticks alike.
-- A tick can end between the doc commit, the doc-PR merge and the Slack send, in either order, so it is **not finished** until this check passes.
-- Order: commit the doc, post to Slack, run step 1, then step 2 (so the doc can record the verified outcome).
+- A tick can end after any one of its three steps (Slack send, doc commit, doc-PR merge), skipping the others, so it is **not finished** until this check passes.
+- Order: post to Slack, run step 1, then write the doc recording the verified outcome, then step 2.
 - Marker: the `*hold HH:MMZ*` header, the `Standup addendum (HH:MMZ)` title, or for a full standup its `Daily Standup (YYYY-MM-DD)` title.
 
 1. **Slack read-back, right after the send.** Read the standup thread back (`slack_read_thread`, or `bash <skills-root>/_slack/webapi.sh thread-replies <channel_id> <parent_ts>` in cron) and require a message carrying this tick's marker (above).
