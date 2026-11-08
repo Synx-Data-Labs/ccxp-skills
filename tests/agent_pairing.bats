@@ -610,7 +610,8 @@ install_outdated_agent() {
 
 @test "asset: ledger items are one factual sentence, the decision lives in the context file (T20261106-735630)" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
-  grep -q 'one complete sentence of facts, under about 280 characters' "$f"
+  grep -q 'one complete sentence of facts, under about 380 characters' "$f"
+  grep -q 'rejects text over 400' "$f"
   grep -q '## Decision needed' "$f"
   grep -q 'plain `file://` URL line' "$f"
   run grep -q 'the exact decision or action' "$f"; [ "$status" -ne 0 ]

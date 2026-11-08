@@ -95,7 +95,7 @@ Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): r
 ## Misc
 
 - Not locked: two writers racing can hand out the same ref (last write wins); the dispatcher is the single writer for refs.
-- Text is cut to 300 characters and control characters are stripped. Titles, questions and paths only: never pass secrets, tokens or credentials (the files are mode 600).
+- Next text (`next add`, `next set --text`) and `reply --tldr` have control characters stripped and are rejected over 400 characters (error shows the length and the limit, exit 2, nothing written), never cut. Titles (120), `--agent` (80) and paths are still clipped. Pass titles, questions and paths only: never pass secrets, tokens or credentials (the files are mode 600).
 - Writes are atomic (temp file + `mv`); a missing or corrupt file starts fresh.
 
 ## Authorization list

@@ -50,7 +50,8 @@
 # <file>.bak-<UTC timestamp>-<pid>, parked_ids become parked items with empty context, inputs/actions
 # merge into next (legacy refs kept), the parked count and i/a counters are dropped. A legacy
 # parked count larger than the ids it came with is reported on stderr (no placeholders invented).
-# Text is cut to 300 chars, control chars stripped.
+# Next text (`next add`, `next set --text`) and `reply --tldr` are control-char-stripped and REJECTED (exit 2, nothing
+# written) over 400 chars, never cut; titles (120), --agent (80) and paths are still clipped.
 # Writes are atomic (temp file + mv); a missing or corrupt file starts fresh.
 # Start log: `start` of a NEW job also appends "<epoch>\t<n>" to <ledger dir>/ccxp-ledger-starts.log (same base
 # name, `-starts.log`; mode 600, append-only, no titles). The first time the log is created while the ledger
@@ -244,7 +245,8 @@ ledger-kid() { local k; k=$(ledger-refnum "${1:-}") || return 2; printf 'k%s' "$
 # $1 text, $2 max chars
 ledger-clip() { printf '%s' "${1:-}" | tr -d '\000-\037\177' | jq -Rrs --argjson n "${2:-300}" '.[0:$n]'; }
 
-ledger-text() { ledger-clip "${1:-}" 300; }
+# Sentence text (Next items, tldr): reject over 400 chars instead of cutting mid-sentence. $1 text, $2 label
+ledger-text() { ledger-bounded "${1:-}" 400 "${2:-text}"; }
 
 # --context value: empty or an absolute path
 ledger-ctx() {
@@ -263,7 +265,7 @@ ledger-args() {
       --context) [[ $# -ge 2 ]] || { echo "ledger: --context needs a path" >&2; return 2; }
         CTX=$(ledger-ctx "$2") || return 2; HAVE_CTX=true; shift 2 ;;
       --text) [[ $# -ge 2 ]] || { echo "ledger: --text needs a value" >&2; return 2; }
-        TXT=$(ledger-clip "$2" 300); HAVE_TXT=true; shift 2 ;;
+        TXT=$(ledger-text "$2" "next text") || return 2; HAVE_TXT=true; shift 2 ;;
       --ref) [[ $# -ge 2 ]] || { echo "ledger: --ref needs a value" >&2; return 2; }
         [[ "$2" =~ ^[nN][0-9]{1,9}$ ]] || { echo "ledger: --ref must look like n12: $2" >&2; return 2; }
         REF="n$((10#${2:1}))"; shift 2 ;;
@@ -308,7 +310,7 @@ ledger-refnum() {
 
 # $1 text, $2 context, $3 explicit ref (optional); prints the new n<k> ref
 ledger-add() {
-  local text; text=$(ledger-text "${1:-}")
+  local text; text=$(ledger-text "${1:-}" "next text") || return 2
   [[ -n "$text" ]] || { echo "ledger: empty text" >&2; return 2; }
   ledger-update '(if $r == "" then .ref_counters.n += 1
                   elif (.next | map(.ref) | index($r)) then error("ref taken")
@@ -864,7 +866,7 @@ ledger() {
       while [[ $# -gt 0 ]]; do
         case "$1" in
           --tldr) [[ $# -ge 2 ]] || { echo "ledger: --tldr needs text" >&2; return 2; }
-            tldr=$(ledger-clip "$2" 300); shift 2 ;;
+            tldr=$(ledger-text "$2" "tldr") || return 2; shift 2 ;;
           --no-decisions) nodec=no; shift ;;
           *) echo "usage: ledger.sh reply [--tldr <text>] [--no-decisions]" >&2; return 2 ;;
         esac

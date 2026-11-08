@@ -157,13 +157,49 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ "$(bash "$LEDGER" show | jq .ref_counters.k)" = "21" ]
 }
 
-@test "long text is truncated to 300 chars and control chars are stripped" {
-  long=$(printf 'x%.0s' $(seq 1 400))
-  bash "$LEDGER" next add "$long"
+@test "next text: 400 chars accepted, 401 rejected with length and limit, file unchanged; control chars stripped" {
+  ok=$(printf 'x%.0s' $(seq 1 400)); long=$(printf 'x%.0s' $(seq 1 401))
+  bash "$LEDGER" next add "$ok"
   bash "$LEDGER" next add "$(printf 'a\nb\tc')"
-  run bash "$LEDGER" show
-  [ "$(jq '.next[0].text | length' <<<"$output")" = "300" ]
-  [ "$(jq -r '.next[1].text' <<<"$output")" = "abc" ]
+  [ "$(bash "$LEDGER" show | jq '.next[0].text | length')" = "400" ]
+  [ "$(bash "$LEDGER" show | jq -r '.next[1].text')" = "abc" ]
+  before=$(cat "$CCXP_LEDGER_FILE")
+  run -2 bash "$LEDGER" next add "$long"
+  [[ "$output" == *"401"* && "$output" == *"max 400"* ]]
+  [ "$(cat "$CCXP_LEDGER_FILE")" = "$before" ]
+}
+
+@test "next set: 400 chars accepted, 401 rejected and the item keeps its text, control chars stripped" {
+  ok=$(printf 'y%.0s' $(seq 1 400)); long=$(printf 'y%.0s' $(seq 1 401))
+  bash "$LEDGER" next add "first"
+  bash "$LEDGER" next set n1 --text "$ok"
+  [ "$(bash "$LEDGER" show | jq '.next[0].text | length')" = "400" ]
+  before=$(cat "$CCXP_LEDGER_FILE")
+  run -2 bash "$LEDGER" next set n1 --text "$long"
+  [[ "$output" == *"401"* && "$output" == *"max 400"* ]]
+  [ "$(cat "$CCXP_LEDGER_FILE")" = "$before" ]
+  bash "$LEDGER" next set n1 --text "$(printf 'p\nq\tr')"
+  [ "$(bash "$LEDGER" show | jq -r '.next[0].text')" = "pqr" ]
+}
+
+@test "reply --tldr: 400 chars accepted, 401 rejected" {
+  ok=$(printf 'z%.0s' $(seq 1 400)); long=$(printf 'z%.0s' $(seq 1 401))
+  bash "$LEDGER" start 1 t
+  run -0 bash "$LEDGER" reply --tldr "$ok"
+  run -2 bash "$LEDGER" reply --tldr "$long"
+  [[ "$output" == *"401"* && "$output" == *"max 400"* ]]
+}
+
+@test "titles are still clipped at 120, not rejected" {
+  long=$(printf 't%.0s' $(seq 1 130))
+  bash "$LEDGER" start 1 "$long"
+  [ "$(bash "$LEDGER" show | jq '.running[0].title | length')" = "120" ]
+}
+
+@test "decision text cap unchanged: 400 accepted, 401 rejected" {
+  bash "$LEDGER" decision add "$(printf 'd%.0s' $(seq 1 400))"
+  run -2 bash "$LEDGER" decision add "$(printf 'd%.0s' $(seq 1 401))"
+  [[ "$output" == *"401"* && "$output" == *"max 400"* ]]
 }
 
 @test "bad new-subcommand args fail without touching the file" {
@@ -206,9 +242,11 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ "$(bash "$LEDGER" ref next n)" = "n1" ]
 }
 
-@test "text is truncated by characters, not bytes" {
+@test "text length is counted in characters, not bytes" {
   bash "$LEDGER" next add "$(printf 'é%.0s' $(seq 1 400))"
-  [ "$(bash "$LEDGER" show | jq '.next[0].text | length')" = "300" ]
+  [ "$(bash "$LEDGER" show | jq '.next[0].text | length')" = "400" ]
+  run -2 bash "$LEDGER" next add "$(printf 'é%.0s' $(seq 1 401))"
+  [[ "$output" == *"401"* ]]
 }
 
 @test "start stores HH:MM started_at and a re-start keeps it" {
