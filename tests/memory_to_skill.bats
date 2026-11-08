@@ -46,7 +46,9 @@ setup() {
 @test "defaults --claude-home to \$HOME/.claude when omitted" {
   local real_home="$BATS_TEST_TMPDIR/home-case"
   mkdir -p "$real_home/.claude/projects/-tmp-somewhere/memory"
-  HOME="$real_home" run memory-to-skill-find-dir --cwd "/tmp/somewhere"
+  # The profile dir is resolved when the script is sourced, so source it afresh under the new HOME.
+  run env -u CLAUDE_CONFIG_DIR HOME="$real_home" bash -c \
+    "source '$REPO_ROOT/memory-to-skill/scripts/find-memory-dir.sh'; memory-to-skill-find-dir --cwd /tmp/somewhere"
   [ "$status" -eq 0 ]
   [ "$output" = "$real_home/.claude/projects/-tmp-somewhere/memory" ]
 }

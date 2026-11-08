@@ -31,7 +31,9 @@
 # profile-dir.sh. Empty when that file is missing, which makes the claim refuse
 # (mkdir of "" fails) instead of guessing a profile.
 # shellcheck source=/dev/null
-[ -r "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh"
+_ccxp_d="${BASH_SOURCE[0]}"; case "$_ccxp_d" in */*) _ccxp_d="${_ccxp_d%/*}" ;; *) _ccxp_d="." ;; esac
+[ -r "$_ccxp_d/profile-dir.sh" ] && . "$_ccxp_d/profile-dir.sh"
+unset _ccxp_d
 CLAIMANT_STATE_DIR="${CLAIMANT_STATE_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/state}}"
 
 # Lowercase hex sha256 of stdin. Portable: macOS ships shasum, GNU ships

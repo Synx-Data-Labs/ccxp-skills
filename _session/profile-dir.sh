@@ -26,7 +26,9 @@ _ccxp_profile_dir_resolve() {
   if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
     p="${CLAUDE_CONFIG_DIR}"
   else
-    here="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || here=""
+    # No external dirname: this runs under restricted PATHs (tests/claimant_id.bats).
+    here="${BASH_SOURCE[0]}"; case "$here" in */*) here="${here%/*}" ;; *) here="." ;; esac
+    here="$(cd "$here" 2>/dev/null && pwd)" || here=""
     case "$here/" in
       */plugins/cache/*) p="${here%/plugins/cache/*}" ;;
       *) p="" ;;
