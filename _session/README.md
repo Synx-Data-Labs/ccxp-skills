@@ -171,6 +171,7 @@ underscore-private to that script), following the same precedent as `attribution
 - Scripts that need the active Claude Code profile dir source `_session/profile-dir.sh` and read `$CCXP_PROFILE_DIR`; none may hardcode `~/.claude`
 - Order: `CLAUDE_CONFIG_DIR` when set, else derived from the script's own path under `<profile>/plugins/cache/`, else `~/.claude`
 - `ccxp_env_files` / `ccxp_first_env_file` give the `.env` candidates (`<profile>/.env`, then the legacy `~/.claude/.env`)
+- Identity state (claimant machine id and secret, session id) created under the legacy `~/.claude/state` is copied once into `<profile>/state` (`ccxp_adopt_legacy_state`), so a named profile keeps its claims
 - `lint_profile_dir.sh` (run by `tests/profile_dir_lint.bats`) fails on a bare `~/.claude` in code; a line may carry the marker `profile-dir-ok` when it cannot source the helper (Python)
 
 ## What this does NOT do

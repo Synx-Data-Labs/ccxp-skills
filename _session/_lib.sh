@@ -114,6 +114,7 @@ session_cc_session_id() {
   if [ -z "$raw" ]; then
     [ -n "${CCXP_PROFILE_DIR:-}" ] || { printf '%s' "${raw:0:8}"; return 0; }
     local state_file="$CCXP_PROFILE_DIR/state/session-id"
+    ccxp_adopt_legacy_state "state/session-id" "$state_file"
     if [ -f "$state_file" ]; then
       raw="$(cat "$state_file")"
     else

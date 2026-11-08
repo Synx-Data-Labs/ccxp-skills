@@ -84,7 +84,7 @@ install_in_cache() {
 }
 
 @test "an unset HOME does not crash a set -u caller" {
-  run env -u HOME -u CLAUDE_CONFIG_DIR bash -c "set -u; . '$HELPER'; [ -n \"\$CCXP_PROFILE_DIR\" ]"
+  run env -u HOME -u CLAUDE_CONFIG_DIR bash -c "set -u; . '$HELPER'; [ \"\$CCXP_PROFILE_DIR\" = /.claude ]"
   [ "$status" -eq 0 ]
 }
 
@@ -188,4 +188,26 @@ install_in_cache() {
 @test "explicit overrides still win over the profile" {
   run env CLAUDE_CONFIG_DIR="$T/prof" LAST_INPUT_STATE_DIR="$T/li" HOME="$T/home" bash -c ". '$REPO_ROOT/hud/scripts/hud-lib.sh'; printf '%s' \"\$LAST_INPUT_STATE_DIR\""
   [ "$output" = "$T/li" ]
+}
+
+# --- legacy identity carry-over ---------------------------------------------
+
+@test "a claimant identity created under ~/.claude is adopted by a named profile" {
+  mkdir -p "$T/home/.claude/state"
+  printf 'deadbeef' > "$T/home/.claude/state/machine-id"
+  printf 'cafe0123cafe0123cafe0123cafe0123' > "$T/home/.claude/state/claimant-secret"
+  run env CLAUDE_CONFIG_DIR="$T/prof" HOME="$T/home" bash -c ". '$REPO_ROOT/_session/claimant-id.sh'; claimant_id '$T/repo'"
+  legacy_id="$output"
+  [ "$(cat "$T/prof/state/machine-id")" = deadbeef ]
+  # Same identity as before the move: computing it from the legacy dir alone matches.
+  run env -u CLAUDE_CONFIG_DIR HOME="$T/home" bash -c ". '$REPO_ROOT/_session/claimant-id.sh'; claimant_id '$T/repo'"
+  [ "$output" = "$legacy_id" ]
+}
+
+@test "adoption never overwrites an existing profile identity" {
+  mkdir -p "$T/home/.claude/state" "$T/prof/state"
+  printf 'deadbeef' > "$T/home/.claude/state/machine-id"
+  printf 'aaaaaaaa' > "$T/prof/state/machine-id"
+  run env CLAUDE_CONFIG_DIR="$T/prof" HOME="$T/home" bash -c ". '$REPO_ROOT/_session/claimant-id.sh'; claimant_machine_id"
+  [ "$output" = aaaaaaaa ]
 }

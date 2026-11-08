@@ -61,3 +61,18 @@ ccxp_first_env_file() {
   done < <(ccxp_env_files)
   return 1
 }
+
+# ccxp_adopt_legacy_state <rel-path> <dest-file>
+# One-time carry-over for identity-bearing state (claimant secret, machine id,
+# session id) that earlier versions kept under the legacy ~/.claude/state even
+# for a named profile: when <dest-file> is missing and the legacy copy
+# <home>/.claude/<rel-path> exists and differs, copy it (mode 600) so claims
+# made under the old identity are still recognised as ours. Silent no-op else.
+ccxp_adopt_legacy_state() {
+  local rel="$1" dest="$2" legacy="${HOME:-}/.claude/$1" # profile-dir-ok
+  [ -e "$dest" ] && return 0
+  [ -r "$legacy" ] && [ "$legacy" != "$dest" ] || return 0
+  mkdir -p "$(dirname "$dest")" 2>/dev/null || return 0
+  ( umask 077; cp "$legacy" "$dest" ) 2>/dev/null || true
+  return 0
+}
