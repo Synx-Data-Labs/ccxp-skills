@@ -166,3 +166,19 @@ JSON
   run bash "$PRUNE" --nope
   [ "$status" -eq 2 ]
 }
+
+# T20260905-297910: prose contract for the same-tick completion check.
+@test "ccxp SKILL: 1.4a same-tick Slack read-back contract is present" {
+  f="$REPO_ROOT/ccxp/SKILL.md"
+  grep -q '^#### 1.4a Same-tick completion check' "$f"
+  grep -q 'thread-replies' "$f"
+  grep -q 'Slack post UNVERIFIED' "$f"
+  grep -q 'find-by-text' "$f"
+}
+
+@test "ccxp SKILL: hold-tick and addendum paths reference 1.4a" {
+  f="$REPO_ROOT/ccxp/SKILL.md"
+  run grep -c '1\.4a' "$f"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 3 ]
+}

@@ -192,7 +192,7 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
    Still one Slack message (`slack_send_message` with `thread_ts`) — "compact" means brief
    content, not a literal single text line. Omit a bullet only if that check genuinely didn't
    run this tick (don't pad with "N/A"); never collapse back to the `·`-joined prose form.
-2. **Exit the tick** — do **not** run 1.2–1.4 (full standup regeneration), do **not** open a per-tick doc PR. The day's `dev/JOURNAL/YYYY-MM-DD-daily-summary.md` (written by the day's first full standup) is the durable record; the **standup Slack thread is the daily rollup** (each hold tick = one reply). The mandatory Slack-reply + nightly checks already ran above — nothing safety-critical is skipped.
+2. **Run the 1.4a completion check** (read the thread back and confirm this note landed), then **exit the tick** — do **not** run 1.2–1.4 (full standup regeneration), do **not** open a per-tick doc PR. The day's `dev/JOURNAL/YYYY-MM-DD-daily-summary.md` (written by the day's first full standup) is the durable record; the **standup Slack thread is the daily rollup** (each hold tick = one reply). The mandatory Slack-reply + nightly checks already ran above — nothing safety-critical is skipped.
 
 - **Why Slack-thread, not a doc append:** `main` requires a PR for any doc change, so appending a `## Hold ticks` line to the daily-summary would still cost one doc PR per tick — the very churn this removes; and the cron wrapper restores `main` between sessions (`restore-default-branch`), so a rollup can't accumulate locally across ticks.
 - The Slack thread is already the canonical archive of session activity, so it *is* the rollup.
@@ -201,6 +201,7 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
 - The first full standup of the day always runs (the daily-floor signal guarantees it), so the day always has its summary doc; cheap holds only collapse the *subsequent* all-gated ticks.
 
 - **Addendum ticks (the common in-practice middle ground) still owe 1.2.2a.** In practice, a non-hold intra-day tick rarely re-runs the *entire* 1.2–1.4 sequence from scratch — it appends a `## Standup addendum (HH:MMZ)` section to the day's existing `dev/JOURNAL/YYYY-MM-DD-daily-summary.md` via its own small PR, recording just what changed this tick (new failure classified, PR merged, etc.), rather than regenerating the whole doc.
+- An addendum tick owes **1.4a** too: post the addendum to the standup thread, read it back, and confirm the doc PR merged before the tick ends.
 - That's a reasonable, established pattern — but an addendum that classifies a **new nightly failure** is still doing Phase 1.2's job for that failure, so it must still run **1.2.2a** (search for the original `#acme-automation-alerts` post, reply with the RCA) before the tick is done — recording the reply outcome in the addendum the same way 1.2.4 does.
 - Skipping straight from "classified in the addendum" to "done" reproduces the exact gap 1.2.2a exists to close (confirmed live: a recurring known-flaky-check failure was classified and journaled in an addendum, but no RCA reply ever reached the original alert thread — caught only because a human checked the alert directly).
 
@@ -448,6 +449,17 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
 - **Scope note.** This fallback is wired only into this phase and `/ipm` step 6 (Weekly Focus) — the two sends across this file and `/ipm` that fire unconditionally on their cadence (daily / weekly).
 - The other `slack_send_message` call sites (Phase 0.5's reclaim-sweep and claim-gap summaries in this file, the IPM bump-2x note, `/ipm` step 5b's ROADMAP-failure escalation) are conditional — they post only when something's already been found — so an occasional miss there is lower-stakes than losing a guaranteed daily/weekly notification.
 - Extending the same pattern to those sites is a reasonable follow-up, not done here to keep this change scoped to the tracked failure.
+
+#### 1.4a Same-tick completion check (every tick that posts or journals)
+
+Applies to full standups (1.4), hold ticks (1.1a) and addendum ticks alike. A tick can end between the doc commit, the doc-PR merge and the Slack send, in either order (T20260905-297910: 11 misses, both directions), so a tick is **not finished** until this check passes.
+
+1. **Slack read-back, right after the send.** Read the standup thread back (`slack_read_thread`, or `bash <skills-root>/_slack/webapi.sh thread-replies <channel_id> <parent_ts>` in cron) and require a reply carrying this tick's `HH:MMZ` marker (the `*hold HH:MMZ*` header, or the `Standup addendum (HH:MMZ)` title).
+   - Missing: retry the send once, then use the 1.4 webhook fallback, then re-check.
+   - After a webhook fallback there is no `ts` and the post lands in the channel, not the thread: verify it with `bash <skills-root>/_slack/webapi.sh find-by-text <channel_id> "<HH:MMZ marker>"`, or accept the fallback script's exit status as the verification.
+   - Still missing: write `Slack post UNVERIFIED (HH:MMZ)` in the session output and the day's journal doc.
+2. **Doc verify (full and addendum ticks only; hold ticks open no doc PR).** The doc PR is merged (`/address-pr <n>` run to completion), not merely opened.
+3. **No claims before proof.** The addendum text must not say a post happened until step 1 has passed.
 
 **Render every task reference as a clickable link.** Resolve each task ID through
 the sidecar helper so the maintainer can jump straight to the task file on GitHub:
