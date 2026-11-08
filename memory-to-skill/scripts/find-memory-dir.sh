@@ -23,24 +23,28 @@
 # forking a subshell the way bats' `run` does, must not inherit -e/-u/
 # pipefail as a side effect of sourcing).
 
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
+
 memory-to-skill-find-dir-usage() {
   cat <<'EOF'
 Usage:
   find-memory-dir.sh [--cwd PATH] [--claude-home PATH]
 
 Prints the absolute path to the current clone's Claude Code auto-memory
-directory (~/.claude/projects/<encoded-cwd>/memory), derived from --cwd (or
+directory (<profile>/projects/<encoded-cwd>/memory), derived from --cwd (or
 the actual working directory when omitted). Exits 1 if no memory directory
 exists for that path yet (nothing has been remembered there).
 
 Options:
   --cwd PATH          Working-directory path to encode (default: pwd).
-  --claude-home PATH  Override ~/.claude (default: $HOME/.claude).
+  --claude-home PATH  Override the profile dir (default: CLAUDE_CONFIG_DIR, else the default profile dir).
 EOF
 }
 
 memory-to-skill-find-dir() {
-  local target_cwd="" claude_home="${HOME:-}/.claude"
+  local target_cwd="" claude_home="${CCXP_PROFILE_DIR:-}"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in

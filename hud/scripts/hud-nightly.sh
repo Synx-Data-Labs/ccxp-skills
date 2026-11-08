@@ -19,8 +19,12 @@
 #
 # Overrides (also test hooks): HUD_NIGHTLY_REPO, HUD_NIGHTLY_WORKFLOW, HUD_NIGHTLY_TTL,
 # HUD_NIGHTLY_OFF=1 (no lookup, "null"), HUD_NIGHTLY_SYNC=1 (refresh in the foreground),
-# HUD_NIGHTLY_STATE_DIR (default ${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-nightly), HUD_NIGHTLY_NOW (fake epoch).
+# HUD_NIGHTLY_STATE_DIR (default <profile>/state/hud-nightly), HUD_NIGHTLY_NOW (fake epoch).
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 _HN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hud-ci.sh
 . "$_HN_DIR/hud-ci.sh" # hci-run-timeout
@@ -29,7 +33,7 @@ HNI_REPO_DEFAULT="Synx-Data-Labs/synxdb-build-pipeline"
 HNI_WORKFLOW_DEFAULT="Nightly Orchestrator"
 HNI_TIMEOUT=10
 
-hni-state-dir() { printf '%s' "${HUD_NIGHTLY_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-nightly}"; }
+hni-state-dir() { printf '%s' "${HUD_NIGHTLY_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-nightly}"; }
 
 # $1 now (epoch), stdin: JSON list of runs (gh run list --json status,conclusion,event,createdAt)
 # -> {"red":N,"green":M,"strip":"++-++-+"}; nothing when no day of the 30 counts. Pure: no clock, no network.

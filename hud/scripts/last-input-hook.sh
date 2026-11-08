@@ -16,7 +16,7 @@
 #
 # Mirrors _session/claimant-id.sh's CLAIMANT_STATE_DIR convention
 # (_session/claimant-id.sh:30) for an override env var, so BATS can isolate
-# writes under $BATS_TEST_TMPDIR instead of the real ~/.claude/state.
+# writes under $BATS_TEST_TMPDIR instead of the real <profile>/state.
 #
 # Deliberately NOT `set -euo pipefail`: same rationale as
 # hud-lib.sh and claimant-id.sh — this runs on every prompt
@@ -24,7 +24,10 @@
 # path below degrades to "timestamp not updated this time" rather than a
 # non-zero exit.
 
-LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
+LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/state/last-input}}"
 LAST_INPUT_PRUNE_DAYS="${LAST_INPUT_PRUNE_DAYS:-30}"
 
 # True (0) iff $1 is safe to use as a bare filename under LAST_INPUT_STATE_DIR

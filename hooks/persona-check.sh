@@ -12,6 +12,10 @@
 # settings.json is only touched by agent-pairing.sh itself. See agent-pairing/SKILL.md.
 set -uo pipefail
 
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh"
+
 # hash_of FILE -> content hash ("" when no tool is available)
 function hash_of() {
   { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1" 2>/dev/null; } | awk '{print $1; exit}'
@@ -25,7 +29,7 @@ function emit() {
 function persona-check() {
   local here dir asset file state json event h
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  dir="${CCXP_PROFILE_DIR:-}"
   asset="$here/agent-pairing/assets/ccxp-agent.md"
   file="$dir/agents/ccxp-agent.md"
   state="$dir/ccxp-persona-check.json"

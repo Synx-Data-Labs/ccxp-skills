@@ -267,8 +267,11 @@ def toplevel(cwd):
 
 
 def log_line(text):
+    # secret-guard.sh passes the resolved path in CCXP_SECRET_GUARD_LOG; the fallback
+    # only serves a direct run (tests) and mirrors the helper's order.
     log = os.environ.get("CCXP_SECRET_GUARD_LOG") or os.path.join(
-        os.path.expanduser("~"), ".claude", "secret-guard-overrides.log")
+        os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude"),  # profile-dir-ok
+        "secret-guard-overrides.log")
     try:
         os.makedirs(os.path.dirname(log), exist_ok=True)
         with open(log, "a", encoding="utf-8") as fh:

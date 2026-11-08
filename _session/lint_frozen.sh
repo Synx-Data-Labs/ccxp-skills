@@ -36,10 +36,13 @@
 
 set -uo pipefail
 
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh"
+
 # Path to the frontmatter linter (override via LINT_TASKS_PY for tests /
-# non-default checkouts — e.g. CI, where ~/.claude/skills does not exist).
+# non-default checkouts — e.g. CI, where <profile>/skills does not exist).
 _lint_frozen_lint_tasks_py() {
-  printf '%s\n' "${LINT_TASKS_PY:-${HOME}/.claude/skills/repo-conventions/scripts/lint_tasks.py}"
+  printf '%s\n' "${LINT_TASKS_PY:-${CCXP_PROFILE_DIR:-}/skills/repo-conventions/scripts/lint_tasks.py}"
 }
 
 # Extract a T<8>-<6> task id from a path or string; empty if none.

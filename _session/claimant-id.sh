@@ -27,7 +27,12 @@
 # this is its own file rather than part of _lib.sh, and why the identity is not
 # reimplemented in two places (the bug class this task exists to close).
 
-CLAIMANT_STATE_DIR="${CLAIMANT_STATE_DIR:-${HOME}/.claude/state}"
+# Profile dir (CLAUDE_CONFIG_DIR, else derived from this path, else ~/.claude): see
+# profile-dir.sh. Empty when that file is missing, which makes the claim refuse
+# (mkdir of "" fails) instead of guessing a profile.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh"
+CLAIMANT_STATE_DIR="${CLAIMANT_STATE_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/state}}"
 
 # Lowercase hex sha256 of stdin. Portable: macOS ships shasum, GNU ships
 # sha256sum, and openssl covers the rest. Runs on every claim, so a missing

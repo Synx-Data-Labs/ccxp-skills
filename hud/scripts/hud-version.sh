@@ -19,9 +19,13 @@
 # untrusted: only strings that match the tag pattern survive.
 #
 # Test hooks: CCXP_HUD_VERSION_SYNC=1 refreshes in the foreground; HUD_VERSION_STATE_DIR
-# relocates the cache (default ${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-version);
+# relocates the cache (default <profile>/state/hud-version);
 # HUD_VERSION_REMOTE overrides the remote (a local path works).
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 _HV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hud-ci.sh
 . "$_HV_DIR/hud-ci.sh"
@@ -32,7 +36,7 @@ HVR_TIMEOUT=8
 HVR_REMOTE_DEFAULT="https://github.com/Synx-Data-Labs/ccxp-skills.git"
 HVR_SEMVER_RE='^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(-[0-9A-Za-z.-]{1,40})?$'
 
-hvr-state-dir() { printf '%s' "${HUD_VERSION_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-version}"; }
+hvr-state-dir() { printf '%s' "${HUD_VERSION_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-version}"; }
 
 # $1 candidate -> 0 when it is a plain X.Y.Z (optionally -prerelease) version.
 hvr-valid() { [[ "$1" =~ $HVR_SEMVER_RE ]]; }

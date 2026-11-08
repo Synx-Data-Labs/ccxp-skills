@@ -6,6 +6,10 @@
 # session transcript. Read-only; run it at turn start or when asked for status.
 set -euo pipefail
 
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
+
 function list-jobs() {
   local sel="${1:-}"
   claude agents --json --all | jq -r --arg sel "$sel" '
@@ -22,7 +26,7 @@ function report() {
   sid="$(claude agents --json --all | jq -r --arg sel "$sel" '
     [.[] | select(.name == $sel or ((.name // "") | startswith("j" + $sel + "-")))] | sort_by(.startedAt // 0) | last | .sessionId // empty')"
   [[ -n "$sid" ]] || { echo "no such job: $sel" >&2; return 1; }
-  f="$(find "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects" -name "$sid.jsonl" 2>/dev/null | head -1)"
+  f="$(find "${CCXP_PROFILE_DIR:-}/projects" -name "$sid.jsonl" 2>/dev/null | head -1)"
   [[ -n "$f" ]] || { echo "transcript not found for $sid" >&2; return 1; }
   jq -rs '[.[] | select(.type=="assistant") | .message.content
            | if type=="string" then . else map(select(.type=="text").text) | join("\n") end

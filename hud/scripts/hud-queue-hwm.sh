@@ -18,12 +18,16 @@
 # files from earlier versions are ignored.
 #
 # State dir (shared with the queue-source stamps): $HUD_QUEUE_STATE_DIR, else
-# ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-queue. Test hooks: HUD_HWM_SYNC=1 (backfill in the
+# <profile>/state/hud-queue. Test hooks: HUD_HWM_SYNC=1 (backfill in the
 # foreground), HUD_HWM_TTL, HUD_HWM_SAMPLE_CAP, HUD_HWM_NOW (fake epoch).
 #
 # Everything is read-only for the repo, silent on failure, and never blocks the render:
 # the backfill is detached and only ever writes under the state dir.
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 _HW_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hud-lib.sh
 . "$_HW_DIR/hud-lib.sh"
@@ -36,7 +40,7 @@ HUD_HWM_QUEUE_PATH="dev/TODO/queue.md"
 
 _hw-now() { printf '%s' "${HUD_HWM_NOW:-$(date +%s)}"; }
 
-_hw-dir() { printf '%s' "${HUD_QUEUE_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-queue}"; }
+_hw-dir() { printf '%s' "${HUD_QUEUE_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-queue}"; }
 
 # $1 repo root -> a short key for repo root + queue path
 sl-hwm-key() { printf '%s\0%s' "$1" "$HUD_HWM_QUEUE_PATH" | cksum | cut -d' ' -f1; }
