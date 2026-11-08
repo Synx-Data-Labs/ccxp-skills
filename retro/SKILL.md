@@ -48,7 +48,7 @@ Collect the rest over `START`..`END`. Do all reads in parallel:
 4. **Open PRs**: `.prs.open` and `.prs.stale_open` (created more than 3 days ago) — the Stale PRs row in Phase 3.
 5. **Current TODO backlog**: `.backlog.todo` and `.backlog.parking` — backlog health; `.tasks_completed` counts task-ID `dev/JOURNAL/` files dated in the window.
 6. **CI failures**: `.ci` — `total`, `green`, `pass_rate_pct`, `top_failing` (top 3 by failure count, for the Top failing workflows row). The fetch uses an explicit `--created` filter and gh's 1000-run API cap; when a query hits the cap, `metrics.sh` auto-bisects the window into disjoint halves and merges them (`.ci.fetches` is the call count, 1 on a normal week), so no manual splitting. If `.ci.truncated` is still `true`, a window too small to split (or the call budget) was capped and runs were dropped: state that gap explicitly in the retro, never report the rate as complete (no silent caps; the undercount recurred 3 retros before this).
-7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention (counts: `.escalations`)
+7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention (counts: `.escalations`). **This is one clone's view, never the week's total**: `drive-threads.json` is gitignored, per-clone state by design (a shared file would race between concurrent sessions), so escalations posted from other clones, concurrent autopilot slots, or as plain channel messages are not in it. Treat the count as a floor and cross-check live Slack (`$DRIVE_ESCALATION_CHANNEL_ID` / the escalation channel) for the window before reporting a number; state both in the retro.
 8. **Previous retro**: Read `PRIOR_RETRO` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
 9. **This week's IPM commit**: Read `IPM_FILE` (`dev/JOURNAL/<THIS_MONDAY>-ipm-weekly.md`) — the focus list to grade. If it is empty/missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
 10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
@@ -348,7 +348,7 @@ Compute and report these metrics for the review period:
 | Avg PR cycle time | created → merged duration |
 | CI pass rate | `X% (green/total)` plus `Δ vs prior retro: +N pp / -N pp / unchanged` (use the `CI pass rate` cell extracted in Phase 1 step 8 as the baseline) |
 | Top failing workflows | top 3 workflow names by failure count in the window, e.g. `Release AcmeDB (5), Upstream Prepare (3), AcmeDB Cloud Release (2)` |
-| Escalations sent | count from drive-threads.json |
+| Escalations sent | `drive-threads.json` count (this clone only, a floor) cross-checked against live Slack search for the window; report both when they differ |
 | Escalations resolved | count where resolved=true |
 | Backlog size | TODO count |
 | Parking lot size | PARKING count |
