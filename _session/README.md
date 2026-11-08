@@ -166,6 +166,13 @@ clone at all — the same primitives `/stage`/`/top`/`/drive` already use, not a
 Its frontmatter reader is a small intentional copy of `task_claim.sh`'s `_tc_fm_get` (which is
 underscore-private to that script), following the same precedent as `attribution.sh`'s own copy.
 
+## Profile dir (`profile-dir.sh`)
+
+- Scripts that need the active Claude Code profile dir source `_session/profile-dir.sh` and read `$CCXP_PROFILE_DIR`; none may hardcode `~/.claude`
+- Order: `CLAUDE_CONFIG_DIR` when set, else derived from the script's own path under `<profile>/plugins/cache/`, else `~/.claude`
+- `ccxp_env_files` / `ccxp_first_env_file` give the `.env` candidates (`<profile>/.env`, then the legacy `~/.claude/.env`)
+- `lint_profile_dir.sh` (run by `tests/profile_dir_lint.bats`) fails on a bare `~/.claude` in code; a line may carry the marker `profile-dir-ok` when it cannot source the helper (Python)
+
 ## What this does NOT do
 
 Explicitly out of scope for the **Project-board mirror** — note these limits are exactly why the on-main `task_claim.sh` lock (which also backs PR ownership) exists:

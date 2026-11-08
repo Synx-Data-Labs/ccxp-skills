@@ -9,7 +9,7 @@
 #
 # Environment / .env resolution (in order, first wins):
 #   1. SLACK_WEBHOOK_URL already exported in the environment
-#   2. ~/.claude/.env  (machine-global, recommended)
+#   2. <profile>/.env  (machine-global, recommended; the legacy ~/.claude/.env is read too)
 #   3. $(pwd)/.env     (consumer repo's env, for back-compat)
 
 set -euo pipefail
@@ -17,9 +17,12 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/slack-notify.sh"
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[[ -r "${SCRIPT_DIR}/../../_session/profile-dir.sh" ]] && source "${SCRIPT_DIR}/../../_session/profile-dir.sh"
 
 # --channel NAME: select SLACK_WEBHOOK_URL_<NAME_UPPERCASED> (resolved AFTER .env is loaded,
-# so a webhook that lives only in ~/.claude/.env works — a shell-side
+# so a webhook that lives only in <profile>/.env works — a shell-side
 # SLACK_WEBHOOK_URL="$SLACK_WEBHOOK_URL_FOO" prefix expands before the script loads .env).
 CHANNEL=""
 ARGS=()
@@ -46,7 +49,13 @@ need_env() {
   if [[ -n "$CHANNEL_VAR" ]]; then [[ -z "${!CHANNEL_VAR:-}" ]]; else [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; fi
 }
 if need_env && { [[ -z "${BATS_TEST_TMPDIR:-}" ]] || [[ -n "${SLACK_ENV_FILE:-}" ]]; }; then
-  for ENV_FILE in ${SLACK_ENV_FILE:+"$SLACK_ENV_FILE"} "${HOME}/.claude/.env" "$(pwd)/.env"; do
+  ENV_CANDIDATES=()
+  [[ -n "${SLACK_ENV_FILE:-}" ]] && ENV_CANDIDATES+=("$SLACK_ENV_FILE")
+  if declare -F ccxp_env_files >/dev/null 2>&1; then
+    while IFS= read -r ENV_FILE; do ENV_CANDIDATES+=("$ENV_FILE"); done < <(ccxp_env_files)
+  fi
+  ENV_CANDIDATES+=("$(pwd)/.env")
+  for ENV_FILE in "${ENV_CANDIDATES[@]}"; do
     if [[ -f "$ENV_FILE" ]]; then
       # shellcheck disable=SC1090
       source "$ENV_FILE"
@@ -89,7 +98,7 @@ fi
 
 if [[ -z "${SLACK_WEBHOOK_URL:-}" ]]; then
   echo "Error: SLACK_WEBHOOK_URL is not set." >&2
-  echo "Set it in ~/.claude/.env, the consumer repo's .env, or export it." >&2
+  echo "Set it in ${CCXP_PROFILE_DIR:-<profile>}/.env, the consumer repo's .env, or export it." >&2
   exit 1
 fi
 

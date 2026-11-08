@@ -42,10 +42,13 @@
 set -uo pipefail
 
 # Known-autonomous clone path(s) — REQUIRED config, no adopting-team default
-# baked in (each team sets its own cron clone path via ~/.claude/.env, see
+# baked in (each team sets its own cron clone path via <profile>/.env, see
 # README Prerequisites). Colon-list; unset means every location classifies as
 # "interactive" (a cosmetic degrade for the standup attribution table, never
 # a functional failure — see attribution_classify below).
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh"
+
 : "${ATTRIBUTION_CRONTAB_CCXP_PATHS:=}"
 
 # Deprecated alias ATTRIBUTION_CCXP_PATHS: honoured only when the new name is
@@ -55,7 +58,7 @@ _attribution_legacy_fallback() {
   return 0
 }
 
-# Load ATTRIBUTION_CRONTAB_CCXP_PATHS from ~/.claude/.env (machine-global) when not
+# Load ATTRIBUTION_CRONTAB_CCXP_PATHS from <profile>/.env (machine-global) when not
 # already exported — same resolution order and ENV_FILE test seam as
 # slack/scripts/slack-send.sh, the synx-skills:vpn skill, and _session/_lib.sh.
 # Skipped in BATS (unless ENV_FILE points at a fixture) to keep tests hermetic.
@@ -65,9 +68,9 @@ _attribution_load_env() {
   if [ -n "${ENV_FILE:-}" ]; then
     [ -f "$ENV_FILE" ] && { # shellcheck disable=SC1090
       source "$ENV_FILE"; }
-  elif [ -z "${BATS_TEST_TMPDIR:-}" ] && [ -f "$HOME/.claude/.env" ]; then
+  elif [ -z "${BATS_TEST_TMPDIR:-}" ] && _attr_envf="$(ccxp_first_env_file 2>/dev/null)"; then
     # shellcheck disable=SC1090
-    source "$HOME/.claude/.env"
+    source "$_attr_envf"
   fi
   # the env file may set either name (new wins)
   ATTRIBUTION_CRONTAB_CCXP_PATHS="${ATTRIBUTION_CRONTAB_CCXP_PATHS:-}"

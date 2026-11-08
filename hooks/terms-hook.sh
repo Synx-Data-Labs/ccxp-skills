@@ -7,6 +7,10 @@
 # (settings.json "agent"), so other profiles never see the feature. See agent-pairing/terms.md.
 set -uo pipefail
 
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh"
+
 # Prompt text -> hook output JSON on stdout (or nothing).
 function terms-hook() {
   command -v jq >/dev/null 2>&1 || return 0
@@ -20,7 +24,7 @@ function terms-hook() {
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   terms="$here/../agent-pairing/scripts/terms.sh"
   [[ -f "$terms" ]] || return 0
-  dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+  dir="${CCXP_PROFILE_DIR:-}"
   local file="${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-$dir/wtf.json}}" capture=0
   if [[ -f "$file" ]] || [[ -f "$(dirname "$file")/terms.json" ]] || [[ "$(jq -r '.agent // empty' "$dir/settings.json" 2>/dev/null)" == "ccxp-agent" ]]; then capture=1; fi
 

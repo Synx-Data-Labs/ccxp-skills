@@ -15,19 +15,22 @@
 # (T20260911-698434). It now sources the single definition instead.
 #
 # _session/_lib.sh is deliberately NOT sourced: it runs `set -uo pipefail` and
-# loads ~/.claude/.env at source time, and this runs on every HUD poll.
+# loads <profile>/.env at source time, and this runs on every HUD poll.
 # claimant-id.sh is side-effect-free for exactly this caller.
+
+_SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Active profile dir (CCXP_PROFILE_DIR); side-effect-free, see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$_SL_DIR/../../_session/profile-dir.sh" ] && . "$_SL_DIR/../../_session/profile-dir.sh"
 
 # Last-user-input timestamp dir: last-input-hook.sh's UserPromptSubmit hook
 # touches <dir>/<session_id> on every prompt, and only that file's mtime is
 # read (sl-last-input-epoch, for the hud `lastat` field). The files hold no
 # prompt text. Mirrors claimant-id.sh's CLAIMANT_STATE_DIR override
 # convention so BATS can isolate reads under $BATS_TEST_TMPDIR.
-LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${HOME}/.claude/state/last-input}"
+LAST_INPUT_STATE_DIR="${LAST_INPUT_STATE_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/state/last-input}}"
 
-_SL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh" \
-                "$HOME/.claude/skills/_session/claimant-id.sh"; do
+for _sl_cand in "$_SL_DIR/../../_session/claimant-id.sh"; do
   # shellcheck source=/dev/null
   [ -r "$_sl_cand" ] && { . "$_sl_cand"; break; }
 done
@@ -177,10 +180,10 @@ sl-gh-hosts-user() {
 
 # gh account for a shell in repo_root $1, cached per root for
 # CCXP_HUD_CACHE_TTL seconds (default 60; 0 disables) so the 15 s poll stays
-# cheap. Cache: $CCXP_HUD_CACHE_DIR (default ${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-cache), one
+# cheap. Cache: $CCXP_HUD_CACHE_DIR (default <profile>/state/hud-cache), one
 # tiny file per root; failures to write are ignored.
 sl-gh-account() {
-  local root="$1" ttl="${CCXP_HUD_CACHE_TTL:-60}" cdir="${CCXP_HUD_CACHE_DIR:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/state/hud-cache}"
+  local root="$1" ttl="${CCXP_HUD_CACHE_TTL:-60}" cdir="${CCXP_HUD_CACHE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-cache}"
   local key f now stamp croot cacct dir acct
   [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=60
   now=$(date +%s)
@@ -346,7 +349,7 @@ sl-autopilot-stats() {
 # Job ledger (written by ledger.sh). Same default path convention as the other
 # state files: CLAUDE_CONFIG_DIR, else ~/.claude. CCXP_LEDGER_FILE overrides.
 sl-ledger-file() {
-  printf '%s' "${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/ccxp-ledger.json}"
+  printf '%s' "${CCXP_LEDGER_FILE:-${CCXP_PROFILE_DIR:-}/ccxp-ledger.json}"
 }
 
 # -> one normalized compact JSON object, or nothing when the ledger is
@@ -405,7 +408,7 @@ sl-default-branch() {
 sl-queue-fetch() {
   local root="$1" branch="$2" dir stamp now last=0 key
   git -C "$root" remote get-url origin >/dev/null 2>&1 || return 0
-  dir="${HUD_QUEUE_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-queue}"
+  dir="${HUD_QUEUE_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-queue}"
   mkdir -p "$dir" 2>/dev/null || return 0
   key=$(printf '%s' "$root" | cksum | cut -d' ' -f1)
   stamp="$dir/fetch-$key"

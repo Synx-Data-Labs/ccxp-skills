@@ -3,7 +3,7 @@
 # (`update` is internal: called by hooks/persona-check.sh; not a user-facing subcommand)
 #
 # Toggles the "ccxp-agent" main-session agent persona (a dispatcher) as a
-# Claude Code profile's default (~/.claude unless --claude-dir overrides
+# Claude Code profile's default (the active profile dir unless --claude-dir overrides
 # it): every future session hands requests to background subagents instead
 # of working inline. A jq-based settings.json edit, never a text replace --
 # that file also carries hooks/permissions/plugin config that must survive
@@ -35,7 +35,10 @@ case "$ACTION" in
 esac
 shift
 
-CLAUDE_DIR="${CLAUDE_DIR:-$HOME/.claude}"
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
+CLAUDE_DIR="${CLAUDE_DIR:-$CCXP_PROFILE_DIR}"
 DRY_RUN=0
 while [ $# -gt 0 ]; do
   case "$1" in

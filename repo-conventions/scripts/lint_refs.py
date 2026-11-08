@@ -288,12 +288,12 @@ def repo_slug(repo_root="."):
 
 def _plugin_cache_gh_wrapper():
     """Best-effort search of $CLAUDE_CONFIG_DIR/plugins/cache (falling back
-    to ~/.claude when unset) for an installed ccxp-skills plugin's
+    to the default profile dir when unset) for an installed ccxp-skills plugin's
     _gh/gh.sh -- the fallback for a vendored copy of this script that has
     no _gh/ sibling of its own (gh_argv() tries GH_SH first). Returns the
     lexicographically-last match (an approximation of "newest version", not
     full semver-aware -- acceptable for this fallback path) or None."""
-    config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude"))
+    config_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude"))  # profile-dir-ok: Python cannot source _session/profile-dir.sh
     cache_root = config_dir / "plugins" / "cache"
     try:
         candidates = sorted(cache_root.glob("*/ccxp-skills/*/_gh/gh.sh"))

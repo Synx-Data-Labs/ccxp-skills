@@ -525,7 +525,7 @@ _tc_is_legacy_self_claim() {
 # comparable from another machine at standup time.
 #
 # Resolution order mirrors _attribution_load_env: an exported value wins, then
-# $ENV_FILE, then ~/.claude/.env; skipped under BATS unless ENV_FILE points at a
+# $ENV_FILE, then <profile>/.env; skipped under BATS unless ENV_FILE points at a
 # fixture, to keep tests hermetic.
 _tc_claimed_role() {
   local path="${1:-}" list p
@@ -535,9 +535,9 @@ _tc_claimed_role() {
     if [ -n "${ENV_FILE:-}" ]; then
       # shellcheck disable=SC1090
       [ -f "$ENV_FILE" ] && source "$ENV_FILE"
-    elif [ -z "${BATS_TEST_TMPDIR:-}" ] && [ -f "$HOME/.claude/.env" ]; then
+    elif [ -z "${BATS_TEST_TMPDIR:-}" ] && _tc_envf="$(ccxp_first_env_file 2>/dev/null)"; then
       # shellcheck disable=SC1090
-      source "$HOME/.claude/.env"
+      source "$_tc_envf"
     fi
     list="${ATTRIBUTION_CRONTAB_CCXP_PATHS:-${ATTRIBUTION_CCXP_PATHS:-}}"
   fi

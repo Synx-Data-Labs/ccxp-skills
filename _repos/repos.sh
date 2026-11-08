@@ -21,6 +21,10 @@
 #
 # Sourceable: functions only; the CLI runs solely under the guard at the bottom.
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh"
 REPOS_CACHE_TTL="${REPOS_CACHE_TTL:-600}"
 REPOS_DEFAULT_DEPTH=2   # 1 level of children + the owner/repo container level
 
@@ -29,7 +33,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/resolve.sh"
 
 function repos-die() { printf 'repos: %s\n' "$*" >&2; return "${REPOS_RC:-2}"; }
 
-function repos-config-dir() { printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; }
+function repos-config-dir() { printf '%s\n' "${CCXP_PROFILE_DIR:-}"; }
 function repos-registry-file() { printf '%s/ccxp-repos.json\n' "$(repos-config-dir)"; }
 function repos-cache-file() { printf '%s/state/ccxp-repos.json\n' "$(repos-config-dir)"; }
 

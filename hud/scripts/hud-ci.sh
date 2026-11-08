@@ -17,8 +17,12 @@
 # argv array, never through a shell string.
 #
 # Test hooks: CCXP_HUD_CI_SYNC=1 refreshes in the foreground; HUD_CI_STATE_DIR
-# relocates the cache (default ${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-ci).
+# relocates the cache (default <profile>/state/hud-ci).
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 HCI_MIN_TTL=120
 HCI_TIMEOUT=5
 
@@ -29,7 +33,7 @@ sl-origin-name() {
   printf '%s' "$url" | sed -E 's|/+$||; s|\.git$||; s|^.*[/:]||'
 }
 
-hci-state-dir() { printf '%s' "${HUD_CI_STATE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/hud-ci}"; }
+hci-state-dir() { printf '%s' "${HUD_CI_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-ci}"; }
 
 # Same shapes the mod's config.ts accepts; the helper re-validates (defence in depth).
 hci-valid() { # $1 kind (workflow|branch|repo) $2 value

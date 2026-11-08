@@ -34,7 +34,7 @@
 #   ledger.sh authz set <key> yes|no [--quote "<owner words>"] [--note "<text>"]   owner's typed words only; yes requires --quote
 #     (ccxp-authz.json next to the ledger, mode 600, atomic; once it exists reply/render add an "Authorization:" section)
 #
-# File: ${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}
+# File: ${CCXP_LEDGER_FILE:-<profile>/ccxp-ledger.json}
 # {"schema":3,"updated_at","next_job","lifetime_jobs",
 #  "running":[{"job","title","context","prompt","agent","flags","resumed","started_at"}],  (started_at = HH:MM local;
 #                prompt = abs path of the saved job prompt, "" = not resumable; resumed = restart count)
@@ -59,8 +59,12 @@
 # backup, else the moment the log began). `stats` reads it; nothing else writes it.
 # Not locked: concurrent writers are last-write-wins. Titles and paths only, NEVER secrets.
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 ledger-file() {
-  printf '%s' "${CCXP_LEDGER_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-ledger.json}"
+  printf '%s' "${CCXP_LEDGER_FILE:-${CCXP_PROFILE_DIR:-}/ccxp-ledger.json}"
 }
 
 ledger-md-file() {

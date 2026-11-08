@@ -25,7 +25,7 @@
 # Repo options (lookup, expand, detect, add, choose, remove): --cwd DIR (default $PWD; the repo is its git
 # toplevel), --repo NAME and --repo-glossary FILE (override the derived name / glossary path).
 #
-# File ("wtf" = where to find): ${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wtf.json}}
+# File ("wtf" = where to find): ${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-<profile>/wtf.json}}
 # {"version":1,"updated_at","terms":{"wtf":{"defs":[{"text","context"|null,"scope":"global"|"repo:<name>",
 #   "default":bool,"pinned":bool,"hits":n,"added_at":"YYYY-MM-DD","last_hit":"YYYY-MM-DD",
 #   "origin":"glossary|captured|asked"}]}}}
@@ -48,8 +48,12 @@
 # file is moved aside (wtf.json.corrupt-<time>), never overwritten. Not locked: last write wins.
 # Definitions are shorthand only: NEVER store secrets. Exit: 0 ok, 1 not found, 2 usage/invalid, 3 limit.
 
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 terms-file() {
-  printf '%s' "${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/wtf.json}}"
+  printf '%s' "${CCXP_WTF_FILE:-${CCXP_TERMS_FILE:-${CCXP_PROFILE_DIR:-}/wtf.json}}"
 }
 
 # One-time migration of a legacy terms.json (same dir) into a missing wtf.json; never loses data:
@@ -520,7 +524,7 @@ terms-import-glossary() {
       *) file="$1"; shift ;;
     esac
   done
-  file="${file:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/rules/glossary.md}"
+  file="${file:-${CCXP_PROFILE_DIR:-}/rules/glossary.md}"
   [[ -r "$file" ]] || { echo "terms: cannot read $file" >&2; return 1; }
   parsed=$(terms-parse-glossary "$file")
   before=$(terms-read | jq '[.terms[].defs | length] | add // 0')

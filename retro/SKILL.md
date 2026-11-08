@@ -463,10 +463,10 @@ Idempotent — skip if an open chore for that same `<metric> on <repo>` regressi
 
 - Pairs with Phase 4c — that grades skills in *our own* marketplace(s); this looks **outward** at every other installed marketplace for a skill that already does something leaner/better than ours, so the comparison stops depending on a human happening to notice (the concrete case that motivated this phase: `ccxp-skills:grill-me` vs. the newly-installed `mattpocock-skills:grilling` implementing the same interview algorithm, found only by a human manually diffing the two).
 
-- **Step 1 — enumerate external marketplaces.** Read `enabledPlugins` from `~/.claude/settings.json`, excluding **our own** marketplace(s) — whichever repo `/retro` is currently running in, plus any sibling marketplace that repo's own `CLAUDE.md`/`dev/guidelines.md` names as "ours" (in this hub repo: `ccxp-skills` and `synx-skills`; a different adopting repo names its own instead — never a hardcoded list).
+- **Step 1 — enumerate external marketplaces.** Read `enabledPlugins` from `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json`, excluding **our own** marketplace(s) — whichever repo `/retro` is currently running in, plus any sibling marketplace that repo's own `CLAUDE.md`/`dev/guidelines.md` names as "ours" (in this hub repo: `ccxp-skills` and `synx-skills`; a different adopting repo names its own instead — never a hardcoded list).
 - No external marketplaces enabled → report "no external marketplaces configured" and end the phase.
 
-**Step 2 — list each external marketplace's skills.** For every remaining marketplace/plugin, read only the frontmatter `description:` (the trigger one-liner) from each `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/skills/*/SKILL.md` — never the full body. This is the cheap side of the comparison, which is what keeps the phase affordable to run every week instead of on a slower cadence.
+**Step 2 — list each external marketplace's skills.** For every remaining marketplace/plugin, read only the frontmatter `description:` (the trigger one-liner) from each `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/<marketplace>/<plugin>/<version>/skills/*/SKILL.md` — never the full body. This is the cheap side of the comparison, which is what keeps the phase affordable to run every week instead of on a slower cadence.
 
 **Step 3 — scope the comparison to whatever Phase 4c step 1 already produced this week.** Reuse that evidence as-is:
 

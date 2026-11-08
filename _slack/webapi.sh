@@ -24,13 +24,17 @@
 # Environment / .env resolution (in order, first wins) — same convention as
 # slack/scripts/slack-send.sh:
 #   1. SLACK_BOT_TOKEN already exported in the environment
-#   2. ~/.claude/.env  (machine-global, recommended)
+#   2. <profile>/.env  (machine-global, recommended; the legacy ~/.claude/.env is read too)
 #   3. $(pwd)/.env     (consumer repo's env, for back-compat)
 
 # -e deliberately omitted — sourceable (same reasoning as _gh/gh.sh): a
 # caller that sources this file to use one function directly must not have
 # its own shell's error-exit behavior silently changed.
 set -uo pipefail
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+# shellcheck source=/dev/null
+[[ -r "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh" ]] && source "$(dirname "${BASH_SOURCE[0]}")/../_session/profile-dir.sh"
 
 _slack_api_base="https://slack.com/api"
 
@@ -50,8 +54,12 @@ _slack_api_load_token() {
   if [[ -n "${BATS_TEST_TMPDIR:-}" ]]; then
     return 1
   fi
-  local env_file
-  for env_file in "${HOME}/.claude/.env" "$(pwd)/.env"; do
+  local env_file env_candidates=()
+  if declare -F ccxp_env_files >/dev/null 2>&1; then
+    while IFS= read -r env_file; do env_candidates+=("$env_file"); done < <(ccxp_env_files)
+  fi
+  env_candidates+=("$(pwd)/.env")
+  for env_file in "${env_candidates[@]}"; do
     if [[ -f "$env_file" ]]; then
       # shellcheck disable=SC1090
       source "$env_file"
@@ -65,7 +73,7 @@ _slack_api_die() { printf '%s: %s\n' "${0##*/}" "$1" >&2; exit 1; }
 
 _slack_api_require_token() {
   _slack_api_load_token || _slack_api_die \
-    "SLACK_BOT_TOKEN is not set (checked env, ~/.claude/.env, \$(pwd)/.env) — see _slack/README.md"
+    "SLACK_BOT_TOKEN is not set (checked env, ${CCXP_PROFILE_DIR:-<profile>}/.env, \$(pwd)/.env) — see _slack/README.md"
 }
 
 _slack_api_require_jq() {
@@ -189,7 +197,7 @@ Usage:
   webapi.sh thread-replies <channel_id> <message_ts>
   webapi.sh find-by-text <channel_id> <search_text> [oldest_ts] [latest_ts]
 
-Requires SLACK_BOT_TOKEN (env, ~/.claude/.env, or $(pwd)/.env). See
+Requires SLACK_BOT_TOKEN (env, <profile>/.env, or $(pwd)/.env). See
 _slack/README.md for the Bot Token Scopes needed and how to obtain one.
 EOF
 }

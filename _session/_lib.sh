@@ -38,7 +38,10 @@ set -uo pipefail
 PROJECT_OWNER="${PROJECT_OWNER:-}"
 PROJECT_NUMBER="${PROJECT_NUMBER:-}"
 
-# Load PROJECT_OWNER/PROJECT_NUMBER from ~/.claude/.env (machine-global) when
+# shellcheck source=/dev/null
+[ -r "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/profile-dir.sh"
+
+# Load PROJECT_OWNER/PROJECT_NUMBER from <profile>/.env (machine-global) when
 # not already exported — same resolution order and ENV_FILE test seam as
 # slack/scripts/slack-send.sh and the synx-skills:vpn skill's load_vpn_env. Skipped
 # in BATS (unless ENV_FILE points at a fixture) to keep tests hermetic.
@@ -50,15 +53,17 @@ _session_load_env() {
     return 0
   fi
   [ -n "${BATS_TEST_TMPDIR:-}" ] && return 0
-  [ -f "$HOME/.claude/.env" ] && { # shellcheck disable=SC1090
-    source "$HOME/.claude/.env"; }
+  local envf
+  envf="$(ccxp_first_env_file 2>/dev/null)" || return 0
+  # shellcheck disable=SC1090
+  source "$envf"
 }
 _session_load_env
 PROJECT_OWNER="${PROJECT_OWNER:-}"
 PROJECT_NUMBER="${PROJECT_NUMBER:-}"
 
 # _gh/gh.sh's own directory, resolved relative to this file rather than
-# hardcoded to ~/.claude/skills — that path only exists on a machine with the
+# hardcoded to a profile skills dir — that path only exists on a machine with the
 # Claude Code skill installed, not on a bare GHA runner that just cloned this
 # repo (T20260810-922807).
 _SESSION_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -103,11 +108,12 @@ session_clone_path() { git rev-parse --show-toplevel 2>/dev/null || pwd; }
 
 session_cc_session_id() {
   # Prefer the runtime-provided session ID; otherwise fall back to a per-host
-  # stable UUID stored in ~/.claude/state/session-id. The short prefix
+  # stable UUID stored in <profile>/state/session-id. The short prefix
   # (first 8 chars) is what gets written to the Project for scan-ability.
   local raw="${CLAUDE_CODE_SESSION_ID:-}"
   if [ -z "$raw" ]; then
-    local state_file="$HOME/.claude/state/session-id"
+    [ -n "${CCXP_PROFILE_DIR:-}" ] || { printf '%s' "${raw:0:8}"; return 0; }
+    local state_file="$CCXP_PROFILE_DIR/state/session-id"
     if [ -f "$state_file" ]; then
       raw="$(cat "$state_file")"
     else

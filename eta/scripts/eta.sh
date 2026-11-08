@@ -18,8 +18,7 @@ set -uo pipefail
 USAGE="usage: eta.sh [T<id>] [--tz <IANA-zone>] [--repo-root DIR]"
 
 _ETA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-for _eta_cand in "$_ETA_DIR/../../_session/claimant-id.sh" \
-                 "$HOME/.claude/skills/_session/claimant-id.sh"; do
+for _eta_cand in "$_ETA_DIR/../../_session/claimant-id.sh"; do
   # shellcheck source=/dev/null
   [ -r "$_eta_cand" ] && { . "$_eta_cand"; break; }
 done
