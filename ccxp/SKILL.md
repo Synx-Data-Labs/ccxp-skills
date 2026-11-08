@@ -140,7 +140,7 @@ Still yours: item 5b, reading the files it names (`journal_yesterday`, `previous
 2. **PRs merged yesterday**: `bash <skills-root>/_gh/gh.sh pr list --state merged --search "merged:>=YYYY-MM-DD merged:<YYYY-MM-DD" --json number,title,mergedAt` (use yesterday's date then today's date)
 3. **PRs opened/updated**: `bash <skills-root>/_gh/gh.sh pr list --state open --json number,title,updatedAt`
 4. **Journal entries**: Check `dev/JOURNAL/` for files dated yesterday
-5. **Current drive-threads**: `bash <skills-root>/_threads/threads.sh list --unresolved` for unresolved escalations
+5. **Current drive-threads**: `bash <skills-root>/_threads/threads.sh list --unresolved` for unresolved escalations. This is this clone's local view only (the file is per-clone by design); escalations posted from other clones or as plain channel messages are absent, so a standup that shows "0 open escalations" must say "in this clone's state" and cross-check live Slack before claiming none.
    5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`.
 
    - This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads.

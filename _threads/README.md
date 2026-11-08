@@ -4,6 +4,8 @@ Single owner of `.claude/state/drive-threads.json` (the local record of Slack
 escalation threads). Skills call `threads.sh` instead of editing the JSON with
 their own `jq`.
 
+**Scope: per clone, by design.** The file is gitignored local state, so two sessions never race on one shared file. It is `/drive`'s working index, not a count of all escalations: other clones, concurrent autopilot slots and direct channel posts are not in it. Any report (standup, `/retro`) built from it is a floor and must cross-check live Slack. See T20260925-267065.
+
 | Command | What it does | Exit |
 |---|---|---|
 | `add <key> --channel --ts --type --summary [--sent-at]` | create or replace the entry | 0 / 2 / 4 |
