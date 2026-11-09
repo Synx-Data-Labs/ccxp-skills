@@ -90,11 +90,11 @@ EOT
   export HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/a1"
   _fake_gh "$OK_RUN"
   run _hud_ci "$repo" '{"workflow":"w.yml","repo":"acme/widgets"}'
-  grep -qF 'run list --workflow w.yml --branch trunk --repo acme/widgets --limit 1 --json status,conclusion,createdAt' "$GH_LOG"
+  grep -qF 'run list --workflow w.yml --branch trunk --repo acme/widgets --limit 20 --json status,conclusion,createdAt,startedAt,updatedAt,event' "$GH_LOG"
   export HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/a2"
   _fake_gh "$OK_RUN"
   run _hud_ci "$repo" '{"workflow":"w.yml","branch":"release/4.8"}'
-  grep -qF 'run list --workflow w.yml --branch release/4.8 --limit 1' "$GH_LOG"
+  grep -qF 'run list --workflow w.yml --branch release/4.8 --limit 20' "$GH_LOG"
 }
 
 @test "a bad ci config (metacharacters, spaces, bad repo, wrong types) is ignored; gh never runs" {
@@ -184,4 +184,87 @@ EOT
   git -C "$repo" remote add origin git@github.com:acme/widgets.git
   run _run_json "{\"cwd\":\"$repo\"}"
   [ "$(jq -r .repo <<<"$output")" = "widgets" ]
+}
+
+# ---- ETA (running run + history of completed successful runs) -----------------------------------
+
+# $1 start, $2 end (ISO), $3 event -> one completed successful run
+_ok() { printf '{"status":"completed","conclusion":"success","event":"%s","createdAt":"%s","startedAt":"%s","updatedAt":"%s"}' "$3" "$1" "$1" "$2"; }
+_running() { printf '{"status":"in_progress","conclusion":null,"event":"%s","createdAt":"%s","startedAt":"%s","updatedAt":"%s"}' "$1" "$2" "$2" "$2"; }
+
+_eta_of() { # $1 = JSON array for gh, $2 = ci config; prints .ci as JSON
+  local repo; repo=$(_make_repo "r-eta-$RANDOM")
+  export HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/eta-$RANDOM"
+  _fake_gh "$1"
+  local cfg='{"workflow":"w.yml"}'
+  _hud_ci "$repo" "${2:-$cfg}" | jq -c .ci
+}
+
+@test "eta: median of the last completed successful runs of the same event; fields are numbers" {
+  local h="$(_running schedule 2026-10-26T03:00:00Z),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T05:00:00Z schedule),$(_ok 2026-10-23T03:00:00Z 2026-10-23T04:30:00Z schedule)"
+  run _eta_of "[$h]"
+  [ "$(jq -r .state <<<"$output")" = running ]
+  # durations 3600, 7200, 5400 -> median 5400
+  [ "$(jq -c '.eta | [.typ, .min, .max, .n]' <<<"$output")" = "[5400,3600,7200,3]" ]
+  [ "$(jq -r '.eta.start' <<<"$output")" = "$(date -u -d 2026-10-26T03:00:00Z +%s 2>/dev/null || date -u -j -f %Y-%m-%dT%H:%M:%SZ 2026-10-26T03:00:00Z +%s)" ]
+}
+
+@test "eta: an even number of runs averages the two middle durations; only the 7 newest history runs count" {
+  local h="$(_running schedule 2026-10-26T03:00:00Z)" d
+  for d in 25 24 23 22 21 20 19; do h="$h,$(_ok 2026-10-${d}T03:00:00Z 2026-10-${d}T04:00:00Z schedule)"; done
+  for d in 18 17 16; do h="$h,$(_ok 2026-10-${d}T03:00:00Z 2026-10-${d}T13:00:00Z schedule)"; done
+  run _eta_of "[$h]"
+  [ "$(jq -c '.eta | [.typ, .max, .n]' <<<"$output")" = "[3600,3600,7]" ]
+  h="$(_running schedule 2026-10-26T03:00:00Z),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T05:00:00Z schedule),$(_ok 2026-10-23T03:00:00Z 2026-10-23T05:00:00Z schedule),$(_ok 2026-10-22T03:00:00Z 2026-10-22T06:00:00Z schedule)"
+  run _eta_of "[$h]"
+  [ "$(jq -r .eta.typ <<<"$output")" = 7200 ]
+}
+
+@test "eta: failed, cancelled and other in-progress runs are not history; fewer than 3 good runs means no eta" {
+  local bad='{"status":"completed","conclusion":"failure","event":"schedule","createdAt":"2026-10-22T03:00:00Z","startedAt":"2026-10-22T03:00:00Z","updatedAt":"2026-10-22T09:00:00Z"}'
+  local h="$(_running schedule 2026-10-26T03:00:00Z),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z schedule),$bad,$(_running schedule 2026-10-21T03:00:00Z)"
+  run _eta_of "[$h]"
+  [ "$(jq -r .state <<<"$output")" = running ]
+  [ "$(jq -r 'has("eta")' <<<"$output")" = false ]
+}
+
+@test "eta: no history at all (a lone running run) has no eta key" {
+  run _eta_of "[$(_running schedule 2026-10-26T03:00:00Z)]"
+  [ "$(jq -c . <<<"$output" | jq -r 'keys | join(",")')" = "at,state" ]
+}
+
+@test "eta: same event is preferred when it has >= 3 runs, else any event is used" {
+  local h="$(_running schedule 2026-10-26T03:00:00Z)" d
+  for d in 25 24 23; do h="$h,$(_ok 2026-10-${d}T03:00:00Z 2026-10-${d}T04:00:00Z schedule)"; done
+  for d in 22 21 20; do h="$h,$(_ok 2026-10-${d}T03:00:00Z 2026-10-${d}T08:00:00Z workflow_dispatch)"; done
+  run _eta_of "[$h]"
+  [ "$(jq -c '.eta | [.typ, .n]' <<<"$output")" = "[3600,3]" ]
+  # only two scheduled runs: falls back to every event (2 schedule + 3 dispatch)
+  h="$(_running schedule 2026-10-26T03:00:00Z),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z schedule)"
+  for d in 22 21 20; do h="$h,$(_ok 2026-10-${d}T03:00:00Z 2026-10-${d}T08:00:00Z workflow_dispatch)"; done
+  run _eta_of "[$h]"
+  [ "$(jq -c '.eta | [.typ, .n]' <<<"$output")" = "[18000,5]" ]
+}
+
+@test "eta: only an in_progress newest run gets one (queued, passing and failing runs do not)" {
+  local hist="$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z schedule),$(_ok 2026-10-23T03:00:00Z 2026-10-23T04:00:00Z schedule)"
+  local newest
+  for newest in '{"status":"queued","conclusion":null,"event":"schedule","createdAt":"2026-10-26T03:00:00Z","startedAt":"2026-10-26T03:00:00Z","updatedAt":"2026-10-26T03:00:00Z"}' "$(_ok 2026-10-26T03:00:00Z 2026-10-26T04:00:00Z schedule)"; do
+    run _eta_of "[$newest,$hist]"
+    [ "$(jq -r 'has("eta")' <<<"$output")" = false ]
+  done
+}
+
+@test "eta: ci.eta false drops it from the output (the cache is shared); the ci block rejects nothing else" {
+  local h="$(_running schedule 2026-10-26T03:00:00Z),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z schedule),$(_ok 2026-10-23T03:00:00Z 2026-10-23T04:00:00Z schedule)"
+  run _eta_of "[$h]" '{"workflow":"w.yml","eta":false}'
+  [ "$(jq -r .state <<<"$output")" = running ]
+  [ "$(jq -r 'has("eta")' <<<"$output")" = false ]
+}
+
+@test "eta: runs without startedAt or with garbage timestamps never produce an eta or an error" {
+  run _eta_of '[{"status":"in_progress","event":"schedule","createdAt":"2026-10-26T03:00:00Z"},{"status":"completed","conclusion":"success","createdAt":"x","startedAt":"nope","updatedAt":5}]'
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .state <<<"$output")" = running ]
+  [ "$(jq -r 'has("eta")' <<<"$output")" = false ]
 }

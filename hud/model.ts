@@ -143,7 +143,15 @@ export function parseHelper(stdout: string): HelperData | null {
   if (typeof c === 'object' && c !== null && !Array.isArray(c)) {
     // Untrusted: only the four known states get through, nothing else is ever drawn.
     const state = str((c as Record<string, unknown>).state)
-    if (CI_STATES.includes(state as CiState)) ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
+    if (CI_STATES.includes(state as CiState)) {
+      ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
+      const e = (c as Record<string, unknown>).eta
+      if (state === 'running' && typeof e === 'object' && e !== null && !Array.isArray(e)) {
+        const eo = e as Record<string, unknown>
+        const [start, typ, min, max, count] = [eo.start, eo.typ, eo.min, eo.max, eo.n].map(num)
+        if (start > 0 && typ > 0 && min > 0 && max >= min && count >= 3) ci.eta = { start, typ, min, max, n: count }
+      }
+    }
   }
   const ni = r.nightly
   let nightly: Nightly | null = null
@@ -343,6 +351,36 @@ function shortDate(epochSec: number): string {
   return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** Seconds as a short duration: `45m`, `4h`, `4.5h`. */
+function shortDuration(sec: number): string {
+  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))}m`
+  return `${(Math.round(sec / 360) / 10).toString()}h`
+}
+
+const dayStart = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+
+/** `HH:MM` local, with ` +Nd` when that is not today. */
+function clock(epochSec: number, nowMs: number): string {
+  const d = new Date(epochSec * 1000)
+  const days = Math.round((dayStart(d) - dayStart(new Date(nowMs))) / 86400000)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}${days > 0 ? ` +${days}d` : ''}`
+}
+
+/**
+ * The ETA text of a running run, or '' (not running, no `eta`). Local time.
+ * - spread (max - min) <= half the median: one time from the median, `ETA 18:40`, overdue once past it.
+ * - wider spread: a range from the fastest to the slowest recent run, `ETA 14:20-19:05`, overdue once past the slowest.
+ * - overdue: `over usual (4h)`, the median duration, never a negative time.
+ */
+export function ciEta(ci: Ci, nowMs: number): string {
+  const e = ci.eta
+  if (ci.state !== 'running' || !e) return ''
+  const now = nowMs / 1000
+  const wide = e.max - e.min > e.typ / 2
+  if (now > e.start + (wide ? e.max : e.typ)) return `over usual (${shortDuration(e.typ)})`
+  return wide ? `ETA ${clock(e.start + e.min, nowMs)}-${clock(e.start + e.max, nowMs)}` : `ETA ${clock(e.start + e.typ, nowMs)}`
+}
+
 /** A CI that must be unmissable: failing (also timed out). Yellow and green rows get no extra highlight. */
 export const isCiRed = (ci: Ci): boolean => ci.state === 'failing'
 
@@ -355,17 +393,19 @@ function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
   const look = CI_LOOK[ci.state]
   const red = isCiRed(ci)
   const date = ci.at > 0 ? ` ${shortDate(ci.at)}` : ''
-  const mk = (wf: boolean, word: boolean, age: boolean, dateOn: boolean): Seg[] => {
+  const eta = ciEta(ci, nowMs)
+  const mk = (wf: boolean, word: boolean, age: boolean, dateOn: boolean, etaOn = false): Seg[] => {
     const segs: Seg[] = [
       { text: 'CI ', bold: true },
       ...(wf ? [{ text: `(${truncate(workflow, 30)}) `, dim: true }] : []),
       { text: look.glyph + (word ? ` ${look.word}` : ''), color: look.color, marker: word },
+      ...(etaOn && eta ? [{ text: ` ${eta}`, color: look.color }] : []),
       ...(dateOn && date ? [{ text: date, color: look.color }] : []),
       ...(age ? ageSegs(ci.at, nowMs) : []),
     ]
     return red ? segs.map(x => ({ ...x, alert: true, bold: true, dim: false })) : segs
   }
-  return [mk(true, true, true, true), mk(false, true, true, true), mk(false, false, true, true), mk(false, false, false, true), mk(false, false, false, false)]
+  return [mk(true, true, true, true, true), mk(false, true, true, true, true), mk(false, false, true, true, true), mk(false, false, false, true), mk(false, false, false, false)]
 }
 
 /** The top CI row, or null (no `ci` configured, switched off in `fields`, or no answer yet). Starts full at every width. */

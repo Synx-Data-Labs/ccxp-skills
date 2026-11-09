@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -1656,4 +1656,72 @@ test('details is a superset of the band: every band cell has a details counterpa
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
   for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+})
+
+// ---- CI ETA --------------------------------------------------------------------------------------
+// Fixtures only: the helper's history logic is tested in tests/hud_ci.bats; here the display of its answer.
+
+const START = new Date(2026, 9, 26, 3, 0).getTime() / 1000 // local 03:00
+const hhmm = (sec: number) => {
+  const d = new Date(sec * 1000)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+const H = 3600
+const run = (eta?: object, state = 'running') => ({ state, at: START, ...(eta ? { eta } : {}) }) as any
+const NARROW = { start: START, typ: 2 * H, min: 1.8 * H, max: 2.2 * H, n: 5 }
+const WIDE = { start: START, typ: 4 * H, min: 2 * H, max: 9 * H, n: 5 }
+
+test('ciEta: a narrow spread shows one time, the start plus the median, in local time', async () => {
+  expect(ciEta(run(NARROW), (START + 600) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}`)
+  expect(ciEta(run(NARROW), (START + 2 * H) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}`) // exactly on time is not overdue
+})
+
+test('ciEta: a wide spread (max - min > half the median) shows the fastest-slowest range', async () => {
+  expect(ciEta(run(WIDE), (START + 3 * H) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}-${hhmm(START + 9 * H)}`)
+  // past the median but within the slowest recent run: still the range, not overdue
+  expect(ciEta(run(WIDE), (START + 6 * H) * 1000)).toContain('ETA ')
+})
+
+test('ciEta: overdue shows the usual duration, never a negative time', async () => {
+  expect(ciEta(run(NARROW), (START + 2 * H + 60) * 1000)).toBe('over usual (2h)')
+  expect(ciEta(run(WIDE), (START + 9 * H + 60) * 1000)).toBe('over usual (4h)')
+  expect(ciEta(run({ ...NARROW, typ: 45 * 60, min: 40 * 60, max: 50 * 60 }), (START + 3 * H) * 1000)).toBe('over usual (45m)')
+  expect(ciEta(run({ ...NARROW, typ: 4.5 * H, min: 4 * H, max: 5 * H }), (START + 6 * H) * 1000)).toBe('over usual (4.5h)')
+})
+
+test('ciEta: nothing when not running or without an eta; +Nd when it lands on another day', async () => {
+  expect(ciEta(run(NARROW, 'passing'), START * 1000)).toBe('')
+  expect(ciEta(run(), START * 1000)).toBe('')
+  const night = new Date(2026, 9, 26, 22, 0).getTime() / 1000
+  expect(ciEta(run({ start: night, typ: 5 * H, min: 4.8 * H, max: 5.2 * H, n: 5 }), (night + 60) * 1000)).toBe('ETA 03:00 +1d')
+})
+
+test('CI row: a running run with an eta carries it after the state; no eta, no extra text; it is dropped when narrow', async () => {
+  const started = NOW - 600 // the band's clock is the real one, so the run started ten minutes ago
+  const row = (eta: object | undefined, cols: number) => text(bandRows(withHelper({ ci: { ...run(eta), at: started } }), { ...CI, fields: ['ci'] }, cols).slice(0, 1))
+  expect(row({ ...NARROW, start: started }, 140)).toMatch(/^CI \(nightly\.yml\) ◐ running ETA \d\d:\d\d \d\d-\d\d /)
+  expect(row(undefined, 140)).toMatch(/^CI \(nightly\.yml\) ◐ running \d\d-\d\d /)
+  expect(row({ ...NARROW, start: started }, 20)).not.toContain('ETA')
+})
+
+test('parseHelper: eta survives only on a running run with sane numbers and >= 3 runs of history', async () => {
+  const eta = (ci: unknown) => parseHelper(JSON.stringify({ ...BASE, ci }))?.ci?.eta
+  const good = { start: START, typ: 7200, min: 6000, max: 8000, n: 5 }
+  expect(eta({ state: 'running', at: START, eta: good })).toEqual(good)
+  expect(eta({ state: 'passing', at: START, eta: good })).toBeUndefined()
+  expect(eta({ state: 'running', at: START, eta: { ...good, n: 2 } })).toBeUndefined()
+  expect(eta({ state: 'running', at: START, eta: { ...good, typ: 'x' } })).toBeUndefined()
+  expect(eta({ state: 'running', at: START, eta: { ...good, max: 1 } })).toBeUndefined()
+  expect(eta({ state: 'running', at: START, eta: [1, 2, 3] })).toBeUndefined()
+})
+
+test('config: ci.eta is on unless explicitly false; withConfig keeps a hand-set false across /hud config', async () => {
+  expect(parseCi({ workflow: 'w.yml' })).toEqual({ workflow: 'w.yml' })
+  expect(parseCi({ workflow: 'w.yml', eta: true })).toEqual({ workflow: 'w.yml' })
+  expect(parseCi({ workflow: 'w.yml', eta: false })).toEqual({ workflow: 'w.yml', eta: false })
+  expect(parseCi({ workflow: 'w.yml', eta: 'no' })).toEqual({ workflow: 'w.yml' })
+  const old = '{"ci": {"workflow": "old.yml", "eta": false}}'
+  expect(JSON.parse(withConfig(old, { ci: { workflow: 'new.yml' } })).ci).toEqual({ workflow: 'new.yml', eta: false })
+  expect(JSON.parse(withConfig(old, { ci: null })).ci).toBeNull()
+  expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}}', { ci: { workflow: 'new.yml' } })).ci).toEqual({ workflow: 'new.yml' })
 })

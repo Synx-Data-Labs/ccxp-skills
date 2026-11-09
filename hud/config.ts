@@ -55,6 +55,7 @@ export function parseCi(x: unknown): CiConfig | undefined {
   const out: CiConfig = { workflow }
   if (typeof raw.branch === 'string' && BRANCH_RE.test(raw.branch.trim())) out.branch = raw.branch.trim()
   if (typeof raw.repo === 'string' && REPO_RE.test(raw.repo.trim())) out.repo = raw.repo.trim()
+  if (raw.eta === false) out.eta = false // on by default; only an explicit false switches the ETA off
   return out
 }
 
@@ -257,7 +258,12 @@ export function withConfig(text: string | undefined | null, patch: { ci?: CiConf
     raw = {}
   }
   const next: Raw = { ...raw }
-  if (patch.ci !== undefined) next.ci = patch.ci
+  if (patch.ci !== undefined) {
+    // A re-run of `/hud config` must not silently turn a hand-set `"eta": false` back on.
+    const old = raw.ci
+    const keepOff = patch.ci !== null && isRecord(old) && old.eta === false
+    next.ci = keepOff ? { ...patch.ci, eta: false } : patch.ci
+  }
   if (patch.fillColor !== undefined) next.fillColor = patch.fillColor
   if (patch.version !== undefined) next.version = patch.version
   if (patch.queue !== undefined) next.queue = patch.queue

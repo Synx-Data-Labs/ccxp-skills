@@ -12,6 +12,8 @@ export type CiConfig = {
   branch?: string
   /** `owner/repo`; undefined means the current repo. */
   repo?: string
+  /** `false` hides the ETA on a running run; undefined (the default) shows it. */
+  eta?: boolean
 }
 
 /** Where the queue cell reads dev/TODO from: the repo's default branch on origin (default; git object reads, no checkout) or this clone's working tree (opt-in). */
@@ -145,7 +147,12 @@ export type Ci = {
   state: CiState
   /** Epoch seconds the last run was created, 0 when unknown. */
   at: number
+  /** Only while the newest run is in progress and the helper had >= 3 completed runs to learn from (seconds / epoch seconds). */
+  eta?: CiEta
 }
+
+/** Typical duration of the workflow's recent successful runs (see `hud/scripts/hud-ci.sh`). */
+export type CiEta = { start: number; typ: number; min: number; max: number; n: number }
 
 /** The ccxp-skills plugin version segment; `latest` is set only when strictly newer than `installed`. */
 export type PluginVersion = {
