@@ -1,10 +1,10 @@
 ---
-status: Design
+status: Done
 estimation: 1
 source: owner request 2026-11-07 (job 1001)
 related: T20261107-406028, T20261107-431002
-claimed_by: cc1-50ac6891:4f87f913cfbf8330
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-02
 ---
 
@@ -89,21 +89,21 @@ Test plan and done criteria are amended accordingly: the BATS file is `tests/rit
 
 ## Test plan
 
-- [ ] Unit (BATS, `tests/ritual_due.bats`): `ritual-due.sh` with a fake clock and timezone prints `standup` daily, `ipm` Mon-Fri (keyed to that week's Monday), `retro` Fri-Sun (keyed to the Friday); Sunday evening Chicago time is still Sunday although UTC is Monday.
-- [ ] Unit (BATS): `claim` prints one ritual per check in priority order and is empty when nothing is due (no marker written); `done` is final for the day; `release` and the 6 h TTL make it due again; a missed Monday heals the same week.
-- [ ] Unit (BATS): concurrent claims, exactly one wins; a Friday standup claim also claims the retro; no network call (shimmed `gh`, `curl`, `claude`).
-- [ ] Local: persona session start runs `claim` and dispatches nothing when nothing is due (observed once on macOS; a non-macOS run is recorded in `## Closed` if available).
-- [ ] Integration (post-merge and release, owner machine not touched by the implementation): one standup, one Monday ipm and one Friday retro dispatched by a live persona session, then a repeat check that does nothing.
+- [x] Unit (BATS, `tests/ritual_due.bats`): `ritual-due.sh` with a fake clock and timezone prints `standup` daily, `ipm` Mon-Fri (keyed to that week's Monday), `retro` Fri-Sun (keyed to the Friday); Sunday evening Chicago time is still Sunday although UTC is Monday.
+- [x] Unit (BATS): `claim` prints one ritual per check in priority order and is empty when nothing is due (no marker written); `done` is final for the day; `release` and the 6 h TTL make it due again; a missed Monday heals the same week.
+- [x] Unit (BATS): concurrent claims, exactly one wins; a Friday standup claim also claims the retro; no network call (shimmed `gh`, `curl`, `claude`).
+- [ ] Local (not done: needs a live persona session on the new release, T20261109-584639): persona session start runs `claim` and dispatches nothing when nothing is due (observed once on macOS; a non-macOS run is recorded in `## Closed` if available).
+- [ ] Integration (external, T20261109-584639; post-merge and release, owner machine not touched by the implementation): one standup, one Monday ipm and one Friday retro dispatched by a live persona session, then a repeat check that does nothing.
 - [x] Dropped by the 2026-11-09 decision: CI-line dedupe and the forced-failing-run latency item (no event-driven CI wake).
 
 ## Done criteria
 
-- [ ] Design merged and the trigger decision recorded (#600 merged; the 2026-11-09 design update is the PR that carries this edit; `## Decision needed` is resolved).
-- [ ] `agent-pairing/scripts/ritual-due.sh` plus `tests/ritual_due.bats` cover day gating, timezones and idempotency (Test plan unit items).
-- [ ] Persona section "Rituals due" in `agent-pairing/assets/ccxp-agent.md` (persona stays under its size guard) and `agent-pairing/rituals.md`; the persona hook cannot dispatch, so no hook change.
+- [x] Design merged and the trigger decision recorded (#600 merged; the 2026-11-09 design update is the PR that carries this edit; `## Decision needed` is resolved).
+- [x] `agent-pairing/scripts/ritual-due.sh` plus `tests/ritual_due.bats` cover day gating, timezones and idempotency (Test plan unit items).
+- [x] Persona section "Rituals due" in `agent-pairing/assets/ccxp-agent.md` (persona stays under its size guard) and `agent-pairing/rituals.md`; the persona hook cannot dispatch, so no hook change.
 - [x] Dropped: workflow template for a CI event trigger (no event-driven wake).
-- [ ] Verified once per ritual by a live persona session after the release (integration item; external, recorded in `## Closed`).
-- [ ] Hub deprecation task T20261107-406028 unblocked only after the item above.
+- [ ] Verified once per ritual by a live persona session after the release (external, needs the plugin release; tracked by T20261109-584639).
+- [ ] Hub deprecation task T20261107-406028 unblocked only after the item above (still blocked; T20261109-584639).
 
 ## Repo file references
 
@@ -116,3 +116,19 @@ Test plan and done criteria are amended accordingly: the BATS file is `tests/rit
 | `hud/scripts/ledger.sh` | n/a | job ledger (the ritual job's row) |
 | `agent-pairing/scripts/ritual-due.sh`, `agent-pairing/rituals.md`, `tests/ritual_due.bats` | new | the due check, its doc and tests (implementation PR) |
 | hub `dev/daily-ccxp.sh` | 580-640, 903-1019 | `ipm-due`, `preflight-actionable`, `start-ccxp` (behavior being replaced) |
+
+## Closed (2026-11-09)
+
+- Shipped in PR #637 (claim #635, design update #636); CI green (bats, Markdown Lint, lint-tasks, skill-quality, sync-tasks); an independent fresh reviewer approved every PR, several rounds on #636 and #637.
+- Met: `agent-pairing/scripts/ritual-due.sh` (`list`, `claim`, `done`, `release`) is token-free and network-free (BATS shims `gh`, `curl`, `claude`), uses a fake clock and `America/Chicago` day boundaries (Sunday evening stays Sunday, DST edges, month rollover), `standup` daily, `ipm` Mon-Fri once per week, `retro` Fri-Sun once per week, one job per check, race-safe `O_EXCL` generation claims with a 6 h retry and mandatory-key `done`/`release`, silent no-op outside a repo with `dev/TODO` and with the off switches. Persona section "Rituals due" plus `agent-pairing/rituals.md` with the limits; persona 45746 bytes of the 46000 guard.
+- Unverified (external): no live persona session has dispatched a ritual yet. The persona change needs a plugin release to reach installs, and no version bump or release was made here; suggested next patch version is 6.3.2 (the owner decides). Limits as documented: only while a session is open and awake, worst-case lag about 1 hour under autopilot, a closed session runs nothing until the next start (catch-up), markers are per profile dir.
+- Process note: PR #637 was merged by a chained command whose pre-merge script had reported BLOCKED for a single unticked "CI green" test-plan checkbox in the PR body; CI was in fact green at that head and all required checks had passed, so the merge is sound, but the gate was not honored as written.
+- Not touched: the hub's launchd job and `dev/daily-ccxp.sh` (removal stays the last step, T20261107-406028 and T20261107-431002; T20261107-406028 stays blocked on the live verification below).
+- Follow-ups filed: T20261109-584639 (verify the rituals live after the release), T20261109-179471 (usage-cost warning, separate follow-up; not built). The event-driven CI wake was dropped by the owner decision, not deferred.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, not invoked as a skill; BATS cases were written alongside the script and re-run after each review fix
+- Verification (`superpowers:verification-before-completion`): local bats and lint before each push; independent fresh-agent review on every PR
+- Systematic debugging (`superpowers:systematic-debugging`): no skill; the claim race and the skill-quality and profile-dir lint failures were diagnosed from reproductions and CI logs
+- Receiving code review (`superpowers:receiving-code-review`): findings applied on #636 (3 rounds) and #637 (4 rounds); the claim-superseded `release` limit and one wording nit were documented instead of changed
