@@ -9,6 +9,7 @@
 # _tc_days_since_last_commit, _tc_resolve_task_location, _tc_fetch_fm_field) are
 # integration surface; _tc_pr_owner's DECISION is exercised by stubbing them.
 
+bats_require_minimum_version 1.5.0
 load test_helper
 setup() {
   # Per-test claimant state: the machine-id and secret are cached under
@@ -1520,4 +1521,151 @@ _vl_setup() {
   claimant_clone_path() { printf '/tmp/T8-other-target'; }
   run _tc_verify_landed T9 --repo hub/repo
   [ "$status" -eq 3 ]
+}
+
+# --- acquire --force: manual takeover (T20261109-745828) ----------------------
+
+_force_setup() {
+  # $1 held-by value → T1 claimed by $1; this clone is "box:/clone" (legacy shape
+  # on purpose is avoided: use a cc1-shaped self id).
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-a.md"
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-a.md" claimed_by "$1"
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-a.md" status "In Progress"
+  _tc_claimant_id() { printf 'cc1-11111111:aaaaaaaaaaaaaaaa'; }
+  F="$TASK_CLAIM_DIR/T1-a.md"
+}
+
+@test "acquire without --force still refuses another claimant (exit 3, file unchanged)" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  run _tc_acquire T1
+  [ "$status" -eq 3 ]
+  [ "$output" = "claimed:cc1-22222222:bbbbbbbbbbbbbbbb" ]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "cc1-22222222:bbbbbbbbbbbbbbbb" ]
+  [ -z "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+}
+
+@test "acquire --force takes over a task held by another claimant" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  run _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"taken-over:cc1-22222222:bbbbbbbbbbbbbbbb"* ]]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "cc1-11111111:aaaaaaaaaaaaaaaa" ]
+  [ "$(_tc_fm_get "$F" status)" = "In Progress" ]
+}
+
+@test "acquire --force takes over a LIVE claimant too (no reclaimable gate)" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  # Force "live": the reclaim gate would refuse, --force must not consult it.
+  _tc_reclaimable() { printf 'live\n'; }
+  run _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"taken-over:"* ]]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "cc1-11111111:aaaaaaaaaaaaaaaa" ]
+}
+
+@test "acquire --force takes over a human-assigned claim" {
+  _force_setup "Alex"
+  run _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [ "$(_tc_fm_get "$F" claimed_takeover_from)" = "Alex" ]
+}
+
+@test "acquire --force records the previous claimant in claimed_takeover_from" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  _tc_acquire T1 --force >/dev/null 2>&1
+  [ "$(_tc_fm_get "$F" claimed_takeover_from)" = "cc1-22222222:bbbbbbbbbbbbbbbb" ]
+  [ -n "$(_tc_fm_get "$F" claimed_role)" ]
+}
+
+@test "acquire --force prints a loud warning naming the previous claimant (stderr)" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  unset TASK_CLAIM_QUIET
+  run --separate-stderr _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"FORCED TAKEOVER"* ]]
+  [[ "$stderr" == *"cc1-22222222:bbbbbbbbbbbbbbbb"* ]]
+  [[ "$stderr" == *"FORCED takeover from"* ]]   # the suggested commit message line
+}
+
+@test "acquire --force on a free task is a plain acquire (nothing recorded)" {
+  _force_setup ""
+  run _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [ "$output" = "acquired" ]
+  [ -z "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+}
+
+@test "acquire --force on my own claim is 'mine' (nothing recorded)" {
+  _force_setup "cc1-11111111:aaaaaaaaaaaaaaaa"
+  run _tc_acquire T1 --force
+  [ "$status" -eq 0 ]
+  [ "$output" = "mine" ]
+  [ -z "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+}
+
+@test "acquire: unknown flag is a usage error (64) and changes nothing" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  run _tc_acquire T1 --frce
+  [ "$status" -eq 64 ]
+  run _tc_acquire T1 --force --nope
+  [ "$status" -eq 64 ]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "cc1-22222222:bbbbbbbbbbbbbbbb" ]
+}
+
+@test "acquire --force on a missing task file keeps exit 2" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  run _tc_acquire T999 --force
+  [ "$status" -eq 2 ]
+}
+
+@test "release clears claimed_takeover_from" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  _tc_acquire T1 --force >/dev/null 2>&1
+  [ -n "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+  _tc_release T1 >/dev/null
+  [ -z "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+}
+
+@test "release-others clears claimed_takeover_from" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  _tc_acquire T1 --force >/dev/null 2>&1
+  _tc_release_others >/dev/null
+  [ -z "$(_tc_fm_get "$F" claimed_takeover_from)" ]
+  [ -z "$(_tc_fm_get "$F" claimed_by)" ]
+}
+
+@test "forced takeover and a concurrent claim collide on claimed_by (the merge stays the lock)" {
+  # Both sides rewrite the same claimed_by: line to different values -> conflict.
+  d="$BATS_TEST_TMPDIR/repo"; mkdir -p "$d/dev/TODO"; git init -q -b main "$d"; git_identity "$d"
+  _mk_task_file "$d/dev/TODO/T1-a.md"
+  _tc_fm_set "$d/dev/TODO/T1-a.md" claimed_by "cc1-22222222:bbbbbbbbbbbbbbbb"
+  git -C "$d" add -A; git -C "$d" commit -qm base
+  git -C "$d" checkout -qb forced
+  ( cd "$d"; TASK_CLAIM_DIR="$d/dev/TODO"; _tc_claimant_id() { printf 'cc1-11111111:aaaaaaaaaaaaaaaa'; }; _tc_acquire T1 --force >/dev/null 2>&1 )
+  git -C "$d" commit -qam forced
+  git -C "$d" checkout -q main; git -C "$d" checkout -qb other
+  ( cd "$d"; TASK_CLAIM_DIR="$d/dev/TODO"; _tc_claimant_id() { printf 'cc1-33333333:cccccccccccccccc'; }; _tc_acquire T1 --force >/dev/null 2>&1 )
+  git -C "$d" commit -qam other
+  run git -C "$d" -c merge.conflictstyle=merge merge forced
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"CONFLICT"* ]]
+}
+
+@test "no skill script, skill doc or caller passes --force to task_claim.sh acquire (manual-only)" {
+  # Only the script itself, its tests, and the docs that describe the flag may
+  # mention it. Every other file that invokes task_claim.sh must not.
+  run bash -c "cd '$REPO_ROOT' && grep -rIl -E 'task_claim\\.sh[^|;&]*(acquire|--force)|acquire[^|;&]*--force' \
+    --include='*.sh' --include='*.md' --include='*.py' --include='*.yml' . \
+    | grep -v -E '^\\./(_session/task_claim\\.sh|tests/|claim/SKILL\\.md|_session/README\\.md|lifecycle\\.md|dev/)' \
+    | xargs -r grep -n -E -- '--force' | grep -E 'task_claim|acquire' || true"
+  [ -z "$output" ]
+}
+
+@test "the drive, autopilot, address-pr and preflight scripts never mention --force on a claim" {
+  for f in drive/scripts/preflight.sh address-pr/scripts/entry-gate.sh drive/SKILL.md autopilot/SKILL.md address-pr/SKILL.md; do
+    [ -f "$REPO_ROOT/$f" ] || continue
+    run bash -c "grep -n -E 'acquire.*--force|--force.*acquire|task_claim.*--force' '$REPO_ROOT/$f'"
+    [ "$status" -eq 1 ]
+  done
 }

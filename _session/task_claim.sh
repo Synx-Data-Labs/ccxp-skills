@@ -49,10 +49,16 @@
 # release-on-pickup (same agent) and the reclaim sweep (foreign dead agent).
 #
 # Verbs:
-#   acquire <task-id>            → claim if free. Prints one of:
+#   acquire <task-id> [--force] → claim if free. Prints one of:
 #                                    "acquired"        (was free, now mine)
 #                                    "mine"            (already mine; idempotent)
 #                                    "claimed:<by>"    (held by another; exit 3)
+#                                    "taken-over:<by>" (--force only: held by another,
+#                                                       taken anyway; exit 0; loud stderr
+#                                                       warning; <by> recorded in the
+#                                                       task's claimed_takeover_from)
+#                                  --force is MANUAL-ONLY (owner words required); no skill
+#                                  script passes it. Unknown flag: exit 64.
 #                                  LOCAL-ONLY: acquire edits the working-tree file and
 #                                  warns on stderr; the lock exists only once the claim
 #                                  PR merges to main (T20260826-280188). Check with:
@@ -563,7 +569,19 @@ _tc_warn_local_only() {
 }
 
 _tc_acquire() {
-  local id="$1" file cur mine decision
+  # acquire <task-id> [--force]. --force (T20261109-745828) is a MANUAL override
+  # the owner asked for: take the task even when another claimant holds it, live
+  # or not. It is never implied and no skill script passes it
+  # (tests/task_claim.bats pins that). Free or already-mine tasks ignore it.
+  local id="${1:-}" force=0 file cur mine decision
+  [ -n "$id" ] || { _session_log "usage: task_claim.sh acquire <task-id> [--force]"; return 64; }
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --force) force=1; shift ;;
+      *) _session_log "task_claim: acquire: unknown argument $1 (usage: acquire <task-id> [--force])"; return 64 ;;
+    esac
+  done
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id under $(_tc_task_dir)"; return 2; }
   cur="$(_tc_fm_get "$file" claimed_by)"
   mine="$(_tc_claimant_id)" || { _session_log "task_claim: cannot resolve claimant id — refusing to claim $id"; return 1; }
@@ -578,7 +596,18 @@ _tc_acquire() {
   fi
   case "$decision" in
     mine)  _tc_warn_local_only "$id"; printf 'mine\n'; return 0 ;;
-    other) printf 'claimed:%s\n' "$cur"; return 3 ;;
+    other)
+      [ "$force" = 1 ] || { printf 'claimed:%s\n' "$cur"; return 3; }
+      # Forced takeover. Still edits the SAME claimed_by: line, so a concurrent
+      # claim collides at merge and the race rule applies unchanged.
+      _session_log "task_claim: WARNING: FORCED TAKEOVER of $id — it was held by '$cur' (live or not); that claimant is displaced. Manual override only. Suggested claim commit message: docs(claim): claim $id (FORCED takeover from $cur)"
+      _tc_fm_set "$file" claimed_by "$mine" || return 1
+      _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
+      _tc_fm_set "$file" claimed_takeover_from "$cur" || return 1
+      _tc_fm_set "$file" status "In Progress" || return 1
+      _tc_stamp_scheduled_if_needed "$file" || return 1
+      _tc_warn_local_only "$id"
+      printf 'taken-over:%s\n' "$cur"; return 0 ;;
     none)
       _tc_fm_set "$file" claimed_by "$mine" || return 1
       _tc_fm_set "$file" claimed_role "$(_tc_claimed_role)" || return 1
@@ -600,6 +629,7 @@ _tc_release() {
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
   _tc_fm_set "$file" claimed_by "" || return 1
   _tc_fm_set "$file" claimed_role "" || return 1   # same clear-on-close contract as claimed_by
+  _tc_fm_set "$file" claimed_takeover_from "" || return 1
   _tc_fm_set "$file" status "$final" || return 1
   printf 'released\n'
 }
@@ -647,6 +677,7 @@ _tc_release_others() {
       case "$status" in "In Progress") status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
       _tc_fm_set "$f" claimed_role ""      || return 1   # same clear-on-close contract as _tc_release
+      _tc_fm_set "$f" claimed_takeover_from "" || return 1
       _tc_fm_set "$f" status "$status"     || return 1
       b="$(basename "$f")"
       if [[ "$b" =~ (T[0-9]{8}-[0-9]{6}) ]]; then id="${BASH_REMATCH[1]}"; else id="${b%.md}"; fi
@@ -1042,7 +1073,7 @@ _tc_main() {
     verify-landed)  _tc_verify_landed "$@" ;;
     reclaimable)    _tc_reclaimable "$@" ;;
     claimant-id)    _tc_claimant_id; printf '\n' ;;
-    *) _session_log "usage: task_claim.sh <acquire|read|release|release-others|pr-owner|verify-landed|reclaimable|claimant-id> [task-id|pr-number] [args]"; return 64 ;;
+    *) _session_log "usage: task_claim.sh <acquire [--force]|read|release|release-others|pr-owner|verify-landed|reclaimable|claimant-id> [task-id|pr-number] [args]"; return 64 ;;
   esac
 }
 
