@@ -22,7 +22,7 @@ ALLOWED = REQUIRED | {
     "target-repo", "target-path", "related", "owner", "description",
     "source-url", "support-issue", "support-report",
     # runtime (tooling-written: /stage, IPM, /focus)
-    "scheduled", "claimed_by", "claimed_role", "iteration",
+    "scheduled", "claimed_by", "claimed_role", "claimed_takeover_from", "iteration",
 }
 STATUS_TOKENS = {"open", "design", "in progress", "review",
                  "blocked", "parked", "done", "closed"}

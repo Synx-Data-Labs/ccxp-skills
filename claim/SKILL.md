@@ -1,7 +1,7 @@
 ---
 name: claim
 description: Use when the user explicitly asks to claim a task, check what this clone currently holds, or release a claim — for interactive work outside the full /drive loop
-argument-hint: "T<id> | release T<id> | status"
+argument-hint: "T<id> [--force] | release T<id> | status"
 ---
 
 Land the durable, cross-session `claimed_by` lock (`_session/task_claim.sh`) on a
@@ -16,6 +16,16 @@ full `/drive` implement→PR→merge loop.
 - `/claim T<id>` (default) — release every task this clone currently holds,
   then claim `T<id>`. One PR (or, in solo-repo mode, one branch + local
   merge — see below) carries both effects.
+- `/claim T<id> --force` — **manual-only takeover** of a task held by another
+  claimant, live or not. Use it **only when the owner's words ask for it**
+  (e.g. "take over T<id>"); never add it on your own judgment, never from
+  `/drive`, `/autopilot`, `/address-pr` or any script. It runs
+  `task_claim.sh acquire T<id> --force` in §1.3, prints a `FORCED TAKEOVER`
+  warning, records `claimed_takeover_from:` in the task, and the commit
+  message must be `docs(claim): claim T<id> (FORCED takeover from <previous>)`.
+  The claim PR still lands through the normal merge: if a concurrent claim
+  wins, §1.5 applies. §1.2's "live means stop" is the only thing `--force`
+  overrides.
 - `/claim release T<id>` — release a single claim without acquiring another
   (abandoning a task, or handing it back).
 - `/claim status` — read-only: report the claim(s) this clone currently holds.
