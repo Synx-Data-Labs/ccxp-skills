@@ -11,7 +11,7 @@ Output is a single `ipm-weekly.md` file that the daily standup grades against an
 
 - **Ad-hoc tool, no `/ccxp` step.** Continuous `/todo next` + `/drive` off `queue.md` is the day-to-day planning loop (T20260924-252293 retired the mandatory Monday ceremony), and `/ccxp` no longer invokes this skill (see `ccxp/SKILL.md` Phase 2a). `/ipm` stays available for a deliberate iteration re-plan, invoked directly, any day; the ccxp-agent persona also dispatches it once per ISO week (`agent-pairing/rituals.md`).
 - **Callable ad hoc, any day** — re-scope after a design changes, or re-commit after a priority shift. This skill has no day-of-week check of its own; "Monday" below just names the conventional cadence for a repo that chooses to run it weekly.
-- **Missed Monday** (for a repo that does run it weekly) — the next Monday's IPM covers the gap by default (the persona catches it up the same week); invoke `/ipm` directly for a deliberate ad-hoc re-plan.
+- **Missed Monday** (for a repo that does run it weekly) — the persona catches it up Tue-Fri of the same week, else the next Monday's IPM covers the gap; invoke `/ipm` directly for a deliberate ad-hoc re-plan.
 - **Cron vs. interactive mode** — reads `CCXP_CRON_MODE` from the environment (inherited, no argument needed), same branching `/ccxp`'s own "Cron mode vs. interactive mode" section describes. Step 3 (pre-IPM design pass) is interactive-only, skipped when `CCXP_CRON_MODE=1`.
 
 ## Workflow
