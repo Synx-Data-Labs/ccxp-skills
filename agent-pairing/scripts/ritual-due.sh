@@ -12,7 +12,7 @@
 #   done      mark a claimed ritual finished (the dispatched job runs this last, on success).
 #   release   drop a claim without marking done (job failed; the next check may retry it).
 #
-# Markers live in ${CCXP_RITUAL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-rituals}/<repo-key>/:
+# Markers live in ${CCXP_RITUAL_DIR:-<profile dir>/ccxp-rituals}/<repo-key>/ (profile dir: _session/profile-dir.sh):
 #   <ritual>-<key>.claim.<n>  generation n+1 is created O_EXCL (set -C): exactly one session wins a
 #                             generation; content = "<epoch> [via]", or "released" after `release`
 #   <ritual>-<key>.done       created by `done`
@@ -25,6 +25,9 @@
 # Scope: only a git repo with a dev/TODO directory (silent no-op elsewhere). Off switch: CCXP_RITUALS=0
 # or a file named `off` in the marker base dir (the ccxp-rituals dir itself, above the per-repo dirs). Test hooks: CCXP_RITUAL_NOW (epoch seconds).
 set -euo pipefail
+
+# Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
+[ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
 
 RITUALS=(standup ipm retro)
 
@@ -91,7 +94,8 @@ function rd-repo-root() {
   echo "$top"
 }
 
-function rd-base() { echo "${CCXP_RITUAL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-rituals}"; }
+# empty when the profile dir is unknown: the check then skips (never guesses a location)
+function rd-base() { echo "${CCXP_RITUAL_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/ccxp-rituals}}"; }
 
 # marker dir for the repo: <name>-<hash of the origin URL> (same across worktrees), else of the toplevel path
 function rd-marker-dir() {
@@ -217,6 +221,7 @@ function ritual-due() {
   verb="${1:-list}"
   [ $# -eq 0 ] || shift
   [ "${CCXP_RITUALS:-1}" = 0 ] && return 0
+  [ -n "$(rd-base)" ] || return 0
   [ -e "$(rd-base)/off" ] && return 0
   local top dir
   top="$(rd-repo-root "${repo:-.}")" || return 0
