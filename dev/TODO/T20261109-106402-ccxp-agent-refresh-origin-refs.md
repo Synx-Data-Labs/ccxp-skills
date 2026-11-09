@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 1
 source: owner request, this conversation, 2026-11-09
 description: ccxp-agent persona may run one read-only git fetch origin per turn and read repo state from origin/<default>
@@ -45,17 +45,17 @@ scheduled: 2026-11-09
 
 ## Test plan
 
-- [ ] `tests/agent_pairing.bats`: new asset test asserts the section, the single fetch, the never-pull/checkout/merge/reset sentence, the `origin/<default>` lookup rule and the carve-out wording are present in `agent-pairing/assets/ccxp-agent.md`.
-- [ ] Existing persona tests stay green: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`, then the full `bats tests/*.bats` in CI.
-- [ ] Persona frontmatter lines 1-5 unchanged (diff review).
-- [ ] Doc impact: `agent-pairing/persona-refresh.md` needs no change (the hash-based refresh is generic); `agent-pairing/bg-jobs.md` does not restate the carve-out list, so no change.
+- [x] `tests/agent_pairing.bats`: new asset test asserts the section, the single fetch, the never-pull/checkout/merge/reset sentence, the `origin/<default>` lookup rule and the carve-out wording are present in `agent-pairing/assets/ccxp-agent.md`.
+- [x] Existing persona tests stay green: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`, then the full `bats tests/*.bats` in CI.
+- [x] Persona frontmatter lines 1-5 unchanged (diff review).
+- [x] Doc impact: `agent-pairing/persona-refresh.md` needs no change (the hash-based refresh is generic); `agent-pairing/bg-jobs.md` does not restate the carve-out list, so no change.
 
 ## Done criteria
 
-- [ ] Persona has the "Repo freshness" section with the four rules: new bats asset test.
-- [ ] Bash carve-out list names the fetch: `ccxp-agent.md:19` plus the same asset test.
-- [ ] Persona grows by under 1.5 KB (`wc -c` before 43095 and after) and persona tests pass: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`.
-- [ ] No plugin version bump, tag or release in this PR: diff review.
+- [x] Persona has the "Repo freshness" section with the four rules: new bats asset test.
+- [x] Bash carve-out list names the fetch: `ccxp-agent.md:19` plus the same asset test.
+- [x] Persona grows by under 1.5 KB (`wc -c` before 43095 and after) and persona tests pass: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`.
+- [x] No plugin version bump, tag or release in this PR: diff review.
 
 ## Closed
 

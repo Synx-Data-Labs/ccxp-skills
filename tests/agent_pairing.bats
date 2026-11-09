@@ -237,6 +237,21 @@ EOF
   grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
 }
 
+@test "asset: Repo freshness rule: one read-only fetch, never pull/checkout/merge/reset, lookups read origin/<default>, fetch named in the Bash carve-out" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Repo freshness$' "$f"
+  grep -q 'fetch --quiet --no-tags --no-recurse-submodules origin' "$f"
+  grep -q 'never `--prune`, never another remote' "$f"
+  grep -q '\*\*Never\*\* pull, check out, merge, rebase, reset, stash or clean the owner.s clone' "$f"
+  grep -q 'git show origin/<default>:<path>' "$f"
+  grep -q 'the one `git fetch origin` of "Repo freshness"' "$f"
+  # the section sits between "On session start" and the autopilot exception, and the carve-out phrase is intact
+  [ "$(grep -n '^## On session start' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Repo freshness' "$f" | cut -d: -f1)" ]
+  [ "$(grep -n '^## Repo freshness' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Exception: `/autopilot`' "$f" | cut -d: -f1)" ]
+  grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
+  [ "$(wc -c < "$f")" -lt 44600 ]
+}
+
 @test "asset: reply format is one Next: section with n refs, no Needs input / Needs your action" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
   grep -q '^- \*\*Next:\*\*' "$f"
