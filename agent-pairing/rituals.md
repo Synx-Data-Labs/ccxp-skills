@@ -24,15 +24,19 @@ Task: T20261107-228304. Owner decision: use the persona's own periodic wake as t
 
 ## Idempotency and races
 
-- Markers: `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-rituals/<origin-url>/<ritual>-<key>.claim.<n>` and `.done`.
+- Markers: `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-rituals/<repo>-<hash of the origin URL>/<ritual>-<key>.claim.<n>` and `.done`.
   - `key` is the day (standup), the week's Monday (ipm) or the week's Friday (retro).
   - A claim is created with `O_EXCL`; of several sessions that see the same state, exactly one wins.
   - The persona claims at dispatch; the job's last action is `ritual-due.sh --repo <repo> done <ritual> <key>`
     (on failure `release`, which makes the ritual due again at the next check).
-- A claim with no `done` older than 6 hours (`CCXP_RITUAL_TTL`) is treated as a dead job and re-claimed once.
+- A claim with no `done` older than 6 hours (`CCXP_RITUAL_TTL`) is treated as a dead job and superseded by a new
+  claim at the next check (again after each further 6 hours). A job slower than that can end up running twice.
+- `done` and `release` need the `<key>` that `claim` printed (a job that crosses midnight must not finish the next day's ritual).
+  A Friday standup's retro claim follows only that same standup: if the standup job dies, the retro is picked up again
+  by the re-claimed standup or the weekend catch-up.
 - Markers are local to the profile dir, not git: two machines or two profiles each run their own standup.
   The ritual artifacts themselves (the daily-summary journal entry, the Slack thread) are not consulted.
-- Only a git repo with `dev/TODO/` is in scope. Off switches: `CCXP_RITUALS=0`, or an empty file `off` in the marker dir.
+- Only a git repo with `dev/TODO/` is in scope. Off switches: `CCXP_RITUALS=0`, or an empty file `off` in `ccxp-rituals/` (the base dir, above the per-repo dirs).
 
 ## Limits (be honest about them)
 
