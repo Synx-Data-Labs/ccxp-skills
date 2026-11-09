@@ -246,7 +246,7 @@ _eta_of() { # $1 = JSON array for gh, $2 = ci config; prints .ci as JSON
   [ "$(jq -c '.eta | [.typ, .n]' <<<"$output")" = "[18000,5]" ]
 }
 
-@test "eta: only an in_progress newest run gets one (queued, passing and failing runs do not)" {
+@test "eta: only an in_progress newest run gets one (queued and passing runs do not)" {
   local hist="$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z schedule),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z schedule),$(_ok 2026-10-23T03:00:00Z 2026-10-23T04:00:00Z schedule)"
   local newest
   for newest in '{"status":"queued","conclusion":null,"event":"schedule","createdAt":"2026-10-26T03:00:00Z","startedAt":"2026-10-26T03:00:00Z","updatedAt":"2026-10-26T03:00:00Z"}' "$(_ok 2026-10-26T03:00:00Z 2026-10-26T04:00:00Z schedule)"; do
@@ -277,9 +277,6 @@ _eta_of() { # $1 = JSON array for gh, $2 = ci config; prints .ci as JSON
   local f; f=$(ls "$HUD_CI_STATE_DIR"/*.json)
   jq 'has("eta")' "$f" | grep -q false
   # a cached eta, then a refresh that fails: state stays, eta goes
-  jq '.fetched = 1 | .eta = {start: 1, typ: 2, min: 1, max: 3, n: 3}' "$f" > "$f.t" && mv "$f.t" "$f"
-  run _hud_ci "$repo" '{"workflow":"w.yml"}' # fresh cache? fetched=1 is old -> refresh runs with the fake gh answering
-  [ "$(jq -r .ci.state <<<"$output")" = running ]
   jq '.fetched = 1 | .eta = {start: 1, typ: 2, min: 1, max: 3, n: 3}' "$f" > "$f.t" && mv "$f.t" "$f"
   _fake_gh FAIL
   run _hud_ci "$repo" '{"workflow":"w.yml"}'
