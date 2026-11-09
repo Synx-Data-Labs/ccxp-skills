@@ -15,7 +15,7 @@ scheduled: 2026-11-02
 - **Type**: feature
 - **Problem**: the daily rituals live in a per-machine cron/launchd wrapper (`dev/daily-ccxp.sh` in the build hub), and the persona only notices CI failures at a user turn or autopilot wake.
 - **Solution**: make "what is due now" a plugin-owned, idempotent check that the persona runs on any trigger (session start, routine, CI event); add an event-driven CI-failure trigger so a failure wakes a job in minutes, not at the next turn.
-- **Open owner decision**: the trigger mechanism (see `## Decision needed` below, recommendation given).
+- **Trigger decided (2026-11-09)**: no external scheduler; the persona's own wake is the trigger (see `## Design update 2026-11-09`, which supersedes the `## Solution` and `## Decision needed` details it contradicts).
 
 ## Problem
 
@@ -53,7 +53,7 @@ scheduled: 2026-11-02
   - Run the rituals only inside a long-lived session with `ScheduleWakeup` or `/loop`: dies when the session exits, which is the failure the owner wants removed.
   - GitHub Actions cron running the whole agent on a runner: durable and neutral, but needs model credentials in CI and a runner-side clone; kept only as a fallback option.
 
-## Decision needed
+## Decision needed (RESOLVED 2026-11-09, see Design update below)
 
 Mechanism for triggering the persona when no user turn is happening (owner decision; nothing below is switched on by this task).
 
@@ -65,6 +65,23 @@ Mechanism for triggering the persona when no user turn is happening (owner decis
 - Recommendation: Option 1 plus Option 2 (event-driven CI wake and daily routine, catch-up on every session start). If routines lack an event or API trigger, use Option 5 only for the CI wake and keep the daily routine.
 - Reverses an earlier decision: T20260924-252293 retired the automatic Monday IPM (`ipm/SKILL.md` line 12, `ccxp/SKILL.md` lines 17-36 and 565-575: `/ccxp` no longer invokes it, no catch-up for a missed Monday). The owner now asks for ipm to run again as a daily-ccxp ritual; the hub wrapper already does (Monday floor, T20261023-920112). This design makes ipm due on Monday and catch up within the same week; the owner confirms by approving this PR, and `ipm/SKILL.md` line 14 ("no automatic mid-week catch-up") must be updated in the implementation.
 - Also open: the standup idempotency artifact (a committed per-day marker versus checking the posted Slack thread), and the single timezone used for "Monday" and "Friday".
+
+## Design update 2026-11-09 (owner decision d15)
+
+Owner: "i also need daily standup, which task is fixing the ccxp-agent to run the /standup every day?" and, on the trigger: "a variation of option B. Today, the ccxp-agent wake up periodically, can we use that trigger?" This replaces the trigger part of `## Solution` and closes `## Decision needed`.
+
+- **Trigger**: no external scheduler of any kind (no routine, no GitHub Actions cron, no `claude --bg` scheduler, no `workflow_run` wake). The persona runs a cheap, token-free "what is due" check at session start, at every user turn and at every autopilot wake (the places it already runs the CI-failure check) and dispatches the due ritual as a background job.
+- **Entry point renamed and reshaped**: `agent-pairing/scripts/ritual-due.sh` (not `ccxp/scripts/daily-due.sh`).
+  - `list` (read-only), `claim` (prints the single highest-priority due ritual as `<ritual> <key>` after an atomic claim, nothing otherwise), `done` and `release` (the job's last action).
+  - Rituals: `standup` every day, `ipm` Mon-Fri once per ISO week (a missed Monday catches up later that week), `retro` Fri-Sun once per week. Timezone `America/Chicago` (`CCXP_RITUAL_TZ`).
+  - Max 1 ritual job per check (priority standup, ipm, retro). A Friday standup claim also claims the retro, because the standup job is `/ccxp`, whose Phase 2b is the retro.
+- **Idempotency (replaces "derived from git artifacts")**: a small per-day marker in the profile dir (`ccxp-rituals/<origin>/<ritual>-<key>.claim.<n>`, `.done`), created with `O_EXCL` so two sessions cannot both win; survives restarts. A claim without `done` older than 6 hours is treated as a dead job and re-claimed. Chosen over checking the Slack thread or journal entry because it needs no network, no merged PR and no ritual-specific filename knowledge. Limit: markers are per profile dir, not shared across machines.
+- **Monday IPM automatic again**: reverses T20260924-252293 (owner decision); `ipm/SKILL.md` and `ccxp/SKILL.md` wording is updated in the implementation. `/ccxp` itself still does not invoke `/ipm`; the persona dispatches it as its own job.
+- **Persona growth**: the persona has about 1 KB of headroom under the 46000-byte guard, so the persona gets a short "Rituals due" section and the detail lives in `agent-pairing/rituals.md`.
+- **Out of scope here**: the event-driven CI wake (CI failures keep the persona's existing polling at the same check points), the workflow template under `actions/`, and the old usage-cost warning (separate follow-up task, not built). The hub's launchd job and script are not touched; their removal stays the last step (T20261107-406028, T20261107-431002).
+- **Limits, stated in the docs**: it runs only while a Claude Code session with the persona is open and awake; with autopilot's 30-60 minute idle waits the worst-case lag is about 1 hour; a closed laptop or session runs nothing until the next start, where the catch-up fires. The persona change needs a plugin release to reach installs (no bump in this task).
+
+Test plan and done criteria are amended accordingly: the BATS file is `tests/ritual_due.bats` (fake clock and timezones, Monday/Friday, catch-up, idempotency, race, TTL retry, no-op fast path, no network); the CI-event items (workflow template, forced failing run latency) are dropped; the persona section is "Rituals due".
 
 ## Test plan
 
