@@ -1556,8 +1556,9 @@ _force_setup() {
 
 @test "acquire --force takes over a LIVE claimant too (no reclaimable gate)" {
   _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
-  # Force "live": the reclaim gate would refuse, --force must not consult it.
-  _tc_reclaimable() { printf 'live\n'; }
+  # The task is In Progress with a fresh claim, i.e. "live" for any staleness
+  # window; --force must take it regardless.
+  [ "$(_tc_reclaim_decide "In Progress" "cc1-22222222:bbbbbbbbbbbbbbbb" 0 0 2)" = "live" ]
   run _tc_acquire T1 --force
   [ "$status" -eq 0 ]
   [[ "$output" == *"taken-over:"* ]]
@@ -1668,4 +1669,36 @@ _force_setup() {
     run bash -c "grep -n -E 'acquire.*--force|--force.*acquire|task_claim.*--force' '$REPO_ROOT/$f'"
     [ "$status" -eq 1 ]
   done
+}
+
+@test "a plain acquire then release leaves no claimed_takeover_from line behind" {
+  _force_setup ""
+  _tc_acquire T1 >/dev/null 2>&1
+  _tc_release T1 >/dev/null
+  ! grep -q claimed_takeover_from "$F"
+  _tc_acquire T1 >/dev/null 2>&1
+  _tc_release_others >/dev/null
+  ! grep -q claimed_takeover_from "$F"
+}
+
+@test "acquire --force records a previous claimant containing backslashes verbatim" {
+  _force_setup 'Al\ex\tb'
+  _tc_acquire T1 --force >/dev/null 2>&1
+  [ "$(_tc_fm_get "$F" claimed_takeover_from)" = 'Al\ex\tb' ]
+}
+
+@test "acquire rejects a flag in the task-id position (exit 64)" {
+  _force_setup "cc1-22222222:bbbbbbbbbbbbbbbb"
+  run _tc_acquire --force T1
+  [ "$status" -eq 64 ]
+  run _tc_acquire --force
+  [ "$status" -eq 64 ]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "cc1-22222222:bbbbbbbbbbbbbbbb" ]
+}
+
+@test "the no-caller guard's pattern does flag a planted caller (positive control)" {
+  d="$BATS_TEST_TMPDIR/ctl"; mkdir -p "$d"
+  printf 'bash _session/task_claim.sh acquire T1 --force\n' > "$d/x.sh"
+  run grep -E 'task_claim\.sh[^|;&]*(acquire|--force)|acquire[^|;&]*--force' "$d/x.sh"
+  [ "$status" -eq 0 ]
 }
