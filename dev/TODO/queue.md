@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261109-106402](T20261109-106402-ccxp-agent-refresh-origin-refs.md): ccxp-agent refreshes origin refs, never the owner's clone
 - [T20261101-115518](T20261101-115518-rewire-todo-and-queue-skills-to-repo-resolve.md): Rewire todo and queue skills to repo-resolve
 - [T20261022-349299](T20261022-349299-dispatcher-detached-bg-jobs.md): ccxp-agent dispatches detached `claude --bg` jobs
 - [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
@@ -54,4 +55,3 @@ reprioritize.
 - [T20261103-169088](T20261103-169088-autopilot-config-and-raise-default-caps.md): Add /autopilot config and raise autopilot default caps
 - [T20261103-139722](T20261103-139722-ccxp-agent-decisions-log.md): ccxp-agent decisions log (`ledger.sh decision ...`)
 - [T20261107-228304](T20261107-228304-daily-ccxp-inside-ccxp-agent.md): Daily ccxp (standup, ipm, retro) runs from ccxp-agent on any platform
-- [T20261109-106402](T20261109-106402-ccxp-agent-refresh-origin-refs.md): ccxp-agent refreshes origin refs, never the owner's clone
