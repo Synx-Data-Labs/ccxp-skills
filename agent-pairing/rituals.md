@@ -20,6 +20,8 @@ Task: T20261107-228304. Owner decision: use the persona's own periodic wake as t
 
 - **One job per check**: priority standup, ipm, retro. A second due ritual is dispatched at the next check.
 - **Friday**: claiming `standup` also claims `retro`, because `/ccxp` runs the retro itself; no duplicate.
+- Releasing the retro on its own while the Friday standup job is still running makes it due again, so a `/retro` job
+  could run beside the `/ccxp` job; release the standup instead.
 - Each job runs in a worktree with `CCXP_CRON_MODE=1` stated in its prompt (rituals only, no focused work).
 
 ## Idempotency and races
@@ -31,6 +33,8 @@ Task: T20261107-228304. Owner decision: use the persona's own periodic wake as t
     (on failure `release`, which makes the ritual due again at the next check).
 - A claim with no `done` older than 6 hours (`CCXP_RITUAL_TTL`) is treated as a dead job and superseded by a new
   claim at the next check (again after each further 6 hours). A job slower than that can end up running twice.
+  The claim is taken before the job is dispatched, so if a turn aborts between the two, that ritual waits out the 6 hours
+  (or a manual `release <ritual> <key>`).
 - `done` and `release` need the `<key>` that `claim` printed (a job that crosses midnight must not finish the next day's ritual).
   A Friday standup's retro claim follows only that same standup: if the standup job dies, the retro is picked up again
   by the re-claimed standup or the weekend catch-up.
