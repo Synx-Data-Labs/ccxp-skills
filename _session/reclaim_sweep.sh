@@ -83,7 +83,7 @@ reclaim_sweep() {
     { [ -n "$claimed_by" ] && [ "$claimed_by" != "none" ]; } || continue
     # Self-reclaim guard — our own claim is not dead. Short-circuit BEFORE the
     # liveness probe so a (mistakenly) reclaimable verdict can't free it.
-    [ "$claimed_by" = "$mine" ] && continue
+    [ "$(_tc_decide "$claimed_by" "$mine")" = "mine" ] && continue
     id="$(_rs_task_id_from_file "$f")"
     [ -n "$id" ] || continue
 

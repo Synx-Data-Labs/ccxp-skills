@@ -251,11 +251,18 @@ _tc_stamp_scheduled_if_needed() {
 
 # --- The own-or-defer decision (the anti-steal core) -------------------------
 
+_tc_legacy_claimant_id() {
+  # This clone's pre-6.2.1 identity, or empty (see claimant_legacy_id).
+  claimant_legacy_id 2>/dev/null || true
+}
+
 _tc_decide() {
   # $1 current-claimant (may be empty)  $2 my-id → "none" | "mine" | "other".
   local cur="$1" mine="$2"
   if [ -z "$cur" ] || [ "$cur" = "none" ]; then printf 'none'; return 0; fi
   if [ "$cur" = "$mine" ]; then printf 'mine'; return 0; fi
+  # Same clone, identity derived under plugin <= 6.2.0 (T20261109-274750).
+  if [ "$cur" = "$(_tc_legacy_claimant_id)" ]; then printf 'mine'; return 0; fi
   printf 'other'
 }
 
@@ -605,7 +612,14 @@ _tc_acquire() {
     printf 'mine\n'; return 0
   fi
   case "$decision" in
-    mine)  _tc_warn_local_only "$id"; printf 'mine\n'; return 0 ;;
+    mine)
+      # Claim stamped under this clone's pre-6.2.1 identity: re-stamp it to the
+      # current one so every reader agrees from now on (T20261109-274750).
+      if [ "$cur" != "$mine" ]; then
+        _session_log "task_claim: re-stamping $id from the pre-6.2.1 identity to the current one"
+        _tc_fm_set "$file" claimed_by "$mine" || return 1
+      fi
+      _tc_warn_local_only "$id"; printf 'mine\n'; return 0 ;;
     other)
       [ "$force" = 1 ] || { printf 'claimed:%s\n' "$cur"; return 3; }
       # Forced takeover. Still edits the SAME claimed_by: line, so a concurrent
@@ -682,7 +696,7 @@ _tc_release_others() {
     for f in "$dir"/*.md; do
       [ -e "$f" ] || continue
       if [ -n "$except_file" ] && [ "$f" -ef "$except_file" ]; then continue; fi
-      [ "$(_tc_fm_get "$f" claimed_by)" = "$mine" ] || continue
+      [ "$(_tc_decide "$(_tc_fm_get "$f" claimed_by)" "$mine")" = "mine" ] || continue
       status="$(_tc_fm_get "$f" status)"
       case "$status" in "In Progress") status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
