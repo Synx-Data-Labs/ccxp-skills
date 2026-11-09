@@ -44,7 +44,7 @@ _iso_ahead() { date -u -v+"$1"M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "$
 
 _hud() { # $1 repo, rest = helper args
   local repo="$1"; shift
-  printf '{"cwd":"%s","session_id":"sess1"}' "$repo" | bash "$HUD" "$@"
+  printf '{"cwd":"%s","session_id":"sess1"%s}' "$repo" "${HUD_STDIN_EXTRA:-}" | bash "$HUD" "$@"
 }
 
 @test "hud-data.sh is executable and sourceable without running main" {
@@ -547,7 +547,11 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   [ "$(jq -r .queue <<<"$output")" = "null" ]
   printf -- '# Q\n\n- [T20260101-000001](T20260101-000001-a.md): a\n- [T20260101-000002](T20260101-000002-b.md): b\n' > "$repo/dev/TODO/queue.md"
   printf -- '---\nstatus: Open — sign-off pending\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
+  # the default is the default branch; this repo has no origin, so it falls back to the working tree and says so
   run _hud "$repo" --json
+  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0,"source":"working-tree","fallback":true}' ] || { echo "$output"; false; }
+  # the explicit working-tree opt-in reads this clone with no extra keys
+  HUD_STDIN_EXTRA=',"queue_source":"working-tree"' run _hud "$repo" --json
   [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"revisited":0,"autoparked":0}' ] || { echo "$output"; false; }
   # the high watermark rides along (no git history in this fixture: the current length is all there is)
   [ "$(jq -c .queue.hwm <<<"$output")" = '{"d180":2,"d30":2,"d7":2}' ]

@@ -60,7 +60,7 @@ export function parseCi(x: unknown): CiConfig | undefined {
 
 export const QUEUE_SOURCES: readonly QueueSource[] = ['working-tree', 'default-branch']
 
-/** `queue` as `{source}` (or a bare source string); an unknown source or shape means the default (working tree). */
+/** `queue` as `{source}` (or a bare source string); an unknown source or shape means unset, which the HUD reads as the default (default-branch). */
 export function parseQueue(x: unknown): QueueConfig | undefined {
   const raw: unknown = typeof x === 'string' ? { source: x } : x
   if (!isRecord(raw) || typeof raw.source !== 'string') return undefined

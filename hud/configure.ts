@@ -14,7 +14,7 @@ export const VERSION_SHOW = 'show (default)'
 export const VERSION_HIDE = 'hide'
 export const QUEUE_DEFAULT_BRANCH = 'default branch (recommended)'
 export const QUEUE_WORKING_TREE = 'working tree'
-export const QUEUE_QUESTION = 'Queue source: working tree (this clone as it is on disk) or default branch (recommended; read from origin without a checkout, so a clone that is behind still shows what origin has)?'
+export const QUEUE_QUESTION = 'Queue source: default branch (the default and recommended; read from origin without a checkout, so a clone that is behind still shows what origin has) or working tree (opt-in: this clone as it is on disk)?'
 /** Option label of the default colour; the other palette names are offered as they are. */
 export const COLOR_DEFAULT = `${FILL_DEFAULT} (default)`
 /** The engine's `$.ui.ask` rejects more than this many options per question (the free-text "Other" is extra). */
