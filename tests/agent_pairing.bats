@@ -555,7 +555,7 @@ install_outdated_agent() {
   grep -q 'End every reply with the footer line `Ledger: <absolute path of ccxp-ledger.md>`' "$f"
   grep -q 'start <n> "<title>" --context' "$f"
   grep -q 'park <n> --context <abs path> --title' "$f"
-  grep -q 'next add "<text>" --context <abs path>' "$f"
+  grep -q 'next add "<text>" --ref n<k> --context <abs path>' "$f"
 }
 
 @test "asset: persona has the session-start reconcile step and saves job prompts" {
