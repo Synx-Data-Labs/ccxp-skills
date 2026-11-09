@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: owner request, this conversation, 2026-11-09
 description: HUD queue.source defaults to default-branch, not the local working tree
-claimed_by: cc1-9f320372:f9b2137c9918a8ee
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-09
 ---
 
@@ -65,10 +65,18 @@ scheduled: 2026-11-09
 - [x] Fetch goes to `origin <default>` only: `hud/scripts/hud-lib.sh` `_sl-queue-fetch-run`, asserted in `tests/hud_queue_source.bats`.
 - [x] README and dialog text updated: `hud/README.md`, `hud/configure.ts`, `hud/configure.test.ts`.
 
-## Closed
+## Closed (2026-11-09)
 
-- Pending.
+- Shipped in PR #624 (claim #622, design #623, queue #621); CI green (bats, Markdown Lint, lint-tasks, skill-quality, sync-tasks).
+- Met: unset, absent, unknown or malformed `queue.source` means `default-branch`; explicit `working-tree` is the opt-in; fallback to the working tree is kept and flagged; the fetch targets `origin <default>` only (new bats case); no queue anywhere means no fetch, temp dir or archive.
+- Unverified: the vitest files (`hud/hooks.test.tsx`, `hud/pure.test.ts`) were edited but cannot run outside Claude Code; reviewed by reading only.
+- Quality regression (shellcheck_error,shellcheck_warning,shellcheck_info,max_fn_lines): false positive; the probe compared against a record with a different file set, and shellcheck output for `hud/scripts/hud-lib.sh` (3 lines) and `hud/scripts/hud-data.sh` (5 lines) is identical before and after.
+- Release: no version bump here; the owner releases the plugin and updates installs for the new default to take effect.
+- Follow-ups: none filed.
 
 ## Skills invoked
 
-- Pending.
+- TDD (`superpowers:test-driven-development`): no, not invoked as a skill; bats cases were written alongside the change and one mutation check was done by the reviewer
+- Verification (`superpowers:verification-before-completion`): bats and lint run before each PR; independent fresh-agent review on every PR
+- Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): applied to the design PR (3 revision rounds), no pushbacks
