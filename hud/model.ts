@@ -353,7 +353,7 @@ function shortDate(epochSec: number): string {
 
 /** Seconds as a short duration: `45m`, `4h`, `4.5h`. */
 function shortDuration(sec: number): string {
-  if (sec < 3600) return `${Math.max(1, Math.round(sec / 60))}m`
+  if (Math.round(sec / 60) < 60) return `${Math.max(1, Math.round(sec / 60))}m`
   return `${(Math.round(sec / 360) / 10).toString()}h`
 }
 
@@ -369,7 +369,7 @@ function clock(epochSec: number, nowMs: number): string {
 /**
  * The ETA text of a running run, or '' (not running, no `eta`). Local time.
  * - spread (max - min) <= half the median: one time from the median, `ETA 18:40`, overdue once past it.
- * - wider spread: a range from the fastest to the slowest recent run, `ETA 14:20-19:05`, overdue once past the slowest.
+ * - wider spread: a range from the fastest to the slowest recent run, `ETA 14:20-19:05` (the first time is never earlier than now), overdue once past the slowest.
  * - overdue: `over usual (4h)`, the median duration, never a negative time.
  */
 export function ciEta(ci: Ci, nowMs: number): string {
@@ -378,7 +378,7 @@ export function ciEta(ci: Ci, nowMs: number): string {
   const now = nowMs / 1000
   const wide = e.max - e.min > e.typ / 2
   if (now > e.start + (wide ? e.max : e.typ)) return `over usual (${shortDuration(e.typ)})`
-  return wide ? `ETA ${clock(e.start + e.min, nowMs)}-${clock(e.start + e.max, nowMs)}` : `ETA ${clock(e.start + e.typ, nowMs)}`
+  return wide ? `ETA ${clock(Math.max(e.start + e.min, now), nowMs)}-${clock(e.start + e.max, nowMs)}` : `ETA ${clock(e.start + e.typ, nowMs)}`
 }
 
 /** A CI that must be unmissable: failing (also timed out). Yellow and green rows get no extra highlight. */

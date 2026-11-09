@@ -268,3 +268,27 @@ _eta_of() { # $1 = JSON array for gh, $2 = ci config; prints .ci as JSON
   [ "$(jq -r .state <<<"$output")" = running ]
   [ "$(jq -r 'has("eta")' <<<"$output")" = false ]
 }
+
+@test "eta: an old cache file without an eta key still answers; a failed refresh drops a cached eta but keeps the state" {
+  local repo; repo=$(_make_repo r-oldcache)
+  _fake_gh "[$(_running schedule 2026-10-26T03:00:00Z)]"
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = running ]
+  local f; f=$(ls "$HUD_CI_STATE_DIR"/*.json)
+  jq 'has("eta")' "$f" | grep -q false
+  # a cached eta, then a refresh that fails: state stays, eta goes
+  jq '.fetched = 1 | .eta = {start: 1, typ: 2, min: 1, max: 3, n: 3}' "$f" > "$f.t" && mv "$f.t" "$f"
+  run _hud_ci "$repo" '{"workflow":"w.yml"}' # fresh cache? fetched=1 is old -> refresh runs with the fake gh answering
+  [ "$(jq -r .ci.state <<<"$output")" = running ]
+  jq '.fetched = 1 | .eta = {start: 1, typ: 2, min: 1, max: 3, n: 3}' "$f" > "$f.t" && mv "$f.t" "$f"
+  _fake_gh FAIL
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = running ]
+  [ "$(jq -r '.ci | has("eta")' <<<"$output")" = false ]
+}
+
+@test "eta: runs with no event at all still count as the same event (null matches null)" {
+  local h="$(_running schedule 2026-10-26T03:00:00Z | jq -c 'del(.event)'),$(_ok 2026-10-25T03:00:00Z 2026-10-25T04:00:00Z x | jq -c 'del(.event)'),$(_ok 2026-10-24T03:00:00Z 2026-10-24T04:00:00Z x | jq -c 'del(.event)'),$(_ok 2026-10-23T03:00:00Z 2026-10-23T04:00:00Z x | jq -c 'del(.event)')"
+  run _eta_of "[$h]"
+  [ "$(jq -c '.eta | [.typ, .n]' <<<"$output")" = "[3600,3]" ]
+}
