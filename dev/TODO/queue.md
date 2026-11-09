@@ -6,7 +6,6 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
-- [T20261109-106402](T20261109-106402-ccxp-agent-refresh-origin-refs.md): ccxp-agent refreshes origin refs, never the owner's clone
 - [T20261101-115518](T20261101-115518-rewire-todo-and-queue-skills-to-repo-resolve.md): Rewire todo and queue skills to repo-resolve
 - [T20261022-349299](T20261022-349299-dispatcher-detached-bg-jobs.md): ccxp-agent dispatches detached `claude --bg` jobs
 - [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
