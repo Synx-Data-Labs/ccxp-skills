@@ -35,12 +35,13 @@ scheduled: 2026-11-09
 
 - Default flips at the two caller edges only; the library function keeps its explicit `working-tree` parameter default so `tests/hud_lib.bats` callers (no origin) are unaffected:
   - `hud/register.tsx:163`: `?? 'default-branch'`
-  - `hud/scripts/hud-data.sh:65`: `working-tree` only when stdin says so; anything else, including absent, is `default-branch`
+  - `hud/scripts/hud-data.sh:65`: `working-tree` only when stdin says so; anything else, including absent, is `default-branch`, and the `|| queue_source=...` jq-failure branch on the same line flips too (bad stdin must not keep the old default)
+  - A project or user `"queue": null` no longer forces working-tree; the only way to force it is the explicit `"working-tree"` value
 - `hud/config.ts` `parseQueue`: an unknown value already returns `undefined` (so the new default); comment updated. Explicit `"working-tree"` still parses.
 - `/hud config` dialog (`hud/configure.ts:15-17`) already lists `default branch (recommended)` first: only the question text gains "(the default)"; the exported option constants keep their values so `hud/configure.test.ts` imports still hold.
-- Fetch cost (review finding): `sl-queue-json` would now run a detached `git fetch origin <default>` every 2 minutes in every repo with an origin, queue or not. Gate it: fetch only when `dev/TODO/queue.md` exists in the working tree or in the local `refs/remotes/origin/<default>` tree; otherwise skip the fetch (the queue line then stays absent, as today).
+- Fetch cost (review finding): `sl-queue-json` would now run a detached `git fetch origin <default>` every 2 minutes in every repo with an origin, queue or not. Gate it (documented limit: a queue that exists only on origin and in neither local tree is picked up once a fetch or `git fetch` by the user brings it in): fetch only when `dev/TODO/queue.md` exists in the working tree or in the local `refs/remotes/origin/<default>` tree; otherwise skip the fetch (the queue line then stays absent, as today).
 - A local-only repo (no origin) with a queue now shows the existing `queue (working tree, origin unavailable)` label by default; accepted as the honest label, documented in the README.
-- Docs and comments: `hud/README.md:30` (Config row; `"queue": null` now means the default, not "off") and `:122`, `:125`, `:128`, `:181` (dialog bullet), `:217` (network sentence: the fetch now runs unless opted out, and only when a queue exists); `hud/scripts/hud-data.sh:27-29,38` header; `hud/config.ts:63` comment.
+- Docs and comments: `hud/README.md:30` (Config row; `"queue": null` now means the default, not "off") and `:122`, `:125`, `:128`, `:181` (dialog bullet), `:217` (network sentence: the fetch now runs unless opted out, and only when a queue exists); `hud/scripts/hud-data.sh:27-29,38` header; `hud/config.ts:63` comment; `types/index.d.ts:17,40` doc comments.
 - Alternatives rejected:
   - Flip the default inside `sl-queue-json`: breaks every library caller and test that has no origin.
   - Drop `working-tree`: owner asked for a default, and offline or origin-less repos still need the opt-in.
@@ -48,15 +49,16 @@ scheduled: 2026-11-09
 
 ## Test plan
 
-- [ ] `hud/pure.test.ts` (vitest): the queue-source section states the new default; `parseQueue` invalid or unset gives the default, explicit working-tree still parses.
+- [ ] `hud/pure.test.ts` (vitest): the existing `parseQueue`/`mergeConfig` cases (`:1505-1513`) stay green; section header text updated.
+- [ ] `hud/hooks.test.tsx` (near `:211`): the stdin the mod sends has `queue_source: "default-branch"` when `queue` is unset and `"working-tree"` when explicit.
 - [ ] `hud/configure.test.ts`: dialog question wording; writes unchanged.
 - [ ] `tests/hud_queue_source.bats:183` ("queue_source in stdin picks the source; absent or unknown means the working tree"): rewritten so absent and unknown mean default-branch and an explicit `working-tree` means the working tree; `:59` case reworded to explicit opt-in; new cases: fetch targets `origin <default>` only, and no fetch when no queue exists anywhere.
-- [ ] `tests/hud_data.bats:544-553` (no stdin, repo without origin, exact queue JSON): pass `queue_source:"working-tree"` or expect the fallback keys; `tests/hud_queue_hwm.bats:105,175` kept hermetic with `HUD_QUEUE_FETCH_SYNC=1` / a stamp dir.
+- [ ] `tests/hud_data.bats:544-553` (no stdin, repo without origin, exact queue JSON): pass `queue_source:"working-tree"` or expect the fallback keys; `tests/hud_queue_hwm.bats:105,175` verified unchanged (its `setup()` already sets `HUD_QUEUE_FETCH_SYNC=1` and a state dir; those repos have no origin).
 - [ ] `bats tests/` and `npx vitest run` (or the repo's runner) green locally; CI green.
 
 ## Done criteria
 
-- [ ] Unset `queue` reads the default branch: `hud/register.tsx` and `hud/scripts/hud-data.sh`, covered by `tests/hud_queue_source.bats:183`.
+- [ ] Unset `queue` reads the default branch: `hud/scripts/hud-data.sh` covered by `tests/hud_queue_source.bats:183`; `hud/register.tsx` covered by the new `hud/hooks.test.tsx` case.
 - [ ] Explicit `"working-tree"` still works: `hud/pure.test.ts` and `tests/hud_queue_source.bats`.
 - [ ] Origin unreadable falls back and is flagged: `tests/hud_queue_source.bats` (no origin case).
 - [ ] Fetch goes to `origin <default>` only: `hud/scripts/hud-lib.sh` `_sl-queue-fetch-run`, asserted in `tests/hud_queue_source.bats`.
