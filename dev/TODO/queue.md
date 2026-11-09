@@ -55,3 +55,5 @@ reprioritize.
 - [T20261103-139722](T20261103-139722-ccxp-agent-decisions-log.md): ccxp-agent decisions log (`ledger.sh decision ...`)
 - [T20261109-179471](T20261109-179471-rituals-usage-cost-warning.md): Usage-cost warning for the persona-driven daily rituals
 - [T20261109-584639](T20261109-584639-verify-rituals-live-after-release.md): Verify the persona-driven daily rituals live after the release
+- [T20261109-745828](T20261109-745828-task-claim-force-manual-takeover.md): `task_claim.sh acquire --force` for manual takeover
+- [T20261109-274750](T20261109-274750-claimant-id-differs-across-plugin-versions.md): Claimant id changes between plugin 6.2.0 and 6.2.1
