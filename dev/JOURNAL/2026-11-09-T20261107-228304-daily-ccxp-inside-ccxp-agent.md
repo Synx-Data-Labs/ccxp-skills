@@ -92,8 +92,6 @@ Test plan and done criteria are amended accordingly: the BATS file is `tests/rit
 - [x] Unit (BATS, `tests/ritual_due.bats`): `ritual-due.sh` with a fake clock and timezone prints `standup` daily, `ipm` Mon-Fri (keyed to that week's Monday), `retro` Fri-Sun (keyed to the Friday); Sunday evening Chicago time is still Sunday although UTC is Monday.
 - [x] Unit (BATS): `claim` prints one ritual per check in priority order and is empty when nothing is due (no marker written); `done` is final for the day; `release` and the 6 h TTL make it due again; a missed Monday heals the same week.
 - [x] Unit (BATS): concurrent claims, exactly one wins; a Friday standup claim also claims the retro; no network call (shimmed `gh`, `curl`, `claude`).
-- [ ] DEFERRED to T20261109-584639 (external, needs the plugin release): Local (not done: needs a live persona session on the new release, T20261109-584639): persona session start runs `claim` and dispatches nothing when nothing is due (observed once on macOS; a non-macOS run is recorded in `## Closed` if available).
-- [ ] DEFERRED to T20261109-584639 (external, needs the plugin release): Integration (external, T20261109-584639; post-merge and release, owner machine not touched by the implementation): one standup, one Monday ipm and one Friday retro dispatched by a live persona session, then a repeat check that does nothing.
 - [x] Dropped by the 2026-11-09 decision: CI-line dedupe and the forced-failing-run latency item (no event-driven CI wake).
 
 ## Done criteria
@@ -102,8 +100,7 @@ Test plan and done criteria are amended accordingly: the BATS file is `tests/rit
 - [x] `agent-pairing/scripts/ritual-due.sh` plus `tests/ritual_due.bats` cover day gating, timezones and idempotency (Test plan unit items).
 - [x] Persona section "Rituals due" in `agent-pairing/assets/ccxp-agent.md` (persona stays under its size guard) and `agent-pairing/rituals.md`; the persona hook cannot dispatch, so no hook change.
 - [x] Dropped: workflow template for a CI event trigger (no event-driven wake).
-- [ ] DEFERRED to T20261109-584639 (external, needs the plugin release): Verified once per ritual by a live persona session after the release (external, needs the plugin release; tracked by T20261109-584639).
-- [ ] DEFERRED to T20261109-584639 (external, needs the plugin release): Hub deprecation task T20261107-406028 unblocked only after the item above (still blocked; T20261109-584639).
+- Moved out of this task to T20261109-584639 (needs the plugin release): live verification of each ritual, and unblocking hub task T20261107-406028 (still blocked); the Local and Integration test-plan items moved with it.
 
 ## Repo file references
 
