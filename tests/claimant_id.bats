@@ -225,3 +225,13 @@ _mk_legacy() {
   run claimant_legacy_id /some/repo
   [ "$status" -ne 0 ]; [ -z "$output" ]
 }
+
+@test "claimant_legacy_id: fixed vector sha256(secret NUL path)[:16] (not derived from itself)" {
+  _mk_legacy
+  [ "$(claimant_legacy_id /fixed/clone)" = "cc1-deadbeef:95f3e79f6e413387" ]
+}
+
+@test "claimant_legacy_id: a different clone path yields a different id" {
+  _mk_legacy
+  [ "$(claimant_legacy_id /clone/a)" != "$(claimant_legacy_id /clone/b)" ]
+}

@@ -117,10 +117,11 @@ claimant_id() {
 # (and returns 1) when there is no distinct legacy pair. $1 clone path (optional).
 # CLAIMANT_LEGACY_STATE_DIR overrides the legacy dir (tests).
 claimant_legacy_id() {
-  local path="${1:-$(claimant_clone_path)}" dir mid secret hash
+  local path="${1:-}" dir mid secret hash
   dir="${CLAIMANT_LEGACY_STATE_DIR:-${HOME:-}/.claude/state}" # profile-dir-ok
   [ -n "$dir" ] && [ "$dir" != "$CLAIMANT_STATE_DIR" ] || return 1
   [ -r "$dir/machine-id" ] && [ -r "$dir/claimant-secret" ] || return 1
+  [ -n "$path" ] || path="$(claimant_clone_path)"   # after the cheap checks: no git fork when there is no legacy pair
   mid="$(tr -d ' \t\n' < "$dir/machine-id" 2>/dev/null)"
   secret="$(tr -d ' \t\n' < "$dir/claimant-secret" 2>/dev/null)"
   [ -n "$mid" ] && [ -n "$secret" ] || return 1

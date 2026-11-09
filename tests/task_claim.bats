@@ -1746,3 +1746,24 @@ _legacy_setup() {
   run _tc_acquire T1
   [ "$status" -eq 3 ]
 }
+
+@test "_tc_decide: the legacy pair's id for a DIFFERENT clone path is still other" {
+  _legacy_setup
+  other_path_id="$(claimant_legacy_id /some/other/clone)"
+  [ "$other_path_id" != "$OLD" ]
+  [ "$(_tc_decide "$other_path_id" "$(_tc_claimant_id)")" = "other" ]
+}
+
+@test "reclaim sweep never frees a claim stamped under this clone's pre-6.2.1 identity" {
+  source "$REPO_ROOT/_session/reclaim_sweep.sh"
+  _legacy_setup
+  G="$TASK_CLAIM_DIR/T20261109-000001-sweep.md"
+  mv "$F" "$G"
+  _tc_reclaimable() { printf 'reclaimable\n'; }
+  # positive control: a foreign claim IS freed by the same sweep
+  H="$TASK_CLAIM_DIR/T20261109-000002-foreign.md"
+  cp "$G" "$H"; _tc_fm_set "$H" claimed_by "cc1-9f320372:5c00aba90423c4bb"
+  run reclaim_sweep --apply
+  [ "$(_tc_fm_get "$G" claimed_by)" = "$OLD" ]
+  [ -z "$(_tc_fm_get "$H" claimed_by)" ]
+}
