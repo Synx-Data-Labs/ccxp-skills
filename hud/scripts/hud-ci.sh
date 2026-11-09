@@ -98,8 +98,8 @@ hci-refresh() {
         end' "$tmp" 2>/dev/null) || state=""
   fi
   if [ -z "$state" ]; then
-    # Failed or no run: keep the previous answer, only move the fetch time.
-    state=$(jq -c --argjson now "$now" '.fetched = $now' "$file" 2>/dev/null) || state=""
+    # Failed or no run: keep the previous state, only move the fetch time. The ETA is not kept: it goes stale fast.
+    state=$(jq -c --argjson now "$now" '.fetched = $now | del(.eta)' "$file" 2>/dev/null) || state=""
     [ -n "$state" ] || state="{\"state\":\"\",\"at\":0,\"fetched\":$now}"
   fi
   printf '%s\n' "$state" >"$tmp" && mv -f "$tmp" "$file"

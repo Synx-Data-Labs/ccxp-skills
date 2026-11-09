@@ -1677,15 +1677,17 @@ test('ciEta: a narrow spread shows one time, the start plus the median, in local
 })
 
 test('ciEta: a wide spread (max - min > half the median) shows the fastest-slowest range', async () => {
-  expect(ciEta(run(WIDE), (START + 3 * H) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}-${hhmm(START + 9 * H)}`)
+  expect(ciEta(run(WIDE), (START + 1 * H) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}-${hhmm(START + 9 * H)}`)
   // past the median but within the slowest recent run: still the range, not overdue
-  expect(ciEta(run(WIDE), (START + 6 * H) * 1000)).toContain('ETA ')
+  // past the fastest run the first time is clamped to now, never a time that has already passed
+  expect(ciEta(run(WIDE), (START + 6 * H) * 1000)).toBe(`ETA ${hhmm(START + 6 * H)}-${hhmm(START + 9 * H)}`)
 })
 
 test('ciEta: overdue shows the usual duration, never a negative time', async () => {
   expect(ciEta(run(NARROW), (START + 2 * H + 60) * 1000)).toBe('over usual (2h)')
   expect(ciEta(run(WIDE), (START + 9 * H + 60) * 1000)).toBe('over usual (4h)')
   expect(ciEta(run({ ...NARROW, typ: 45 * 60, min: 40 * 60, max: 50 * 60 }), (START + 3 * H) * 1000)).toBe('over usual (45m)')
+  expect(ciEta(run({ start: START, typ: 3590, min: 3500, max: 3650, n: 5 }), (START + 2 * H) * 1000)).toBe('over usual (1h)') // 59.8 minutes reads 1h, not 60m
   expect(ciEta(run({ ...NARROW, typ: 4.5 * H, min: 4 * H, max: 5 * H }), (START + 6 * H) * 1000)).toBe('over usual (4.5h)')
 })
 
