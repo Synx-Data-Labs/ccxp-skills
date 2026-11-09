@@ -34,6 +34,13 @@ ledger.sh ref next <n|s|k>      # allocate and print the next ref
 ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g. n22)
 ```
 
+## Context file naming
+
+- **Next item `n<k>`**: the context file is `n<k>-<slug>-T<taskid>.md` under `${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-context/` (example `n305-release-ccxp-skills-T20261109-338243.md`; `<taskid>` like `T20261109-338243`, left out when the item has no task). The `n<k>` in the name lets you point at the "next" item by file as well as by ref.
+- **Sequence**: reserve the ref first with `ledger.sh ref next n` (prints `n<k>`), write the file under that name, then `ledger.sh next add "<text>" --ref n<k> --context <that file>`.
+- **Soft check**: when the context basename does not start with `<ref>-`, `next add` prints a warning on stderr; the item is still added and the exit status is unchanged. Without `--ref` the ref is assigned by `next add` itself, so the warning compares against the ref it assigned.
+- **Proposal for `r`/`k` (not enforced, no check)**: running `r<n>-<slug>[-T<taskid>].md`, parked `k<n>-<slug>[-T<taskid>].md`.
+
 ## Decisions log
 
 The owner's standing decisions live in `ccxp-decisions.json` (+ rendered `ccxp-decisions.md`) in the ledger's directory, or at `CCXP_DECISIONS_FILE`. File formats, capture rules and examples: `agent-pairing/decisions.md`.

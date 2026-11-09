@@ -94,7 +94,7 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
 
 
 @test "next add/done allocate increasing n refs and never reuse one" {
-  run bash "$LEDGER" next add "Nightly fix: which repo?" --context /c/q.md
+  run bash "$LEDGER" next add "Nightly fix: which repo?" --context /c/n1-q.md
   [ "$output" = "n1" ]
   [ "$(bash "$LEDGER" next add "second")" = "n2" ]
   bash "$LEDGER" next done n1
@@ -230,6 +230,32 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ "$(bash "$LEDGER" show | jq .ref_counters.n)" = "76" ]
   run bash "$LEDGER" next add "bad" --ref x3
   [ "$status" -ne 0 ]
+}
+
+@test "next add warns (stderr only, exit 0) when the context file name does not start with the ref" {
+  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/notes.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "n1" ]
+  [[ "$stderr" == *"notes.md should start with n1-"* ]]
+  run --separate-stderr bash "$LEDGER" next add "b" --ref n9 --context /ctx/n8-other.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "n9" ]
+  [[ "$stderr" == *"should start with n9-"* ]]
+  [ "$(bash "$LEDGER" show | jq '.next | length')" = "2" ]
+}
+
+@test "next add is silent about naming when the context file starts with the ref (reserved or auto)" {
+  ref=$(bash "$LEDGER" ref next n)
+  [ "$ref" = "n1" ]
+  run --separate-stderr bash "$LEDGER" next add "a" --ref "$ref" --context /ctx/n1-slug-T20261109-338243.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "n1" ]
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "b" --context /ctx/n2-slug.md
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "c" --context /ctx/n30x.md
+  [[ "$stderr" == *"should start with n3-"* ]]
 }
 
 @test "next done keeps a done history capped at 20 with closed_at" {
@@ -472,7 +498,7 @@ allow: pr-merge" >> "$f"
   [[ "$output" == *"warning: next add without --context"* ]]
   run bash "$LEDGER" park k3
   [[ "$output" == *"warning: k3 has no context"* ]]
-  run bash "$LEDGER" next add "fine" --context /c/n.md
+  run bash "$LEDGER" next add "fine" --context /c/n2-fine.md
   [ "$output" = "n2" ]
   run bash "$LEDGER" park k3 --context /c/p.md
   [ -z "$output" ]
@@ -482,7 +508,7 @@ allow: pr-merge" >> "$f"
   run bash "$LEDGER" reply
   [[ "$output" == *$'r8 '*$'\n  context: MISSING'* ]]
   [[ "$output" == *$'n1 ask me\n  context: MISSING'* ]]
-  [[ "$output" == *$'n2 fine\n  file:///c/n.md'* ]]
+  [[ "$output" == *$'n2 fine\n  file:///c/n2-fine.md'* ]]
   bash "$LEDGER" reply > "$BATS_TEST_TMPDIR/r.txt"
   run bash "$LEDGER" check "$BATS_TEST_TMPDIR/r.txt"
   [ "$status" -eq 1 ]
