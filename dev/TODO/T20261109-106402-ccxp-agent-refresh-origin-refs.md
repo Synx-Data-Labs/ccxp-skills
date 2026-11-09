@@ -32,11 +32,12 @@ scheduled: 2026-11-09
 ## Solution
 
 - New section "Repo freshness" in `agent-pairing/assets/ccxp-agent.md`, placed after "On session start" (about 6 bullets, no more):
-  - At session start and at each user turn or autopilot wake, you may run ONE `git -C <session repo> fetch origin` (no `--prune`, no other remote, never a pull); it only updates remote-tracking refs, then continue; a failure (offline, auth) is ignored silently.
+  - At session start, and at a user turn or autopilot wake only when you are about to answer a repo-state lookup and the last fetch is older than about 5 minutes (no clock: judge from `FETCH_HEAD` mtime, `stat`), you may run ONE fetch: `GIT_TERMINAL_PROMPT=0 git -C <session repo> -c gc.auto=0 fetch --quiet --no-tags --no-recurse-submodules origin` (never `--prune`, no other remote, never a pull). It updates remote-tracking refs inside `.git` (and `FETCH_HEAD`); nothing in the working tree or index. Keep it short (`timeout 15` where available).
+  - If the fetch fails (offline, auth), carry on, but say the answer comes from possibly stale origin refs instead of presenting it as fresh.
   - Never pull, check out, merge, rebase, reset, stash or clean the owner's clone; it is often on a non-main branch with uncommitted work.
-  - Quick lookups of repo state (queue, task files, journal) read `origin/<default>` with `git show origin/<default>:<path>` or `git ls-tree`, where the default is `git symbolic-ref --short refs/remotes/origin/HEAD`; say when you answer from the working tree instead.
-  - Jobs already fetch origin before creating worktrees; do not fetch for them.
-- Bash carve-out wording (`ccxp-agent.md:19`): add "`git fetch origin` in the session repo (remote-tracking refs only, see \"Repo freshness\")" to the closed list, and say it writes only `.git` remote-tracking refs.
+  - Quick lookups of repo state (queue, task files, journal) read `origin/<default>` with `git show origin/<default>:<path>` or `git ls-tree`, where the default is `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`), else `main`, else `master`; with no `origin`, or outside a git repo, read the working tree and say so.
+  - A job for a different repo already fetches origin before creating its worktree ("Other-repo isolation"); the dispatcher's own fetch only keeps the session repo's `origin/<default>` current. Do not fetch on a job's behalf.
+- Bash carve-out wording (`ccxp-agent.md:19`): add "the single `git fetch origin` of \"Repo freshness\" (writes only remote-tracking refs and `FETCH_HEAD` inside `.git`)" to the closed list; keep the phrase `Bash is read-only except this closed list of carve-outs` and the existing carve-out phrases verbatim (asserted by `tests/agent_pairing.bats` and `tests/terms.bats:575`).
 - Alternatives rejected:
   - Pull or fast-forward the clone: unsafe on a dirty or non-main branch, which is the common state.
   - Fetch inside a hook or timer: no background watcher exists and the persona has no clock; the per-turn cadence matches CI detection.
@@ -45,15 +46,15 @@ scheduled: 2026-11-09
 ## Test plan
 
 - [ ] `tests/agent_pairing.bats`: new asset test asserts the section, the single fetch, the never-pull/checkout/merge/reset sentence, the `origin/<default>` lookup rule and the carve-out wording are present in `agent-pairing/assets/ccxp-agent.md`.
-- [ ] Existing persona tests (`tests/agent_pairing.bats`, `tests/agent_pairing_jobs.bats`, persona-refresh hook tests) stay green: `bats tests/agent_pairing*.bats`.
-- [ ] `claude plugin validate .`-style frontmatter unchanged: the persona's `tools:` line and `description:` are not edited.
-- [ ] Doc impact: `agent-pairing/persona-refresh.md` needs no change (the hash-based refresh is generic); `agent-pairing/SKILL.md` re-read for a stale "read-only Bash" statement.
+- [ ] Existing persona tests stay green: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`, then the full `bats tests/*.bats` in CI.
+- [ ] Persona frontmatter lines 1-5 unchanged (diff review).
+- [ ] Doc impact: `agent-pairing/persona-refresh.md` needs no change (the hash-based refresh is generic); `agent-pairing/bg-jobs.md` does not restate the carve-out list, so no change.
 
 ## Done criteria
 
 - [ ] Persona has the "Repo freshness" section with the four rules: new bats asset test.
 - [ ] Bash carve-out list names the fetch: `ccxp-agent.md:19` plus the same asset test.
-- [ ] Persona size not materially grown (under 1 KB added) and refresh tests pass: `bats tests/agent_pairing*.bats`.
+- [ ] Persona grows by under 1.5 KB (`wc -c` before 43095 and after) and persona tests pass: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`.
 - [ ] No plugin version bump, tag or release in this PR: diff review.
 
 ## Closed
