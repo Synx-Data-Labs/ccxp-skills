@@ -1702,3 +1702,47 @@ _force_setup() {
   run grep -E 'task_claim\.sh[^|;&]*(acquire|--force)|acquire[^|;&]*--force' "$d/x.sh"
   [ "$status" -eq 0 ]
 }
+
+# --- a claim stamped under the pre-6.2.1 identity still reads as mine (T20261109-274750) ---
+
+_legacy_setup() {
+  export CLAIMANT_LEGACY_STATE_DIR="$BATS_TEST_TMPDIR/legacy"
+  mkdir -p "$CLAIMANT_LEGACY_STATE_DIR"
+  printf 'deadbeef' > "$CLAIMANT_LEGACY_STATE_DIR/machine-id"
+  printf 'legacysecretlegacysecretlegacyse' > "$CLAIMANT_LEGACY_STATE_DIR/claimant-secret"
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-a.md"
+  F="$TASK_CLAIM_DIR/T1-a.md"
+  OLD="$(claimant_legacy_id)"
+  _tc_fm_set "$F" claimed_by "$OLD"; _tc_fm_set "$F" status "In Progress"
+}
+
+@test "_tc_decide: the clone's pre-6.2.1 id is mine, a stranger is still other" {
+  _legacy_setup
+  [ "$(_tc_decide "$OLD" "$(_tc_claimant_id)")" = "mine" ]
+  [ "$(_tc_decide "cc1-9f320372:5c00aba90423c4bb" "$(_tc_claimant_id)")" = "other" ]
+}
+
+@test "acquire on a pre-6.2.1-stamped claim says mine and re-stamps to the current id" {
+  _legacy_setup
+  run _tc_acquire T1
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"mine"* ]]
+  [ "$(_tc_fm_get "$F" claimed_by)" = "$(_tc_claimant_id)" ]
+}
+
+@test "release-others frees a claim stamped under the pre-6.2.1 identity" {
+  _legacy_setup
+  run _tc_release_others
+  [[ "$output" == *"released:T1"* ]]
+  [ -z "$(_tc_fm_get "$F" claimed_by)" ]
+}
+
+@test "without a legacy pair behavior is unchanged: a foreign claim is still refused" {
+  export CLAIMANT_LEGACY_STATE_DIR="$BATS_TEST_TMPDIR/none"
+  TASK_CLAIM_DIR="$BATS_TEST_TMPDIR/dev/TODO"; mkdir -p "$TASK_CLAIM_DIR"
+  _mk_task_file "$TASK_CLAIM_DIR/T1-a.md"
+  _tc_fm_set "$TASK_CLAIM_DIR/T1-a.md" claimed_by "cc1-deadbeef:0123456789abcdef"
+  run _tc_acquire T1
+  [ "$status" -eq 3 ]
+}

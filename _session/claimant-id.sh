@@ -108,6 +108,26 @@ claimant_id() {
   printf 'cc1-%s:%s' "$mid" "${hash:0:16}"
 }
 
+# The identity this clone had under plugin <= 6.2.0, which kept the machine id
+# and secret in $HOME/.claude/state regardless of the active profile (6.2.1
+# moved them to <profile>/state, see profile-dir.sh). When the profile already
+# held its own pair, the one-time adoption never copied the legacy one, so the
+# same clone has TWO identities and claims stamped under the old one read as
+# foreign (T20261109-274750). READ-ONLY: never creates state, prints nothing
+# (and returns 1) when there is no distinct legacy pair. $1 clone path (optional).
+# CLAIMANT_LEGACY_STATE_DIR overrides the legacy dir (tests).
+claimant_legacy_id() {
+  local path="${1:-$(claimant_clone_path)}" dir mid secret hash
+  dir="${CLAIMANT_LEGACY_STATE_DIR:-${HOME:-}/.claude/state}" # profile-dir-ok
+  [ -n "$dir" ] && [ "$dir" != "$CLAIMANT_STATE_DIR" ] || return 1
+  [ -r "$dir/machine-id" ] && [ -r "$dir/claimant-secret" ] || return 1
+  mid="$(tr -d ' \t\n' < "$dir/machine-id" 2>/dev/null)"
+  secret="$(tr -d ' \t\n' < "$dir/claimant-secret" 2>/dev/null)"
+  [ -n "$mid" ] && [ -n "$secret" ] || return 1
+  hash="$(printf '%s\0%s' "$secret" "$path" | claimant_sha256)" || return 1
+  printf 'cc1-%s:%s' "$mid" "${hash:0:16}"
+}
+
 # The authoritative shape test. Anchored, not a `cc1-*` glob: a machine
 # genuinely named "cc1-box" writes `cc1-box:/home/...`, which must stay a
 # legacy <host>:<path> claim, and a hand-assigned `cc1-Alex` must keep its

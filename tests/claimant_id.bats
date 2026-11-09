@@ -194,3 +194,34 @@ print(claim_display(sys.argv[1], 'ccxp'))
 " "$id")"
   [ "$from_sh" = "$from_py" ]
 }
+
+# --- legacy (<= 6.2.0) identity (T20261109-274750) ---------------------------
+
+_mk_legacy() {
+  # A legacy pair under $BATS_TEST_TMPDIR/legacy distinct from the profile pair.
+  export CLAIMANT_LEGACY_STATE_DIR="$BATS_TEST_TMPDIR/legacy"
+  mkdir -p "$CLAIMANT_LEGACY_STATE_DIR"
+  printf 'deadbeef' > "$CLAIMANT_LEGACY_STATE_DIR/machine-id"
+  printf 'legacysecretlegacysecretlegacyse' > "$CLAIMANT_LEGACY_STATE_DIR/claimant-secret"
+}
+
+@test "claimant_legacy_id: derives a distinct, current-shape id from the legacy pair" {
+  _mk_legacy
+  claimant_id /some/repo >/dev/null   # create the profile pair
+  run claimant_legacy_id /some/repo
+  [ "$status" -eq 0 ]
+  claimant_is_current_shape "$output"
+  [[ "$output" == cc1-deadbeef:* ]]
+  [ "$output" != "$(claimant_id /some/repo)" ]
+}
+
+@test "claimant_legacy_id: silent, nonzero and creates nothing without a distinct legacy pair" {
+  export CLAIMANT_LEGACY_STATE_DIR="$BATS_TEST_TMPDIR/absent"
+  run claimant_legacy_id /some/repo
+  [ "$status" -ne 0 ]; [ -z "$output" ]
+  [ ! -e "$BATS_TEST_TMPDIR/absent" ]
+  _mk_legacy
+  export CLAIMANT_LEGACY_STATE_DIR="$CLAIMANT_STATE_DIR"   # same dir as the profile's: not distinct
+  run claimant_legacy_id /some/repo
+  [ "$status" -ne 0 ]; [ -z "$output" ]
+}

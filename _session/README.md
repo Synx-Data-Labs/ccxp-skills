@@ -104,6 +104,8 @@ Resolving the identity **fails closed**. If `~/.claude/state/` cannot be written
 
 **Migrating an existing claim** needs no operator step: `_tc_acquire` re-stamps a legacy `<host>:<path>` claim whose path half is this clone, instead of refusing it. See `_tc_is_legacy_self_claim` for how narrow that carve-out is and the residual risk it knowingly accepts.
 
+**Two identities on one machine (T20261109-274750).** Plugin <= 6.2.0 kept `machine-id` and `claimant-secret` in `$HOME/.claude/state` whatever the profile; 6.2.1 moved them to `<profile>/state` and adopts the legacy pair only when the profile has none. A profile that already held its own pair keeps it, so the same clone then has two ids and a claim stamped under the old one read as foreign. `claimant_legacy_id` (read-only, never creates state) derives the old id from the legacy pair; `_tc_decide`, `release-others` and the reclaim sweep treat it as mine, and `acquire` re-stamps such a claim to the current id.
+
 **Forced takeover (`acquire <id> --force`, T20261109-745828).** A manual override for the case where a task is held by another claimant and nobody can release it: a claim whose id matches no clone, a dead session `reclaimable` still reads as live, a human-assigned claim. The owner asked for it explicitly; it is **never implied**: `/drive`, `/autopilot`, `/address-pr`, `preflight.sh` and `entry-gate.sh` never pass it (`tests/task_claim.bats` greps for that). Behavior:
 
 - Held by another claimant, live or not: re-stamps `claimed_by` / `claimed_role`, sets `status: In Progress`, prints `taken-over:<previous>` (exit 0) and a loud `FORCED TAKEOVER` warning on stderr naming the previous claimant, with a suggested commit message (`docs(claim): claim T<id> (FORCED takeover from <previous>)`).
