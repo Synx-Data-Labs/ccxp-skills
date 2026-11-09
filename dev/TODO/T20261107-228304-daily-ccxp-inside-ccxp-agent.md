@@ -3,7 +3,7 @@ status: Design
 estimation: 1
 source: owner request 2026-11-07 (job 1001)
 related: T20261107-406028, T20261107-431002
-claimed_by: cc1-50ac6891:124c776dbc3570af
+claimed_by: cc1-50ac6891:4f87f913cfbf8330
 claimed_role: interactive
 scheduled: 2026-11-02
 ---
