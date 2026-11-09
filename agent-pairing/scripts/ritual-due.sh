@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ritual-due.sh [--repo DIR] [list | claim | done <ritual> [key] | release <ritual> [key]]
+# ritual-due.sh [--repo DIR] [list | claim | done <ritual> <key> | release <ritual> <key>]
 #
 # Token-free, network-free "what is due" check for the ccxp-agent persona (T20261107-228304).
 # Rituals: standup (every day), ipm (Mon-Fri, once per ISO week), retro (Fri-Sun, once per week).
@@ -17,11 +17,13 @@
 #                             generation; content = "<epoch> [via]", or "released" after `release`
 #   <ritual>-<key>.done       created by `done`
 # A claim with no .done older than CCXP_RITUAL_TTL seconds (default 21600 = 6 h) counts as abandoned
-# (the job died): the next check supersedes it with a new generation. A Friday `standup` claim also claims `retro`, because the
-# standup job runs /ccxp, whose Phase 2b is the retro; `done`/`release` of the standup follow it.
+# (the job died): the next check supersedes it with a new generation. A Friday `standup` claim also claims `retro`
+# (same key), because the standup job runs /ccxp, whose Phase 2b is the retro; `done`/`release` of that standup
+# follow it, and only it. `done` and `release` require the key `claim` printed. Known limit: a job running longer
+# than the TTL whose claim was superseded can still `release` and drop the newer claim.
 #
 # Scope: only a git repo with a dev/TODO directory (silent no-op elsewhere). Off switch: CCXP_RITUALS=0
-# or a file named `off` in the marker base dir. Test hooks: CCXP_RITUAL_NOW (epoch seconds).
+# or a file named `off` in the marker base dir (the ccxp-rituals dir itself, above the per-repo dirs). Test hooks: CCXP_RITUAL_NOW (epoch seconds).
 set -euo pipefail
 
 RITUALS=(standup ipm retro)
@@ -91,12 +93,16 @@ function rd-repo-root() {
 
 function rd-base() { echo "${CCXP_RITUAL_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-rituals}"; }
 
-# marker dir for the repo: sanitized origin URL (same across worktrees), else the toplevel path
+# marker dir for the repo: <name>-<hash of the origin URL> (same across worktrees), else of the toplevel path
 function rd-marker-dir() {
   local top=$1 id
   id="$(git -C "$top" remote get-url origin 2>/dev/null || true)"
   [ -n "$id" ] || id="$top"
-  echo "$(rd-base)/${id//[^A-Za-z0-9._-]/_}"
+  # a hash, never the URL itself: a remote may embed credentials, and sanitized URLs can collide
+  local h name
+  h="$( (printf '%s' "$id" | sha256sum || printf '%s' "$id" | shasum -a 256 || printf '%s' "$id" | cksum) 2>/dev/null | cut -c1-16)"
+  name="$(basename "${id%.git}")"
+  echo "$(rd-base)/${name//[^A-Za-z0-9._-]/_}-${h//[^A-Za-z0-9]/_}"
 }
 
 # newest generation number n of <ritual>-<key>.claim.<n> (0 when none)
@@ -164,7 +170,7 @@ function rd-claim() {
       rkey="$(rd-key retro)" || rkey=""
       if [ "$rkey" = "$key" ]; then
         rgen="$(rd-gen "$dir" retro "$rkey")"
-        if [ "$(rd-state "$dir" retro "$rkey")" = due ]; then rd-take "$dir" retro "$rkey" "$rgen" standup || true; fi
+        if [ "$(rd-state "$dir" retro "$rkey")" = due ]; then rd-take "$dir" retro "$rkey" "$rgen" "standup:$key" || true; fi
       fi
     fi
     echo "$r $key"
@@ -173,25 +179,21 @@ function rd-claim() {
   return 0
 }
 
-# the current retro key when its newest claim was taken by a standup (content "<epoch> standup")
+# true when the newest retro-<key> claim was taken by the standup of that same key (a Friday standup)
 function rd-companion() {
-  local dir=$1 rkey gen
-  rkey="$(rd-key retro)" || return 0
-  [ -n "$rkey" ] || return 0
-  gen="$(rd-gen "$dir" retro "$rkey")"
-  ((gen > 0)) || return 0
-  if grep -q ' standup$' "$dir/retro-$rkey.claim.$gen" 2>/dev/null; then echo "$rkey"; fi
+  local dir=$1 key=$2 gen
+  gen="$(rd-gen "$dir" retro "$key")"
+  ((gen > 0)) || return 1
+  grep -q " standup:$key\$" "$dir/retro-$key.claim.$gen" 2>/dev/null
 }
 
 function rd-finish() {
-  local dir=$1 verb=$2 ritual=${3:-} key=${4:-} ck
+  local dir=$1 verb=$2 ritual=${3:-} key=${4:-}
   case " ${RITUALS[*]} " in *" $ritual "*) ;; *) echo "ritual-due: unknown ritual '$ritual'" >&2; return 2 ;; esac
-  [ -n "$key" ] || key="$(rd-key "$ritual")"
-  [ -n "$key" ] || return 0
-  [[ "$key" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "ritual-due: bad key '$key'" >&2; return 2; }
-  if [ "$ritual" = standup ]; then
-    ck="$(rd-companion "$dir")"
-    if [ -n "$ck" ]; then rd-finish-one "$dir" "$verb" retro "$ck"; fi
+  # the key is mandatory: a job that crossed midnight must not finish the next day's ritual
+  [[ "$key" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "ritual-due: $verb needs the <key> that claim printed (got '$key')" >&2; return 2; }
+  if [ "$ritual" = standup ] && rd-companion "$dir" "$key"; then
+    rd-finish-one "$dir" "$verb" retro "$key"
   fi
   rd-finish-one "$dir" "$verb" "$ritual" "$key"
 }
@@ -223,7 +225,7 @@ function ritual-due() {
     list) rd-list "$dir" ;;
     claim) rd-claim "$dir" ;;
     done | release) rd-finish "$dir" "$verb" "$@" ;;
-    *) echo "usage: ritual-due.sh [--repo DIR] [list|claim|done <ritual> [key]|release <ritual> [key]]" >&2; return 2 ;;
+    *) echo "usage: ritual-due.sh [--repo DIR] [list|claim|done <ritual> <key>|release <ritual> <key>]" >&2; return 2 ;;
   esac
 }
 

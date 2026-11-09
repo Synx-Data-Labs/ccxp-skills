@@ -114,7 +114,7 @@ at() { CCXP_RITUAL_NOW="$1" bash "$RD" --repo "$REPO" "${@:2}"; }
   for i in 1 2 3 4 5 6; do ( CCXP_RITUAL_NOW="$WED_NOON" bash "$RD" --repo "$REPO" claim >"$out/$i" ) & done
   wait
   [ "$(cat "$out"/* | grep -c '^standup 2026-11-11$')" -eq 1 ]
-  [ "$(cat "$out"/* | grep -c '^ipm 2026-11-09$')" -le 1 ]
+  [ "$(cat "$out"/* | grep -c '^ipm 2026-11-09$')" -eq 1 ]
 }
 
 @test "a claim whose job died is retried after the TTL, not before" {
@@ -194,4 +194,52 @@ at() { CCXP_RITUAL_NOW="$1" bash "$RD" --repo "$REPO" "${@:2}"; }
 @test "sourceable: functions load without running anything" {
   run bash -c "source '$RD' && declare -F ritual-due"
   [ "$status" -eq 0 ]
+}
+
+@test "a stale Friday retro claim is not finished by a Saturday standup (companion follows its own standup only)" {
+  at "$FRI_NOON" claim >/dev/null                       # Friday standup + retro claimed, job dies
+  at $((FRI_NOON + 21600 + 60)) claim >/dev/null        # re-claimed ipm etc. later; now Saturday's standup:
+  run at "$SAT_NOON" claim
+  [ "$output" = "standup 2026-11-14" ]
+  at "$SAT_NOON" done standup 2026-11-14
+  run at "$SAT_NOON" list
+  [[ "$output" == *"retro 2026-11-13"* ]]               # the retro never ran: still due
+}
+
+@test "done and release require the key claim printed" {
+  run at "$MON_NOON" done standup
+  [ "$status" -eq 2 ]
+  run at "$MON_NOON" release standup
+  [ "$status" -eq 2 ]
+}
+
+@test "a job that crosses midnight finishes its own day: done with the printed key" {
+  at "$MON_NOON" claim >/dev/null
+  at $((MON_NOON + 43200)) done standup 2026-11-09   # finished Tuesday 00:00+ Chicago
+  run at $((MON_NOON + 43200)) list
+  [ "$output" = $'standup 2026-11-10\nipm 2026-11-09' ]
+}
+
+@test "DST edges: Sunday of the fall-back and spring-forward weekends stay Sunday until Chicago midnight" {
+  run at 1793511000 list; [ "$output" = $'standup 2026-11-01\nretro 2026-10-30' ]   # 2026-11-01 00:30 CDT
+  run at 1793597400 list; [ "$output" = $'standup 2026-11-01\nretro 2026-10-30' ]   # 2026-11-01 23:30 CST
+  run at 1773030600 list; [ "$output" = $'standup 2026-03-08\nretro 2026-03-06' ]   # 2026-03-08 23:30 CDT
+  run at 1773034200 list; [ "$output" = $'standup 2026-03-09\nipm 2026-03-09' ]     # 2026-03-09 00:30 CDT
+}
+
+@test "a claim file that is empty (writer mid-write) counts as in flight until it is older than the TTL" {
+  local d; at "$MON_NOON" claim >/dev/null
+  d="$(dirname "$(find "$CCXP_RITUAL_DIR" -name 'standup-2026-11-09.claim.1')")"
+  : >"$d/standup-2026-11-09.claim.1"
+  run at "$MON_NOON" list; [ "$output" = "ipm 2026-11-09" ]
+  touch -t 202611080000 "$d/standup-2026-11-09.claim.1"
+  run at "$MON_NOON" list; [ "$output" = $'standup 2026-11-09\nipm 2026-11-09' ]
+}
+
+@test "the marker dir name is a hash: a credential in the origin URL never reaches the filesystem" {
+  git -C "$REPO" remote set-url origin "https://user:s3cr3t-token@example.com/acme/widgets.git"
+  at "$MON_NOON" claim >/dev/null
+  run bash -c "find '$CCXP_RITUAL_DIR' | grep -c 's3cr3t'"
+  [ "$output" = "0" ]
+  [ -n "$(find "$CCXP_RITUAL_DIR" -name 'standup-*')" ]
 }

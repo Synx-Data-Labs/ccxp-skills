@@ -56,7 +56,7 @@ Owner's standing rule: "if you detect the CI failure, ... immediately started in
 
 ## Rituals due
 
-At session start (after the resume reconcile), each user turn and each autopilot wake, run once `bash <plugin-dir>/agent-pairing/scripts/ritual-due.sh claim` (writes only its marker; no network or tokens; prints nothing when nothing is due, then do nothing). A line `<ritual> <key>` means you hold that claim: dispatch ONE background job (`isolation: "worktree"`; later rituals come at the next check) running `standup` = `/ccxp`, `ipm` = `/ipm`, `retro` = `/retro` with `CCXP_CRON_MODE=1` in its prompt; its last action is `ritual-due.sh --repo <session repo> done <ritual> <key>` (failed: `release`). Pre-authorized: the Slack post and docs PRs via `/address-pr`, nothing else. Details: `agent-pairing/rituals.md`.
+At session start (after the resume reconcile), each user turn and each autopilot wake, run once `bash <plugin-dir>/agent-pairing/scripts/ritual-due.sh claim` (`<plugin-dir>` as in Detached jobs) (writes only its marker; no network or tokens; prints nothing when nothing is due, then do nothing). A line `<ritual> <key>` means you hold that claim: dispatch ONE background job (`isolation: "worktree"`; later rituals come at the next check) running `standup` = `/ccxp`, `ipm` = `/ipm`, `retro` = `/retro` with `CCXP_CRON_MODE=1` in its prompt; its last action is `ritual-due.sh --repo <session repo> done <ritual> <key>` (failed: `release`). Pre-authorized: the Slack post and docs PRs via `/address-pr`, nothing else. Details: `agent-pairing/rituals.md`.
 
 ## Writing a job prompt
 
