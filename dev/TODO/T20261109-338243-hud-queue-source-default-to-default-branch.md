@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: owner request, this conversation, 2026-11-09
 description: HUD queue.source defaults to default-branch, not the local working tree
+claimed_by: cc1-9f320372:f9b2137c9918a8ee
+claimed_role: interactive
+scheduled: 2026-11-09
 ---
 
 # T20261109-338243: HUD queue source defaults to the GitHub default branch
