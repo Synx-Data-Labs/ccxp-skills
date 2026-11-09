@@ -2,11 +2,19 @@
 # CI status data for the ccxp-hud band (hud-data.sh sources this).
 #
 # hud-ci-json <repo_root> <ci_config_json> <poll_seconds>
-#   prints {"state":"passing|failing|running|unknown","at":<epoch>} or "null".
+#   prints {"state":"passing|failing|running|unknown","at":<epoch>[,"eta":{...}]} or "null".
 #
 # The CI source is CONFIGURATION, never code: <ci_config_json> is the mod's `ci`
 # block ({"workflow","branch"?,"repo"?}); null or invalid prints "null" and runs
-# nothing. The last run of that workflow comes from `gh run list ... --limit 1`.
+# nothing. The last runs of that workflow come from ONE `gh run list ... --limit 20` call:
+# the newest decides the state, the rest feed the ETA.
+#
+# ETA (on unless the ci block has "eta": false): only while the newest run is in_progress. History = the
+# older runs that completed with success and have a positive startedAt..updatedAt span, newest first,
+# capped at 7. Those with the same event (schedule vs workflow_dispatch ...) as the running run are
+# used when there are >= 3 of them, else any event. Fewer than 3 usable runs: no "eta" key at all.
+# Otherwise "eta": {"start": epoch the run started, "typ": median seconds, "min", "max", "n"}.
+# Showing it (ETA HH:MM, ~ range, over usual) is the mod's job (hud/model.ts ciEta).
 #
 # Never blocks the caller: it prints the cached answer at once and, when the
 # cache is older than the TTL (>= 120 s, and never more often than the poll), starts
@@ -69,15 +77,24 @@ hci-refresh() {
     branch=$(head -n1 "$tmp" 2>/dev/null | head -c 200)
     hci-valid branch "$branch" || branch=""
   fi
-  if [ -n "$branch" ] && hci-run-timeout "$HCI_TIMEOUT" gh run list --workflow "$wf" --branch "$branch" "${repo_args[@]}" --limit 1 --json status,conclusion,createdAt >"$tmp" 2>/dev/null; then
+  if [ -n "$branch" ] && hci-run-timeout "$HCI_TIMEOUT" gh run list --workflow "$wf" --branch "$branch" "${repo_args[@]}" --limit 20 --json status,conclusion,createdAt,startedAt,updatedAt,event >"$tmp" 2>/dev/null; then
     state=$(jq -c --argjson now "$now" '
+      def ts: (. // "") | tostring | fromdateiso8601? // 0;
+      def median: sort | length as $n | if $n % 2 == 1 then .[($n - 1) / 2] else ((.[$n / 2 - 1] + .[$n / 2]) / 2 | floor) end;
       (.[0] // null) as $r
       | if ($r | type) != "object" then empty else
-          {state: (if $r.status != "completed" then "running"
-                   elif $r.conclusion == "success" then "passing"
-                   elif ($r.conclusion | IN("failure", "timed_out", "startup_failure")) then "failing"
-                   else "unknown" end),
-           at: ((($r.createdAt // "") | tostring | fromdateiso8601?) // 0), fetched: $now}
+          ([.[1:][] | select(type == "object" and .status == "completed" and .conclusion == "success")
+            | {event: (.event | tostring), d: ((.updatedAt | ts) - (.startedAt | ts))} | select(.d > 0)]) as $hist
+          | ($hist | map(select(.event == ($r.event | tostring)))) as $same
+          | (if ($same | length) >= 3 then $same else $hist end | .[:7] | map(.d)) as $ds
+          | ($r.startedAt | ts) as $start
+          | {state: (if $r.status != "completed" then "running"
+                     elif $r.conclusion == "success" then "passing"
+                     elif ($r.conclusion | IN("failure", "timed_out", "startup_failure")) then "failing"
+                     else "unknown" end),
+             at: (($r.createdAt | ts)), fetched: $now}
+            + (if $r.status == "in_progress" and $start > 0 and ($ds | length) >= 3
+               then {eta: {start: $start, typ: ($ds | median), min: ($ds | min), max: ($ds | max), n: ($ds | length)}} else {} end)
         end' "$tmp" 2>/dev/null) || state=""
   fi
   if [ -z "$state" ]; then
@@ -91,11 +108,12 @@ hci-refresh() {
 }
 
 hud-ci-json() {
-  local root="$1" cfg="$2" poll="${3:-0}" wf branch repo
+  local root="$1" cfg="$2" poll="${3:-0}" wf branch repo eta_on
   { [ -n "$cfg" ] && [ "$cfg" != "null" ]; } || { printf 'null'; return 0; }
   wf=$(jq -r 'if type == "object" and (.workflow | type) == "string" then .workflow else "" end' <<<"$cfg" 2>/dev/null) || wf=""
   branch=$(jq -r 'if type == "object" and (.branch | type) == "string" then .branch else "" end' <<<"$cfg" 2>/dev/null) || branch=""
   repo=$(jq -r 'if type == "object" and (.repo | type) == "string" then .repo else "" end' <<<"$cfg" 2>/dev/null) || repo=""
+  eta_on=$(jq -r 'if type == "object" and .eta == false then "false" else "true" end' <<<"$cfg" 2>/dev/null) || eta_on=true
   hci-valid workflow "$wf" || { printf 'null'; return 0; }
   [ -z "$branch" ] || hci-valid branch "$branch" || { printf 'null'; return 0; }
   [ -z "$repo" ] || hci-valid repo "$repo" || { printf 'null'; return 0; }
@@ -131,6 +149,12 @@ hud-ci-json() {
   fi
 
   local out=""
-  [ -z "$cached" ] || out=$(jq -c '{state, at: (.at // 0)} | select(.state | IN("passing", "failing", "running", "unknown"))' <<<"$cached" 2>/dev/null | head -n1) || out=""
+  # Untrusted cache: only numbers survive in "eta"; it is dropped when ci.eta is false.
+  [ -z "$cached" ] || out=$(jq -c --argjson eta "$eta_on" '
+      (.eta // null) as $e
+      | {state, at: (.at // 0)}
+        + (if $eta and ($e | type) == "object" and all($e.start, $e.typ, $e.min, $e.max, $e.n; type == "number")
+           then {eta: {start: ($e.start | floor), typ: ($e.typ | floor), min: ($e.min | floor), max: ($e.max | floor), n: ($e.n | floor)}} else {} end)
+      | select(.state | IN("passing", "failing", "running", "unknown"))' <<<"$cached" 2>/dev/null | head -n1) || out=""
   printf '%s' "${out:-null}"
 }

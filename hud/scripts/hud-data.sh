@@ -28,7 +28,7 @@
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
 #                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
-#    "ci": null | {"state","at"},   # last run of the CONFIGURED workflow (hud-ci.sh)
+#    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
