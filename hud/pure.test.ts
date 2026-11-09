@@ -1499,7 +1499,7 @@ test('alertSegs: red row is bold, red, undimmed; NO_COLOR drops the colour and s
   expect(isAlertRow(green)).toBe(false)
 })
 
-// --- queue source (T20261104-420419): working tree (default) or the default branch ---
+// --- queue source (T20261104-420419, default flipped by T20261109-338243): the default branch (default) or the working tree (opt-in) ---
 
 test('queue source: config parses {source} or a bare string; unknown means unset; a project value replaces the user value like ci', async () => {
   expect(parseConfigText('{"queue": {"source": "default-branch"}}').queue).toEqual({ source: 'default-branch' })
@@ -1509,7 +1509,7 @@ test('queue source: config parses {source} or a bare string; unknown means unset
   expect(mergeConfig({}, {}).queue).toBeUndefined()
   expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), {}).queue).toEqual({ source: 'default-branch' })
   expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), parseConfigText('{"queue": {"source": "working-tree"}}')).queue).toEqual({ source: 'working-tree' })
-  // `"queue": null` in a project file switches a user-level source off for that project, like `ci: null`.
+  // `"queue": null` in a project file drops a user-level source for that project (like `ci: null`): the HUD then uses the default, default-branch.
   expect(mergeConfig(parseConfigText('{"queue": {"source": "default-branch"}}'), parseConfigText('{"queue": null}')).queue).toBeUndefined()
 })
 

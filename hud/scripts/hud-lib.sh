@@ -402,6 +402,13 @@ sl-default-branch() {
   return 0
 }
 
+# $1 repo root $2 branch -> 0 when dev/TODO/queue.md exists in the working tree or in the local
+# refs/remotes/origin/<branch> tree (no network). A queue that exists only on origin, in neither,
+# is picked up once something fetches it (documented limit).
+_sl-queue-anywhere() {
+  [ -f "$1/dev/TODO/queue.md" ] || git -C "$1" cat-file -e "refs/remotes/origin/$2:dev/TODO/queue.md" 2>/dev/null
+}
+
 # $1 repo root $2 branch -> at most one detached `git fetch origin <branch>` per HUD_QUEUE_FETCH_TTL
 # (stamped BEFORE the attempt, so an offline remote is not retried every poll). Never blocks, never
 # prompts for credentials, silent on failure, no garbage collection, nothing in the working tree.
@@ -492,7 +499,9 @@ sl-queue-json() {
     # Never fatal: when origin/<default> cannot be read, fall back to the working tree and say so.
     local br; br=$(sl-default-branch "$repo_root")
     extra='{"source":"working-tree","fallback":true}'
-    if [ -n "$br" ]; then
+    # No queue anywhere (working tree or the local origin/<default> tree): skip the fetch, the temp
+    # dir and the archive altogether, so a repo without a queue costs nothing per poll.
+    if [ -n "$br" ] && _sl-queue-anywhere "$repo_root" "$br"; then
       sl-queue-fetch "$repo_root" "$br"
       if git -C "$repo_root" rev-parse --verify -q "refs/remotes/origin/$br^{commit}" >/dev/null 2>&1; then
         # A helper killed mid-archive (the mod's 5 s limit) cannot clean up: sweep our own stale temp dirs first.

@@ -24,7 +24,7 @@
 #                      "next_job","updated_at"},   # ledger.sh file
 #    "queue": null | {"total","ready","held","epic","claimed","revisited","autoparked"[,"source","branch"|"fallback"]},
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
-#                         # `source`/`branch` only when stdin `queue_source` is "default-branch": read from origin/<branch>
+#                         # `source`/`branch` unless stdin `queue_source` is "working-tree" (opt-in): read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
 #                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
@@ -35,9 +35,9 @@
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
 # `ci_ttl` (poll seconds), and `show_version` (bool, default true),
-# `queue_source` ("working-tree" default | "default-branch"). Never exits non-zero: any failure prints "{}" so the mod
+# `queue_source` ("default-branch" default, also for absent or unknown | "working-tree" opt-in). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
-# time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` for queue_source default-branch).
+# time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` unless queue_source is working-tree, and only when a queue exists).
 
 _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hud-lib.sh
@@ -62,7 +62,7 @@ hud-data() {
 
   show_version=$(printf '%s' "$input" | jq -r 'if .show_version == false then 0 else 1 end' 2>/dev/null) || show_version=1
 
-  queue_source=$(printf '%s' "$input" | jq -r 'if .queue_source == "default-branch" then "default-branch" else "working-tree" end' 2>/dev/null) || queue_source="working-tree"
+  queue_source=$(printf '%s' "$input" | jq -r 'if .queue_source == "working-tree" then "working-tree" else "default-branch" end' 2>/dev/null) || queue_source="default-branch"
 
   local repo_root clone_id label task_id="" task_title="" branch rec
   repo_root=$(sl-repo-root "$cwd")

@@ -56,7 +56,7 @@ _origin_moves_on() {
   git -C "$SEED" add -A && git -C "$SEED" commit -q -m more && git -C "$SEED" push -q origin HEAD:"${1:-main}"
 }
 
-@test "working-tree mode is the default and ignores origin: stale clone shows its own numbers, no extra keys" {
+@test "working-tree mode is the library default (sl-queue-json called without a source) and ignores origin: stale clone shows its own numbers, no extra keys" {
   _world; _origin_moves_on
   run _q "$ME"
   [ "$status" -eq 0 ]
@@ -180,14 +180,48 @@ _origin_moves_on() {
   [ -z "$output" ]
 }
 
-@test "hud-data --json: queue_source in stdin picks the source; absent or unknown means the working tree" {
+@test "hud-data --json: queue_source in stdin picks the source; absent or unknown means the default branch, working-tree is the opt-in" {
   _world; _origin_moves_on
   run bash -c "printf '%s' '{\"cwd\":\"$ME\",\"queue_source\":\"default-branch\"}' | bash '$HUD' --json"
   [ "$(jq -r '.queue | [.total, .source, .branch] | @csv' <<<"$output")" = '3,"default-branch","main"' ] || { echo "$output"; false; }
   run bash -c "printf '%s' '{\"cwd\":\"$ME\"}' | bash '$HUD' --json"
-  [ "$(jq -c '.queue | [.total, has("source")]' <<<"$output")" = '[2,false]' ]
+  [ "$(jq -r '.queue | [.total, .source, .branch] | @csv' <<<"$output")" = '3,"default-branch","main"' ] || { echo "$output"; false; }
   run bash -c "printf '%s' '{\"cwd\":\"$ME\",\"queue_source\":\"bogus\"}' | bash '$HUD' --json"
+  [ "$(jq -r '.queue | [.total, .source] | @csv' <<<"$output")" = '3,"default-branch"' ]
+  run bash -c "printf '%s' '{\"cwd\":\"$ME\",\"queue_source\":\"working-tree\"}' | bash '$HUD' --json"
   [ "$(jq -c '.queue | [.total, has("source")]' <<<"$output")" = '[2,false]' ]
+  # malformed stdin must not keep the old default either
+  run bash -c "printf 'not json' | (cd '$ME' && bash '$HUD' --json)"
+  [ "$status" -eq 0 ]
+}
+
+@test "the fetch goes to origin and the default branch only, never to local branches" {
+  _world; _origin_moves_on
+  git -C "$ME" checkout -q -b side
+  local before; before=$(git -C "$ME" rev-parse side main)
+  run _q "$ME" default-branch
+  [ "$(jq -r .total <<<"$output")" = "3" ]
+  [ "$(git -C "$ME" rev-parse side main)" = "$before" ]
+  [ "$(git -C "$ME" rev-parse origin/main)" = "$(git -C "$SEED" rev-parse HEAD)" ]
+}
+
+@test "no queue anywhere: default-branch does no fetch, no temp dir and prints nothing" {
+  _world
+  git -C "$ME" rm -q -r dev/TODO/queue.md && git -C "$ME" commit -q -m noq && git -C "$ME" push -q origin HEAD:main
+  git -C "$ME" update-ref -d refs/remotes/origin/main; git -C "$ME" update-ref refs/remotes/origin/main "$(git -C "$ME" rev-parse HEAD)"
+  rm -rf "$HUD_QUEUE_STATE_DIR"
+  run _q "$ME" default-branch
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ ! -e "$HUD_QUEUE_STATE_DIR" ] || [ -z "$(ls "$HUD_QUEUE_STATE_DIR")" ]
+}
+
+@test "a queue only on origin, in neither local tree, is not fetched in (documented limit)" {
+  _world
+  git -C "$ME" rm -q dev/TODO/queue.md && git -C "$ME" commit -q -m noq
+  git -C "$ME" update-ref refs/remotes/origin/main "$(git -C "$ME" rev-parse HEAD)"
+  run _q "$ME" default-branch
+  [ -z "$output" ]
 }
 
 @test "origin/HEAD naming a missing branch is unknown (marked fallback), not a guess at main" {

@@ -190,6 +190,18 @@ test('project override beats the user file', async ($: any, on: any) => {
   await row.unmount()
 })
 
+for (const [cfg, want] of [[undefined, 'default-branch'], ['{"queue": "nope"}', 'default-branch'], ['{"queue": {"source": "working-tree"}}', 'working-tree'], ['{"queue": {"source": "default-branch"}}', 'default-branch']] as const) {
+  test(`queue source on stdin: config ${JSON.stringify(cfg)} sends ${want} (unset or invalid means the default branch)`, async ($: any, on: any) => {
+    const w = fresh()
+    w.cfg = cfg
+    world($, on, w)
+    await $.session.start(START)
+    const band = await $.ui.mount(BAND(140))
+    await band.unmount()
+    expect(w.stdins.some(x => x.includes('queue_source') && JSON.parse(x).queue_source === want)).toBe(true)
+  })
+}
+
 test('the band shows helper data once the session started, and the helper gets a fixed argv', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"ci": {"workflow": "nightly.yml"}}'

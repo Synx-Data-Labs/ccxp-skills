@@ -14,7 +14,7 @@ export type CiConfig = {
   repo?: string
 }
 
-/** Where the queue cell reads dev/TODO from: this clone's working tree (default) or the repo's default branch on origin (git object reads, no checkout). */
+/** Where the queue cell reads dev/TODO from: the repo's default branch on origin (default; git object reads, no checkout) or this clone's working tree (opt-in). */
 export type QueueSource = 'working-tree' | 'default-branch'
 
 export type QueueConfig = {
@@ -37,7 +37,7 @@ export type HudConfig = {
   version: boolean
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
-  /** Queue cell source; undefined means `{ source: 'working-tree' }` (the original behaviour). A project file's value replaces the user file's. */
+  /** Queue cell source; undefined means `{ source: 'default-branch' }`. A project file's value replaces the user file's. */
   queue?: QueueConfig
 }
 
