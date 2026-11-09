@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 2
 source: Owner decision d19, 2026-11-09 ("add a --force parameter to task_claim.sh, so that we can manually take over an existing task")
 description: task_claim.sh acquire <id> --force takes over a task held by another claimant (manual use only)
-claimed_by: cc1-50ac6891:9e4681d6b34224d4
-claimed_role: interactive
+claimed_by:
+claimed_role:
 related: T20261109-274750
 scheduled: 2026-11-09
 ---
@@ -27,5 +27,10 @@ scheduled: 2026-11-09
 
 ## Done criteria
 
-- [ ] BATS: takeover from another and from a live claimant, no-flag unchanged, previous claimant recorded, exit codes, unknown flag, no caller passes `--force`.
-- [ ] Docs: `_session/README.md`, `claim/SKILL.md`, `lifecycle.md`, release note in the close journal.
+- [x] BATS: takeover from another and from a live claimant, no-flag unchanged, previous claimant recorded, exit codes, unknown flag, no caller passes `--force`.
+- [x] Docs: `_session/README.md`, `claim/SKILL.md`, `lifecycle.md`, release note in the close journal.
+
+## Closed (2026-11-09)
+
+- Shipped in #641 (`acquire <id> --force`, `claimed_takeover_from:`, docs, BATS); review fixes: no empty-key churn on release, backslash-safe `_tc_fm_set` (awk ENVIRON), flag-first usage error.
+- Release note (suggest 6.3.3, owner decides): `task_claim.sh acquire <id> --force` takes over a claimed task manually; records `claimed_takeover_from:`; never passed by any skill.
