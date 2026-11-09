@@ -262,7 +262,9 @@ _tc_decide() {
   if [ -z "$cur" ] || [ "$cur" = "none" ]; then printf 'none'; return 0; fi
   if [ "$cur" = "$mine" ]; then printf 'mine'; return 0; fi
   # Same clone, identity derived under plugin <= 6.2.0 (T20261109-274750).
-  if [ "$cur" = "$(_tc_legacy_claimant_id)" ]; then printf 'mine'; return 0; fi
+  # Only a current-shape value can be a legacy-derived id, so skip the derivation
+  # (file reads + sha) for human overrides and plaintext legacy claims.
+  if claimant_is_current_shape "$cur" && [ "$cur" = "$(_tc_legacy_claimant_id)" ]; then printf 'mine'; return 0; fi
   printf 'other'
 }
 
