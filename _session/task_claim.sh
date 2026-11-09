@@ -191,7 +191,9 @@ _tc_fm_set() {
   [ -w "$file" ] || { _session_log "task_claim: not writable: $file"; return 1; }
   if [ -n "$value" ]; then line="$field: $value"; else line="$field:"; fi
   tmp="$(mktemp "${file}.tc.XXXXXX")" || return 1
-  awk -v f="$field" -v repl="$line" '
+  # repl travels via ENVIRON, not -v: awk -v interprets backslash escapes, which
+  # would mangle a value such as a hand-assigned claimant containing "\\".
+  TC_REPL="$line" awk -v f="$field" '
     BEGIN { infm = 0; done = 0; opened = 0; skipping = 0 }
     NR==1 && $0=="---" { infm = 1; opened = 1; print; next }
     {
@@ -200,11 +202,11 @@ _tc_fm_set() {
         skipping = 0                             # first non-blank, non-indented line — stop
       }
       if (infm && $0=="---") {              # closing fence
-        if (!done) { print repl; done = 1 }
+        if (!done) { print ENVIRON["TC_REPL"]; done = 1 }
         infm = 0; print; next
       }
       if (infm && !done && index($0, f":") == 1) {
-        print repl; done = 1; skipping = 1; next   # replace existing; consume its continuation lines
+        print ENVIRON["TC_REPL"]; done = 1; skipping = 1; next   # replace existing; consume its continuation lines
       }
       print
     }
@@ -568,13 +570,21 @@ _tc_warn_local_only() {
   _session_log "task_claim: local-only: the claim on $1 is not held until the claim PR merges to main (already merged? then ignore; verify with: task_claim.sh verify-landed $1 [--repo <hub-owner/repo>])"
 }
 
+_tc_clear_takeover_record() {
+  # Clear claimed_takeover_from only when present, so an ordinary release never
+  # inserts an empty key into tasks that never had a forced takeover.
+  [ -z "$(_tc_fm_get "$1" claimed_takeover_from)" ] || _tc_fm_set "$1" claimed_takeover_from ""
+}
+
 _tc_acquire() {
   # acquire <task-id> [--force]. --force (T20261109-745828) is a MANUAL override
   # the owner asked for: take the task even when another claimant holds it, live
   # or not. It is never implied and no skill script passes it
   # (tests/task_claim.bats pins that). Free or already-mine tasks ignore it.
   local id="${1:-}" force=0 file cur mine decision
-  [ -n "$id" ] || { _session_log "usage: task_claim.sh acquire <task-id> [--force]"; return 64; }
+  case "$id" in
+    ""|-*) _session_log "usage: task_claim.sh acquire <task-id> [--force] (the task id comes first)"; return 64 ;;
+  esac
   shift
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -629,7 +639,7 @@ _tc_release() {
   file="$(_tc_find_file "$id")" || { _session_log "task_claim: no task file for $id"; return 2; }
   _tc_fm_set "$file" claimed_by "" || return 1
   _tc_fm_set "$file" claimed_role "" || return 1   # same clear-on-close contract as claimed_by
-  _tc_fm_set "$file" claimed_takeover_from "" || return 1
+  _tc_clear_takeover_record "$file" || return 1
   _tc_fm_set "$file" status "$final" || return 1
   printf 'released\n'
 }
@@ -677,7 +687,7 @@ _tc_release_others() {
       case "$status" in "In Progress") status="Open" ;; *) : ;; esac
       _tc_fm_set "$f" claimed_by ""        || return 1
       _tc_fm_set "$f" claimed_role ""      || return 1   # same clear-on-close contract as _tc_release
-      _tc_fm_set "$f" claimed_takeover_from "" || return 1
+      _tc_clear_takeover_record "$f"       || return 1
       _tc_fm_set "$f" status "$status"     || return 1
       b="$(basename "$f")"
       if [[ "$b" =~ (T[0-9]{8}-[0-9]{6}) ]]; then id="${BASH_REMATCH[1]}"; else id="${b%.md}"; fi
