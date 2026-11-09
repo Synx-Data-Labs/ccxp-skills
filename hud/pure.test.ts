@@ -1679,8 +1679,14 @@ test('ciEta: a narrow spread shows one time, the start plus the median, in local
 test('ciEta: a wide spread (max - min > half the median) shows the fastest-slowest range', async () => {
   expect(ciEta(run(WIDE), (START + 1 * H) * 1000)).toBe(`ETA ${hhmm(START + 2 * H)}-${hhmm(START + 9 * H)}`)
   // past the median but within the slowest recent run: still the range, not overdue
-  // past the fastest run the first time is clamped to now, never a time that has already passed
+  // past the fastest run (and the median) but within the slowest: still a range, not overdue; the first time is clamped to now, never a time that has already passed
   expect(ciEta(run(WIDE), (START + 6 * H) * 1000)).toBe(`ETA ${hhmm(START + 6 * H)}-${hhmm(START + 9 * H)}`)
+})
+
+test('ciEta: the spread boundary (max - min exactly half the median) is still narrow; now == start + typ is not overdue', async () => {
+  const edge = { start: START, typ: 4 * H, min: 3 * H, max: 5 * H, n: 5 }
+  expect(ciEta(run(edge), (START + 1 * H) * 1000)).toBe(`ETA ${hhmm(START + 4 * H)}`)
+  expect(ciEta(run({ ...WIDE, max: 9 * H }), (START + 9 * H) * 1000)).toBe(`ETA ${hhmm(START + 9 * H)}-${hhmm(START + 9 * H)}`) // now == start + max is not overdue
 })
 
 test('ciEta: overdue shows the usual duration, never a negative time', async () => {
@@ -1701,7 +1707,7 @@ test('ciEta: nothing when not running or without an eta; +Nd when it lands on an
 test('CI row: a running run with an eta carries it after the state; no eta, no extra text; it is dropped when narrow', async () => {
   const started = NOW - 600 // the band's clock is the real one, so the run started ten minutes ago
   const row = (eta: object | undefined, cols: number) => text(bandRows(withHelper({ ci: { ...run(eta), at: started } }), { ...CI, fields: ['ci'] }, cols).slice(0, 1))
-  expect(row({ ...NARROW, start: started }, 140)).toMatch(/^CI \(nightly\.yml\) ◐ running ETA \d\d:\d\d \d\d-\d\d /)
+  expect(row({ ...NARROW, start: started }, 140)).toMatch(/^CI \(nightly\.yml\) ◐ running ETA \d\d:\d\d(?: \+\dd)? \d\d-\d\d /)
   expect(row(undefined, 140)).toMatch(/^CI \(nightly\.yml\) ◐ running \d\d-\d\d /)
   expect(row({ ...NARROW, start: started }, 20)).not.toContain('ETA')
 })
