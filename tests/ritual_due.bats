@@ -243,3 +243,10 @@ at() { CCXP_RITUAL_NOW="$1" bash "$RD" --repo "$REPO" "${@:2}"; }
   [ "$output" = "0" ]
   [ -n "$(find "$CCXP_RITUAL_DIR" -name 'standup-*')" ]
 }
+
+@test "without CCXP_RITUAL_DIR the markers live under the active profile dir (CLAUDE_CONFIG_DIR)" {
+  local prof="$BATS_TEST_TMPDIR/profile"; mkdir -p "$prof"
+  run env -u CCXP_RITUAL_DIR CLAUDE_CONFIG_DIR="$prof" CCXP_RITUAL_NOW="$MON_NOON" bash "$RD" --repo "$REPO" claim
+  [ "$output" = "standup 2026-11-09" ]
+  [ -n "$(find "$prof/ccxp-rituals" -name 'standup-2026-11-09.claim.1')" ]
+}
