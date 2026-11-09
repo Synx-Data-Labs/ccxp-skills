@@ -1,8 +1,11 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: owner request, this conversation, 2026-11-09
 description: ccxp-agent persona may run one read-only git fetch origin per turn and read repo state from origin/<default>
+claimed_by: cc1-9f320372:f9b2137c9918a8ee
+claimed_role: interactive
+scheduled: 2026-11-09
 ---
 
 # T20261109-106402: ccxp-agent refreshes origin refs, never the owner's clone
