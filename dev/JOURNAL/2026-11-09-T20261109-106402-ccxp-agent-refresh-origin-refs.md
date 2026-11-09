@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: owner request, this conversation, 2026-11-09
 description: ccxp-agent persona may run one read-only git fetch origin per turn and read repo state from origin/<default>
-claimed_by: cc1-9f320372:f9b2137c9918a8ee
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-09
 ---
 
@@ -57,10 +57,16 @@ scheduled: 2026-11-09
 - [x] Persona grows by under 1.5 KB (`wc -c` before 43095 and after) and persona tests pass: `bats tests/agent_pairing*.bats tests/terms.bats tests/persona_check.bats`.
 - [x] No plugin version bump, tag or release in this PR: diff review.
 
-## Closed
+## Closed (2026-11-09)
 
-- Pending.
+- Shipped in PR #629 (queue #626, claim #627, design #628); CI green (bats, Markdown Lint, lint-tasks, skill-quality, sync-tasks).
+- Met: `agent-pairing/assets/ccxp-agent.md` has a "Repo freshness" section (one read-only `git fetch origin` with `--no-tags --no-prune --no-recurse-submodules`, never pull/check out/merge/rebase/reset/stash/clean the owner's clone, lookups read `origin/<default>` and say so); the Bash carve-out names the fetch; persona grew by 1457 bytes; `tests/agent_pairing.bats` has a new asset test and the persona, terms and persona-check tests pass.
+- Not done here by design: no plugin version bump, tag or release. The persona refresh hook picks the change up after the owner releases and updates the plugin.
+- Follow-ups: none filed.
 
 ## Skills invoked
 
-- Pending.
+- TDD (`superpowers:test-driven-development`): no, not invoked as a skill; the bats asset test was written with the change
+- Verification (`superpowers:verification-before-completion`): bats and lint run before each PR; independent fresh-agent review on every PR
+- Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): applied to the design PR and the implementation PR, no pushbacks
