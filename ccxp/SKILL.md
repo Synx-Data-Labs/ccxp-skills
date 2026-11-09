@@ -6,7 +6,7 @@ argument-hint: "[task-id]"
 
 Claude Code Extreme Programming: the master skill that orchestrates daily engineering work following XP best practices. Starts with a daily standup (review yesterday, check progress against the week's IPM commit if one exists, plan today), focused work via `/drive`, and a weekly retrospective on Fridays.
 
-**The Monday Iteration Planning Meeting is a separate, opt-in ritual, not something this orchestrator auto-triggers**. The day-to-day planning loop is continuous `/todo next` + `/drive` pulling straight off `dev/TODO/queue.md`'s existing priority order. A repo that wants an explicit weekly iteration commit invokes `/ipm` directly, any day — see `ipm/SKILL.md`.
+**The Monday Iteration Planning Meeting is a separate, opt-in ritual, not something this orchestrator auto-triggers**. The day-to-day planning loop is continuous `/todo next` + `/drive` pulling straight off `dev/TODO/queue.md`'s existing priority order. A repo that wants an explicit weekly iteration commit invokes `/ipm` directly, any day — see `ipm/SKILL.md`. (`/ccxp` still never invokes it itself; the ccxp-agent persona dispatches the standup, the Monday IPM and the Friday retro as separate jobs, see `agent-pairing/rituals.md`.)
 
 ## Argument
 

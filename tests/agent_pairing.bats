@@ -253,6 +253,17 @@ EOF
   [ "$(wc -c < "$f")" -lt 46000 ]
 }
 
+@test "asset: Rituals due section runs ritual-due.sh claim at start/turn/wake, one job per check, carve-out named" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Rituals due$' "$f"
+  grep -q 'agent-pairing/scripts/ritual-due.sh claim' "$f"
+  grep -q 'dispatch ONE background job' "$f"
+  grep -q '`ritual-due.sh` of "Rituals due"' "$f"
+  grep -q 'agent-pairing/rituals.md' "$f"
+  [ -x "$REPO_ROOT/agent-pairing/scripts/ritual-due.sh" ]
+  [ -f "$REPO_ROOT/agent-pairing/rituals.md" ]
+}
+
 @test "asset: reply format is one Next: section with n refs, no Needs input / Needs your action" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
   grep -q '^- \*\*Next:\*\*' "$f"
