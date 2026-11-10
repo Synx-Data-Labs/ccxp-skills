@@ -56,11 +56,11 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [ -f "$md" ]
   grep -q '^## Running (1)$' "$md"
   grep -Eq '^- r8 \[[0-9]{2}:[0-9]{2}\] job$' "$md"
-  grep -q '^  context: file:///ctx/a.md$' "$md"
+  grep -q '^  file:///ctx/a.md$' "$md"
   grep -q '^- n1 q$' "$md"
-  grep -q '^  context: file:///ctx/n.md$' "$md"
+  grep -q '^  file:///ctx/n.md$' "$md"
   grep -q '^- k3 Parked thing$' "$md"
-  grep -q '^  context: file:///ctx/p.md$' "$md"
+  grep -q '^  file:///ctx/p.md$' "$md"
   bash "$LEDGER" finish 8
   grep -q '^## Running (0)$' "$md"
 }
@@ -421,12 +421,12 @@ allow: pr-merge" >> "$f"
   bash "$LEDGER" park k4
   md="$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
   grep -qF -- '- r6 [' "$md"
-  grep -qxF '  context: file:///tmp/my%20dir/r%206.md' "$md"
-  grep -qxF '  context: file:///ctx/n1.md' "$md"
-  grep -qxF '  context: file:///ctx/p%203.md' "$md"
-  run grep -cE '\]\(file://|^  /' "$md"
+  grep -qxF '  file:///tmp/my%20dir/r%206.md' "$md"
+  grep -qxF '  file:///ctx/n1.md' "$md"
+  grep -qxF '  file:///ctx/p%203.md' "$md"
+  run grep -cE '\]\(file://|^  /|context:' "$md"
   [ "$output" = "0" ]
-  [ "$(grep -c 'context: (none)' "$md")" = "3" ]
+  [ "$(grep -c '^  (none)$' "$md")" = "3" ]
   grep -qxF "Ledger: file://$(dirname "$CCXP_LEDGER_FILE" | sed 's/ /%20/g')/ledger.md" "$md"
   run bash "$LEDGER" render
   [[ "$output" == *$'\n  file:///tmp/my%20dir/r%206.md'* ]]
@@ -687,7 +687,7 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   grep -Eq '^- d2 \[[0-9-]{10}\] repo rule - retired: obsolete \([0-9-]{10}\)$' "$md"
   bash "$LEDGER" decision add "with ctx" --quote "owner words" --context "/ctx/a b.md" >/dev/null
   grep -q '^  quote: "owner words"$' "$md"
-  grep -q '^  context: file:///ctx/a%20b.md$' "$md"
+  grep -q '^  file:///ctx/a%20b.md$' "$md"
 }
 
 @test "decision: archive moves old closed entries past 200 to ccxp-decisions-archive.json, keeps active and recent ones" {

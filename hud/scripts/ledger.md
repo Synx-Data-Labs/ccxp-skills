@@ -89,7 +89,7 @@ A restart ends running subagents but leaves their `running` rows. `start` can re
 
 ## Markdown view
 
-Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows `context: file:///abs/path` (path percent-encoded): one plain URL, no markdown link and no repeated path, cmd-clickable in vscode or a terminal; an empty context shows `context: (none)`. The header has a plain `Ledger: file://...` line for the file itself. `render` and `reply` print the same plain `file://` URL on the row's second line. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
+Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): running jobs, Next items and parked items. Each row shows its context on its own indented line as a bare `file:///abs/path` (path percent-encoded), with no label glued to it (a `context:` prefix broke cmd-click in a VS Code terminal, T20261110-302973): one plain URL, no markdown link and no repeated path; an empty context shows `(none)`. The header has a plain `Ledger: file://...` line for the file itself. `render` and `reply` print the same plain `file://` URL on the row's second line. The ccxp-agent ends every reply with `Ledger: <absolute path of that file>`.
 
 ## Migration
 

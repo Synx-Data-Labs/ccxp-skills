@@ -182,7 +182,7 @@ ledger-render() {
   tmp=$(mktemp "$md.XXXXXX") || return 0
   if printf '%s' "$1" | jq -r --arg md "$md" --argjson az "$(authz-effective-if-file)" '
       def enc: split("/") | map(@uri) | join("/");
-      def item($head): "- " + $head + "\n  context: "
+      def item($head): "- " + $head + "\n  "
         + (if .context != "" then "file://" + (.context | enc) else "(none)" end);
       def sect($name; $items): "## " + $name + " (" + ($items | length | tostring) + ")\n"
         + (if ($items | length) == 0 then "- none" else ($items | join("\n")) end) + "\n";
@@ -536,7 +536,7 @@ decisions-render-file() {
       def day: .added_at[0:10];
       def item: "- " + .ref + " [" + day + "] " + .text
         + (if .quote != "" then "\n  quote: \"" + .quote + "\"" else "" end)
-        + (if .context != "" then "\n  context: file://" + (.context | enc) else "" end);
+        + (if .context != "" then "\n  file://" + (.context | enc) else "" end);
       def num: .ref[1:] | tonumber;
       [.decisions[] | select(.status == "active")] as $act
       | [.decisions[] | select(.status != "active")] as $old
