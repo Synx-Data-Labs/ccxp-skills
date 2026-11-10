@@ -609,8 +609,7 @@ EOF
   printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$STUB_BIN/op"; chmod +x "$STUB_BIN/op"
   env PATH="$STUB_BIN" REFRESH_ENV_OP_TIMEOUT=30 bash -c "source '$REFRESH'; refresh-env '$REPO'" >/dev/null 2>&1 &
   local pid=$! i
-  for i in $(seq 1 50); do [ -d "$REPO/.env.refresh.lock" ] && break; sleep 0.1; done
-  sleep 0.3
+  for i in $(seq 1 50); do ls "$REPO"/.env.err.* >/dev/null 2>&1 && break; sleep 0.1; done
   kill -KILL "$pid"
   wait "$pid" 2>/dev/null || true
   # SIGKILL cannot be trapped: the leftovers and stale lock stay until the next run.
