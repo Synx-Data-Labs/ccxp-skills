@@ -16,7 +16,9 @@
 #   timed out, or lock held (callers must NOT load the stale cache).
 #
 # Env: OP_ACCOUNT, REFRESH_ENV_OP_TIMEOUT (default 60s),
-#   REFRESH_ENV_LOCK_WAIT (default 10s).
+#   REFRESH_ENV_LOCK_WAIT (default 10s),
+#   REFRESH_ENV_SWEEP_MINS (default 10): leftover .env.tmp.*/.env.err.* older
+#   than this, and not open by any process, are removed on the next run.
 
 re-sha256() {
   if command -v shasum >/dev/null 2>&1; then
@@ -97,6 +99,25 @@ re-unlock-msg() {
 # op's stderr, minus any line that could quote a template value.
 re-safe-err() { grep -v -e 'op://' -e '=' "$1" 2>/dev/null | head -n 3 || true; }
 
+# Temp files of the refresh in flight; removed by the signal/EXIT traps and
+# after every refresh, so no exit path leaves them behind.
+_RE_TMP=""; _RE_ERR=""
+re-cleanup() { rm -f "${_RE_TMP:-}" "${_RE_ERR:-}"; _RE_TMP=""; _RE_ERR=""; }
+
+# Remove leftovers of killed runs (SIGKILL, older helper versions, an old
+# inline .envrc): only the exact mktemp shape, regular files, older than
+# REFRESH_ENV_SWEEP_MINS, and not open by a live process (when lsof exists).
+re-sweep-stale() {
+  local dir="$1" mins="${REFRESH_ENV_SWEEP_MINS:-10}" f
+  case "$mins" in ''|*[!0-9]*) mins=10 ;; esac
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if command -v lsof >/dev/null 2>&1 && lsof -- "$f" >/dev/null 2>&1; then continue; fi
+    rm -f "$f"
+  done < <(find "$dir" -maxdepth 1 -type f \( -name '.env.tmp.??????' -o -name '.env.err.??????' \) -mmin "+$mins" 2>/dev/null)
+  return 0
+}
+
 re-lock() {
   local lock="$1/.env.refresh.lock" waited=0 max=$(( ${REFRESH_ENV_LOCK_WAIT:-10} * 5 )) p
   while ! mkdir "$lock" 2>/dev/null; do
@@ -121,7 +142,9 @@ re-do-refresh() {
     return 10
   fi
   tmp="$(umask 077 && mktemp "$dir/.env.tmp.XXXXXX")" || { echo "refresh-env: cannot write in $dir" >&2; return 1; }
-  errf="$(umask 077 && mktemp "$dir/.env.err.XXXXXX")" || { rm -f "$tmp"; return 1; }
+  _RE_TMP="$tmp"
+  errf="$(umask 077 && mktemp "$dir/.env.err.XXXXXX")" || { re-cleanup; return 1; }
+  _RE_ERR="$errf"
   tpl_hash="$(re-sha256 "$dir/.env.tpl")" || { rm -f "$tmp" "$errf"; return 1; }
   re-run-op "$dir/.env.tpl" "$tmp" "$errf" || rc=$?
   if [ "$rc" -eq 124 ]; then
@@ -170,6 +193,7 @@ refresh-env() {
     [ -n "$keys" ] && while IFS= read -r arg; do echo "drift: $arg"; done <<<"$keys"
     return 3
   fi
+  re-sweep-stale "$dir"
   if [ "$mode" = "force" ]; then reason="forced"; fi
   if [ -z "$reason" ]; then
     echo "unchanged: $dir/.env fresh (content hash matches .env.tpl)"
@@ -180,7 +204,7 @@ refresh-env() {
   # Killed mid-refresh (Ctrl-C, direnv abort, SIGTERM): drop temp files holding
   # resolved secrets, the lock, and the orphaned op.
   _RE_PID=""
-  trap 'kill "${_RE_PID:-0}" 2>/dev/null; rm -f "'"$dir"'"/.env.tmp.* "'"$dir"'"/.env.err.*; re-unlock "'"$dir"'"; exit 75' INT TERM HUP
+  trap 'kill "${_RE_PID:-0}" 2>/dev/null; re-cleanup; re-unlock "'"$dir"'"; exit 75' INT TERM HUP
   # Another caller may have refreshed while we waited for the lock.
   reason="$(re-stale-reason "$dir")" || reason="error"
   if [ "$mode" != "force" ] && [ -z "$reason" ]; then
@@ -189,6 +213,7 @@ refresh-env() {
     return 0
   fi
   re-do-refresh "$dir" || rc=$?
+  re-cleanup   # every return path of re-do-refresh, success or failure
   trap - INT TERM HUP
   re-unlock "$dir"
   return "$rc"
@@ -198,6 +223,7 @@ refresh-env() {
 # defaults to its own directory so callers need no argument.
 if [[ "${BASH_SOURCE[0]:-}" == "${0:-}" ]]; then
   set -euo pipefail
+  trap 're-cleanup' EXIT   # direct run only: a sourced caller's EXIT trap stays untouched
   default_dir="."
   [ "$(basename "$0")" = "refresh-env" ] && default_dir="$(cd "$(dirname "$0")" && pwd)"
   has_dir=0
