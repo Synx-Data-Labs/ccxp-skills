@@ -20,7 +20,7 @@ setup() {
   STUB_BIN="$BATS_TEST_TMPDIR/bin"
   mkdir -p "$STUB_BIN"
   local tool src
-  for tool in bash sh cat printf env rm mkdir dirname basename head wc cut mktemp mv chmod cp cmp grep sleep kill shasum sha256sum perl tr sed; do
+  for tool in bash sh cat printf env rm mkdir dirname basename head wc cut mktemp mv chmod cp cmp grep sleep kill shasum sha256sum perl tr sed find touch ls; do
     src="$(command -v "$tool" 2>/dev/null || true)"
     [ -n "$src" ] && ln -sf "$src" "$STUB_BIN/$tool"
   done
@@ -593,4 +593,53 @@ EOF
   sleep 0.3
   [ ! -d "$REPO/.env.refresh.lock" ]
   ! ls "$REPO"/.env.tmp.* "$REPO"/.env.err.* 2>/dev/null
+}
+
+@test "refresh-env success leaves no .env.tmp.* or .env.err.* behind" {
+  _re_setup
+  _stub_op
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [ -s "$REPO/.env" ]
+  ! ls "$REPO"/.env.tmp.* "$REPO"/.env.err.* 2>/dev/null
+}
+
+@test "refresh-env SIGKILLed mid-refresh: next run sweeps the stale leftovers" {
+  _re_setup
+  printf '#!/usr/bin/env bash\nexec sleep 30\n' >"$STUB_BIN/op"; chmod +x "$STUB_BIN/op"
+  env PATH="$STUB_BIN" REFRESH_ENV_OP_TIMEOUT=30 bash -c "source '$REFRESH'; refresh-env '$REPO'" >/dev/null 2>&1 &
+  local pid=$! i
+  for i in $(seq 1 50); do [ -d "$REPO/.env.refresh.lock" ] && break; sleep 0.1; done
+  sleep 0.3
+  kill -KILL "$pid"
+  wait "$pid" 2>/dev/null || true
+  # SIGKILL cannot be trapped: the leftovers and stale lock stay until the next run.
+  ls "$REPO"/.env.tmp.* >/dev/null
+  touch -t 202001010000 "$REPO"/.env.tmp.* "$REPO"/.env.err.*
+  _stub_op
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  ! ls "$REPO"/.env.tmp.* "$REPO"/.env.err.* 2>/dev/null
+}
+
+@test "refresh-env sweep removes only old exact-shape temp files" {
+  _re_setup
+  _stub_op
+  : >"$REPO/.env.tmp.OLD123"; : >"$REPO/.env.err.OLD123"
+  : >"$REPO/.env.tmp.NEW123"
+  : >"$REPO/.env.tmp.keepme-not-mktemp-shape"
+  touch -t 202001010000 "$REPO/.env.tmp.OLD123" "$REPO/.env.err.OLD123" "$REPO/.env.tmp.keepme-not-mktemp-shape"
+  _run_re "'$REPO'"
+  [ "$status" -eq 0 ]
+  [ ! -e "$REPO/.env.tmp.OLD123" ]
+  [ ! -e "$REPO/.env.err.OLD123" ]
+  [ -e "$REPO/.env.tmp.NEW123" ]
+  [ -e "$REPO/.env.tmp.keepme-not-mktemp-shape" ]
+}
+
+@test "refresh-env --check does not sweep (read-only)" {
+  _re_setup
+  : >"$REPO/.env.tmp.OLD123"; touch -t 202001010000 "$REPO/.env.tmp.OLD123"
+  run env PATH="$STUB_BIN" bash -c "source '$REFRESH'; refresh-env --check '$REPO' 2>&1"
+  [ -e "$REPO/.env.tmp.OLD123" ]
 }

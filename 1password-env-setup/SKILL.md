@@ -44,6 +44,11 @@ directory.
    network, etc.) is reported as a failure and stops the workflow
    (T20260918-214522). Set `OP_ACCOUNT` (e.g. `OP_ACCOUNT=my.1password.com`)
    to pass `--account` through to `op inject`.
+   `refresh-env` removes its `.env.tmp.*`/`.env.err.*` on every exit path
+   (success, failure, signal, EXIT) and sweeps leftovers older than
+   `REFRESH_ENV_SWEEP_MINS` (default 10) that no process holds open. A repo
+   whose `.envrc` is an old inline-`mktemp` template (no `./refresh-env`)
+   leaks one temp file per killed direnv run; re-run this skill to replace it.
 5. Run `direnv allow` in `<path>` so the new `.envrc` takes effect
    immediately. If `direnv` isn't installed, skip with install guidance.
 
