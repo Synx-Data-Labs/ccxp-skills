@@ -56,3 +56,4 @@ reprioritize.
 - [T20261109-179471](T20261109-179471-rituals-usage-cost-warning.md): Usage-cost warning for the persona-driven daily rituals
 - [T20261109-584639](T20261109-584639-verify-rituals-live-after-release.md): Verify the persona-driven daily rituals live after the release
 - [T20261110-173302](T20261110-173302-refresh-env-leaks-env-tmp-files.md): refresh-env leaks .env.tmp.* temp files
+- [T20261110-302973](T20261110-302973-ledger-context-link-own-line.md): Ledger context link: bare file:// URL on its own line
