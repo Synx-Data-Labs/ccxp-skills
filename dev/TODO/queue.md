@@ -55,3 +55,4 @@ reprioritize.
 - [T20261103-139722](T20261103-139722-ccxp-agent-decisions-log.md): ccxp-agent decisions log (`ledger.sh decision ...`)
 - [T20261109-179471](T20261109-179471-rituals-usage-cost-warning.md): Usage-cost warning for the persona-driven daily rituals
 - [T20261109-584639](T20261109-584639-verify-rituals-live-after-release.md): Verify the persona-driven daily rituals live after the release
+- [T20261112-143063](T20261112-143063-configurable-customer-rulebook-hook.md): Configurable customer-provided rule book (config key, pending-export hook, generic renderer)
