@@ -20,14 +20,14 @@ One alert per invocation.
 
 - Permalink: _Copy link_ on the message's "more actions" menu.
 - A job that holds no URL passes the pair instead: `/labrun-rca C000EXAMPLE 1600000000.000000`.
-- A bare run id (6+ digits) skips step 1's channel guard and steps 2-3 (no thread exists, so nothing is read or posted): it only runs the RCA in the working repo and reports to the caller.
+- A bare run id (6+ digits) skips step 1's channel guard, the Slack read, the thread-state check, the ack and the thread post (no thread exists): the repo guard of step 2 still applies, then step 4 runs the RCA and the result goes to the caller, not to Slack.
 
 ## Workflow
 
 ### 1. Resolve the input and apply the channel guard
 
 ```bash
-bash <skills-root>/labrun-rca/scripts/labrun.sh input "<slack-message-url>" | <channel_id> <message_ts> | <run_id>
+bash <skills-root>/labrun-rca/scripts/labrun.sh input "<slack-message-url>"   # or: input <channel_id> <message_ts>  |  input <run_id>
 ```
 
 Prints `channel_id=<id>` and `message_ts=<10 digits>.<6 digits>` (a permalink's `p...` digits get a dot inserted 6 characters from the end; a pair is validated as given), or `run_id=<id>`. Exit 2 on a malformed input (channel must start with `C`/`G`/`D`) — fail fast and show the expected formats. `labrun.sh parse <url>` stays for URL-only callers.
