@@ -79,7 +79,7 @@ Delegate to `/rca <run-id> --repo <owner/repo> --no-post` (the repo from step 2'
 - Error log extraction (`gh run view --log-failed`)
 - Classification (Our code / Infrastructure / Upstream / Transient / Configuration)
 - Impact assessment (is `main` red?)
-- Task need (step 6 files it)
+- Task (`/rca` step 6 files it)
 
 Let `/rca` write the normal RCA report to the conversation. Capture its output structure (root cause, classification, confidence, impact, task ID if any).
 
@@ -107,16 +107,16 @@ Keep it compact. A Slack thread reply is for a quick read, not the full transcri
 
 ### 6. Task creation
 
-Our code, Configuration, Upstream, or any Unconfirmed result lands a task in the working repo (name the run's repo): `/new-task`, `/top <id>`, then `/drive <id>` in the background after the reply (never wait on it):
+For Our code, Configuration, Upstream, or any Unconfirmed result `/rca` step 6 files the task in the working repo via the `/new-task` helpers (never a second one; no repo context: `/new-task`). Then `/top <id>`, and start `/drive <id>` in the background after the reply:
 
-- **Reuse first.** An open task found by `/rca` step 3.5 gets `/top` and its id, never a second task.
-- Step 5's Action carries the task id; post once the file exists.
-- Transient and Infrastructure follow `/rca`'s plan; no task unless it says so.
-- No repo context: the reply ends with `Action: needs manual follow-up — RCA above`.
+- **Reuse first.** An open task found by `/rca` step 3.5 gets `/top` and its id.
+- Step 5's Action carries the task id; post once it exists.
+- Transient and Infrastructure follow `/rca`'s plan.
+- No repo context: `Action: needs manual follow-up — RCA above`.
 
 ### 7. Several alerts at once
 
-Steps 1-3 run per alert; `labrun.sh group-alerts` ([reference.md](reference.md)) then groups the survivors by run id: steps 4 and 6 run once per run id, each alert gets its own step 5 reply.
+Steps 1-3 run per alert; `labrun.sh group-alerts` ([reference.md](reference.md)) then groups the survivors by run id: steps 4 and 6 run once per run id (the `rca` line first), each alert gets its own step 5 reply.
 
 ## Edge cases and reuse
 
