@@ -8,12 +8,14 @@
 #   check       rate limit: when the last check is at least CCXP_ALERTS_MIN_GAP seconds old (default 300) or
 #               there is none, record this check and print the read window start: the last-seen message ts
 #               minus CCXP_ALERTS_OVERLAP seconds (default 600) as "<sec>.000000", or "-" when no ts has been
-#               seen yet (read only the newest 20). Exit 0. Too soon: print nothing, exit 1.
+#               seen yet (read only the newest 20). Exit 0. Too soon: print nothing, exit 1. A state failure
+#               (no profile dir, unwritable dir) exits 3 with a message on stderr.
 #   done <ts>   advance the last-seen marker to <ts> (the newest message ts the read returned); never moves back.
 #   plan        stdin: one line per candidate failure alert, tab separated:
-#                 <ts> <reply_count> <ack_only 0|1> <age_minutes>
+#                 <ts> <reply_count> <ack_only 0|1> <age_minutes>  (whitespace separated)
 #               stdout, oldest first: "dispatch <ts>" (at most CCXP_ALERTS_CAP = 3) and "next <ts>" for the rest;
-#               handled alerts print nothing. Handled = the thread has a reply, OR a context file under
+#               handled alerts print nothing. Alerts held back by the cap pin the next `done` to just before the
+#               oldest of them (state file `hold`), so the following read sees them again. Handled = the thread has a reply, OR a context file under
 #               <context dir> or a ledger row carries the ts. Exception: an ack-only thread older than 60 minutes
 #               with no live job (no context file touched within 60 minutes, no ledger row) is not handled.
 #
@@ -46,19 +48,18 @@ function ad-ledger-file() {
 
 function ad-is-ts() { [[ "${1:-}" =~ ^[0-9]{1,12}\.[0-9]{1,9}$ ]]; }
 
-function ad-int() { [[ "${2:-}" =~ ^[0-9]+$ ]] && echo "$2" || echo "$1"; }
+function ad-int() { if [[ "${2:-}" =~ ^[0-9]+$ ]]; then echo $((10#$2)); else echo "$1"; fi; }
 
 function ad-check() {
   local dir now gap overlap last seen sec
-  dir="$(ad-state-dir)" || return 1
+  dir="$(ad-state-dir)" || { echo "alerts-due: no profile dir; set CCXP_ALERTS_DIR" >&2; return 3; }
   now="$(ad-now)"
   gap="$(ad-int 300 "${CCXP_ALERTS_MIN_GAP:-}")"
   overlap="$(ad-int 600 "${CCXP_ALERTS_OVERLAP:-}")"
   last=""
   [ -r "$dir/last-check" ] && last="$(cat "$dir/last-check" 2>/dev/null || true)"
   if [[ "$last" =~ ^[0-9]+$ ]] && ((now - last < gap)); then return 1; fi
-  mkdir -p "$dir"
-  echo "$now" >"$dir/last-check"
+  { mkdir -p "$dir" && echo "$now" >"$dir/last-check"; } || { echo "alerts-due: cannot write $dir" >&2; return 3; }
   seen=""
   [ -r "$dir/last-seen" ] && seen="$(cat "$dir/last-seen" 2>/dev/null || true)"
   if ad-is-ts "$seen"; then
@@ -71,15 +72,31 @@ function ad-check() {
 }
 
 function ad-done() {
-  local ts="${1:-}" dir seen
+  local ts="${1:-}" dir seen hold
   ad-is-ts "$ts" || { echo "alerts-due: done needs a message ts like 1731500000.123456 (got '$ts')" >&2; return 2; }
-  dir="$(ad-state-dir)" || return 1
-  mkdir -p "$dir"
+  dir="$(ad-state-dir)" || { echo "alerts-due: no profile dir; set CCXP_ALERTS_DIR" >&2; return 3; }
+  mkdir -p "$dir" || { echo "alerts-due: cannot write $dir" >&2; return 3; }
+  # a plan that held alerts back (cap) pins the marker just before the oldest one, so the next read sees them again
+  if [ -r "$dir/hold" ]; then
+    hold="$(cat "$dir/hold" 2>/dev/null || true)"
+    rm -f "$dir/hold"
+    if ad-is-ts "$hold" && ad-newer "$ts" "$hold"; then ts="$(ad-before "$hold")"; fi
+  fi
   seen=""
   [ -r "$dir/last-seen" ] && seen="$(cat "$dir/last-seen" 2>/dev/null || true)"
   # never move back; compare as whole seconds then microseconds so the check is exact
   if ad-is-ts "$seen" && ! ad-newer "$ts" "$seen"; then return 0; fi
   echo "$ts" >"$dir/last-seen"
+}
+
+# ts $1 minus one microsecond
+function ad-before() {
+  local s="${1%%.*}" u="${1#*.}"
+  while ((${#u} < 6)); do u="${u}0"; done
+  u="${u:0:6}"
+  s=$((10#$s)); u=$((10#$u))
+  if ((u == 0)); then s=$((s - 1)); u=999999; else u=$((u - 1)); fi
+  printf '%d.%06d\n' "$s" "$u"
 }
 
 # true when ts $1 is strictly newer than ts $2
@@ -107,11 +124,11 @@ function ad-job-evidence() {
 }
 
 function ad-plan() {
-  local cap n=0 ts replies ack age ev handled line
+  local cap n=0 ts replies ack age ev handled line hold="" dir
   cap="$(ad-int 3 "${CCXP_ALERTS_CAP:-}")"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    IFS=$'\t' read -r ts replies ack age <<<"$line"
+    read -r ts replies ack age <<<"$line"
     if ! ad-is-ts "$ts"; then echo "alerts-due: skipping bad ts '$ts'" >&2; continue; fi
     replies="$(ad-int 0 "$replies")"; age="$(ad-int 0 "$age")"
     ev="$(ad-job-evidence "$ts")"
@@ -119,9 +136,13 @@ function ad-plan() {
     if ((replies > 0)) || [ -n "$ev" ]; then handled=1; fi
     if ((handled == 1)) && [ "$ack" = 1 ] && ((age > 60)) && [ "$ev" != live ]; then handled=0; fi
     ((handled == 0)) || continue
-    if ((n < cap)); then echo "dispatch $ts"; else echo "next $ts"; fi
+    if ((n < cap)); then echo "dispatch $ts"; else echo "next $ts"; [ -n "$hold" ] || hold="$ts"; fi
     n=$((n + 1))
-  done < <(cat | LC_ALL=C sort -t$'\t' -k1,1g)
+  done < <(cat | LC_ALL=C sort -u -k1,1g)
+  # remember where held-back alerts start (or clear a stale hold) for the next `done`
+  if dir="$(ad-state-dir)" && mkdir -p "$dir" 2>/dev/null; then
+    if [ -n "$hold" ]; then echo "$hold" >"$dir/hold"; else rm -f "$dir/hold"; fi
+  fi
 }
 
 function alerts-due() {

@@ -128,3 +128,33 @@ at() { CCXP_ALERTS_NOW="$1" bash "$AD" "${@:2}"; }
   run bash "$AD" frobnicate
   [ "$status" -eq 2 ]
 }
+
+@test "plan: space separated input works, leading zeros do not break arithmetic, duplicate ts dispatched once" {
+  run at "$NOW" plan <<<$'1794240000.000100 0 0 5\n1794240000.000100 0 0 5\n1794240100.000200 1 1 08'
+  [ "$output" = "dispatch 1794240000.000100" ]
+  run at "$NOW" plan <<<$'1794240100.000200 1 1 090'
+  [ "$output" = "dispatch 1794240100.000200" ]
+}
+
+@test "cap: done after held-back alerts pins the marker before the oldest next, so they are re-read" {
+  at "$NOW" check >/dev/null
+  run at "$NOW" plan <<<$'1794240100.000000 0 0 1\n1794240200.000000 0 0 1\n1794240300.000000 0 0 1\n1794240400.000000 0 0 1'
+  [[ "$output" == *"next 1794240400.000000"* ]]
+  at "$NOW" done 1794240500.000000
+  [ "$(cat "$CCXP_ALERTS_DIR/last-seen")" = "1794240399.999999" ]
+  [ ! -e "$CCXP_ALERTS_DIR/hold" ]
+  # a later plan with nothing held back clears the hold; done then takes the newest ts
+  at "$NOW" plan <<<$'1794240400.000000 0 0 1' >/dev/null
+  at "$NOW" done 1794240500.000000
+  [ "$(cat "$CCXP_ALERTS_DIR/last-seen")" = "1794240500.000000" ]
+}
+
+@test "state failure: unwritable state dir exits 3 with a message, not 1" {
+  touch "$BATS_TEST_TMPDIR/file"
+  CCXP_ALERTS_DIR="$BATS_TEST_TMPDIR/file/sub" run --separate-stderr at "$NOW" check
+  [ "$status" -eq 3 ]
+  [[ "$stderr" == *"cannot write"* ]]
+  unset CCXP_ALERTS_DIR CLAUDE_CONFIG_DIR
+  CCXP_PROFILE_DIR="" HOME="" run --separate-stderr env -u CCXP_ALERTS_DIR CCXP_PROFILE_DIR= bash -c 'CCXP_ALERTS_NOW=1 bash "$0" check' "$AD"
+  [ "$status" -ne 0 ]
+}
