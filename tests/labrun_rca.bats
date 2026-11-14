@@ -378,3 +378,17 @@ thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
   lab repo-of "${RUN}9x"
   [ "$status" -eq 2 ]
 }
+
+@test "alert-kind: counts like '0 failed' do not make a failure; a bare run link or :x: does" {
+  run bash -c 'echo "Run succeeded after retry (0 failed)" | bash "$1" alert-kind' _ "$LAB"
+  [ "$status" -eq 9 ]
+  run bash -c 'echo ":x: Nightly build main #55 <https://github.com/o/r/actions/runs/123456789|run>" | bash "$1" alert-kind --branch main' _ "$LAB"
+  [ "$status" -eq 0 ]
+  run bash -c 'echo "Nightly main #55 recovered https://github.com/o/r/actions/runs/123456789" | bash "$1" alert-kind' _ "$LAB"
+  [ "$status" -eq 9 ]
+}
+
+@test "thread-state: a mention or space before *RCA still counts as done" {
+  run bash -c 'printf "1600000000.000000\t <@U123> *RCA x\r\n" | bash "$1" thread-state --now 1600000100' _ "$LAB"
+  [ "$status" -eq 10 ]
+}

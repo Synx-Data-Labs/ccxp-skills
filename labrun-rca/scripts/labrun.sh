@@ -37,8 +37,9 @@
 #
 #   labrun.sh alert-kind [--branch B] [--default-branch D]   (message text on stdin)
 #       Prints "failure" (exit 0), or "not a failure alert[: branch X is not D]"
-#       (exit 9): success/recovered/green/resolved text, or a branch other than D
-#       (default main). The job stays silent on exit 9.
+#       (exit 9): no failure signal (failed/errored/cancelled/timed out, or failure/
+#       failing/:x:/a run link without a recovery word), recovered/resolved text, or a
+#       branch other than D (default main). The job stays silent on exit 9.
 #
 #   labrun.sh thread-state --now EPOCH [--live-job yes|no]   (replies on stdin, "ts<TAB>text")
 #       done (exit 10): a reply starts with *RCA. wait (exit 11): the only replies
@@ -222,13 +223,16 @@ cmd_alert_kind() {
     esac
   done
   text="$(cat | tr '[:upper:]' '[:lower:]')"
+  # counts such as "0 failed" / "no failures" are not failure words
+  local clean
+  clean="$(printf '%s' "$text" | sed -E 's/\b(0|no|zero) +(failed|failures?|errors?)\b//g')"
   # A strong failure word wins over any other word in the message (job names,
   # error excerpts and "3 tests passed" must not mute a real failure). A weak
   # one ("failure", "failing") counts unless the text also says it recovered.
-  if printf '%s' "$text" | grep -qE '\b(failed|errored|cancell?ed|timed out)\b'; then
+  if printf '%s' "$clean" | grep -qE '\b(failed|errored|cancell?ed|timed out)\b'; then
     :
-  elif printf '%s' "$text" | grep -qE '\b(failure|failing)\b' &&
-       ! printf '%s' "$text" | grep -qE '\b(recovered|resolved|succeeded|now green|is green|fixed)\b'; then
+  elif printf '%s' "$clean" | grep -qE '\b(failure|failing)\b|:x:|actions/runs/' &&
+       ! printf '%s' "$clean" | grep -qE '\b(recovered|resolved|succeeded|now green|is green|fixed)\b'; then
     :
   else
     echo "not a failure alert"; exit 9
@@ -251,6 +255,8 @@ cmd_thread_state() {
   [[ "$now" =~ ^[0-9]+$ ]] || die "--now must be epoch seconds"
   case "$live" in yes|no) ;; *) die "--live-job must be yes or no" ;; esac
   while IFS=$'\t' read -r ts text || [ -n "$ts$text" ]; do
+    text="${text//$'\r'/}"
+    while [[ "$text" =~ ^([[:space:]]+|\<[@!][^\>]*\>) ]]; do text="${text:${#BASH_REMATCH[0]}}"; done   # leading space / mentions
     # a line whose first field is not a Slack ts is a continuation of a
     # multi-line reply: never count it as a reply of its own
     [[ "$ts" =~ ^[0-9]{9,}(\.[0-9]+)?$ ]] || continue
