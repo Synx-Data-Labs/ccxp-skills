@@ -12,11 +12,11 @@ routine, no workflow, no launchd: the persona piggybacks on the places it alread
   - Otherwise it records the check and prints the read window start: the last-seen ts minus 10 minutes, or `-`.
 - **Read**: `slack_read_channel` on #slack-automation-alerts only (owner whitelist d1-8), newest 20 messages, nothing older than the window start. Read tools only; posting stays inside jobs.
 - **Candidate**: a bot-authored message announcing a failure (`failed`/`failure`, not success or recovered). Cheap filter; the job decides the rest (branch, already green) and stays silent for a non-failure.
-- **Plan**: one line per candidate, `<ts>\t<reply_count>\t<ack_only 0|1>\t<age_minutes>`, piped to `alerts-due.sh plan`.
+- **Plan**: one whitespace-separated line per candidate, `<ts> <reply_count> <ack_only 0|1> <age_minutes>`, piped to `alerts-due.sh plan`.
   - Handled (no output): the thread has a reply, or a file under `<profile dir>/ccxp-context/` or a ledger row carries the `ts`. A run id alone does not count: a bare `/rca` job of the CI-failure response never replies in the thread, so the alert job still runs and reuses that RCA and task (`/rca` step 3.5).
   - Exception: an ack-only thread (only the "Running RCA" reply) older than 60 minutes with no live job (no context file touched in the last hour, no ledger row) is not handled.
   - Output, oldest first: `dispatch <ts>` for at most 3 alerts, `next <ts>` for the rest (listed under Next).
-- Afterwards `alerts-due.sh done <newest ts the read returned>` advances the marker (never backwards). A read that finds nothing new writes only the marker.
+- Afterwards `alerts-due.sh done <newest ts the read returned>` advances the marker (never backwards). When the cap held alerts back, `done` pins the marker to just before the oldest `next` alert, so the following read sees them again. A state failure makes `check`/`done` exit 3 with a message (exit 1 only ever means "not due"). A read that finds nothing new writes only the marker.
 - **Dispatch**: per `dispatch` line one background job, repo context block resolved from the run URL's `owner/repo`, whose prompt runs `/labrun-rca <channel_id> <ts>` through the Skill tool. Job title and context file carry the run id and the `ts`: that is the dedupe record. Pre-authorized: the one thread reply (d2-3) and task filing and driving per the CI-failure rule (d0-4); no publish, promote, tag or release.
 - **One path**: when the CI-failure response finds a failed run that has an alert in the channel, it dispatches the `labrun-rca` job instead of a bare `/rca` job. A failed run with no alert keeps the `/rca` job.
 

@@ -666,6 +666,7 @@ install_outdated_agent() {
   grep -q '^## Slack alerts check$' "$f"
   grep -q 'agent-pairing/scripts/alerts-due.sh check' "$f"
   grep -q 'alerts-due.sh plan' "$f"
+  grep -q '`alerts-due.sh` of "Slack alerts check"' "$f"
   grep -q '/labrun-rca <channel_id> <ts>' "$f"
   grep -q 'agent-pairing/alerts.md' "$f"
   grep -E '^tools:.*mcp__claude_ai_Slack__slack_read_channel.*mcp__claude_ai_Slack__slack_read_thread' "$f"
