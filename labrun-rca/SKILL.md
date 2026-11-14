@@ -72,7 +72,7 @@ This is the functional equivalent of a `:eyes:` reaction: it tells the channel t
 
 ### 4. Run RCA
 
-Delegate to `/rca <run-id> --no-post` (`--no-post` suppresses `/rca` §5.5's channel-root Slack post — step 5 below is the one and only post, in the thread). That skill handles:
+Delegate to `/rca <run-id> --repo <owner/repo> --no-post` (the repo from step 2's guard; `--no-post` suppresses `/rca` §5.5's channel-root Slack post — step 5 below is the one and only post, in the thread). That skill handles:
 
 - Run lookup (`gh run view`)
 - Failed job + step identification
@@ -107,12 +107,16 @@ Keep it compact. A Slack thread reply is for a quick read, not the full transcri
 
 ### 6. Task creation
 
-`/rca` already handles task creation per its classification rules. If it creates a task:
+An actionable classification (Our code, Configuration, Upstream, Unconfirmed) lands a task; route it through `/new-task`, then `/top <id>`, then `/drive <id>` (rule d0-4):
 
-- Mention the task ID in the thread reply (see step 5).
-- No extra action required from this skill — the task file lands in `dev/TODO/` on the feature branch where `/rca` was invoked.
+- **Reuse first.** When `/rca` step 3.5 found an open task for the signature, `/top` that task and mention its id; never file a second one.
+- Put the task id in step 5's Action field; post after the task exists.
+- Transient and Infrastructure follow `/rca`'s plan; no task unless it says so.
+- No repo context: the reply ends with `Action: needs manual follow-up — RCA above`.
 
-If the caller is not in a repo context (e.g., running this from a personal dir), `/rca` will still classify the failure but may not be able to create a task. In that case the thread reply ends with `Action: needs manual follow-up — RCA above`.
+### 7. Several alerts at once
+
+`labrun.sh group-alerts` ([reference.md](reference.md)) groups them by run id before step 4: steps 4 and 6 run once per run id, each alert gets its own step 5 reply.
 
 ## Edge cases and reuse
 

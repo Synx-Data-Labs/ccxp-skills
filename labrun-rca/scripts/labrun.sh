@@ -35,6 +35,10 @@
 #   labrun.sh channel-guard <channel_id>   exit 0 only for $SLACK_AUTOMATION_ALERTS_CHANNEL_ID
 #       (exit 8 for any other channel, 2 when the variable is unset).
 #
+#   labrun.sh group-alerts              (lines '<key><TAB><run_id>' on stdin)
+#       Prints '<key><TAB><run_id><TAB>rca|reuse': the first alert of a run id is
+#       'rca' (run the RCA), later ones 'reuse' (same result, own thread reply).
+#
 #   labrun.sh alert-kind [--branch B] [--default-branch D]   (message text on stdin)
 #       Prints "failure" (exit 0), or "not a failure alert[: branch X is not D]"
 #       (exit 9): no failure signal (failed/errored/cancelled/timed out, or failure/
@@ -273,7 +277,21 @@ cmd_thread_state() {
   echo continue
 }
 
-[ $# -ge 1 ] || die "usage: labrun.sh parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state ..."
+cmd_group_alerts() {
+  [ $# -eq 0 ] || die "usage: labrun.sh group-alerts   (lines '<key><TAB><run_id>' on stdin)"
+  local key rid seen=" "
+  while IFS=$'\t' read -r key rid || [ -n "$key$rid" ]; do
+    rid="${rid//$'\r'/}"
+    [ -n "$key" ] || continue
+    [[ "$rid" =~ ^[0-9]+$ ]] || die "run id must be numeric, got '$rid'"
+    case "$seen" in
+      *" $rid "*) printf '%s\t%s\treuse\n' "$key" "$rid" ;;
+      *) seen="$seen$rid "; printf '%s\t%s\trca\n' "$key" "$rid" ;;
+    esac
+  done
+}
+
+[ $# -ge 1 ] || die "usage: labrun.sh parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state|group-alerts ..."
 sub="$1"; shift
 case "$sub" in
   parse) cmd_parse "$@" ;;
@@ -285,5 +303,6 @@ case "$sub" in
   channel-guard) cmd_channel_guard "$@" ;;
   alert-kind) cmd_alert_kind "$@" ;;
   thread-state) cmd_thread_state "$@" ;;
+  group-alerts) cmd_group_alerts "$@" ;;
   *) die "unknown subcommand: $sub (parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state)" ;;
 esac

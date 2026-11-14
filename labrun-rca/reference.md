@@ -13,6 +13,14 @@ Detail moved out of SKILL.md to keep its context budget (the skill-quality ratch
 | Run succeeded on retry before RCA ran, or the alert is a success/recovered/other-branch post | `alert-kind` exits 9 (no failure signal, success/recovered wording or other branch): no thread reply; report `not a failure alert` to the caller |
 | `/rca` itself errors (e.g., run not accessible) | Post the error verbatim to the thread so the channel isn't left hanging |
 
+## Grouping alerts (step 7)
+
+```bash
+printf '%s\t%s\n' "<channel>:<ts>" <run-id> ... | bash <skills-root>/labrun-rca/scripts/labrun.sh group-alerts
+```
+
+Each line comes back as `<key><TAB><run-id><TAB>rca|reuse`. Run `/rca` and the step 6 task routing for the `rca` line only; a `reuse` line posts the same report and task id in its own thread.
+
 ## Reuse from existing skills
 
 - `/rca` — all the analysis, classification, and task-creation logic. Do not duplicate it here.
