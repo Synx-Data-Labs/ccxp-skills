@@ -16,7 +16,8 @@
 #   ledger.sh next add "<text>" [--context <abs-path>] [--ref n<k>]   open a "Next:" item; prints its ref
 #                                 (auto-increments the n counter; --ref picks one, error if taken)
 #                                 warns on stderr (exit status unchanged) when the context file name does not start with "<ref>-";
-#                                 convention n<k>-<slug>[-T<taskid>].md: reserve with "ref next n", write the file, then add --ref n<k>
+#                                 convention n<k>-j<job>-<slug>[-t<taskid>].md (legacy n<k>-<slug>[-T<taskid>].md stays accepted; a job without
+#                                 a Next item uses j<job>-<slug>[-t<taskid>].md): reserve with "ref next n", write the file, then add --ref n<k>
 #   ledger.sh next done <ref>     close it (n3, N3 or 3; legacy i3/a2 refs work too); kept in "done" (last 20)
 #   ledger.sh next set <ref> [--text <t>] [--context <abs-path>]   edit an open item
 #   ledger.sh set-counter <n|s|k> <value>   set a ref counter exactly (to initialise it)
@@ -880,9 +881,10 @@ ledger() {
           [[ -n "$CTX" ]] || echo "ledger: warning: next add without --context (every item needs a context file)" >&2
           local added; added=$(ledger-add "${POS[0]:-}" "$CTX" "$REF") || return $?
           printf '%s\n' "$added"
-          # soft naming check: a Next item's context file is n<k>-<slug>[-T<taskid>].md (reserve the ref first: ref next n, then --ref)
+          # soft naming check: a Next item's context file is n<k>-j<job>-<slug>[-t<taskid>].md; the legacy n<k>-<slug>[-T<taskid>].md also passes
+          # (prefix test only; reserve the ref first: ref next n, then --ref)
           [[ -z "$CTX" || "${CTX##*/}" == "$added"-* ]] \
-            || echo "ledger: warning: context file ${CTX##*/} should start with $added- (n<k>-<slug>[-T<taskid>].md; reserve the ref with 'ref next n', then pass --ref)" >&2 ;;
+            || echo "ledger: warning: context file ${CTX##*/} should start with $added- (n<k>-j<job>-<slug>[-t<taskid>].md, legacy n<k>-<slug>[-T<taskid>].md also accepted; reserve the ref with 'ref next n', then pass --ref)" >&2 ;;
         done) ledger-done "${2:-}" ;;
         set) shift; ledger-args "$@" || return 2; ledger-set "${POS[0]:-}" ;;
         *) echo "usage: ledger.sh next add <text> [--context <path>] [--ref nN] | next done <ref> | next set <ref> [--text t] [--context p]  (input/action: deprecated aliases)" >&2; return 2 ;;
