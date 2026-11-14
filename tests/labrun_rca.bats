@@ -392,3 +392,25 @@ thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
   run bash -c 'printf "1600000000.000000\t <@U123> *RCA x\r\n" | bash "$1" thread-state --now 1600000100' _ "$LAB"
   [ "$status" -eq 10 ]
 }
+
+@test "group-alerts: one rca per run id, later alerts of the same run reuse it" {
+  run bash -c "printf 'C1:1.1\t111111\nC1:2.2\t222222\nC1:3.3\t111111\n' | bash '$LAB' group-alerts"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'C1:1.1\t111111\trca\nC1:2.2\t222222\trca\nC1:3.3\t111111\treuse' ]
+  run bash -c "printf 'C1:1.1\tabc\n' | bash '$LAB' group-alerts"
+  [ "$status" -eq 2 ]
+}
+
+@test "SKILL.md: /rca --repo is documented and labrun-rca passes it" {
+  grep -q -- '--repo owner/repo' "$REPO_ROOT/rca/SKILL.md"
+  grep -q 'argument-hint:.*--repo owner/repo' "$REPO_ROOT/rca/SKILL.md"
+  grep -q -- '/rca <run-id> --repo <owner/repo> --no-post' "$REPO_ROOT/labrun-rca/SKILL.md"
+}
+
+@test "SKILL.md: actionable RCA routes through new-task, top and drive and names the reuse rule" {
+  grep -q '/new-task' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q '/top <id>' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q '/drive <id>' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q 'Reuse first' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q 'group-alerts' "$REPO_ROOT/labrun-rca/SKILL.md"
+}

@@ -1,7 +1,7 @@
 ---
 name: rca
 description: Use when you have a failed GitHub Actions run URL or run ID to diagnose, classify, and track root cause directly (not from a Slack notification — that's /labrun-rca)
-argument-hint: "<run-url or run-id> [workflow-name] [--no-post]"
+argument-hint: "<run-url or run-id> [workflow-name] [--repo owner/repo] [--no-post]"
 ---
 
 Perform root cause analysis on a failed GitHub Actions pipeline run.
@@ -15,6 +15,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 - `/rca https://github.com/your-org/build-pipeline-repo/actions/runs/12345`
 - `/rca 12345`
 - `/rca` — auto-pick the most recent failed run on main
+- `--repo owner/repo` (any position) — the repo that owns the run; default: the working repo (`gh repo view`). A run URL carries its repo, which wins. Every `gh` call below then uses `--repo <owner/repo>` and `ci-triage.sh` gets the full run URL (`https://github.com/<owner/repo>/actions/runs/<id>`) instead of the bare id; tasks still land in the working repo's `dev/TODO/`. `/labrun-rca` passes the repo derived from the alert's run URL.
 - `--no-post` (any position) — skip step 5.5's Slack post. A caller that owns the Slack reply (`/labrun-rca` posts into the alert's thread) passes it so the report is not also posted to the channel root.
 
 ## Workflow
