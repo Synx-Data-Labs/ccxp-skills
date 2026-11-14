@@ -258,6 +258,42 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [[ "$stderr" == *"should start with n3-"* ]]
 }
 
+@test "next add accepts the n<k>-j<job>-<slug>-t<taskid> name silently, also via ref next n then --ref" {
+  ref=$(bash "$LEDGER" ref next n)
+  [ "$ref" = "n1" ]
+  run --separate-stderr bash "$LEDGER" next add "a" --ref "$ref" --context /ctx/n1-j1222-release-t20261109-338243.md
+  [ "$status" -eq 0 ]
+  [ "$output" = "n1" ]
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "b" --context /ctx/n2-j1222-slug.md
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+}
+
+@test "next add warning names the n<k>-j<job> pattern and keeps the legacy form accepted" {
+  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/notes.md
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"should start with n1-"* ]]
+  [[ "$stderr" == *"n<k>-j<job>-<slug>[-t<taskid>].md"* ]]
+  [[ "$stderr" == *"legacy n<k>-<slug>[-T<taskid>].md"* ]]
+}
+
+@test "next add still warns for a job-only name (no n<k>- prefix)" {
+  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/j1222-slug-t20261109-338243.md
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"should start with n1-"* ]]
+}
+
+# Regression guard (passes before and after the pattern change): start and park have no name check.
+@test "start and park stay silent for job-only j<job>-<slug>[-t<taskid>] context names" {
+  run --separate-stderr bash "$LEDGER" start 1222 "job" --context /ctx/j1222-slug-t20261109-338243.md
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" park k5 --context /ctx/j1222-slug.md
+  [ "$status" -eq 0 ]
+  [ -z "$stderr" ]
+}
+
 @test "next done keeps a done history capped at 20 with closed_at" {
   for i in $(seq 1 22); do bash "$LEDGER" next add "t$i" >/dev/null; done
   for i in $(seq 1 22); do bash "$LEDGER" next done n$i; done

@@ -36,10 +36,11 @@ ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g
 
 ## Context file naming
 
-- **Next item `n<k>`**: the context file is `n<k>-<slug>-T<taskid>.md` under `${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-context/` (example `n305-release-ccxp-skills-T20261109-338243.md`; `<taskid>` like `T20261109-338243`, left out when the item has no task). The `n<k>` in the name lets you point at the "next" item by file as well as by ref.
+- **Next item `n<k>`**: the context file is `n<k>-j<job>-<slug>[-t<taskid>].md` under `${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-context/` (example `n305-j1222-release-ccxp-skills-t20261109-338243.md`; `<taskid>` like `T20261109-338243` is written in lowercase in the name, and both the `j<job>` and the `t<taskid>` part are left out when the item has no job or no task). The name shows how the next item, its job and its task relate.
+- **Running or parked row (no Next item)**: `j<job>-<slug>[-t<taskid>].md`. No check runs on `start` or `park`, so these names never warn.
+- **Legacy**: `n<k>-<slug>[-T<taskid>].md` (and old `r<n>-`/`k<n>-` names) stay accepted silently; existing files are not renamed. The check is a prefix test, so it cannot tell `n3-slug.md` from `n3-j5-slug.md` and never looks at the task part; the new form is preferred through the warning text, this page and the persona.
 - **Sequence**: reserve the ref first with `ledger.sh ref next n` (prints `n<k>`), write the file under that name, then `ledger.sh next add "<text>" --ref n<k> --context <that file>`.
-- **Soft check**: when the context basename does not start with `<ref>-`, `next add` prints a warning on stderr; the item is still added and the exit status is unchanged. Without `--ref` the ref is assigned by `next add` itself, so the warning compares against the ref it assigned.
-- **Proposal for `r`/`k` (not enforced, no check)**: running `r<n>-<slug>[-T<taskid>].md`, parked `k<n>-<slug>[-T<taskid>].md`.
+- **Soft check**: when the context basename does not start with `<ref>-`, `next add` prints a warning on stderr that names the new pattern; the item is still added and the exit status is unchanged. Without `--ref` the ref is assigned by `next add` itself, so the warning compares against the ref it assigned.
 
 ## Decisions log
 
