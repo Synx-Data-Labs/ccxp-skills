@@ -16,7 +16,11 @@ Run root cause analysis on a GitHub Actions failure that was announced in Slack,
 /labrun-rca https://example-workspace.slack.com/archives/C000EXAMPLE/p1600000000000000
 ```
 
-One alert per invocation. The permalink copy-path in Slack is _Copy link_ on the message's "more actions" menu. A job that holds no URL passes the pair instead: `/labrun-rca C000EXAMPLE 1600000000.000000`. A bare run id (6+ digits) skips steps 1's channel guard and 2-3 (no thread exists, so nothing is read or posted): it only runs the RCA in the working repo and reports the result to the caller.
+One alert per invocation.
+
+- Permalink: _Copy link_ on the message's "more actions" menu.
+- A job that holds no URL passes the pair instead: `/labrun-rca C000EXAMPLE 1600000000.000000`.
+- A bare run id (6+ digits) skips step 1's channel guard and steps 2-3 (no thread exists, so nothing is read or posted): it only runs the RCA in the working repo and reports to the caller.
 
 ## Workflow
 
@@ -32,7 +36,7 @@ Prints `channel_id=<id>` and `message_ts=<10 digits>.<6 digits>` (a permalink's 
 
 ### 2. Read the notification
 
-Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent message and any existing replies. Feed the replies (one `ts<TAB>text` line per reply, newlines inside a reply flattened to spaces, parent excluded; lines not starting with a ts are ignored as continuations) to `bash <skills-root>/labrun-rca/scripts/labrun.sh thread-state --now "$(date +%s)" --live-job yes|no`:
+Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent message and any existing replies. Feed the replies (one `ts<TAB>text` line per reply, newlines flattened, parent excluded) to `bash <skills-root>/labrun-rca/scripts/labrun.sh thread-state --now "$(date +%s)" --live-job yes|no`:
 
 - `done` (exit 10): a reply starts with `*RCA` — stop and report the thread URL rather than duplicating work.
 - `wait` (exit 11): only the step 3 ack is there and it is under 60 minutes old, or a job for this alert is live and the ack is all the thread has — stop.
@@ -45,11 +49,16 @@ From the parent message text, **blocks and attachments** (older composite-action
 - **Branch** (usually `main` for lab runs)
 - **Conclusion** (should be `failure`)
 
-Then decide whether this is an alert to answer at all: feed the whole message (text plus the flattened blocks/attachments JSON, so a block-only alert is seen) to `bash <skills-root>/labrun-rca/scripts/labrun.sh alert-kind --branch <branch> --default-branch <the repo's default branch>` (the default branch is `main` when omitted: pass it for a repo that uses another). Exit 9 (`not a failure alert`: a success post, a recovered or green run, or a branch other than the default branch) means **stay silent**: post nothing in the thread, and report `not a failure alert` to the caller (the persona job result). Never reply "run is green" — one reply per failure thread only.
+Then decide whether to answer at all:
 
-Repo: `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives the run's `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0. When no run url was found (bare run id input), the RCA runs in the working repo, so check that repo (`gh repo view --json nameWithOwner`) with the same `repo-allowed` call. Exit 7 (outside the accounts this profile serves, `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
+- Feed the whole message (text plus the flattened blocks/attachments JSON, so a block-only alert is seen) to `bash <skills-root>/labrun-rca/scripts/labrun.sh alert-kind --branch <branch> --default-branch <the repo's default branch>` (default `main` when omitted).
+- Exit 9 (`not a failure alert`: no failure signal, success or recovered wording, or another branch) means **stay silent**: post nothing, report `not a failure alert` to the caller. Never reply "run is green"; one reply per failure thread.
 
-If the notification format is ambiguous (no run ID visible, multiple run IDs, no workflow name), post a short "needs manual RCA input" reply in the thread and stop.
+Repo guard:
+
+- `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0.
+- With no run url (bare run id) the RCA runs in the working repo: check that one (`gh repo view --json nameWithOwner`).
+- Exit 7 (outside `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
 
 ### 3. Acknowledge in-thread
 
@@ -105,24 +114,9 @@ Keep it compact. A Slack thread reply is for a quick read, not the full transcri
 
 If the caller is not in a repo context (e.g., running this from a personal dir), `/rca` will still classify the failure but may not be able to create a task. In that case the thread reply ends with `Action: needs manual follow-up — RCA above`.
 
-## Edge cases
+## Edge cases and reuse
 
-| Situation | Handling |
-|-----------|----------|
-| Malformed URL (no `/archives/…/p…`) | `labrun.sh input` (or `parse`) exits 2 — fail fast, print the URL format expected |
-| Private channel the user can't see | `slack_read_thread` will error — surface the error verbatim |
-| Message already has a thread reply from labrun-rca | Read the thread, note "already analyzed by <ts>", stop |
-| Notification message has no run ID | Post a short "couldn't auto-detect run ID" reply and stop |
-| Run succeeded on retry before RCA ran, or the alert is a success/recovered/other-branch post | `alert-kind` exits 9 (no failure signal, success/recovered wording or other branch): no thread reply; report `not a failure alert` to the caller |
-| `/rca` itself errors (e.g., run not accessible) | Post the error verbatim to the thread so the channel isn't left hanging |
-
-## Reuse from existing skills
-
-- `/rca` — all the analysis, classification, and task-creation logic. Do not duplicate it here.
-- `/slack` — used today only for fire-and-forget webhook announcements; this skill intentionally bypasses the webhook path in favor of MCP so it can target a specific thread.
-- `/slack-check-reply` — reference for the Slack thread state pattern (`.claude/state/drive-threads.json`). labrun-rca does _not_ write to that file; drive-threads is escalations-from-Claude, labrun-rca reacts to alerts-to-Claude.
-- `/drive` — uses MCP `slack_send_message` the same way; same channel_id/message_ts conventions apply.
-- `/ccxp` Phase 1.2.2a — runs this exact reply behavior automatically every standup tick, for every failure `/rca` classifies during the nightly health check, by searching for the matching alert instead of starting from a copy-pasted permalink (it has a run ID, not a URL). Reuses this skill's Step 5 reply format so both entry points read identically. Invoke `labrun-rca` directly only for ad-hoc cases 1.2.2a won't cover: a failure outside last night's window, or a channel/workflow the automated search didn't match.
+The edge-case table and the list of skills this one reuses (`/rca`, `/slack`, `/slack-check-reply`, `/drive`, `/ccxp` 1.2.2a) are in [reference.md](reference.md).
 
 ## Headless sessions
 
