@@ -142,7 +142,7 @@ cmd_render_reply() {
     [ -n "$(printf '%s' "$k" | tr -d '[:space:]')" ] || die "empty value for a required field"
   done
   [[ "$rid" =~ ^[0-9]+$ ]] || die "--run-id must be numeric"
-  [[ "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+([/?#]|$) ]] || die "--run-url must be https://github.com/<owner>/<repo>/actions/runs/<id>"
+  [[ "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$ ]] || die "--run-url must be https://github.com/<owner>/<repo>/actions/runs/<id>"
 
   [ "${url##*/runs/}" = "$rid" ] || die "--run-id $rid does not match the id in --run-url"
   local c
