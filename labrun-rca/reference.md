@@ -8,7 +8,7 @@ Detail moved out of SKILL.md to keep its context budget (the skill-quality ratch
 |-----------|----------|
 | Malformed URL (no `/archives/…/p…`) | `labrun.sh input` (or `parse`) exits 2 — fail fast, print the URL format expected |
 | Private channel the user can't see | `slack_read_thread` will error — surface the error verbatim |
-| Message already has a thread reply from labrun-rca | Read the thread, note "already analyzed by <ts>", stop |
+| Message already has thread replies | `thread-state` `done` (a reply starts with `*RCA`) or `wait` (fresh ack only): stop; `continue`: proceed (step 2) |
 | Notification message has no run ID | Post a short "couldn't auto-detect run ID" reply and stop |
 | Run succeeded on retry before RCA ran, or the alert is a success/recovered/other-branch post | `alert-kind` exits 9 (no failure signal, success/recovered wording or other branch): no thread reply; report `not a failure alert` to the caller |
 | `/rca` itself errors (e.g., run not accessible) | Post the error verbatim to the thread so the channel isn't left hanging |

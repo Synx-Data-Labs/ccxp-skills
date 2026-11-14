@@ -45,7 +45,7 @@ Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent
 From the parent message text, **blocks and attachments** (older composite-action alerts carry the run link only in a button: save the whole message JSON to a file and give that to `extract-run`, which also reads `\/`-escaped URLs), extract:
 
 - **Workflow name** (e.g. "Release AcmeDB")
-- **Run ID** — pipe the message text through `bash <skills-root>/labrun-rca/scripts/labrun.sh extract-run`: it prints `run_id=<id>` (plus `run_url=` when a link was present); exit 3 = no run id, exit 4 = several distinct ids (`candidate=` lines) — either way take the ambiguous path below, never guess
+- **Run ID** — pipe the message text through `bash <skills-root>/labrun-rca/scripts/labrun.sh extract-run`: it prints `run_id=<id>` (plus `run_url=` when a link was present); exit 3 = no run id, exit 4 = several distinct ids (`candidate=` lines) — either way post a short "needs manual RCA input" thread reply and stop, never guess
 - **Branch** (usually `main` for lab runs)
 - **Conclusion** (should be `failure`)
 
