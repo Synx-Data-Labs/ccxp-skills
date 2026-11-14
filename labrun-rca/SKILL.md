@@ -32,10 +32,10 @@ Prints `channel_id=<id>` and `message_ts=<10 digits>.<6 digits>` (a permalink's 
 
 ### 2. Read the notification
 
-Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent message and any existing replies. Feed the replies (`ts<TAB>text`, parent excluded) to `bash <skills-root>/labrun-rca/scripts/labrun.sh thread-state --now "$(date +%s)" --live-job yes|no`:
+Use MCP `slack_read_thread` with `channel_id` + `message_ts` to fetch the parent message and any existing replies. Feed the replies (one `ts<TAB>text` line per reply, newlines inside a reply flattened to spaces, parent excluded; lines not starting with a ts are ignored as continuations) to `bash <skills-root>/labrun-rca/scripts/labrun.sh thread-state --now "$(date +%s)" --live-job yes|no`:
 
 - `done` (exit 10): a reply starts with `*RCA` — stop and report the thread URL rather than duplicating work.
-- `wait` (exit 11): only the step 3 ack is there and it is under 60 minutes old, or a job for this alert is live — stop.
+- `wait` (exit 11): only the step 3 ack is there and it is under 60 minutes old, or a job for this alert is live and the ack is all the thread has — stop.
 - `continue` (exit 0): no replies, or an ack-only thread older than 60 minutes with no live job (the job that posted the ack died) — go on and reply under it.
 
 From the parent message text, **blocks and attachments** (older composite-action alerts carry the run link only in a button: save the whole message JSON to a file and give that to `extract-run`, which also reads `\/`-escaped URLs), extract:
@@ -45,9 +45,9 @@ From the parent message text, **blocks and attachments** (older composite-action
 - **Branch** (usually `main` for lab runs)
 - **Conclusion** (should be `failure`)
 
-Then decide whether this is an alert to answer at all: `printf '%s' "<message text>" | bash <skills-root>/labrun-rca/scripts/labrun.sh alert-kind --branch <branch>`. Exit 9 (`not a failure alert`: a success post, a recovered or green run, or a branch other than the default branch) means **stay silent**: post nothing in the thread, and report `not a failure alert` to the caller (the persona job result). Never reply "run is green" — one reply per failure thread only.
+Then decide whether this is an alert to answer at all: feed the whole message (text plus the flattened blocks/attachments JSON, so a block-only alert is seen) to `bash <skills-root>/labrun-rca/scripts/labrun.sh alert-kind --branch <branch> --default-branch <the repo's default branch>` (the default branch is `main` when omitted: pass it for a repo that uses another). Exit 9 (`not a failure alert`: a success post, a recovered or green run, or a branch other than the default branch) means **stay silent**: post nothing in the thread, and report `not a failure alert` to the caller (the persona job result). Never reply "run is green" — one reply per failure thread only.
 
-Repo: `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives the run's `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0. Exit 7 (outside the accounts this profile serves, `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
+Repo: `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives the run's `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0. When no run url was found (bare run id input), take the repo from `gh repo view --json nameWithOwner` of the working repo and run the same `repo-allowed` check on it, so no run in an unserved repo is analysed. Exit 7 (outside the accounts this profile serves, `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
 
 If the notification format is ambiguous (no run ID visible, multiple run IDs, no workflow name), post a short "needs manual RCA input" reply in the thread and stop.
 
@@ -130,7 +130,7 @@ The MCP `slack_send_message` and `slack_read_thread` calls above work in an inte
 
 ## Notes
 
-- **Thread-only replies.** Never post to the channel root when replying with RCA findings — always use `thread_ts`. This keeps `#acme-automation-alerts` readable.
+- **Thread-only replies.** Never post to the channel root when replying with RCA findings — always use `thread_ts`. This keeps `#slack-automation-alerts` readable.
 - **One RCA per failure.** Check the thread before starting so concurrent ccxp sessions don't race on the same message.
 - **No secrets in replies.** Paste log excerpts, not environment variables or tokens. The `gh run view --log-failed` output is generally safe but spot-check before sending.
 - **Respect `/rca`'s classification and confidence.** Don't editorialize. If `/rca` says Transient, the Slack reply says Transient — and if it says Unconfirmed, the reply says Unconfirmed, not a bare classification that reads as definitive.

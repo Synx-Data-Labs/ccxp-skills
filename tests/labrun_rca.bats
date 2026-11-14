@@ -347,3 +347,34 @@ thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
   grep -qi 'channel-guard' "$REPO_ROOT/labrun-rca/SKILL.md"
   grep -q 'not a failure alert' "$REPO_ROOT/labrun-rca/SKILL.md"
 }
+
+@test "alert-kind: failure words inside job names or excerpts do not mute a real failure" {
+  for t in "Release failed: unsuccessful upload" "CI failed: unresolved symbol foo" "Job recovery-test failed" \
+           "Build failed: 3 tests passed, 2 failed" "Release failed on job green-field" "Release timed out" "Run cancelled"; do
+    run bash -c 'echo "$2" | bash "$1" alert-kind --branch main' _ "$LAB" "$t"
+    [ "$status" -eq 0 ]
+    [ "$output" = "failure" ]
+  done
+  run bash -c 'echo "Release Example failure" | bash "$1" alert-kind' _ "$LAB"
+  [ "$status" -eq 0 ]
+}
+
+@test "thread-state: unterminated last line, multi-line replies and bad ts" {
+  run bash -c 'printf "1600000000.000000\t*RCA done" | bash "$1" thread-state --now 1600000100' _ "$LAB"
+  [ "$status" -eq 10 ]
+  run bash -c 'printf "1600000000.000000\t🔍 Running RCA on x\n*RCA quoted by a human on a continuation line\n" | bash "$1" thread-state --now 1600000100' _ "$LAB"
+  [ "$status" -eq 11 ]
+  run bash -c 'printf "abc\t🔍 Running RCA\n\tfoo\n" | bash "$1" thread-state --now 1600000100' _ "$LAB"
+  [ "$status" -eq 0 ]; [ "$output" = "continue" ]
+}
+
+@test "repo-allowed: case-insensitive, no glob expansion; repo-of accepts a job suffix but not a longer id" {
+  run env LABRUN_SERVED_OWNERS=synx-data-labs bash "$LAB" repo-allowed Synx-Data-Labs/x
+  [ "$status" -eq 0 ]
+  run env LABRUN_SERVED_OWNERS='*' bash "$LAB" repo-allowed other/x
+  [ "$status" -eq 7 ]
+  lab repo-of "$RUN/job/1"
+  [ "$output" = "repo=example-org/example-repo" ]
+  lab repo-of "${RUN}9x"
+  [ "$status" -eq 2 ]
+}
