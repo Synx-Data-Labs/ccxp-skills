@@ -23,7 +23,9 @@ routine, no workflow, no launchd: the persona piggybacks on the places it alread
 ## Known limit
 
 The persona runs only while a session is open: no overnight coverage; autopilot wakes give partial cover. The next
-check catches up on everything unanswered within the 20-message read plus the 10-minute overlap.
+check catches up on everything unanswered within the 20-message read plus the 10-minute overlap. An ack-only thread
+is re-dispatched only while its alert is still inside that window (the marker moves to the newest message read),
+so a dead job on an alert older than about 70 minutes with newer channel traffic is not retried automatically.
 
 ## Knobs
 

@@ -158,3 +158,10 @@ at() { CCXP_ALERTS_NOW="$1" bash "$AD" "${@:2}"; }
   CCXP_PROFILE_DIR="" HOME="" run --separate-stderr env -u CCXP_ALERTS_DIR CCXP_PROFILE_DIR= bash -c 'CCXP_ALERTS_NOW=1 bash "$0" check' "$AD"
   [ "$status" -ne 0 ]
 }
+
+@test "plan: decimal or CR-terminated age still triggers the ack-only exception" {
+  run at "$NOW" plan <<<$'1794240000.000100 1 1 61.5'
+  [ "$output" = "dispatch 1794240000.000100" ]
+  run at "$NOW" plan <<<$'1794240000.000100 1 1 90\r'
+  [ "$output" = "dispatch 1794240000.000100" ]
+}

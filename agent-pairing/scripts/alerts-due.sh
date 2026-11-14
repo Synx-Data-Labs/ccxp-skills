@@ -13,13 +13,14 @@
 #   done <ts>   advance the last-seen marker to <ts> (the newest message ts the read returned); never moves back.
 #   plan        stdin: one line per candidate failure alert, tab separated:
 #                 <ts> <reply_count> <ack_only 0|1> <age_minutes>  (whitespace separated)
+#               (age_minutes is whole minutes; a decimal part and CR are ignored)
 #               stdout, oldest first: "dispatch <ts>" (at most CCXP_ALERTS_CAP = 3) and "next <ts>" for the rest;
 #               handled alerts print nothing. Alerts held back by the cap pin the next `done` to just before the
 #               oldest of them (state file `hold`), so the following read sees them again. Handled = the thread has a reply, OR a context file under
 #               <context dir> or a ledger row carries the ts. Exception: an ack-only thread older than 60 minutes
 #               with no live job (no context file touched within 60 minutes, no ledger row) is not handled.
 #
-# State: ${CCXP_ALERTS_DIR:-<profile dir>/ccxp-alerts}/{last-check,last-seen}. Context dir:
+# State: ${CCXP_ALERTS_DIR:-<profile dir>/ccxp-alerts}/{last-check,last-seen,hold}. Context dir:
 # ${CCXP_CONTEXT_DIR:-<profile dir>/ccxp-context}. Ledger: ${CCXP_LEDGER_FILE:-<profile dir>/ccxp-ledger.json}.
 # Off switch: CCXP_ALERTS=0. Test hook: CCXP_ALERTS_NOW (epoch seconds).
 set -euo pipefail
@@ -128,7 +129,9 @@ function ad-plan() {
   cap="$(ad-int 3 "${CCXP_ALERTS_CAP:-}")"
   while IFS= read -r line; do
     [ -n "$line" ] || continue
+    line="${line//$'\r'/}"
     read -r ts replies ack age <<<"$line"
+    age="${age%%.*}"
     if ! ad-is-ts "$ts"; then echo "alerts-due: skipping bad ts '$ts'" >&2; continue; fi
     replies="$(ad-int 0 "$replies")"; age="$(ad-int 0 "$age")"
     ev="$(ad-job-evidence "$ts")"
