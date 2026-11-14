@@ -142,7 +142,7 @@ cmd_render_reply() {
     [ -n "$(printf '%s' "$k" | tr -d '[:space:]')" ] || die "empty value for a required field"
   done
   [[ "$rid" =~ ^[0-9]+$ ]] || die "--run-id must be numeric"
-  [[ "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$ ]] || die "--run-url must be https://github.com/<owner>/<repo>/actions/runs/<id>"
+  [[ "$url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+([/?#]|$) ]] || die "--run-url must be https://github.com/<owner>/<repo>/actions/runs/<id>"
 
   [ "${url##*/runs/}" = "$rid" ] || die "--run-id $rid does not match the id in --run-url"
   local c
@@ -186,16 +186,19 @@ cmd_input() {
 
 cmd_repo_of() {
   [ $# -eq 1 ] || die "usage: labrun.sh repo-of <run-url>"
-  [[ "$1" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/[0-9]+ ]] || die "not a GitHub Actions run url: $1"
+  [[ "$1" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/[0-9]+([/?#]|$) ]] || die "not a GitHub Actions run url: $1"
   printf 'repo=%s\n' "${BASH_REMATCH[1]}"
 }
 
 cmd_repo_allowed() {
   [ $# -eq 1 ] || die "usage: labrun.sh repo-allowed <owner/repo>"
   [[ "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "expected owner/repo, got '$1'"
-  local served="${LABRUN_SERVED_OWNERS:-Synx-Data-Labs}" e
-  for e in ${served//,/ }; do
-    if [ "$e" = "$1" ] || [ "$e" = "${1%%/*}" ]; then return 0; fi
+  local served="${LABRUN_SERVED_OWNERS:-Synx-Data-Labs}" e want owner entries
+  want="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"; owner="${want%%/*}"   # GitHub names are case-insensitive
+  read -ra entries <<< "${served//,/ }"                                           # no glob expansion
+  for e in "${entries[@]}"; do
+    e="$(printf '%s' "$e" | tr '[:upper:]' '[:lower:]')"
+    if [ "$e" = "$want" ] || [ "$e" = "$owner" ]; then return 0; fi
   done
   echo "labrun.sh: repo $1 is outside the accounts this profile serves" >&2
   exit 7
@@ -218,11 +221,18 @@ cmd_alert_kind() {
       *) die "unknown argument: $1" ;;
     esac
   done
-  text="$(cat)"
-  if printf '%s' "$text" | grep -qiE 'succe(ss|eded)|recover|resolved|\bgreen\b|passed'; then
+  text="$(cat | tr '[:upper:]' '[:lower:]')"
+  # A strong failure word wins over any other word in the message (job names,
+  # error excerpts and "3 tests passed" must not mute a real failure). A weak
+  # one ("failure", "failing") counts unless the text also says it recovered.
+  if printf '%s' "$text" | grep -qE '\b(failed|errored|cancell?ed|timed out)\b'; then
+    :
+  elif printf '%s' "$text" | grep -qE '\b(failure|failing)\b' &&
+       ! printf '%s' "$text" | grep -qE '\b(recovered|resolved|succeeded|now green|is green|fixed)\b'; then
+    :
+  else
     echo "not a failure alert"; exit 9
   fi
-  printf '%s' "$text" | grep -qiE 'fail' || { echo "not a failure alert"; exit 9; }
   if [ -n "$branch" ] && [ "$branch" != "$def" ]; then
     echo "not a failure alert: branch $branch is not $def"; exit 9
   fi
@@ -240,8 +250,10 @@ cmd_thread_state() {
   done
   [[ "$now" =~ ^[0-9]+$ ]] || die "--now must be epoch seconds"
   case "$live" in yes|no) ;; *) die "--live-job must be yes or no" ;; esac
-  while IFS=$'\t' read -r ts text; do
-    [ -n "$ts$text" ] || continue
+  while IFS=$'\t' read -r ts text || [ -n "$ts$text" ]; do
+    # a line whose first field is not a Slack ts is a continuation of a
+    # multi-line reply: never count it as a reply of its own
+    [[ "$ts" =~ ^[0-9]{9,}(\.[0-9]+)?$ ]] || continue
     n=$((n+1))
     case "$text" in
       "*RCA"*) echo done; exit 10 ;;
