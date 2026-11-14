@@ -79,7 +79,7 @@ Delegate to `/rca <run-id> --repo <owner/repo> --no-post` (the repo from step 2'
 - Error log extraction (`gh run view --log-failed`)
 - Classification (Our code / Infrastructure / Upstream / Transient / Configuration)
 - Impact assessment (is `main` red?)
-- Task creation in `dev/TODO/` when actionable
+- Task need (step 6 files it)
 
 Let `/rca` write the normal RCA report to the conversation. Capture its output structure (root cause, classification, confidence, impact, task ID if any).
 
@@ -107,16 +107,16 @@ Keep it compact. A Slack thread reply is for a quick read, not the full transcri
 
 ### 6. Task creation
 
-An actionable classification (Our code, Configuration, Upstream, Unconfirmed) lands a task; route it through `/new-task`, then `/top <id>`, then `/drive <id>` (rule d0-4):
+Our code, Configuration, Upstream, or any Unconfirmed result lands a task in the working repo (name the run's repo): `/new-task`, `/top <id>`, then `/drive <id>` in the background after the reply (never wait on it):
 
-- **Reuse first.** When `/rca` step 3.5 found an open task for the signature, `/top` that task and mention its id; never file a second one.
-- Put the task id in step 5's Action field; post after the task exists.
+- **Reuse first.** An open task found by `/rca` step 3.5 gets `/top` and its id, never a second task.
+- Step 5's Action carries the task id; post once the file exists.
 - Transient and Infrastructure follow `/rca`'s plan; no task unless it says so.
 - No repo context: the reply ends with `Action: needs manual follow-up — RCA above`.
 
 ### 7. Several alerts at once
 
-`labrun.sh group-alerts` ([reference.md](reference.md)) groups them by run id before step 4: steps 4 and 6 run once per run id, each alert gets its own step 5 reply.
+Steps 1-3 run per alert; `labrun.sh group-alerts` ([reference.md](reference.md)) then groups the survivors by run id: steps 4 and 6 run once per run id, each alert gets its own step 5 reply.
 
 ## Edge cases and reuse
 
