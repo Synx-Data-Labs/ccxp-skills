@@ -20,4 +20,3 @@ Detail moved out of SKILL.md to keep its context budget (the skill-quality ratch
 - `/slack-check-reply` — reference for the Slack thread state pattern (`.claude/state/drive-threads.json`). labrun-rca does _not_ write to that file; drive-threads is escalations-from-Claude, labrun-rca reacts to alerts-to-Claude.
 - `/drive` — uses MCP `slack_send_message` the same way; same channel_id/message_ts conventions apply.
 - `/ccxp` Phase 1.2.2a — runs this exact reply behavior automatically every standup tick, for every failure `/rca` classifies during the nightly health check, by searching for the matching alert instead of starting from a copy-pasted permalink (it has a run ID, not a URL). Reuses this skill's Step 5 reply format so both entry points read identically. Invoke `labrun-rca` directly only for ad-hoc cases 1.2.2a won't cover: a failure outside last night's window, or a channel/workflow the automated search didn't match.
-
