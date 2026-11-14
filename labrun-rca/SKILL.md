@@ -16,7 +16,7 @@ Run root cause analysis on a GitHub Actions failure that was announced in Slack,
 /labrun-rca https://example-workspace.slack.com/archives/C000EXAMPLE/p1600000000000000
 ```
 
-One alert per invocation. The permalink copy-path in Slack is _Copy link_ on the message's "more actions" menu. A job that holds no URL passes the pair instead: `/labrun-rca C000EXAMPLE 1600000000.000000`. A bare run id (6+ digits) skips the run-id extraction in step 2 (the thread is then not read and no thread reply is possible: use it only to RCA without posting).
+One alert per invocation. The permalink copy-path in Slack is _Copy link_ on the message's "more actions" menu. A job that holds no URL passes the pair instead: `/labrun-rca C000EXAMPLE 1600000000.000000`. A bare run id (6+ digits) skips steps 1's channel guard and 2-3 (no thread exists, so nothing is read or posted): it only runs the RCA in the working repo and reports the result to the caller.
 
 ## Workflow
 
@@ -47,7 +47,7 @@ From the parent message text, **blocks and attachments** (older composite-action
 
 Then decide whether this is an alert to answer at all: feed the whole message (text plus the flattened blocks/attachments JSON, so a block-only alert is seen) to `bash <skills-root>/labrun-rca/scripts/labrun.sh alert-kind --branch <branch> --default-branch <the repo's default branch>` (the default branch is `main` when omitted: pass it for a repo that uses another). Exit 9 (`not a failure alert`: a success post, a recovered or green run, or a branch other than the default branch) means **stay silent**: post nothing in the thread, and report `not a failure alert` to the caller (the persona job result). Never reply "run is green" — one reply per failure thread only.
 
-Repo: `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives the run's `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0. When no run url was found (bare run id input), take the repo from `gh repo view --json nameWithOwner` of the working repo and run the same `repo-allowed` check on it, so no run in an unserved repo is analysed. Exit 7 (outside the accounts this profile serves, `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
+Repo: `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-of <run-url>` gives the run's `owner/repo`; `bash <skills-root>/labrun-rca/scripts/labrun.sh repo-allowed <owner/repo>` must exit 0. When no run url was found (bare run id input), the RCA runs in the working repo, so check that repo (`gh repo view --json nameWithOwner`) with the same `repo-allowed` call. Exit 7 (outside the accounts this profile serves, `LABRUN_SERVED_OWNERS`): post a short thread reply "run belongs to <owner/repo>, outside this profile's accounts — needs manual RCA" and stop.
 
 If the notification format is ambiguous (no run ID visible, multiple run IDs, no workflow name), post a short "needs manual RCA input" reply in the thread and stop.
 
@@ -113,7 +113,7 @@ If the caller is not in a repo context (e.g., running this from a personal dir),
 | Private channel the user can't see | `slack_read_thread` will error — surface the error verbatim |
 | Message already has a thread reply from labrun-rca | Read the thread, note "already analyzed by <ts>", stop |
 | Notification message has no run ID | Post a short "couldn't auto-detect run ID" reply and stop |
-| Run succeeded on retry before RCA ran, or the alert is a success/recovered/other-branch post | `alert-kind` exits 9: no thread reply; report `not a failure alert` to the caller |
+| Run succeeded on retry before RCA ran, or the alert is a success/recovered/other-branch post | `alert-kind` exits 9 (no failure signal, success/recovered wording or other branch): no thread reply; report `not a failure alert` to the caller |
 | `/rca` itself errors (e.g., run not accessible) | Post the error verbatim to the thread so the channel isn't left hanging |
 
 ## Reuse from existing skills
