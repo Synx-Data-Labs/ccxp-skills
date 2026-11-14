@@ -225,8 +225,125 @@ render() {
   [ "$status" -eq 1 ]
 }
 
-@test "SKILL.md calls the script for parse, extract-run and render-reply" {
-  for s in parse extract-run render-reply; do
+@test "SKILL.md calls the script for input, extract-run, render-reply and the guards" {
+  for s in input extract-run render-reply repo-of repo-allowed channel-guard alert-kind thread-state; do
     grep -q "<skills-root>/labrun-rca/scripts/labrun.sh $s" "$REPO_ROOT/labrun-rca/SKILL.md"
   done
+}
+
+# ---- job input forms (T20261113-143109) -------------------------------------
+
+@test "input: permalink, channel+ts pair and bare run id all resolve" {
+  lab input "$URL"
+  [ "$output" = $'channel_id=C000EXAMPLE\nmessage_ts=1600000000.000000' ]
+  lab input C000EXAMPLE 1600000000.000123
+  [ "$status" -eq 0 ]
+  [ "$output" = $'channel_id=C000EXAMPLE\nmessage_ts=1600000000.000123' ]
+  lab input 12345678901
+  [ "$output" = "run_id=12345678901" ]
+}
+
+@test "input: malformed forms exit 2 with nothing on stdout" {
+  for args in "" "C000EXAMPLE" "c000example 1600000000.000123" "C000EXAMPLE 16000.1" "123" "a b c"; do
+    run bash -c 'bash "$1" input $2 2>/dev/null' _ "$LAB" "$args"
+    [ "$status" -eq 2 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "extract-run: a Block Kit message with the run link only in a button resolves" {
+  cat > "$BATS_TEST_TMPDIR/blocks.json" <<JSON
+{"text":"Release Example failed","blocks":[{"type":"actions","elements":[{"type":"button","text":{"type":"plain_text","text":"View run"},"url":"https:\/\/github.com\/example-org\/example-repo\/actions\/runs\/12345678901"}]}]}
+JSON
+  lab extract-run "$BATS_TEST_TMPDIR/blocks.json"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'run_id=12345678901\nrun_url='"$RUN" ]
+}
+
+# ---- repo and channel guards -------------------------------------------------
+
+@test "repo-of: owner/repo from a run url; anything else exits 2" {
+  lab repo-of "$RUN"
+  [ "$output" = "repo=example-org/example-repo" ]
+  lab repo-of https://example.com/x
+  [ "$status" -eq 2 ]
+}
+
+@test "repo-allowed: default owner Synx-Data-Labs; env widens; other repo exits 7" {
+  run env -u LABRUN_SERVED_OWNERS bash "$LAB" repo-allowed Synx-Data-Labs/synxdb-build-pipeline
+  [ "$status" -eq 0 ]
+  run env -u LABRUN_SERVED_OWNERS bash "$LAB" repo-allowed example-org/example-repo
+  [ "$status" -eq 7 ]
+  run env LABRUN_SERVED_OWNERS="example-org other/one" bash "$LAB" repo-allowed example-org/example-repo
+  [ "$status" -eq 0 ]
+  run env LABRUN_SERVED_OWNERS="other/one" bash "$LAB" repo-allowed other/two
+  [ "$status" -eq 7 ]
+  run env LABRUN_SERVED_OWNERS="other/one" bash "$LAB" repo-allowed other/one
+  [ "$status" -eq 0 ]
+}
+
+@test "channel-guard: only the alerts channel id passes; unset env is a usage error" {
+  run env SLACK_AUTOMATION_ALERTS_CHANNEL_ID=C000ALERTS bash "$LAB" channel-guard C000ALERTS
+  [ "$status" -eq 0 ]
+  run env SLACK_AUTOMATION_ALERTS_CHANNEL_ID=C000ALERTS bash "$LAB" channel-guard C000OTHER
+  [ "$status" -eq 8 ]
+  run env -u SLACK_AUTOMATION_ALERTS_CHANNEL_ID bash "$LAB" channel-guard C000ALERTS
+  [ "$status" -eq 2 ]
+}
+
+# ---- alert-kind: stay silent on non-failures --------------------------------
+
+@test "alert-kind: a failure text on the default branch is a failure alert" {
+  run bash -c 'echo "Release Example failed on main" | bash "$1" alert-kind --branch main' _ "$LAB"
+  [ "$status" -eq 0 ]
+  [ "$output" = "failure" ]
+}
+
+@test "alert-kind: success, recovered and other-branch alerts exit 9 (no reply)" {
+  for t in "Release Example succeeded on main" "Release Example recovered: run is green" "Release Example failure resolved"; do
+    run bash -c 'echo "$2" | bash "$1" alert-kind --branch main' _ "$LAB" "$t"
+    [ "$status" -eq 9 ]
+    [ "$output" = "not a failure alert" ]
+  done
+  run bash -c 'echo "Release Example failed" | bash "$1" alert-kind --branch feature/x' _ "$LAB"
+  [ "$status" -eq 9 ]
+  [ "$output" = "not a failure alert: branch feature/x is not main" ]
+  run bash -c 'echo "Release Example failed" | bash "$1" alert-kind --branch develop --default-branch develop' _ "$LAB"
+  [ "$status" -eq 0 ]
+}
+
+# ---- thread-state: RCA done, ack-only, stale ack ----------------------------
+
+thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
+  run bash "$LAB" thread-state --now "$1" --live-job "$2"
+}
+
+@test "thread-state: no replies or only human chatter -> continue" {
+  thread 1600010000 no <<< ""
+  [ "$status" -eq 0 ]; [ "$output" = "continue" ]
+  printf '1600000100.000000\tlooking into it\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run bash -c 'bash "$1" thread-state --now 1600010000 --live-job no < "$2"' _ "$LAB" "$BATS_TEST_TMPDIR/r.txt"
+  [ "$output" = "continue" ]
+}
+
+@test "thread-state: a reply starting *RCA means stop (exit 10)" {
+  printf '1600000100.000000\t*RCA — Release Example run 1*\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run bash -c 'bash "$1" thread-state --now 1600000200 --live-job no < "$2"' _ "$LAB" "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 10 ]; [ "$output" = "done" ]
+}
+
+@test "thread-state: ack-only thread waits under 60 min or with a live job, continues after" {
+  printf '1600000000.000000\t🔍 Running RCA on Release run 1 — will reply with findings.\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run bash -c 'bash "$1" thread-state --now 1600001000 --live-job no < "$2"' _ "$LAB" "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 11 ]; [ "$output" = "wait" ]
+  run bash -c 'bash "$1" thread-state --now 1600009999 --live-job yes < "$2"' _ "$LAB" "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 11 ]; [ "$output" = "wait" ]
+  run bash -c 'bash "$1" thread-state --now 1600003601 --live-job no < "$2"' _ "$LAB" "$BATS_TEST_TMPDIR/r.txt"
+  [ "$status" -eq 0 ]; [ "$output" = "continue" ]
+}
+
+@test "SKILL.md states the headless-cron path and the channel guard" {
+  grep -q '_slack/webapi.sh' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -qi 'channel-guard' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q 'not a failure alert' "$REPO_ROOT/labrun-rca/SKILL.md"
 }
