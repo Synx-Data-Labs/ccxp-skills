@@ -120,11 +120,11 @@ The edge-case table and the list of skills this one reuses (`/rca`, `/slack`, `/
 
 ## Headless sessions
 
-The MCP `slack_send_message` and `slack_read_thread` calls above work in an interactive session (and the ccxp-agent persona). A headless cron session has no Slack MCP: it must read and post through `<skills-root>/_slack/webapi.sh` (bot token path, as `/ccxp` Phase 1.2.2a does) instead of failing; the channel guard, thread-state and alert-kind checks are identical.
+The MCP Slack calls above work in an interactive session (and the ccxp-agent persona). A headless cron session has no Slack MCP: read and post through `<skills-root>/_slack/webapi.sh` (as `/ccxp` Phase 1.2.2a does) instead of failing; the guards are identical.
 
 ## Notes
 
-- **Thread-only replies.** Never post to the channel root when replying with RCA findings — always use `thread_ts`. This keeps `#slack-automation-alerts` readable.
-- **One RCA per failure.** Check the thread before starting so concurrent ccxp sessions don't race on the same message.
-- **No secrets in replies.** Paste log excerpts, not environment variables or tokens. The `gh run view --log-failed` output is generally safe but spot-check before sending.
-- **Respect `/rca`'s classification and confidence.** Don't editorialize. If `/rca` says Transient, the Slack reply says Transient — and if it says Unconfirmed, the reply says Unconfirmed, not a bare classification that reads as definitive.
+- **Thread-only replies.** Never post to the channel root; always use `thread_ts`.
+- **One RCA per failure.** Check the thread first (step 2) so concurrent sessions don't race.
+- **No secrets in replies.** Log excerpts only, never environment variables or tokens; spot-check `--log-failed` output.
+- **Respect `/rca`'s classification and confidence.** Don't editorialize: Transient stays Transient, Unconfirmed stays Unconfirmed.
