@@ -414,3 +414,11 @@ thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
   grep -q 'Reuse first' "$REPO_ROOT/labrun-rca/SKILL.md"
   grep -q 'group-alerts' "$REPO_ROOT/labrun-rca/SKILL.md"
 }
+
+@test "group-alerts: CRLF ids group with their LF twins; unknown-subcommand usage lists it" {
+  run bash -c "printf 'C1:1.1\t111111\r\nC1:2.2\t111111\n' | bash '$LAB' group-alerts"
+  [ "$status" -eq 0 ]
+  [ "$output" = $'C1:1.1\t111111\trca\nC1:2.2\t111111\treuse' ]
+  lab nope
+  [[ "$output" == *group-alerts* ]]
+}

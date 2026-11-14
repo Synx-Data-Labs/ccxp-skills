@@ -304,5 +304,5 @@ case "$sub" in
   alert-kind) cmd_alert_kind "$@" ;;
   thread-state) cmd_thread_state "$@" ;;
   group-alerts) cmd_group_alerts "$@" ;;
-  *) die "unknown subcommand: $sub (parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state)" ;;
+  *) die "unknown subcommand: $sub (parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state|group-alerts)" ;;
 esac
