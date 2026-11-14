@@ -24,6 +24,25 @@
 #       Configuration (case-insensitive, "our-code" ok); confidence: Confirmed|
 #       Unconfirmed. Exit 2 usage, 5 enum failure, 6 the reply contains a
 #       token-like string (nothing is printed, the match is not echoed).
+#
+#   labrun.sh input <permalink> | <channel_id> <message_ts> | <run_id>
+#       Resolve a job's argument. Prints channel_id=/message_ts= (permalink or
+#       pair) or run_id= (a bare number of 6+ digits). Exit 2 otherwise.
+#
+#   labrun.sh repo-of <run-url>            prints repo=<owner/repo> (exit 2 if not a run url)
+#   labrun.sh repo-allowed <owner/repo>    exit 0 when the owner (or full repo) is in
+#       LABRUN_SERVED_OWNERS (space/comma separated, default Synx-Data-Labs), else 7.
+#   labrun.sh channel-guard <channel_id>   exit 0 only for $SLACK_AUTOMATION_ALERTS_CHANNEL_ID
+#       (exit 8 for any other channel, 2 when the variable is unset).
+#
+#   labrun.sh alert-kind [--branch B] [--default-branch D]   (message text on stdin)
+#       Prints "failure" (exit 0), or "not a failure alert[: branch X is not D]"
+#       (exit 9): success/recovered/green/resolved text, or a branch other than D
+#       (default main). The job stays silent on exit 9.
+#
+#   labrun.sh thread-state --now EPOCH [--live-job yes|no]   (replies on stdin, "ts<TAB>text")
+#       done (exit 10): a reply starts with *RCA. wait (exit 11): the only replies
+#       are the ack and it is under 60 minutes old or a job is live. continue (exit 0).
 # Exit: 0 ok.
 set -uo pipefail
 
@@ -51,6 +70,7 @@ cmd_extract_run() {
   [ $# -le 1 ] || die "usage: labrun.sh extract-run [FILE]"
   local text ids urls n
   if [ $# -eq 1 ]; then [ -r "$1" ] || die "cannot read $1"; text="$(cat "$1")"; else text="$(cat)"; fi
+  text="$(printf '%s' "$text" | sed 's#\\/#/#g')"   # Block Kit JSON escapes / as \/
   urls="$(printf '%s\n' "$text" | grep -oE 'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+' | awk -F/runs/ '!s[$2]++')"
   if [ -n "$urls" ]; then
     ids="$(printf '%s\n' "$urls" | sed -E 's#.*/runs/##' | awk '!s[$0]++')"
@@ -148,11 +168,104 @@ cmd_render_reply() {
   printf '%s\n' "$out"
 }
 
-[ $# -ge 1 ] || die "usage: labrun.sh parse|extract-run|render-reply ..."
+
+cmd_input() {
+  local a
+  case $# in
+    1)
+      a="$1"
+      if [[ "$a" =~ ^[0-9]{6,}$ ]]; then printf 'run_id=%s\n' "$a"; return 0; fi
+      cmd_parse "$a" ;;
+    2)
+      [[ "$1" =~ ^[CGD][A-Z0-9]{2,}$ ]] || die "channel id must match [CGD][A-Z0-9]{2,}, got '$1'"
+      [[ "$2" =~ ^[0-9]{10}\.[0-9]{6}$ ]] || die "message ts must be <10 digits>.<6 digits>, got '$2'"
+      printf 'channel_id=%s\nmessage_ts=%s\n' "$1" "$2" ;;
+    *) die "usage: labrun.sh input <permalink> | <channel_id> <message_ts> | <run_id>" ;;
+  esac
+}
+
+cmd_repo_of() {
+  [ $# -eq 1 ] || die "usage: labrun.sh repo-of <run-url>"
+  [[ "$1" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/[0-9]+ ]] || die "not a GitHub Actions run url: $1"
+  printf 'repo=%s\n' "${BASH_REMATCH[1]}"
+}
+
+cmd_repo_allowed() {
+  [ $# -eq 1 ] || die "usage: labrun.sh repo-allowed <owner/repo>"
+  [[ "$1" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "expected owner/repo, got '$1'"
+  local served="${LABRUN_SERVED_OWNERS:-Synx-Data-Labs}" e
+  for e in ${served//,/ }; do
+    if [ "$e" = "$1" ] || [ "$e" = "${1%%/*}" ]; then return 0; fi
+  done
+  echo "labrun.sh: repo $1 is outside the accounts this profile serves" >&2
+  exit 7
+}
+
+cmd_channel_guard() {
+  [ $# -eq 1 ] || die "usage: labrun.sh channel-guard <channel_id>"
+  [ -n "${SLACK_AUTOMATION_ALERTS_CHANNEL_ID:-}" ] || die "SLACK_AUTOMATION_ALERTS_CHANNEL_ID is not set"
+  [ "$1" = "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" ] && return 0
+  echo "labrun.sh: channel $1 is not the alerts channel; refusing to post" >&2
+  exit 8
+}
+
+cmd_alert_kind() {
+  local branch="" def="main" text
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --branch) [ $# -ge 2 ] || die "--branch needs a value"; branch="$2"; shift 2 ;;
+      --default-branch) [ $# -ge 2 ] || die "--default-branch needs a value"; def="$2"; shift 2 ;;
+      *) die "unknown argument: $1" ;;
+    esac
+  done
+  text="$(cat)"
+  if printf '%s' "$text" | grep -qiE 'succe(ss|eded)|recover|resolved|\bgreen\b|passed'; then
+    echo "not a failure alert"; exit 9
+  fi
+  printf '%s' "$text" | grep -qiE 'fail' || { echo "not a failure alert"; exit 9; }
+  if [ -n "$branch" ] && [ "$branch" != "$def" ]; then
+    echo "not a failure alert: branch $branch is not $def"; exit 9
+  fi
+  echo failure
+}
+
+cmd_thread_state() {
+  local now="" live="no" ts text last_ack=0 other=0 n=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --now) [ $# -ge 2 ] || die "--now needs a value"; now="$2"; shift 2 ;;
+      --live-job) [ $# -ge 2 ] || die "--live-job needs a value"; live="$2"; shift 2 ;;
+      *) die "unknown argument: $1" ;;
+    esac
+  done
+  [[ "$now" =~ ^[0-9]+$ ]] || die "--now must be epoch seconds"
+  case "$live" in yes|no) ;; *) die "--live-job must be yes or no" ;; esac
+  while IFS=$'\t' read -r ts text; do
+    [ -n "$ts$text" ] || continue
+    n=$((n+1))
+    case "$text" in
+      "*RCA"*) echo done; exit 10 ;;
+      "🔍 Running RCA"*) last_ack="${ts%%.*}" ;;
+      *) other=1 ;;
+    esac
+  done
+  if [ "$n" -gt 0 ] && [ "$other" = 0 ] && [ "$last_ack" != 0 ]; then
+    if [ "$live" = yes ] || [ $((now - last_ack)) -lt 3600 ]; then echo wait; exit 11; fi
+  fi
+  echo continue
+}
+
+[ $# -ge 1 ] || die "usage: labrun.sh parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state ..."
 sub="$1"; shift
 case "$sub" in
   parse) cmd_parse "$@" ;;
   extract-run) cmd_extract_run "$@" ;;
   render-reply) cmd_render_reply "$@" ;;
-  *) die "unknown subcommand: $sub (parse|extract-run|render-reply)" ;;
+  input) cmd_input "$@" ;;
+  repo-of) cmd_repo_of "$@" ;;
+  repo-allowed) cmd_repo_allowed "$@" ;;
+  channel-guard) cmd_channel_guard "$@" ;;
+  alert-kind) cmd_alert_kind "$@" ;;
+  thread-state) cmd_thread_state "$@" ;;
+  *) die "unknown subcommand: $sub (parse|extract-run|render-reply|input|repo-of|repo-allowed|channel-guard|alert-kind|thread-state)" ;;
 esac
