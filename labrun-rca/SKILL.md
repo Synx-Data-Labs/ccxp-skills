@@ -107,12 +107,11 @@ Keep it compact. A Slack thread reply is for a quick read, not the full transcri
 
 ### 6. Task creation
 
-For Our code, Configuration, Upstream, or any Unconfirmed result `/rca` step 6 files the task in the working repo via the `/new-task` helpers (never a second one; no repo context: `/new-task`). Then `/top <id>`, and start `/drive <id>` in the background after the reply:
+Run this before posting step 5. `/rca` step 6 files the task itself (the `/new-task` procedure; never file a second one): Our code, Configuration, Upstream, any Unconfirmed result, Transient or Infrastructure per its plan. This skill then adds `/top <id>` and, after the reply, a background `/drive <id>`:
 
 - **Reuse first.** An open task found by `/rca` step 3.5 gets `/top` and its id.
-- Step 5's Action carries the task id; post once it exists.
-- Transient and Infrastructure follow `/rca`'s plan.
-- No repo context: `Action: needs manual follow-up — RCA above`.
+- Step 5's Action carries the task id.
+- No repo context, nothing filed: `Action: needs manual follow-up — RCA above`.
 
 ### 7. Several alerts at once
 

@@ -408,7 +408,7 @@ thread() { # thread <now> <live-job> <<< replies "ts<TAB>text"
 }
 
 @test "SKILL.md: actionable RCA routes through new-task, top and drive and names the reuse rule" {
-  grep -q '/new-task' "$REPO_ROOT/labrun-rca/SKILL.md"; grep -q 'never a second one' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q '/new-task' "$REPO_ROOT/labrun-rca/SKILL.md"; grep -q 'never file a second one' "$REPO_ROOT/labrun-rca/SKILL.md"
   grep -q '/top <id>' "$REPO_ROOT/labrun-rca/SKILL.md"
   grep -q '/drive <id>' "$REPO_ROOT/labrun-rca/SKILL.md"
   grep -q 'Reuse first' "$REPO_ROOT/labrun-rca/SKILL.md"
