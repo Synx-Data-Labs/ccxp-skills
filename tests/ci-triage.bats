@@ -232,3 +232,15 @@ STUB
   CI_TRIAGE_REPO="" run ci_triage_main 999
   [ "$(grep -c -- '--repo' "$STUB_LOG")" -eq 0 ]
 }
+
+@test "ci_triage_gh with no repo works under bash 3.2 (empty array, set -u)" {
+  [ -x /bin/bash ] || skip "no /bin/bash"
+  cat > gh-stub.sh <<'STUB'
+#!/usr/bin/env bash
+echo "stub $*"
+STUB
+  chmod +x gh-stub.sh
+  run /bin/bash -c "set -u; CI_TRIAGE_GH='$BATS_TEST_TMPDIR/gh-stub.sh'; source '$REPO_ROOT/_gh/ci-triage.sh'; ci_triage_gh run view 1"
+  [ "$status" -eq 0 ]
+  [ "$output" = "stub run view 1" ]
+}

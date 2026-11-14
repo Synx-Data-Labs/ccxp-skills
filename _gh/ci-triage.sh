@@ -42,11 +42,11 @@ ci_triage_gh() {
   local repo_args=()
   [ -z "${CI_TRIAGE_REPO:-}" ] || repo_args=(--repo "$CI_TRIAGE_REPO")
   if [ -n "$CI_TRIAGE_GH" ]; then
-    "$CI_TRIAGE_GH" "$@" "${repo_args[@]}"
+    "$CI_TRIAGE_GH" "$@" ${repo_args[@]+"${repo_args[@]}"}
   elif [ -x "$_CI_TRIAGE_DIR/gh.sh" ]; then
-    bash "$_CI_TRIAGE_DIR/gh.sh" "$@" "${repo_args[@]}"
+    bash "$_CI_TRIAGE_DIR/gh.sh" "$@" ${repo_args[@]+"${repo_args[@]}"}
   else
-    gh "$@" "${repo_args[@]}"
+    gh "$@" ${repo_args[@]+"${repo_args[@]}"}
   fi
 }
 
@@ -118,7 +118,7 @@ for j in jobs:
 
 ci_triage_main() {
   local raw="${1:-}" ctx=5
-  [ -n "$raw" ] || { echo "usage: ci-triage.sh <run-id-or-url> [--context N]" >&2; return 64; }
+  [ -n "$raw" ] || { echo "usage: ci-triage.sh <run-id-or-url> [--context N] [--repo OWNER/REPO]" >&2; return 64; }
   shift || true
   CI_TRIAGE_REPO="$(ci_triage_parse_repo "$raw" || true)"
   while [ $# -gt 0 ]; do
