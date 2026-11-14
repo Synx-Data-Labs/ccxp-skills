@@ -19,6 +19,7 @@
 #   bash ci-triage.sh 29670112823
 #   bash ci-triage.sh https://github.com/OWNER/REPO/actions/runs/29670112823
 #   bash ci-triage.sh 29670112823 --context 8
+#   bash ci-triage.sh 29670112823 --repo OWNER/REPO   (a run URL names its own repo)
 #
 # Must run from the target repo's clone (gh resolves against $PWD's origin,
 # same assumption as every other _gh/_session/_taskid script).
@@ -36,13 +37,25 @@ CI_TRIAGE_GH="${CI_TRIAGE_GH:-}"
 _CI_TRIAGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ci_triage_gh() {
+  # CI_TRIAGE_REPO (owner/repo, set by ci_triage_main from a run URL or --repo)
+  # makes gh read that repo's run instead of the one $PWD's origin names.
+  local repo_args=()
+  [ -z "${CI_TRIAGE_REPO:-}" ] || repo_args=(--repo "$CI_TRIAGE_REPO")
   if [ -n "$CI_TRIAGE_GH" ]; then
-    "$CI_TRIAGE_GH" "$@"
+    "$CI_TRIAGE_GH" "$@" "${repo_args[@]}"
   elif [ -x "$_CI_TRIAGE_DIR/gh.sh" ]; then
-    bash "$_CI_TRIAGE_DIR/gh.sh" "$@"
+    bash "$_CI_TRIAGE_DIR/gh.sh" "$@" "${repo_args[@]}"
   else
-    gh "$@"
+    gh "$@" "${repo_args[@]}"
   fi
+}
+
+ci_triage_parse_repo() {
+  # $1 run-id-or-url → owner/repo from a run URL; empty (+ nonzero) for a bare id.
+  if [[ "${1:-}" =~ ^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/actions/runs/[0-9]+ ]]; then
+    printf '%s' "${BASH_REMATCH[1]}"; return 0
+  fi
+  return 1
 }
 
 # --- pure helpers -------------------------------------------------------------
@@ -107,9 +120,14 @@ ci_triage_main() {
   local raw="${1:-}" ctx=5
   [ -n "$raw" ] || { echo "usage: ci-triage.sh <run-id-or-url> [--context N]" >&2; return 64; }
   shift || true
-  if [ "${1:-}" = "--context" ] && [ -n "${2:-}" ]; then
-    ctx="$2"
-  fi
+  CI_TRIAGE_REPO="$(ci_triage_parse_repo "$raw" || true)"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --context) [ -n "${2:-}" ] && ctx="$2"; shift 2 || shift ;;
+      --repo) [ -n "${2:-}" ] && CI_TRIAGE_REPO="$2"; shift 2 || shift ;;
+      *) shift ;;
+    esac
+  done
 
   local run_id
   run_id="$(ci_triage_parse_run_id "$raw")" || {

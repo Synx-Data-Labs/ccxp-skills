@@ -206,3 +206,29 @@ STUB
   run grep -c '\.claude/skills/_gh' "$REPO_ROOT/_gh/ci-triage.sh"
   [ "$status" -ne 0 ]
 }
+
+@test "ci_triage_parse_repo: owner/repo from a run URL, nothing for a bare id" {
+  run ci_triage_parse_repo "https://github.com/o/r/actions/runs/999/job/5"
+  [ "$status" -eq 0 ]; [ "$output" = "o/r" ]
+  run ci_triage_parse_repo 999
+  [ "$status" -ne 0 ]
+}
+
+@test "ci_triage_main passes --repo to every gh call: from a run URL and from the flag" {
+  cat > gh-stub.sh <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$STUB_LOG"
+STUB
+  chmod +x gh-stub.sh
+  export CI_TRIAGE_GH="$BATS_TEST_TMPDIR/gh-stub.sh" STUB_LOG="$BATS_TEST_TMPDIR/calls.log"
+  : > "$STUB_LOG"
+  run ci_triage_main "https://github.com/o/r/actions/runs/999"
+  [ "$status" -eq 0 ]
+  [ "$(grep -c -- '--repo o/r' "$STUB_LOG")" -eq 2 ]
+  : > "$STUB_LOG"
+  run ci_triage_main 999 --repo x/y --context 3
+  [ "$(grep -c -- '--repo x/y' "$STUB_LOG")" -eq 2 ]
+  : > "$STUB_LOG"
+  CI_TRIAGE_REPO="" run ci_triage_main 999
+  [ "$(grep -c -- '--repo' "$STUB_LOG")" -eq 0 ]
+}
