@@ -250,7 +250,7 @@ EOF
   [ "$(grep -n '^## Repo freshness' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Exception: `/autopilot`' "$f" | cut -d: -f1)" ]
   grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
   # a guard against the persona silently ballooning, not a precise budget
-  [ "$(wc -c < "$f")" -lt 46000 ]
+  [ "$(wc -c < "$f")" -lt 48000 ]
 }
 
 @test "asset: Rituals due section runs ritual-due.sh claim at start/turn/wake, one job per check, carve-out named" {
@@ -659,4 +659,18 @@ install_outdated_agent() {
   grep -q 'Autopilot runs one cycle at a time' "$f"
   grep -q '\*\*Boundary\*\*' "$f"
   grep -q 'wtf.json' "$f"
+}
+
+@test "asset: Slack alerts check section calls alerts-due.sh, read-only Slack tools, cap and one-path rule" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Slack alerts check$' "$f"
+  grep -q 'agent-pairing/scripts/alerts-due.sh check' "$f"
+  grep -q 'alerts-due.sh plan' "$f"
+  grep -q '/labrun-rca <channel_id> <ts>' "$f"
+  grep -q 'agent-pairing/alerts.md' "$f"
+  grep -E '^tools:.*mcp__claude_ai_Slack__slack_read_channel.*mcp__claude_ai_Slack__slack_read_thread' "$f"
+  run grep -E '^tools:.*slack_send_message' "$f"; [ "$status" -ne 0 ]
+  grep -q '\*\*One path\*\*: a failed run that has an alert' "$f"
+  [ -x "$REPO_ROOT/agent-pairing/scripts/alerts-due.sh" ]
+  [ -f "$REPO_ROOT/agent-pairing/alerts.md" ]
 }
