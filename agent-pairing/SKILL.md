@@ -124,6 +124,7 @@ right now."
 - `persona-refresh.md` — the persona refreshes itself after a `/plugin` update
 - `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `wtf.json` ("where to find"), the UserPromptSubmit `hooks/terms-hook.sh`)
 - `rituals.md` — daily standup, Monday IPM and Friday retro dispatched by the persona's "Rituals due" check (`scripts/ritual-due.sh`); tests: `bats tests/ritual_due.bats`
+- `alerts.md` — the persona's "Slack alerts check": reads #slack-automation-alerts and starts one `labrun-rca` job per unanswered failure alert (`scripts/alerts-due.sh`); tests: `bats tests/alerts_due.bats`
 - `decisions.md` — the agent's decisions log (`ledger.sh decision ...`, `ccxp-decisions.json`/`.md`)
 - `superpowers:dispatching-parallel-agents` — the general pattern this
   profile-level toggle is built on
