@@ -15,7 +15,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 - `/rca https://github.com/your-org/build-pipeline-repo/actions/runs/12345`
 - `/rca 12345`
 - `/rca` — auto-pick the most recent failed run on main
-- `--repo owner/repo` (any position) — the repo that owns the run; default: the working repo (`gh repo view`). A run URL carries its repo, which wins. Every `gh` call below then uses `--repo <owner/repo>` and `ci-triage.sh <run-id> --repo <owner/repo>` reads that repo's run; tasks still land in the working repo's `dev/TODO/`. `/labrun-rca` passes the repo derived from the alert's run URL.
+- `--repo owner/repo` (any position) — the repo that owns the run; default: the working repo (`gh repo view`). A run URL carries its repo; an explicit `--repo` wins. Every `gh` call below then uses `--repo <owner/repo>` and `ci-triage.sh <run-id> --repo <owner/repo>` reads that repo's run; tasks still land in the working repo's `dev/TODO/`. `/labrun-rca` passes the repo derived from the alert's run URL.
 - `--no-post` (any position) — skip step 5.5's Slack post. A caller that owns the Slack reply (`/labrun-rca` posts into the alert's thread) passes it so the report is not also posted to the channel root.
 
 ## Workflow
@@ -24,7 +24,7 @@ Perform root cause analysis on a failed GitHub Actions pipeline run.
 
 ```bash
 # Get run details
-bash <skills-root>/_gh/gh.sh run view <run-id> --json name,status,conclusion,headBranch,jobs \
+bash <skills-root>/_gh/gh.sh run view <run-id> [--repo <owner/repo>] --json name,status,conclusion,headBranch,jobs \
   --jq '{name: .name, branch: .headBranch, conclusion: .conclusion, jobs: [.jobs[] | {name: .name, conclusion: .conclusion}]}'
 ```
 
@@ -37,7 +37,7 @@ For each failed job:
 
 ```bash
 # Failed job/step names + a bounded error-context window in one shot
-bash <skills-root>/_gh/ci-triage.sh <run-id>
+bash <skills-root>/_gh/ci-triage.sh <run-id> [--repo <owner/repo>]
 ```
 
 **Dig deeper** — don't stop at the first error. Look for:
