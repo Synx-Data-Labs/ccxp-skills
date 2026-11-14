@@ -40,7 +40,7 @@ REPO_ROOT="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)"
 
 @test "rca + labrun-rca: delegated RCA does not also post to the channel root" {
   grep -q -- '--no-post' "$REPO_ROOT/rca/SKILL.md"
-  grep -q -- '/rca <run-id> --no-post' "$REPO_ROOT/labrun-rca/SKILL.md"
+  grep -q -- '/rca <run-id> --repo <owner/repo> --no-post' "$REPO_ROOT/labrun-rca/SKILL.md"
 }
 
 @test "email-triage: read-only is a policy, not a claim about the connector" {
