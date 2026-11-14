@@ -21,8 +21,8 @@
 #   bash ci-triage.sh 29670112823 --context 8
 #   bash ci-triage.sh 29670112823 --repo OWNER/REPO   (a run URL names its own repo)
 #
-# Must run from the target repo's clone (gh resolves against $PWD's origin,
-# same assumption as every other _gh/_session/_taskid script).
+# A bare run id must run from the target repo's clone (gh resolves against
+# $PWD's origin); a run URL or --repo reads that repo from anywhere.
 
 set -uo pipefail
 
