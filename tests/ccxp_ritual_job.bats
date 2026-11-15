@@ -74,27 +74,27 @@ reuse() { run bash "$RJ" rca-reuse --now "$NOW" "$@"; }
   printf '%s\t%s\n' "$((NOW-4000)).2" "$(rca_reply 'Our code' 'T20260101-123456 filed')" >> "$BATS_TEST_TMPDIR/t"
   reuse < "$BATS_TEST_TMPDIR/t"
   [ "$status" -eq 0 ]
-  [ "$output" = "reuse Our code T20260101-123456" ]
+  [ "$output" = "$(printf 'reuse\tOur code\tT20260101-123456')" ]
 }
 
 @test "rca-reuse: an RCA reply with no task gives none" {
   printf '%s\t%s\n' "$((NOW-4000)).2" "$(rca_reply Transient 'None — transient')" > "$BATS_TEST_TMPDIR/t"
   reuse < "$BATS_TEST_TMPDIR/t"
   [ "$status" -eq 0 ]
-  [ "$output" = "reuse Transient none" ]
+  [ "$output" = "$(printf 'reuse\tTransient\tnone')" ]
 }
 
 @test "rca-reuse: a literal backslash-n flattened reply and a leading mention parse" {
   printf '%s\t<@U123> *RCA — wf run 1*\\n\\n*Classification:* Upstream\\n*Confidence:* Confirmed\\n*Action:* T20260101-000001\\n\n' "$((NOW-4000)).2" > "$BATS_TEST_TMPDIR/t"
   reuse < "$BATS_TEST_TMPDIR/t"
   [ "$status" -eq 0 ]
-  [ "$output" = "reuse Upstream T20260101-000001" ]
+  [ "$output" = "$(printf 'reuse\tUpstream\tT20260101-000001')" ]
 }
 
 @test "rca-reuse: a continuation line is not a reply" {
   printf '%s\t%s\nplain continuation\n' "$((NOW-4000)).2" "$(rca_reply Upstream 'T20260101-000001')" > "$BATS_TEST_TMPDIR/t"
   reuse < "$BATS_TEST_TMPDIR/t"
-  [ "$output" = "reuse Upstream T20260101-000001" ]
+  [ "$output" = "$(printf 'reuse\tUpstream\tT20260101-000001')" ]
 }
 
 @test "rca-reuse: a fresh ack-only thread waits (an RCA is in flight)" {
@@ -122,7 +122,7 @@ reuse() { run bash "$RJ" rca-reuse --now "$NOW" "$@"; }
   reuse < "$BATS_TEST_TMPDIR/t"
   [ "$status" -eq 10 ]; [ "$output" = run-rca ]
   run bash "$RJ" rca-reuse < "$BATS_TEST_TMPDIR/t"
-  [ "$status" -ne 0 ]
+  [ "$status" -eq 2 ]
 }
 
 # -- channel ---------------------------------------------------------------
@@ -214,6 +214,15 @@ reuse() { run bash "$RJ" rca-reuse --now "$NOW" "$@"; }
   grep -q '^#### Unattended defaults' "$SKILL"
   grep -q '^#### Ritual job bookkeeping' "$SKILL"
   grep -q 'ritual-due.sh release' "$SKILL"
+}
+
+@test "SKILL: Phase 0 composes skip-sync with the sync as one command (exit 10 triggers it)" {
+  grep -qE 'ritual-job.sh skip-sync \\$' "$SKILL"
+  grep -qE '^  \|\| bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh' "$SKILL"
+}
+
+@test "SKILL: a missing read-back id does not make a successful post partial" {
+  grep -q 'does not make the run partial' "$SKILL"
 }
 
 @test "SKILL: no literal Slack channel name remains in ccxp/SKILL.md" {
