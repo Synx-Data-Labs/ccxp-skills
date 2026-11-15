@@ -1061,3 +1061,201 @@ LOG() { printf '%s' "${CCXP_LEDGER_FILE%.json}-starts.log"; }
   run grep -c "^Decisions: file://" "$(dj | sed "s/\.json\$/.md/")"
   [ "$output" = "1" ]
 }
+
+# ---- context set (T20261114-307604): repoint the stored context of decisions, Next/Done, running and parked rows ----
+
+cx_init() {
+  export CCXP_CONTEXT_DIR="$BATS_TEST_TMPDIR/ctx"
+  mkdir -p "$CCXP_CONTEXT_DIR"
+  : > "$CCXP_CONTEXT_DIR/new.md"
+}
+# checksum of every file in the ledger dir (ledger, decisions, md views, archive, backups)
+cx_snap() { find "$(dirname "$CCXP_LEDGER_FILE")" -type f | sort | xargs cat | cksum; }
+cx_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+
+@test "context set: repoints a Done row; prints id: path; no .bak file; mode 600; lock dir removed" {
+  cx_init
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  bash "$LEDGER" next done n1
+  run bash "$LEDGER" context set n1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "n1: $CCXP_CONTEXT_DIR/new.md" ]
+  [ "$(bash "$LEDGER" show | jq -r '.done[0].context')" = "$CCXP_CONTEXT_DIR/new.md" ]
+  [ "$(cx_mode "$CCXP_LEDGER_FILE")" = "600" ]
+  [ ! -d "$CCXP_LEDGER_FILE.lock" ]
+  run bash -c 'ls "$(dirname "$CCXP_LEDGER_FILE")" | grep -c "\.bak-"'
+  [ "$output" = "0" ]
+}
+
+@test "context set: repoints an active decision; show and the decisions md reflect it" {
+  cx_init
+  bash "$LEDGER" decision add "d" --context /old/d.md >/dev/null
+  run bash "$LEDGER" context set d1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "d1: $CCXP_CONTEXT_DIR/new.md" ]
+  run bash "$LEDGER" decision show d1
+  [[ "$output" == *"context: $CCXP_CONTEXT_DIR/new.md"* ]]
+  run grep -c "file://$CCXP_CONTEXT_DIR/new.md" "$(dj | sed "s/\.json\$/.md/")"
+  [ "$output" = "1" ]
+  [ "$(cx_mode "$(dj)")" = "600" ]
+}
+
+@test "context set: a retired decision can be repointed too" {
+  cx_init
+  bash "$LEDGER" decision add "d" --context /old/d.md >/dev/null
+  bash "$LEDGER" decision retire d1 "gone" >/dev/null
+  run bash "$LEDGER" context set d1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+  run bash "$LEDGER" decision show d1
+  [[ "$output" == *"context: $CCXP_CONTEXT_DIR/new.md"* ]]
+}
+
+@test "context set: open Next row (md re-rendered), running row and parked row" {
+  cx_init
+  bash "$LEDGER" next add "open" --context /old/n1.md >/dev/null
+  bash "$LEDGER" start 7 "job" --context /old/r7.md
+  bash "$LEDGER" park k3 --context /old/k3.md
+  bash "$LEDGER" context set n1 "$CCXP_CONTEXT_DIR/new.md"
+  bash "$LEDGER" context set r7 "$CCXP_CONTEXT_DIR/new.md"
+  bash "$LEDGER" context set k3 "$CCXP_CONTEXT_DIR/new.md"
+  run bash "$LEDGER" show
+  [ "$(jq -r '.next[0].context, .running[0].context, .parked[0].context' <<<"$output" | sort -u)" = "$CCXP_CONTEXT_DIR/new.md" ]
+  run grep -c "file://$CCXP_CONTEXT_DIR/new.md" "${CCXP_LEDGER_FILE%.json}.md"
+  [ "$output" = "3" ]
+}
+
+@test "context set: legacy i<k> Done row; a ref present in both next and done updates both; ids are case-insensitive" {
+  cx_init
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":3,"lifetime_jobs":0,"running":[],"next":[{"ref":"n1","text":"again","context":"/old/b.md"}],
+    "done":[{"ref":"i3","text":"legacy","context":"/old/i3.md"},{"ref":"n1","text":"first","context":"/old/a.md"}],
+    "parked":[],"ref_counters":{"n":1,"s":0,"k":0}}' > "$CCXP_LEDGER_FILE"
+  run bash "$LEDGER" context set I3 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+  run bash "$LEDGER" context set N1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "n1: $CCXP_CONTEXT_DIR/new.md" ]
+  run bash "$LEDGER" show
+  [ "$(jq -r '[.next[].context, .done[].context] | unique | join(",")' <<<"$output")" = "$CCXP_CONTEXT_DIR/new.md" ]
+  bash "$LEDGER" decision add "d" >/dev/null
+  run bash "$LEDGER" context set D1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 0 ]
+}
+
+@test "context set: a bad path exits 2 and changes nothing (missing, relative, outside dir, ., .., //, symlink, escaping parent, sibling dir, long, control char)" {
+  cx_init
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  bash "$LEDGER" next done n1
+  bash "$LEDGER" decision add "d" --context /old/d.md >/dev/null
+  mkdir -p "$BATS_TEST_TMPDIR/out" "$BATS_TEST_TMPDIR/ctx-evil"
+  : > "$BATS_TEST_TMPDIR/out/f.md"; : > "$BATS_TEST_TMPDIR/ctx-evil/f.md"
+  ln -s "$CCXP_CONTEXT_DIR/new.md" "$CCXP_CONTEXT_DIR/ln.md"
+  ln -s "$BATS_TEST_TMPDIR/out" "$CCXP_CONTEXT_DIR/escape"
+  local c="$CCXP_CONTEXT_DIR" before bad
+  before=$(cx_snap)
+  for bad in "$c/missing.md" "rel/new.md" "$BATS_TEST_TMPDIR/out/f.md" "$c/./new.md" "$c/../ctx/new.md" "$c//new.md" \
+             "$c/ln.md" "$c/escape/f.md" "$BATS_TEST_TMPDIR/ctx-evil/f.md" "$c/$(printf 'a%.0s' $(seq 1 520))" "$c/new"$'\t'".md" "$c" ""; do
+    run bash "$LEDGER" context set n1 "$bad"
+    [ "$status" -eq 2 ]
+    run bash "$LEDGER" context set d1 "$bad"
+    [ "$status" -eq 2 ]
+  done
+  [ "$(cx_snap)" = "$before" ]
+}
+
+@test "context set: a credential-looking path is refused" {
+  cx_init
+  local tok="ghp_$(printf 'a%.0s' $(seq 1 30))"
+  : > "$CCXP_CONTEXT_DIR/$tok.md"
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  run bash "$LEDGER" context set n1 "$CCXP_CONTEXT_DIR/$tok.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *credential* ]]
+}
+
+@test "context set: unknown ids exit 1 and bad id forms exit 2, nothing is written" {
+  cx_init
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  bash "$LEDGER" decision add "d" >/dev/null
+  local before id; before=$(cx_snap)
+  for id in n999 d999 r9 k9 i3; do
+    run bash "$LEDGER" context set "$id" "$CCXP_CONTEXT_DIR/new.md"
+    [ "$status" -eq 1 ]
+  done
+  for id in 5 s3 x1 n d "" n1x r-1; do
+    run bash "$LEDGER" context set "$id" "$CCXP_CONTEXT_DIR/new.md"
+    [ "$status" -eq 2 ]
+  done
+  run bash "$LEDGER" context set n1
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" context nope
+  [ "$status" -eq 2 ]
+  [ "$(cx_snap)" = "$before" ]
+}
+
+@test "context set: n<k> never touches a parked k<k> with the same number" {
+  cx_init
+  bash "$LEDGER" park k5 --context /old/k5.md
+  run bash "$LEDGER" context set n5 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [ "$(bash "$LEDGER" show | jq -r '.parked[0].context')" = "/old/k5.md" ]
+}
+
+@test "context set: an archived decision is refused with the archived message" {
+  cx_init
+  bash "$LEDGER" decision add "d" >/dev/null
+  echo '{"schema":1,"decisions":[{"ref":"d7","text":"old"}]}' > "$(dj | sed 's/\.json$/-archive.json/')"
+  local before; before=$(cx_snap)
+  run bash "$LEDGER" context set d7 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *archived* ]]
+  [ "$(cx_snap)" = "$before" ]
+}
+
+@test "context set: a malformed, unparseable or newer-schema file prints its own error, never 'no decision'" {
+  cx_init
+  mkdir -p "$(dirname "$CCXP_LEDGER_FILE")"
+  echo '{"schema":1,"counter":1,"decisions":[{"ref":"d1","text":""}]}' > "$(dj)"
+  local before; before=$(cx_snap)
+  run bash "$LEDGER" context set d1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *MALFORMED* ]]
+  [ "$(cx_snap)" = "$before" ]
+  echo 'not json' > "$(dj)"; before=$(cx_snap)
+  run bash "$LEDGER" context set d1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"not valid JSON"* ]]
+  [[ "$output" != *"no decision"* ]]
+  [ "$(cx_snap)" = "$before" ]
+  echo '{"schema":2,"decisions":[{"ref":"d1","text":"x"}]}' > "$(dj)"; before=$(cx_snap)
+  run bash "$LEDGER" context set d1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"newer schema"* ]]
+  [ "$(cx_snap)" = "$before" ]
+  unlink "$(dj)"
+  echo '{"schema":4,"next":[{"ref":"n1","text":"x","context":"/old"}],"done":[]}' > "$CCXP_LEDGER_FILE"; before=$(cx_snap)
+  run bash "$LEDGER" context set n1 "$CCXP_CONTEXT_DIR/new.md"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"newer schema"* ]]
+  [ "$(cx_snap)" = "$before" ]
+}
+
+@test "context set: the context dir falls back to <profile>/ccxp-context" {
+  local prof="$BATS_TEST_TMPDIR/profile"
+  mkdir -p "$prof/ccxp-context"; : > "$prof/ccxp-context/new.md"
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  run env -u CCXP_CONTEXT_DIR CLAUDE_CONFIG_DIR="$prof" bash "$LEDGER" context set n1 "$prof/ccxp-context/new.md"
+  [ "$status" -eq 0 ]
+  [ "$(bash "$LEDGER" show | jq -r '.next[0].context')" = "$prof/ccxp-context/new.md" ]
+}
+
+@test "context set: refuses when no context dir can be resolved (profile-dir.sh not found)" {
+  local d="$BATS_TEST_TMPDIR/iso"
+  mkdir -p "$d"
+  cp "$LEDGER" "$d/ledger.sh"
+  bash "$LEDGER" next add "q" --context /old/n1.md >/dev/null
+  : > "$BATS_TEST_TMPDIR/new.md"
+  run env -u CCXP_PROFILE_DIR -u CCXP_CONTEXT_DIR bash "$d/ledger.sh" context set n1 "$BATS_TEST_TMPDIR/new.md"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *CCXP_CONTEXT_DIR* ]]
+}

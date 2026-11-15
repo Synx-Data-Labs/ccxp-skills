@@ -20,6 +20,7 @@ bash <plugin>/hud/scripts/ledger.sh render                                      
 bash <plugin>/hud/scripts/ledger.sh reply [--tldr "<t>"]                         # reply tail: Running, Next, Parked, "Ledger: <abs path>"
 bash <plugin>/hud/scripts/ledger.sh check <replyfile|->                           # draft reply vs ledger: MISSING / EXTRA / NO-CONTEXT refs, exit 1
 bash <plugin>/hud/scripts/ledger.sh set-counter <n|s|k|d> <value>                # initialise a ref counter exactly (d = the decisions counter)
+bash <plugin>/hud/scripts/ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path> # repoint a stored context (Done rows, decisions too; see below)
 ```
 
 The JSON is the source of truth: the dispatcher composes the Running / Next / Parked sections of each reply from `render` (or `show`) and changes them only through these calls, so reply and file cannot drift.
@@ -33,6 +34,21 @@ ledger.sh next set <ref> [--text "<t>"] [--context <abs-path>]
 ledger.sh ref next <n|s|k>      # allocate and print the next ref
 ledger.sh ref bump <ref>        # raise the counter to at least this number (e.g. n22)
 ```
+
+## Repointing a context path
+
+`next set <ref> --context` only edits open Next items. To repoint the stored context of a Done row, a decision, a running job or a parked item (for example after renaming a context file), use:
+
+```bash
+ledger.sh context set <id> <abs path>    # prints "<id>: <path>"
+```
+
+- `<id>` is `d<n>` (a decision, live file only; an archived one is refused), `n<k>` (a Next or Done row; every match in `next` and `done` is updated; legacy `i<k>`/`a<k>` work), `r<n>` (a running job) or `k<n>` (a parked item). Case does not matter; a bare number, `s<k>` or anything else is refused.
+- The path must be absolute, at most 500 characters, without control characters, `.`, `..` or `//` parts, and not credential-looking. It must be an existing regular file (not a symlink) whose real directory is inside the context dir: `${CCXP_CONTEXT_DIR:-<profile dir>/ccxp-context}`. With neither known (`profile-dir.sh` missing and `CCXP_CONTEXT_DIR` unset) it refuses.
+- Exit `2`: bad id form, bad path or usage. Exit `1`: refused with a message (unknown id, malformed or newer-schema file, lock timeout). Nothing is written in either case.
+- Writes are atomic (temp file + `mv`) and re-render the `.md` views. There is no `.bak` copy: the migration backup is the only `.bak-*` kind, and `stats` reads the oldest one as the first-job time.
+- Locking: decisions use their own lock. Ledger rows take `<ledger>.lock`, which only other `context set` calls take; `start`, `finish`, `next *` and `park` stay unlocked (last write wins), so run a batch of repoints while the dispatcher is idle.
+- Only the last 20 closed Next items stay in `done`; an older Done row is gone and cannot be repointed.
 
 ## Context file naming
 
@@ -102,7 +118,7 @@ Every write also renders `ccxp-ledger.md` next to the JSON (same name, `.md`): r
 
 ## Misc
 
-- Not locked: two writers racing can hand out the same ref (last write wins); the dispatcher is the single writer for refs.
+- Not locked: two writers racing can hand out the same ref (last write wins); the dispatcher is the single writer for refs. Exceptions: decisions have a lock, and `context set` takes a ledger lock that only other `context set` calls respect.
 - Text is cut to 300 characters and control characters are stripped. Titles, questions and paths only: never pass secrets, tokens or credentials (the files are mode 600).
 - Writes are atomic (temp file + `mv`); a missing or corrupt file starts fresh.
 

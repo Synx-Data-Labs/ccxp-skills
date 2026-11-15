@@ -21,6 +21,12 @@
 #   ledger.sh next done <ref>     close it (n3, N3 or 3; legacy i3/a2 refs work too); kept in "done" (last 20)
 #   ledger.sh next set <ref> [--text <t>] [--context <abs-path>]   edit an open item
 #   ledger.sh set-counter <n|s|k> <value>   set a ref counter exactly (to initialise it)
+#   ledger.sh context set <d<n>|n<k>|i<k>|a<k>|r<n>|k<n>> <abs path>   repoint the stored context of a decision (live file only),
+#                                 a Next or Done row (every match), a running job or a parked item; prints "<id>: <path>".
+#                                 The path must exist (regular file, no symlink, no . .. // parts, at most 500 chars) inside the context dir
+#                                 (${CCXP_CONTEXT_DIR:-<profile dir>/ccxp-context}). Exit 2 bad id or path, 1 refused (unknown id, bad file).
+#                                 Locking: decisions use their lock; ledger rows a <ledger>.lock that only `context set` takes, so run a batch
+#                                 while no other ledger call runs. No .bak copy (the atomic temp file + mv is the safety net).
 #   ledger.sh render              print Next / Running / Parked as the reply sections + a "Ledger:" line
 #   ledger.sh reply [--tldr "<text>"]   the reply tail, plain text, to paste verbatim: Running (r<n> [HH:MM] title, context file:// url),
 #                                 Next: (n<k>, context file:// url), Parked: (k<n>, context file:// url), then "Ledger: <abs path of ccxp-ledger.md>"
@@ -60,7 +66,8 @@
 # already counts jobs, a one-time seed line `#seed\t<first-job estimate epoch>\t<log began epoch>` goes first, so the
 # lifetime average is meaningful from day one (the estimate is the oldest `<ledger>.bak-<UTC stamp>` migration
 # backup, else the moment the log began). `stats` reads it; nothing else writes it.
-# Not locked: concurrent writers are last-write-wins. Titles and paths only, NEVER secrets.
+# Not locked: concurrent writers are last-write-wins (except decisions, and `context set`, which only excludes other `context set` calls).
+# Titles and paths only, NEVER secrets.
 
 
 # Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
@@ -761,6 +768,96 @@ ledger-authz() {
   esac
 }
 
+# ---- context set: repoint the stored context path of a decision, Next/Done row, running job or parked item ----
+
+# The directory context files must live in (same rule as agent-pairing/scripts/alerts-due.sh):
+# CCXP_CONTEXT_DIR, else <profile dir>/ccxp-context. Prints nothing and fails when neither is known.
+ledger-context-dir() {
+  if [[ -n "${CCXP_CONTEXT_DIR:-}" ]]; then printf '%s' "$CCXP_CONTEXT_DIR"
+  elif [[ -n "${CCXP_PROFILE_DIR:-}" ]]; then printf '%s/ccxp-context' "$CCXP_PROFILE_DIR"
+  else return 1
+  fi
+}
+
+# $1 path: succeed only for an absolute, plain (no . .. // components), at most 500 characters, control-free,
+# credential-free path of an existing regular non-symlink file whose real directory is inside the real context dir.
+# The checked string is exactly what gets stored. Exit 2 with a message otherwise.
+ledger-context-check() {
+  local p="${1:-}" dir real rdir n
+  [[ -n "$p" && "$p" == /* ]] || { echo "ledger: context path must be an absolute path: $p" >&2; return 2; }
+  [[ "$p" != *[[:cntrl:]]* ]] || { echo "ledger: context path has control characters" >&2; return 2; }
+  n=$(printf '%s' "$p" | jq -Rrs 'length')
+  [[ "$n" -le 500 ]] || { echo "ledger: context path is $n characters, at most 500" >&2; return 2; }
+  case "$p/" in
+    *//* | */./* | */../*) echo "ledger: context path must not contain ., .. or // components: $p" >&2; return 2 ;;
+  esac
+  ledger-secret-like "$p" && { echo "ledger: context path looks like it holds a credential; not saved" >&2; return 2; }
+  [[ ! -L "$p" ]] || { echo "ledger: context path is a symlink: $p" >&2; return 2; }
+  [[ -f "$p" ]] || { echo "ledger: context file does not exist: $p" >&2; return 2; }
+  dir=$(ledger-context-dir) || { echo "ledger: cannot find the context dir (set CCXP_CONTEXT_DIR)" >&2; return 2; }
+  real=$(cd -P "$dir" 2>/dev/null && pwd) || { echo "ledger: context dir does not exist: $dir" >&2; return 2; }
+  rdir=$(cd -P "$(dirname "$p")" 2>/dev/null && pwd) || { echo "ledger: cannot resolve the directory of $p" >&2; return 2; }
+  [[ "$rdir/" == "$real/"* ]] || { echo "ledger: context path must be inside $real: $p" >&2; return 2; }
+}
+
+# $1 id (d<n> | n<k> | i<k> | a<k> | r<n> | k<n>, case-insensitive), $2 abs path.
+# Exit 2 usage / bad id form / bad path; exit 1 refused (unknown id, unreadable or newer-schema file, lock timeout).
+# Decisions go through decisions-update (its mkdir lock); ledger rows through ledger-update under <ledger>.lock, which only
+# other `context set` calls take: start/finish/next/park stay unlocked (last write wins), so run a batch while the dispatcher is idle.
+ledger-context-set() {
+  local usage="usage: ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path>"
+  [[ $# -eq 2 ]] || { echo "$usage" >&2; return 2; }
+  local id p="$2" num
+  id=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+  [[ "$id" =~ ^[dniarkDNIARK][0-9]{1,9}$ ]] || { echo "ledger: not an id (d<n>, n<k>, r<n> or k<n>): $1" >&2; return 2; }
+  num=$((10#${id:1})); id="${id:0:1}$num"
+  ledger-context-check "$p" || return 2
+  local f bad filter
+  case "${id:0:1}" in
+    d)
+      f=$(decisions-file)
+      if [[ -s "$f" ]]; then
+        jq -e 'type == "object"' "$f" >/dev/null 2>&1 \
+          || { echo "ledger: $f is not valid JSON; not writing (fix or move it aside)" >&2; return 1; }
+        jq -e '(.schema | numbers // 1) > 1' "$f" >/dev/null 2>&1 \
+          && { echo "ledger: $f has a newer schema than this script (1); not writing" >&2; return 1; }
+      fi
+      bad=$(decisions-malformed)
+      [[ -z "$bad" ]] || { printf '%s\n' "$bad" >&2; echo "ledger: $f has malformed entries; not writing (fix the file, then retry)" >&2; return 1; }
+      [[ -n "$(decisions-status "$id")" ]] || { decisions-missing "$id"; return 1; }
+      decisions-update 'if (.decisions | map(.ref) | index($r)) then .decisions |= map(if .ref == $r then .context = $c else . end)
+                        else error("unknown ref") end' --arg r "$id" --arg c "$p" \
+        || { echo "ledger: could not update $id" >&2; return 1; }
+      ;;
+    r)
+      ledger-read | jq -e --argjson n "$num" '.running | map(.job) | index($n)' >/dev/null 2>&1 \
+        || { echo "ledger: no running job $id" >&2; return 1; }
+      filter='if (.running | map(.job) | index($n)) then .running |= map(if .job == $n then .context = $c else . end)
+              else error("unknown id") end'
+      ledger-with-lock "$(ledger-file).lock" ledger-update "$filter" --argjson n "$num" --arg c "$p" \
+        || { echo "ledger: could not update $id" >&2; return 1; }
+      ;;
+    k)
+      ledger-read | jq -e --arg i "$id" '.parked | map(.id) | index($i)' >/dev/null 2>&1 \
+        || { echo "ledger: no parked item $id" >&2; return 1; }
+      filter='if (.parked | map(.id) | index($i)) then .parked |= map(if .id == $i then .context = $c else . end)
+              else error("unknown id") end'
+      ledger-with-lock "$(ledger-file).lock" ledger-update "$filter" --arg i "$id" --arg c "$p" \
+        || { echo "ledger: could not update $id" >&2; return 1; }
+      ;;
+    *)
+      ledger-read | jq -e --arg i "$id" '[.next[], .done[] | select(.ref == $i)] | length > 0' >/dev/null 2>&1 \
+        || { echo "ledger: no Next or Done row $id" >&2; return 1; }
+      filter='if ([.next[], .done[] | select(.ref == $i)] | length) == 0 then error("unknown id")
+              else (.next |= map(if .ref == $i then .context = $c else . end))
+                   | (.done |= map(if .ref == $i then .context = $c else . end)) end'
+      ledger-with-lock "$(ledger-file).lock" ledger-update "$filter" --arg i "$id" --arg c "$p" \
+        || { echo "ledger: could not update $id" >&2; return 1; }
+      ;;
+  esac
+  printf '%s: %s\n' "$id" "$p"
+}
+
 ledger() {
   local cmd="${1:-show}"; shift || true
   case "$cmd" in
@@ -874,6 +971,10 @@ ledger() {
       done
       ledger-reply "$tldr" "$([[ "$nodec" == no ]] && echo no || echo yes)" ;;
     decision) ledger-decision "$@" ;;
+    context) case "${1:-}" in
+        set) shift; ledger-context-set "$@" ;;
+        *) echo "usage: ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path>" >&2; return 2 ;;
+      esac ;;
     authz) ledger-authz "$@" ;;
     check) ledger-check "${1:-}" ;;
     next | input | action) case "${1:-}" in
@@ -922,7 +1023,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | stats [--json] | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | stats [--json] | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | context set <id> <abs path> | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 
