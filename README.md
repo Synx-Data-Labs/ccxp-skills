@@ -54,6 +54,11 @@ shares:
     one-line skip note (or an interactive prompt for `retro`). Optional
     per-use overrides, which win when set: `SLACK_STANDUP_CHANNEL`
     (standup / `slack-check-reply`) and `RETRO_SLACK_CHANNEL` (`retro`).
+    `SLACK_STANDUP_CHANNEL_ID` is the standup channel's raw ID for the cron
+    read-back (`webapi.sh thread-replies`); unset makes that read-back
+    `UNVERIFIED`. `ccxp` posts to no channel it is not configured for
+    (`ccxp/scripts/ritual-job.sh channel`, exit 3): the post stops with
+    `not configured` rather than using a default.
     The webhook fallback (`slack-fallback.sh`) still routes through
     `SLACK_WEBHOOK_URL_DEV`, which is bound to its own channel.
   - `SLACK_BOT_TOKEN` / `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` — bot-token
