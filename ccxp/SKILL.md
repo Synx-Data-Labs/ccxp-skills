@@ -62,13 +62,23 @@ skill/argument surface.
 [ -x "<skills-root>/_gh/gh.sh" ] || { echo "ccxp: <skills-root> (<the literal path you substituted>) doesn't look like a ccxp-skills checkout — check the Base directory reported above" >&2; exit 1; }
 ```
 
+### Channels and ritual-job helper
+
+- This skill names no Slack channel. "The standup channel" and "the alerts channel" below are resolved by `bash <skills-root>/ccxp/scripts/ritual-job.sh channel standup|standup-id|alerts` (`SLACK_STANDUP_CHANNEL`, else `CCXP_SLACK_CHANNEL`; `SLACK_STANDUP_CHANNEL_ID`; `SLACK_AUTOMATION_ALERTS_CHANNEL_ID`; exported, then the profile `.env`, then the repo `.env`).
+- Exit 3 means not configured: every MCP or bot-token post to that channel stops with the note `not configured` (this covers 1.1a, 1.4, the Phase 0.5 summaries and escalations); never fall back to a default channel. The one exception is the 1.4 webhook fallback, bound to its own channel: with the standup channel unset, 1.4 skips the MCP send and goes straight to the webhook.
+- The Slack MCP tools take a channel ID: resolve the standup channel name with `slack_search_channels` first (a value that already looks like an ID, `C` or `G` plus capitals and digits, is used as is). In cron, `standup-id` supplies the ID for `webapi.sh thread-replies`; its exit 3 makes the 1.4a read-back `UNVERIFIED`, not a stop.
+
 ### Phase 0: Sync
 
 Pull the latest code and skills, prune stale refs, and clean up local branches whose remote is gone. This ensures the TODO backlog, guidelines, and skill definitions are current — and `git branch` doesn't accumulate stale `t<id>-…` branches from merged PRs.
 
 ```bash
-bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh   # acts on the cwd repo (or --repo DIR)
+bash <skills-root>/ccxp/scripts/ritual-job.sh skip-sync \
+  || bash <skills-root>/ccxp/scripts/sync-and-prune-branches.sh   # acts on the cwd repo (or --repo DIR)
 ```
+
+- **`skip-sync` decides, so the one line above runs the sync only on `sync` (exit 10).** `skip` (exit 0) means `CCXP_CRON_MODE=1` in a linked worktree, which is how the ccxp-agent persona dispatches ritual jobs (it already fetched): no clone sync, no branch prune, no skills-repo fast-forward. Any other cron-mode worktree skips too; that is intended, a worktree's owner does its own syncing.
+- In a skipped job Phase 0.5 runs steps 1 and 4 against the worktree and **skips step 3's reclaim sweep**: it branches off and returns to `main`, which a linked worktree cannot check out. The next non-worktree tick sweeps.
 
 - Fast-forwards the working repo and the shared skills repo, then deletes local branches whose remote tracking ref is gone (PRs already merged + remote branch auto-deleted by `gh pr merge --delete-branch`) — inlining the `/cleanup-branches` skill workflow so the cron-driven ccxp run stays self-contained, no nested skill dispatch needed.
 - The `--prune` in its fetch step is the prerequisite for the branch cleanup — without it, `[gone]` markers don't appear, and the cleanup is a no-op. See `ccxp/scripts/sync-and-prune-branches.sh` for the full recipe.
@@ -86,7 +96,7 @@ One cheap, idempotent prune keeps session-coordination state lean.
 bash <skills-root>/ccxp/scripts/prune-drive-threads.sh
 ```
 
-Idempotent — a no-op on a clean file; a malformed file is left untouched (non-zero exit). Age is measured from `resolved_at`, falling back to `sent_at`; the work is done by `_threads/threads.sh prune`. Unresolved escalations and recently-resolved ones are always kept; the Slack channel (`#acme-dev-notifications`) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
+Idempotent — a no-op on a clean file; a malformed file is left untouched (non-zero exit). Age is measured from `resolved_at`, falling back to `sent_at`; the work is done by `_threads/threads.sh prune`. Unresolved escalations and recently-resolved ones are always kept; the Slack channel (the standup channel) remains the canonical archive of historical escalations, so this file is only `/drive`'s working index, not a long-term record.
 
 - **3. Dead task-claim reclaim sweep.** The peer-mode lock (`_session/task_claim.sh`) is **heartbeat-free by design** — a `claimed_by:` line on `main` is what lets a claim survive restarts, but a claim whose owning CC session *died* (crash / kill / reboot) is never released.
 - The task stays `status: In Progress`, `claimed_by: <dead session>`, and peer-mode `/todo next` excludes it from every *other* session, so it silently leaks out of the backlog (this is the orphaned-claim cause behind the recurring "PR stranded under a stale owner" escalations).
@@ -98,7 +108,7 @@ bash <skills-root>/ccxp/scripts/reclaim-sweep-pr.sh
 
 - No-op (prints nothing, exits 0) when `CCXP_PEER_MODE=0` or when the read-only detect pass finds nothing to reclaim — nothing branched, nothing committed.
 - Otherwise it branches off main, applies the sweep, runs the doc-lint guard, commits, pushes, opens a PR, and returns to main (never leaves the cron working tree on a branch), printing the reclaimed-lines summary and the PR URL on stdout.
-- Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to `#acme-dev-notifications` — a reclaimed task may have had real WIP, so a reclaim is never silent.
+- Then `/address-pr` the new PR (pure status-change → auto-merge tier) and MCP-Slack each reclaimed line to the standup channel — a reclaimed task may have had real WIP, so a reclaim is never silent.
 
 - Detect-on-`main` → branch-only-if-work keeps the cron working tree clean.
 - The reclaim decision reuses the unit-tested `task_claim.sh reclaimable` primitive: a claim is freed only when status is `In Progress`/`Review`, `claimed_by` is session-shaped (either the current `cc1-` form or the legacy `<sid>@<machine>` form — a non-session value like a bare human name is never auto-reclaimable), there is no caller-observed in-progress GH Actions run on the claim's open PR branch, AND **both** activity signals exceed `TASK_CLAIM_STALE_DAYS` (default 2) — the last commit mentioning it on `main` (the relevant signal for a no-PR task) **and** the open PR's last activity (`updatedAt`: push/comment/review — the relevant signal for an open-PR task).
@@ -118,7 +128,7 @@ bash <skills-root>/_session/claim_gap.sh
 - `In Progress` is different: a task mid-implementation with no claimant means someone flipped status without acquiring the lock, which IS a real coordination gap.
 
 - No-op (prints nothing) when every `In Progress` task is properly claimed, **or when the flagged list is unchanged since the last call** (dedup — the script now remembers the last-posted list's hash in a durable per-user, per-repo file under `~/.claude/state/claim-gap/`, shared by every clone of the repo, and stays silent on a repeat).
-- Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to `#acme-dev-notifications` — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into.
+- Otherwise, log each `unclaimed <task-id> …` line and Slack the summary to the standup channel — same "never silent" principle as the reclaim sweep, since a genuinely new (or changed) gap is exactly the kind of coordination issue a peer session could step into.
 - See `_session/claim_gap.sh` + `tests/claim_gap.bats`.
 
 ### Phase 1: Daily standup
@@ -144,7 +154,7 @@ Still yours: item 5b, reading the files it names (`journal_yesterday`, `previous
    5b. **Check for maintainer replies — MANDATORY every tick**: run `/slack-check-reply all`.
 
    - This is not optional and not skippable on the basis of any prior-tick note: a reply can land between any two ticks, and the maintainer often answers **in the daily standup thread** (one reply resolving several blockers at once), which the patched `/slack-check-reply` discovers and reads.
-   - **The MCP slack user CAN read `#acme-dev-notifications` even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts.
+   - **The MCP slack user CAN read the standup channel even though it is a private channel** — use `slack_search_public_and_private` (NOT `slack_search_public`, which only sees public channels and returns nothing here) and `slack_read_thread` with the channel_id+ts.
    - **Disregard any prior daily-summary note claiming "MCP can't see the channel" / "can't re-read replies from a fresh session" — that was a wrong conclusion from using the public-only search; overwrite it.** A reply preempts: split a batched standup reply into per-task directives, treat each as resolving that blocker, and file any new scope it raises as follow-up tasks.
 
 6. **Previous ccxp summary**: Read the most recent `dev/JOURNAL/*-daily-summary.md` for continuity (for continuity only — never let a prior note about Slack-unreadability suppress step 5b)
@@ -174,7 +184,7 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
 
 **When the gate holds — cheap-hold action:**
 
-1. Post the **compact, bulleted** hold note (the script's `--note` text) to `#acme-dev-notifications`, **threaded under the day's
+1. Post the **compact, bulleted** hold note (the script's `--note` text) to the standup channel, **threaded under the day's
    standup parent** (discover it live, exactly as `/slack-check-reply` does —
    `slack_search_public_and_private` for the latest `"Daily Standup"`, reply with `thread_ts`).
    Same scannability principle as the full standup's Weekly focus/Attribution/Blockers sections
@@ -202,7 +212,7 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
 
 - **Addendum ticks (the common in-practice middle ground) still owe 1.2.2a.** In practice, a non-hold intra-day tick rarely re-runs the *entire* 1.2–1.4 sequence from scratch — it appends a `## Standup addendum (HH:MMZ)` section to the day's existing `dev/JOURNAL/YYYY-MM-DD-daily-summary.md` via its own small PR, recording just what changed this tick (new failure classified, PR merged, etc.), rather than regenerating the whole doc.
 - An addendum tick owes **1.4a** too: post the addendum to the standup thread, read it back, and confirm the doc PR merged before the tick ends.
-- That's a reasonable, established pattern — but an addendum that classifies a **new nightly failure** is still doing Phase 1.2's job for that failure, so it must still run **1.2.2a** (search for the original `#acme-automation-alerts` post, reply with the RCA) before the tick is done — recording the reply outcome in the addendum the same way 1.2.4 does.
+- That's a reasonable, established pattern — but an addendum that classifies a **new nightly failure** is still doing Phase 1.2's job for that failure, so it must still run **1.2.1a/1.2.2a** (find the original alert post, reuse or reply with the RCA) before the tick is done — recording the reply outcome in the addendum the same way 1.2.4 does.
 - Skipping straight from "classified in the addendum" to "done" reproduces the exact gap 1.2.2a exists to close (confirmed live: a recurring known-flaky-check failure was classified and journaled in an addendum, but no RCA reply ever reached the original alert thread — caught only because a human checked the alert directly).
 
 > **Between-iterations weekday note (Component 2 — decided "not worth it").** A separate wrapper-side weekday throttle for "between-iterations" hold-days was considered and **rejected**: the pre-flight actionability gate (`dev/daily-ccxp.sh:497`) already skips a no-signal weekday tick, and this Phase 1.0 short-circuit handles the fired-but-gated case more precisely than a blunt calendar throttle. Re-introducing a weekday throttle would re-add the calendar-gating complexity the 2026-06-27 `HOLDDAY_THROTTLE=0` decision deliberately removed.
@@ -225,9 +235,24 @@ If `.nightly.failures` is empty, record "Nightly runs: all green ({N} runs check
 
 > **Single-workflow recurrence safety-net**: `--limit 100` makes a dropped recurrence very unlikely, but the count is still a global page across all workflows. `/rca`'s own "has it happened before?" check (Step 4) sidesteps the busy-window problem entirely by querying *per workflow* (`run list --workflow <name> --limit 5`), so once a failure is being RCA'd its recurrence history is robust regardless of this page size.
 
+##### 1.2.1a Find the alert thread and reuse an existing RCA (before 1.2.2)
+
+- Per failed run, find its alert and read the thread first, so a run the persona's alert check (or `/labrun-rca`) already answered is not analysed twice.
+- Find the alert in the alerts channel: with the Slack MCP use `slack_read_channel` on a window covering the run's time and match the run id in the message text **and** its blocks/attachments (a Block Kit alert carries the run link only in a button); without MCP use `_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"` (needs `SLACK_BOT_TOKEN`). Read its replies the same way (`slack_read_thread`, or `webapi.sh thread-replies`), flattened to `ts<TAB>text` lines.
+- Decide with the script:
+
+```bash
+printf '%s\n' "$REPLIES" | bash <skills-root>/ccxp/scripts/ritual-job.sh rca-reuse --now "$(date +%s)" --live-job no   # reuse <class> <task-id|none> | wait (11) | run-rca (10)
+```
+
+- `reuse`: record the per-failure line from it (classification, task id) and **skip `/rca`** for that run; the reply is already there, so 1.2.2a posts nothing.
+- `wait` (exit 11): an RCA is in flight (a fresh "Running RCA" ack, under 60 minutes): record `RCA in flight` for that run, run no `/rca` and post nothing; the next tick re-checks.
+- `run-rca`, or no alert found: run 1.2.2 for that run, then post the reply in 1.2.2a.
+- Neither Slack MCP nor `SLACK_BOT_TOKEN`/`SLACK_AUTOMATION_ALERTS_CHANNEL_ID`: skip this step with the note `1.2.1a skipped: no Slack access` and run 1.2.2 for every failure.
+
 ##### 1.2.2 Run RCA on each failure
 
-For each failed run, invoke `/rca <run-id>`. The rca skill will:
+For each failed run that 1.2.1a did not answer with `reuse`, invoke `/rca <run-id>`. The rca skill will:
 
 - Extract error evidence from logs
 - Classify the failure (Our code, Infrastructure, Upstream, Transient, Configuration)
@@ -238,39 +263,21 @@ For each failed run, invoke `/rca <run-id>`. The rca skill will:
 
 ##### 1.2.2a Reply RCA in the original alert thread
 
-- The `./.github/actions/slack-notify` composite action in synxdb-build-pipeline fires an immediate, unclassified alert to `#acme-automation-alerts` for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note).
-- Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in `#acme-dev-notifications`, a different channel.
-- **Design rationale**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2, check whether it has a matching alert and reply on it:
+- The `./.github/actions/slack-notify` composite action in synxdb-build-pipeline fires an immediate, unclassified alert to the alerts channel for a subset of release/build workflows the moment they fail on `main` (not every workflow on `main` — see 1.2.5's note).
+- Until now, whoever's watching that channel saw only the raw "build failed" ping and a lone `:eyes:` reaction — the classification, task ID, or "this is a known issue" only ever reached the standup digest (1.2.4 → 1.4) in the standup channel, a different channel.
+- **Design rationale**: anyone watching the alert itself should see the RCA there too, not have to cross-reference the standup. For each failure just classified in 1.2.2 whose alert was found in 1.2.1a:
 
-- **Uses `_slack/webapi.sh` (bot token via the Slack Web API, no MCP).** The old `mcp__claude_ai_Slack__*` OAuth-connector tools (`slack_search_public_and_private`, `slack_read_thread`, `slack_send_message`) are unavailable in cron/headless sessions, which is every ccxp tick — that gap is exactly why the two misses this step exists to catch went unreplied.
-- Requires `SLACK_BOT_TOKEN` and `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` (the alerts channel's Slack channel ID, e.g. `C0ALGAPRCA3` — see README Prerequisites), resolved via the same three-tier lookup every other var in this suite uses (already-exported, then `~/.claude/.env`, then `$(pwd)/.env`).
-- If either is unresolvable, skip all of 1.2.2a with a one-line note (`1.2.2a skipped: SLACK_BOT_TOKEN/SLACK_AUTOMATION_ALERTS_CHANNEL_ID not configured`) recorded next to the per-failure line — this is the expected state until the manual Slack-app setup step is done, and it doesn't fail the tick.
+- **Two transports.** With the Slack MCP (a persona job, an interactive session) use `slack_send_message`; in a cron/headless tick, which has no MCP, use `_slack/webapi.sh` with the bot token. Pick MCP when its tools are present, else the token path.
+- The token path requires `SLACK_BOT_TOKEN` and `SLACK_AUTOMATION_ALERTS_CHANNEL_ID` (`ritual-job.sh channel alerts`). With neither MCP nor the token, skip 1.2.2a with a one-line note (`1.2.2a skipped: no Slack access`) recorded next to the per-failure line; it doesn't fail the tick.
+- Finding the alert and the already-replied check happen in 1.2.1a, before 1.2.2; only runs that came back `run-rca` (or had no alert) get a reply here.
 
-1. **Find the alert message.** The alert is posted via a bare webhook, whose response carries no usable `ts` — nothing stashes the alert's `channel_id`/`message_ts` for a later tick to look up directly, so this is a **search**, not a lookup (same shape as `/slack-check-reply` Step 4's fallback):
-
-   The alert's run-URL button is not text-indexed, so synxdb-build-pipeline's action also posts a plain `<…/actions/runs/<run-id>|run <run-id>>` link; that is what this search matches (older alerts will not match).
+1. **Post the reply.** Reuse `labrun-rca`'s Step 5 format exactly (error / root cause / classification / impact / action / log link). Don't invent a second format here — this automated path and a manually-pasted permalink through `/labrun-rca` are two entry points to the same behavior, and should read identically to whoever's watching the thread:
 
    ```bash
-   bash <skills-root>/_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"
+   bash <skills-root>/_slack/webapi.sh post "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<RCA text>" "<matched .ts>"   # MCP: slack_send_message with thread_ts
    ```
 
-   Returns a JSON array, newest-first (`conversations.history` order — a bot token can't call `search.messages`, that's user-token-only). Take `.[0]`; its `.ts` is the message to reply on. If `[]` — no alert posted for this workflow, the run predates the webhook, or the channel/format changed — skip to step 4 and note the miss.
-
-2. **Dedup.**
-
-   ```bash
-   bash <skills-root>/_slack/webapi.sh thread-replies "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<matched .ts>"
-   ```
-
-   Check `.messages[]` for one whose `.text` already starts with `*RCA —` (this automation's own marker, shared with `/labrun-rca`). If found, don't post again — either an earlier tick or a manually-run `/labrun-rca` on the same permalink already covered it.
-
-3. **Post the reply.** Reuse `labrun-rca`'s Step 5 format exactly (error / root cause / classification / impact / action / log link). Don't invent a second format here — this automated path and a manually-pasted permalink through `/labrun-rca` are two entry points to the same behavior, and should read identically to whoever's watching the thread:
-
-   ```bash
-   bash <skills-root>/_slack/webapi.sh post "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "<RCA text>" "<matched .ts>"
-   ```
-
-4. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `already replied` / `1.2.2a skipped: SLACK_BOT_TOKEN/SLACK_AUTOMATION_ALERTS_CHANNEL_ID not configured`) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
+2. **Record the outcome** next to the per-failure line from 1.2.2 (`replied in thread` / `no matching alert` / `1.2.2a skipped: no Slack access`; `already replied` and `RCA in flight` come from 1.2.1a) — 1.2.4 surfaces a miss so it stays visible rather than silently dropped.
 
 ##### 1.2.3 PR new tasks
 
@@ -403,7 +410,7 @@ try/catch here.
 
 #### 1.4 Slack the standup
 
-Send daily summary to `#acme-dev-notifications` via MCP `slack_send_message`.
+Send daily summary to the standup channel via MCP `slack_send_message`.
 
 **Webhook fallback on MCP send failure.** `slack_send_message` has shown
 chronic intermittent `MCP error -32603: Internal Server Error` failures — a 7-consecutive-day
@@ -414,7 +421,7 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
    one retry on error — per the design decision ("don't loop retries in a single session — 2 attempts
    is enough evidence per occurrence"). Looping past that second attempt is not warranted.
 2. If the tool is unavailable or both attempts error, fall back immediately to the wrapper around the
-   script the `/slack` skill's `dev` channel uses (routes to the same `#acme-dev-notifications`).
+   script the `/slack` skill's `dev` channel uses (routes to whichever channel `SLACK_WEBHOOK_URL_DEV` is bound to).
    It prints a one-line status, appends it to the journal file, and exits 1 on failure (it can't
    rely on `slack-send.sh`'s exit code — that exits 0 on a webhook 404):
 
@@ -484,6 +491,20 @@ STANDUP_MESSAGE="$(bash <skills-root>/ccxp/scripts/render-standup.sh "$STANDUP_D
 
 - It prints the `*Daily Standup* (YYYY-MM-DD)` block: Resolved, Nightly, Needs your attention, Top 5 next, then the optional Epic progress / Weekly focus / Attribution blocks (each omitted when it has no data), then Blockers. The five headline sections (Resolved, Nightly, Needs your attention, Top 5 next, Blockers) **always render** with their None/Nothing/all-green fallback — a missing one reads as broken, not empty.
 - **Message-length discipline.** The tool has a 5000-char cap per text element; `--max-chars` defaults to it. The renderer trims in the documented order (one line per highlight and the first reason per PR, then the whole Attribution block). If it still exits 5 (too long), shorten the judgment text and rerun — never truncate mid-sentence.
+
+#### Unattended defaults (`CCXP_CRON_MODE=1`, persona ritual job)
+
+No step waits on a human in a ritual job:
+
+- **The 1.1 item 5b reply check** reads replies once and moves on; no reply means no directive, never a wait.
+- **1.2.3 `/gcpr` + `/address-pr`** run to completion; a PR that is not mergeable (CI red, review pending, approval needed) stays open and is named in the standup's attention section.
+- **1.4 send** tries MCP once with one retry; with no MCP it goes straight to the webhook fallback; both failing is written to the journal and the final report, never a prompt.
+- **Slack posts** to an unconfigured channel stop with `not configured` (see Channels above).
+
+#### Ritual job bookkeeping
+
+- The job's last action, run by the `/ccxp` agent inside the job as its prompt directs, is `ritual-due.sh --repo <session repo> done <ritual> <key>` (`agent-pairing/rituals.md`).
+- A partial run (the standup not posted and verified by 1.4a, or the doc PR not merged) must run `ritual-due.sh release <ritual> <key>` instead of `done`, so the ritual is due again at the next check; `done` is only for a run that finished.
 
 ### Phase 2a: Monday IPM — optional, not auto-invoked
 
@@ -620,4 +641,4 @@ CRON_TZ=America/Chicago
 - **Cron does rituals, not engineering.** In cron mode the loop's job is standup + nightly health/reclaim housekeeping + the Friday retro — never the (opt-in) Monday IPM, never the pre-IPM design pass, and never Phase 3. Focused implementation work happens in interactive pairing sessions, where a human's judgment on business priority and design readiness is available.
 - **Retro is honest.** See the `/retro` skill notes — the retro exists to improve the process, not to report status.
 - **Read guidelines first.** Always read `dev/guidelines.md` before making changes — this rule cascades from `/drive`.
-- **Escalation protocol.** Inherited from `/drive` — all Slack escalations go to `#acme-dev-notifications` via MCP `slack_send_message`.
+- **Escalation protocol.** Inherited from `/drive` — all Slack escalations go to the standup channel via MCP `slack_send_message`.
