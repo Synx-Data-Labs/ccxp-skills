@@ -9,14 +9,14 @@
 #   ritual-job.sh rca-reuse --now EPOCH [--live-job yes|no]
 #       Reads the alert thread replies on stdin, one "ts<TAB>text" line per reply, and
 #       asks labrun.sh thread-state (same marker, mention and ack rules). Prints
-#       "reuse <classification> <task-id|none>" (exit 0) for a posted *RCA reply,
+#       "reuse<TAB><classification><TAB><task-id|none>" (exit 0) for a posted *RCA reply,
 #       "wait" (exit 11) while only a fresh "🔍 Running RCA" ack or a live job is there,
 #       else "run-rca" (exit 10).
 #   ritual-job.sh channel standup|standup-id|alerts
 #       Prints the configured Slack channel; exit 3 and a message on stderr when
 #       unset (no default). standup = SLACK_STANDUP_CHANNEL, else CCXP_SLACK_CHANNEL;
 #       standup-id = SLACK_STANDUP_CHANNEL_ID; alerts = SLACK_AUTOMATION_ALERTS_CHANNEL_ID.
-#       Lookup order, first set wins: exported, then each file of RITUAL_JOB_ENV_FILES
+#       Lookup order, first set wins per variable: exported, then each file of RITUAL_JOB_ENV_FILES
 #       (colon-separated; default the profile .env files, then $(pwd)/.env).
 # Exit: 2 usage.
 
@@ -62,7 +62,7 @@ rj_rca_reuse() {
         cls="$(printf '%s' "$text" | sed -n 's/.*\*Classification:\* *\([^*]*\)\*Confidence:\*.*/\1/p' | sed 's/\\n[[:space:]]*$//; s/[[:space:]]*$//')"
         act="$(printf '%s' "$text" | sed -n 's/.*\*Action:\* *//p')"
         id="$(printf '%s' "$act" | grep -oE 'T[0-9]{8}-[0-9]{6}' | head -1)"
-        echo "reuse ${cls:-unknown} ${id:-none}"; return 0 ;;
+        printf 'reuse\t%s\t%s\n' "${cls:-unknown}" "${id:-none}"; return 0 ;;
     esac
   done <<< "$replies"
   echo "$state"; return 10

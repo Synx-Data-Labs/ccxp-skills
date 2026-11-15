@@ -66,7 +66,7 @@ skill/argument surface.
 
 - This skill names no Slack channel. "The standup channel" and "the alerts channel" below are resolved by `bash <skills-root>/ccxp/scripts/ritual-job.sh channel standup|standup-id|alerts` (`SLACK_STANDUP_CHANNEL`, else `CCXP_SLACK_CHANNEL`; `SLACK_STANDUP_CHANNEL_ID`; `SLACK_AUTOMATION_ALERTS_CHANNEL_ID`; exported, then the profile `.env`, then the repo `.env`).
 - Exit 3 means not configured: every MCP or bot-token post to that channel stops with the note `not configured` (this covers 1.1a, 1.4, the Phase 0.5 summaries and escalations); never fall back to a default channel. The one exception is the 1.4 webhook fallback, bound to its own channel: with the standup channel unset, 1.4 skips the MCP send and goes straight to the webhook.
-- The Slack MCP tools take a channel ID: resolve the standup channel name with `slack_search_channels` first (a value that already looks like an ID, `C` or `G` plus capitals and digits, is used as is). In cron, `standup-id` supplies the ID for `webapi.sh thread-replies`; its exit 3 makes the 1.4a read-back `UNVERIFIED`, not a stop.
+- The Slack MCP tools take a channel ID: resolve the standup channel name with `slack_search_channels` first (a value that already looks like an ID, `C` or `G` plus capitals and digits, is used as is). In cron, `standup-id` supplies the ID for `webapi.sh thread-replies`; its exit 3 makes the 1.4a read-back `UNVERIFIED`, not a stop. Use MCP (`slack_read_thread`) for the read-back when its tools are present (a persona job), else this token path.
 
 ### Phase 0: Sync
 
@@ -78,7 +78,7 @@ bash <skills-root>/ccxp/scripts/ritual-job.sh skip-sync \
 ```
 
 - **`skip-sync` decides, so the one line above runs the sync only on `sync` (exit 10).** `skip` (exit 0) means `CCXP_CRON_MODE=1` in a linked worktree, which is how the ccxp-agent persona dispatches ritual jobs (it already fetched): no clone sync, no branch prune, no skills-repo fast-forward. Any other cron-mode worktree skips too; that is intended, a worktree's owner does its own syncing.
-- In a skipped job Phase 0.5 runs steps 1 and 4 against the worktree and **skips step 3's reclaim sweep**: it branches off and returns to `main`, which a linked worktree cannot check out. The next non-worktree tick sweeps.
+- In a skipped job Phase 0.5 runs its numbered items 1 and 4 against the worktree (the list has no item 2) and **skips item 3's reclaim sweep**: it branches off and returns to `main`, which a linked worktree cannot check out. The next non-worktree tick sweeps.
 
 - Fast-forwards the working repo and the shared skills repo, then deletes local branches whose remote tracking ref is gone (PRs already merged + remote branch auto-deleted by `gh pr merge --delete-branch`) — inlining the `/cleanup-branches` skill workflow so the cron-driven ccxp run stays self-contained, no nested skill dispatch needed.
 - The `--prune` in its fetch step is the prerequisite for the branch cleanup — without it, `[gone]` markers don't appear, and the cleanup is a no-op. See `ccxp/scripts/sync-and-prune-branches.sh` for the full recipe.
@@ -238,14 +238,15 @@ If `.nightly.failures` is empty, record "Nightly runs: all green ({N} runs check
 ##### 1.2.1a Find the alert thread and reuse an existing RCA (before 1.2.2)
 
 - Per failed run, find its alert and read the thread first, so a run the persona's alert check (or `/labrun-rca`) already answered is not analysed twice.
-- Find the alert in the alerts channel: with the Slack MCP use `slack_read_channel` on a window covering the run's time and match the run id in the message text **and** its blocks/attachments (a Block Kit alert carries the run link only in a button); without MCP use `_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"` (needs `SLACK_BOT_TOKEN`). Read its replies the same way (`slack_read_thread`, or `webapi.sh thread-replies`), flattened to `ts<TAB>text` lines.
+- Find the alert in the alerts channel: with the Slack MCP use `slack_read_channel` on a window covering the run's time and match the run id in the message text **and** its blocks/attachments (a Block Kit alert carries the run link only in a button); without MCP use `_slack/webapi.sh find-by-text "$SLACK_AUTOMATION_ALERTS_CHANNEL_ID" "actions/runs/<run-id>"` (needs `SLACK_BOT_TOKEN`). Read its replies the same way (`slack_read_thread`, or `webapi.sh thread-replies`), one line per reply: `ts`, a TAB, then the text with newlines replaced by a space (or a literal `\n`).
 - Decide with the script:
 
 ```bash
-printf '%s\n' "$REPLIES" | bash <skills-root>/ccxp/scripts/ritual-job.sh rca-reuse --now "$(date +%s)" --live-job no   # reuse <class> <task-id|none> | wait (11) | run-rca (10)
+printf '%s\n' "$REPLIES" | bash <skills-root>/ccxp/scripts/ritual-job.sh rca-reuse --now "$(date +%s)" --live-job no   # reuse<TAB><class><TAB><task-id|none> | wait (11) | run-rca (10)
 ```
 
-- `reuse`: record the per-failure line from it (classification, task id) and **skip `/rca`** for that run; the reply is already there, so 1.2.2a posts nothing.
+- `reuse`: record the per-failure line from it (classification, task id; the fields are tab-separated) and **skip `/rca`** for that run; the reply is already there, so 1.2.2a posts nothing.
+- Pass `--live-job yes` instead when a background job for this alert is known to be running (a persona alert-check job you can see in its job list): a stale ack then still waits.
 - `wait` (exit 11): an RCA is in flight (a fresh "Running RCA" ack, under 60 minutes): record `RCA in flight` for that run, run no `/rca` and post nothing; the next tick re-checks.
 - `run-rca`, or no alert found: run 1.2.2 for that run, then post the reply in 1.2.2a.
 - Neither Slack MCP nor `SLACK_BOT_TOKEN`/`SLACK_AUTOMATION_ALERTS_CHANNEL_ID`: skip this step with the note `1.2.1a skipped: no Slack access` and run 1.2.2 for every failure.
@@ -296,7 +297,7 @@ Hold onto this tick's nightly-health facts — **do not write them to a file yet
 - Failures: {M} ({list of workflow names, or "None"})
 - Tasks created: {K} ({list of task IDs, or "None"})
 - Classification breakdown: {e.g., "1 our code, 1 transient", or "All green"}
-- Alert-thread replies (from 1.2.2a): {P} posted, {Q} no matching alert found, {R} already replied — omit this line entirely on an all-green tick (no failures means no alerts to search for)
+- Alert-thread replies (from 1.2.1a/1.2.2a): {P} posted, {Q} no matching alert found, {R} already replied or reused, {W} RCA in flight (skipped for this tick) — omit this line entirely on an all-green tick (no failures means no alerts to search for)
 
 ##### 1.2.5 (Retired — folded into 1.4)
 
@@ -504,7 +505,7 @@ No step waits on a human in a ritual job:
 #### Ritual job bookkeeping
 
 - The job's last action, run by the `/ccxp` agent inside the job as its prompt directs, is `ritual-due.sh --repo <session repo> done <ritual> <key>` (`agent-pairing/rituals.md`).
-- A partial run (the standup not posted and verified by 1.4a, or the doc PR not merged) must run `ritual-due.sh release <ritual> <key>` instead of `done`, so the ritual is due again at the next check; `done` is only for a run that finished.
+- A partial run (the standup not posted, a read-back that failed or found the post missing, or the doc PR not merged) must run `ritual-due.sh release <ritual> <key>` instead of `done`, so the ritual is due again at the next check; `done` is only for a run that finished. A read-back that was impossible only because no channel ID is configured (`UNVERIFIED`) does not make the run partial when the post itself succeeded: report `done` and keep the `UNVERIFIED` note, so the standup is not posted twice.
 
 ### Phase 2a: Monday IPM — optional, not auto-invoked
 
