@@ -122,3 +122,26 @@ check() { printf '%s\n' "$1" >"$REPO/dev/.routines.yml"; run --separate-stderr b
   [ "$status" -eq 1 ]
   [[ "$output" == *"later than not_after"* ]]
 }
+
+@test "an unknown tz is rejected" {
+  check $'routines:\n  r:\n    tz: Foo/Bar\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"unknown tz"* ]]
+  check $'routines:\n  r:\n    tz: Asia/Shanghai\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 0 ]
+}
+
+@test "an unhashable key or non-UTF-8 file is skipped whole, not a crash" {
+  check $'? [a, b]\n: 1'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"file skipped"* ]]
+  printf 'routines:\n  r: \xff\xfe\n' >"$REPO/dev/.routines.yml"
+  run --separate-stderr bash "$RT" --repo "$REPO" check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"file skipped"* ]]
+}
+
+@test "null in a brand-new routine is treated as unset" {
+  check $'routines:\n  r:\n    schedule: {days: weekdays, at: ~}\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 0 ]
+}
