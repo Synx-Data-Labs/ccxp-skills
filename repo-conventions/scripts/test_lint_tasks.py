@@ -408,5 +408,90 @@ class LintTasksTest(unittest.TestCase):
         self.assertEqual(rc, 0)
 
 
+class DimensionsTest(unittest.TestCase):
+    """T20261114-352324: when / when-end / place / person / type, typed blockers."""
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = self._tmp.name
+        self.addCleanup(self._tmp.cleanup)
+
+    def lint(self, extra, status="Open"):
+        f = write_task(self.root, frontmatter=f"status: {status}\nestimation: 2\nscheduled: 2026-11-16\n{extra}")
+        return lint_tasks.lint_file(f)
+
+    def test_old_task_without_keys_passes(self):
+        self.assertEqual(self.lint(""), [])
+
+    def test_accepted_forms(self):
+        fm = ("when: 2026-11-14\nwhen-end: 2026-11-15T10:00:00Z\n"
+              "place: [office, vpn]\nperson: person-a\ntype: feature")
+        self.assertEqual(self.lint(fm), [])
+
+    def test_datetime_with_offset_and_yaml_datetime(self):
+        self.assertEqual(self.lint("when: 2026-11-14T14:00+08:00"), [])
+        self.assertEqual(self.lint("when: 2026-11-14T14:00"), [])
+
+    def test_bad_when_format(self):
+        self.assertTrue(any("when" in m for m in self.lint("when: tomorrow")))
+        self.assertTrue(any("when" in m for m in self.lint("when: 2026-11-14 14:00")))
+
+    def test_when_end_before_when(self):
+        errs = self.lint("when: 2026-11-14\nwhen-end: 2026-11-13")
+        self.assertTrue(any("before" in m for m in errs))
+
+    def test_email_in_person_or_place(self):
+        self.assertTrue(any("email" in m for m in self.lint("person: a@b.com")))
+        self.assertTrue(any("email" in m for m in self.lint("place: [x@y.org]")))
+
+    def test_whitespace_in_slug(self):
+        self.assertTrue(self.lint("place: needs VPN"))
+        self.assertTrue(self.lint("person: [person a]"))
+
+    def test_non_list_value(self):
+        self.assertTrue(any("slug" in m for m in self.lint("place: {a: b}")))
+
+    def test_type_enum_and_event_guard(self):
+        self.assertTrue(any("type" in m for m in self.lint("type: gadget")))
+        self.assertEqual(self.lint("type: bug"), [])
+        self.assertTrue(any("requires 'when'" in m for m in self.lint("type: event")))
+        self.assertEqual(self.lint("type: event\nwhen: 2026-12-01"), [])
+
+    def test_fallback_parser_prose_value(self):
+        # unquoted ': ' breaks yaml -> line-based parser; raw strings are checked
+        fm = "source: Owner request: call\nplace: [office, vpn]\nwhen: 2026-11-14"
+        self.assertEqual(self.lint(fm), [])
+        self.assertTrue(self.lint("source: Owner request: call\nperson: a@b.com"))
+
+    def test_typed_blockers(self):
+        self.assertEqual(self.lint("", "Blocked by person:person-a"), [])
+        self.assertEqual(self.lint("", "Blocked by ext:vendor reply"), [])
+        self.assertTrue(any("email" in m for m in self.lint("", "Blocked by person:a@b.com")))
+        errs = self.lint("", "Blocked by ext:waiting on T20260101-000001")
+        self.assertTrue(any("T<id>" in m for m in errs))
+
+    def test_typed_blocker_passes_board_pass(self):
+        write_task(self.root, frontmatter="status: Blocked by person:person-a\nestimation: 1\nscheduled: 2026-11-16")
+        self.assertEqual(lint_tasks.lint_blocked_by(self.root), {})
+
+    def test_task_id_blocker_still_checked(self):
+        write_task(self.root, frontmatter="status: Blocked by T20260101-000009\nestimation: 1\nscheduled: 2026-11-16")
+        self.assertEqual(len(lint_tasks.lint_blocked_by(self.root)), 1)
+
+    def test_warning_past_when_exit_zero(self):
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 1\nwhen: 2020-01-01")
+        self.assertEqual(lint_tasks.lint_file(f), [])
+        w = lint_tasks.warnings_for(f, today="2026-11-16")
+        self.assertEqual(len(w), 1)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 0)
+
+    def test_warning_event_passed_and_none_for_done_or_future(self):
+        f = write_task(self.root, frontmatter="status: Open\nestimation: 1\ntype: event\nwhen: 2020-01-01")
+        self.assertIn("close it", lint_tasks.warnings_for(f, today="2026-11-16")[0])
+        g = write_task(self.root, name="T20260611-000002-x.md", frontmatter="status: Open\nestimation: 1\nwhen: 2030-01-01")
+        self.assertEqual(lint_tasks.warnings_for(g, today="2026-11-16"), [])
+        h = write_task(self.root, name="T20260611-000003-x.md", frontmatter="status: Parked\nestimation: 1\nwhen: 2020-01-01")
+        self.assertEqual(lint_tasks.warnings_for(h, today="2026-11-16"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

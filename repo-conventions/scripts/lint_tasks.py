@@ -6,6 +6,7 @@ Parsing + status tolerance mirror actions/sync-tasks/sync.py so a file never
 lint-passes yet syncs wrong.
 """
 import argparse
+import datetime
 import re
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ ALLOWED = REQUIRED | {
     "priority", "deadline", "blocks", "blocked-by", "source",
     "target-repo", "target-path", "related", "owner", "description",
     "source-url", "support-issue", "support-report",
+    # task dimensions (T20261114-352324): time / place / person / type
+    "when", "when-end", "place", "person", "type",
     # runtime (tooling-written: /stage, IPM, /focus)
     "scheduled", "claimed_by", "claimed_role", "claimed_takeover_from", "iteration",
 }
@@ -129,7 +132,8 @@ def check_estimation(ctx):
 
 
 def check_allowlist(ctx):
-    return [f"unknown field '{k}' (not in the canonical 19-key allowlist)"
+    return [f"unknown field '{k}' (not in the canonical "
+            f"{len(ALLOWED)}-key allowlist)"
             for k in sorted(ctx.keys) if k not in ALLOWED]
 
 
@@ -217,9 +221,122 @@ def check_not_done_in_todo(ctx):
     ]
 
 
+WHEN_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?)?$")
+TYPES = {"chore", "feature", "bug", "event", "research", "spike", "rca",
+         "support", "other"}
+SLUG_RE = re.compile(r"^[A-Za-z0-9][\w.-]*$")
+
+
+def _text(v):
+    """Stringify a frontmatter scalar; yaml turns 2026-11-14 into a date and
+    2026-11-14T14:00 into a datetime, so format checks run on the ISO text."""
+    if isinstance(v, datetime.datetime):
+        return v.isoformat(timespec="minutes") if v.tzinfo is None else v.isoformat()
+    if isinstance(v, datetime.date):
+        return v.isoformat()
+    return str(v).strip()
+
+
+def _as_list(v):
+    """Return (items, error). yaml lists pass through; the line-based fallback
+    parser hands raw text, so '[a, b]' / 'a, b' / 'a' are split on commas."""
+    if isinstance(v, list):
+        return [str(i).strip() for i in v], None
+    if isinstance(v, (dict, bool, int, float)) or v is None:
+        return [], "must be a slug or a list of slugs"
+    t = _text(v)
+    if t.startswith("[") and t.endswith("]"):
+        t = t[1:-1]
+    return [i.strip().strip("'\"") for i in t.split(",") if i.strip()], None
+
+
+def check_dimensions(ctx):
+    """Optional when / when-end / place / person / type (T20261114-352324).
+    Absent means no constraint. Hard errors only; soft nudges live in
+    warn_dimensions."""
+    out, k = [], ctx.keys
+    for key in ("when", "when-end"):
+        if key in k and not WHEN_RE.match(_text(k[key])):
+            out.append(f"{key} '{_text(k[key])}' must be YYYY-MM-DD or "
+                       f"YYYY-MM-DDTHH:MM (optional seconds, Z or offset)")
+    if "when" in k and "when-end" in k:
+        a, b = _text(k["when"]), _text(k["when-end"])
+        if WHEN_RE.match(a) and WHEN_RE.match(b) and b[:16] < a[:16]:
+            out.append(f"when-end '{b}' is before when '{a}'")
+    for key in ("place", "person"):
+        if key not in k:
+            continue
+        items, err = _as_list(k[key])
+        if err:
+            out.append(f"{key}: {err}")
+        for it in items:
+            if "@" in it:
+                out.append(f"{key} '{it}' looks like an email address — use an alias")
+            elif not SLUG_RE.match(it):
+                out.append(f"{key} '{it}' must be a slug without whitespace "
+                           f"(letters, digits, '-', '_', '.')")
+    if "type" in k:
+        t = _text(k["type"]).lower()
+        if t not in TYPES:
+            out.append(f"type '{_text(k['type'])}' must be one of "
+                       f"{', '.join(sorted(TYPES))}")
+        elif t == "event" and "when" not in k:
+            out.append("type: event requires 'when' (an event is a dated "
+                       "task, never implementation work)")
+    return out
+
+
+def check_typed_blockers(ctx):
+    """`Blocked by person:<alias>` / `ext:<text>` are typed non-task blockers
+    (T20261114-352324). A person alias must be a slug (no email, no
+    whitespace); ext text must not contain a T<id>-shaped string, which the
+    task-id blocker check would misread as a task blocker."""
+    status = ctx.keys.get("status")
+    if status is None or status_head(status) != "blocked":
+        return []
+    out = []
+    for m in re.finditer(r"\b(person|ext):(\S*)", str(status)):
+        if m.group(1) == "person":
+            alias = m.group(2).rstrip(",;")
+            if not alias:
+                out.append("Blocked by person: needs an alias")
+            elif "@" in alias:
+                out.append(f"Blocked by person:{alias} looks like an email — use an alias")
+            elif not SLUG_RE.match(alias):
+                out.append(f"Blocked by person:{alias} must be a slug without whitespace")
+    em = re.search(r"\bext:(.*)$", str(status))
+    if em and TASK_ID_RE.search(em.group(1)):
+        out.append("Blocked by ext: text must not contain a T<id>-shaped string "
+                   "(it would be read as a task blocker)")
+    return out
+
+
+def warn_dimensions(ctx, today=None):
+    """Soft nudges: printed, never change the exit code."""
+    today = today or datetime.date.today().isoformat()
+    if "status" not in ctx.keys or "when" not in ctx.keys:
+        return []
+    if status_head(ctx.keys["status"]) in ("done", "closed", "parked"):
+        return []
+    w = _text(ctx.keys["when"])
+    if WHEN_RE.match(w) and w[:10] < today:
+        if _text(ctx.keys.get("type", "")).lower() == "event":
+            return [f"event date {w[:10]} has passed — close it (Open to Done)"]
+        return [f"when '{w[:10]}' is in the past for an open task"]
+    return []
+
+
+def warnings_for(path, today=None):
+    ctx = Ctx(path)
+    if ctx.error:
+        return []
+    return warn_dimensions(ctx, today)
+
+
 CHECKS = (check_required, check_status, check_estimation,
           check_allowlist, check_h1_id, check_scheduled_when_advanced,
-          check_not_done_in_todo)
+          check_not_done_in_todo, check_dimensions, check_typed_blockers)
 
 
 def lint_file(path):
@@ -357,6 +474,13 @@ def main(argv=None):
     for path, violations in lint_blocked_by(args.repo_path).items():
         results.setdefault(str(path), []).extend(violations)
 
+    # Warning channel: printed, exit code unaffected.
+    warned = 0
+    for f in files:
+        for msg in warnings_for(f):
+            warned += 1
+            print(f"⚠️  {f}: {msg}")
+
     failed = sum(1 for v in results.values() if v)
     for path, violations in results.items():
         if violations:
@@ -369,7 +493,8 @@ def main(argv=None):
     if failed:
         print(f"\n❌ {failed}/{total} task file(s) violate the conventions")
         return 1
-    print(f"\n✅ {total} task file(s) conform")
+    print(f"\n✅ {total} task file(s) conform"
+          + (f" ({warned} warning(s))" if warned else ""))
     return 0
 
 
