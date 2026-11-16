@@ -39,7 +39,7 @@ function rt-config() {
   profile="${CCXP_ROUTINES_PROFILE_FILE:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/ccxp-routines.yml}}"
   [ -n "$repo_top" ] && tracked="$repo_top/dev/.routines.yml"
   shift 2 || shift $#
-  if ! python3 -I -c 'import yaml' 2>/dev/null && ! yq --version >/dev/null 2>&1; then
+  if ! python3 -I -c 'import yaml' 2>/dev/null && ! yq --version 2>&1 | grep -q mikefarah; then
     # no YAML reader: the compiled-in built-ins keep today's behavior (identical to ritual-due.sh)
     if [ "$mode" = rows ]; then
       echo "routine-due: warning: neither PyYAML nor yq found; using the built-in routines only" >&2
@@ -88,7 +88,12 @@ function rt-every-state() {
 function rt-row-key() {
   local name kind at secs days once nb na tz scope also
   IFS=$'\t' read -r name kind at secs days once nb na tz scope also <<<"$1"
-  if [ "$kind" = every ]; then echo every; else rt-key "$at" "$days" "$once" "$nb" "$na" "$tz"; fi
+  if [ "$kind" = every ]; then
+    # an every: routine still honors days and the not_before/not_after window; the key is the constant "every"
+    [ -n "$(rt-key - "$days" day "$nb" "$na" "$tz")" ] && echo every || true
+  else
+    rt-key "$at" "$days" "$once" "$nb" "$na" "$tz"
+  fi
 }
 
 function rt-list() {
@@ -126,7 +131,7 @@ function rt-claim() {
     [ "$(rd-state "$dir" "$name" "$key")" = due ] || continue
     rd-take "$dir" "$name" "$key" "$gen" || continue
     if [ "$also" != - ]; then
-      for a in ${also//,/ }; do
+      for a in ${also//,/ }; do   # names are validated ^[A-Za-z0-9_][A-Za-z0-9_.-]*$: no glob characters
         arow="$(rt-find "$2" "$a")"
         [ -n "$arow" ] || continue
         akey="$(rt-row-key "$arow")"
@@ -178,15 +183,18 @@ function routine-due() {
   if [ "${1:-}" = --repo ]; then repo="${2:?--repo needs a directory}"; shift 2; fi
   verb="${1:-list}"
   [ $# -eq 0 ] || shift
-  [ "${CCXP_RITUALS:-1}" = 0 ] && return 0
-  [ -n "$(rd-base)" ] || return 0
-  [ -e "$(rd-base)/off" ] && return 0
   top="$(rd-repo-root "${repo:-.}")" || top=""
+  # one clock reading per call, so the date and the time of day cannot straddle midnight
+  CCXP_RITUAL_NOW="$(rd-now)"
+  export CCXP_RITUAL_NOW
   case "$verb" in
-    check) rt-config check "$top" ;;
+    check) rt-config check "$top" ;;   # a lint is never silenced by the off switches
     show) rt-config show "$top" "${1:?show needs a routine name}" ;;
     list | claim | done | release)
-      rows="$(rt-config rows "$top")"
+      [ "${CCXP_RITUALS:-1}" = 0 ] && return 0
+      [ -n "$(rd-base)" ] || return 0
+      [ -e "$(rd-base)/off" ] && return 0
+      rows="$(rt-config rows "$top")" || { echo "routine-due: warning: could not read the routine config" >&2; rows=""; }
       case "$verb" in
         list) rt-list "$top" "$rows" ;;
         claim) rt-claim "$top" "$rows" ;;

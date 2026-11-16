@@ -98,3 +98,27 @@ check() { printf '%s\n' "$1" >"$REPO/dev/.routines.yml"; run --separate-stderr b
   [ "$status" -eq 1 ]
   [[ "$output" == *"file skipped"* ]]
 }
+
+@test "a block scalar with a trailing newline is not a valid time or interval" {
+  check $'routines:\n  r:\n    schedule:\n      at: |\n        09:00\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bad at"* ]]
+  check $'routines:\n  r:\n    schedule:\n      every: |\n        5m\n    steps: [{skill: "/rca"}]'
+  [[ "$output" == *"bad every"* ]]
+}
+
+@test "bad routine names and also_claims entries are rejected" {
+  check $'routines:\n  "../x":\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bad routine name"* ]]
+  check $'routines:\n  r:\n    also_claims: ["*"]\n    steps: [{skill: "/rca"}]'
+  [[ "$output" == *"bad also_claims entry"* ]]
+  check $'routines:\n  r:\n    also_claims: [r]\n    steps: [{skill: "/rca"}]'
+  [[ "$output" == *"bad also_claims entry"* ]]
+}
+
+@test "at or not_before later than not_after is rejected" {
+  check $'routines:\n  r:\n    schedule: {at: "12:00", not_after: "10:00"}\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"later than not_after"* ]]
+}

@@ -270,3 +270,75 @@ Y
   got="$(PATH="$BATS_TEST_TMPDIR/nopy:$PATH" bash -c '. "$1"; rt-config rows ""' _ "$RT" 2>/dev/null)"
   [ "$got" = "$want" ]
 }
+
+# --- review fixes ---
+
+@test "every: honors days and the not_before/not_after window" {
+  tracked <<'Y'
+routines:
+  hourly:
+    schedule: {every: 1h, not_before: "09:00", not_after: "10:00", days: [sat]}
+    steps: [{skill: "/ccxp"}]
+Y
+  run at "$MON_NOON" list
+  [[ "$output" != *hourly* ]]
+  run at "$SAT_NOON" list
+  [[ "$output" != *hourly* ]]
+  run at "$((SAT_NOON - 9000))" list   # Sat 09:30
+  [[ "$output" == *"hourly every"* ]]
+}
+
+@test "a non-string or unsafe routine name warns and never aborts list, claim or done" {
+  tracked <<'Y'
+routines:
+  2026: {steps: [{skill: "/ccxp"}]}
+  yes: {steps: [{skill: "/ccxp"}]}
+  "../x": {steps: [{skill: "/ccxp"}]}
+Y
+  run --separate-stderr at "$MON_NOON" list
+  [ "$status" -eq 0 ]
+  [ "$output" = $'standup 2026-11-09\nipm 2026-11-09' ]
+  [[ "$stderr" == *"bad routine name"* ]]
+  run --separate-stderr at "$MON_NOON" claim
+  [ "$output" = "standup 2026-11-09" ]
+}
+
+@test "also_claims with a glob character or the routine itself is rejected, no globbing happens" {
+  touch "$REPO/retro"
+  tracked <<'Y'
+routines:
+  standup: {also_claims: ["*", standup]}
+Y
+  run --separate-stderr at "$FRI_NOON" claim
+  [ "$output" = "standup 2026-11-13" ]
+  [[ "$stderr" == *"bad also_claims entry"* ]]
+  # the invalid override was dropped, so the built-in standup -> retro coupling still holds
+  run at "$FRI_NOON" list
+  [ "$output" = "ipm 2026-11-09" ]
+}
+
+@test "a later layer can switch a schedule from at to every and back, and null removes a key" {
+  tracked <<'Y'
+routines:
+  r:
+    schedule: {days: weekdays, at: "09:00", not_before: "08:00"}
+    steps: [{skill: "/ccxp"}]
+Y
+  profile <<'Y'
+routines:
+  r:
+    schedule: {every: 1h, not_before: null}
+Y
+  run at "$MON_NOON" list
+  [[ "$output" == *"r every"* ]]
+  run at "$MON_NOON" show r
+  [[ "$output" != *not_before* ]]
+}
+
+@test "check and show still run with the off switches set" {
+  CCXP_RITUALS=0 run at "$MON_NOON" show ipm
+  [ "$status" -eq 0 ]
+  printf 'extra: 1\n' | tracked
+  CCXP_RITUALS=0 run at "$MON_NOON" check
+  [ "$status" -eq 1 ]
+}

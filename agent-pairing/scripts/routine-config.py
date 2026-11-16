@@ -20,8 +20,9 @@ DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 ROUTINE_KEYS = {"description", "enabled", "schedule", "steps", "on_failure", "report", "tz", "also_claims", "allow", "scope"}
 SCHEDULE_KEYS = {"every", "at", "days", "once_per", "not_before", "not_after"}
 TOP_KEYS = {"routines", "here", "routines-file"}
-HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-EVERY = re.compile(r"^([1-9]\d*)([smhd])$")
+HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+EVERY = re.compile(r"([1-9]\d*)([smhd])")
+NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
 UNIT = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
 try:
@@ -56,7 +57,7 @@ def load(path):
                     if k.value == "routines" and isinstance(v, yaml.MappingNode):
                         rseen = set()
                         for rk, _ in v.value:
-                            lines["routines." + rk.value] = rk.start_mark.line + 1
+                            lines["routines." + str(rk.value)] = rk.start_mark.line + 1
                             if rk.value in rseen:
                                 raise Problem("duplicate routine name '%s'" % rk.value, rk.start_mark.line + 1)
                             rseen.add(rk.value)
@@ -77,12 +78,21 @@ def load(path):
     return data, lines
 
 
-def deep_merge(a, b):
+def deep_merge(a, b, path=()):
+    """dicts merge key by key; None deletes a key; a new schedule `every` replaces an old `at` and vice versa."""
     if not isinstance(a, dict) or not isinstance(b, dict):
         return b
     out = dict(a)
+    if path == ("schedule",):
+        if "every" in b and "at" not in b:
+            out.pop("at", None)
+        if "at" in b and "every" not in b:
+            out.pop("every", None)
     for k, v in b.items():
-        out[k] = deep_merge(a[k], v) if k in a else v
+        if v is None:
+            out.pop(k, None)
+        else:
+            out[k] = deep_merge(a[k], v, path + (k,)) if k in a else v
     return out
 
 
@@ -125,10 +135,10 @@ def validate(name, r, root):
             errs.append("routine '%s': unknown schedule key '%s'" % (name, k))
     if "every" in sch and "at" in sch:
         errs.append("routine '%s': schedule takes every or at, not both" % name)
-    if "every" in sch and not (isinstance(sch["every"], str) and EVERY.match(sch["every"])):
+    if "every" in sch and not (isinstance(sch["every"], str) and EVERY.fullmatch(sch["every"])):
         errs.append("routine '%s': bad every '%s' (use 5m, 2h, 1d)" % (name, sch["every"]))
     for k in ("at", "not_before", "not_after"):
-        if k in sch and not (isinstance(sch[k], str) and HHMM.match(sch[k])):
+        if k in sch and not (isinstance(sch[k], str) and HHMM.fullmatch(sch[k])):
             errs.append("routine '%s': bad %s %r (a quoted \"HH:MM\"; unquoted 10:30 parses as the integer 630)" % (name, k, sch[k]))
     d = sch.get("days", "daily")
     if not (d in ("daily", "weekdays") or (isinstance(d, list) and d and all(x in DAYS for x in d))):
@@ -146,7 +156,15 @@ def validate(name, r, root):
     for k in ("also_claims", "allow"):
         if k in r and not (isinstance(r[k], list) and all(isinstance(x, str) for x in r[k])):
             errs.append("routine '%s': %s must be a list of names" % (name, k))
-    if "tz" in r and not (isinstance(r["tz"], str) and re.match(r"^[A-Za-z0-9_+./-]+$", r["tz"])):
+    if isinstance(r.get("also_claims"), list):
+        for x in r["also_claims"]:
+            if isinstance(x, str) and (not NAME.fullmatch(x) or x == name):
+                errs.append("routine '%s': bad also_claims entry '%s'" % (name, x))
+    nb, na = sch.get("not_before"), sch.get("not_after")
+    lim = [v for v in (sch.get("at"), nb) if isinstance(v, str) and HHMM.fullmatch(v)]
+    if isinstance(na, str) and HHMM.fullmatch(na) and any(v > na for v in lim):
+        errs.append("routine '%s': at/not_before is later than not_after (the routine would never be due)" % name)
+    if "tz" in r and not (isinstance(r["tz"], str) and re.fullmatch(r"[A-Za-z0-9_+./-]+", r["tz"])):
         errs.append("routine '%s': bad tz" % name)
     return errs
 
@@ -165,7 +183,11 @@ def resolve(args):
         except Problem as exc:
             probs.append((path, exc.args[1] if len(exc.args) > 1 else None, exc.args[0] + "; file skipped"))
             return None
-        for k in data:
+        for k in list(data):
+            if not isinstance(k, str):
+                probs.append((path, None, "non-string top-level key %r" % (k,)))
+                del data[k]
+                continue
             if k not in TOP_KEYS or (k == "routines-file" and not is_profile):
                 probs.append((path, lines.get(k), "unknown top-level key '%s'" % k))
         if "here" in data:
@@ -181,6 +203,9 @@ def resolve(args):
             probs.append((path, lines.get("routines"), "routines must be a mapping"))
             return data
         for name, entry in rs.items():
+            if not isinstance(name, str) or not NAME.fullmatch(name):
+                probs.append((path, None, "bad routine name %r (letters, digits, _ . -; quote names like yes/no/on)" % (name,)))
+                continue
             line = lines.get("routines." + name)
             if not isinstance(entry, dict):
                 probs.append((path, line, "routine '%s' must be a mapping; keeping previous definition" % name))
@@ -230,7 +255,7 @@ def rows(merged):
         sch = r.get("schedule", {})
         kind, every = "at", 0
         if "every" in sch:
-            m = EVERY.match(sch["every"])
+            m = EVERY.fullmatch(sch["every"])
             kind, every = "every", int(m.group(1)) * UNIT[m.group(2)]
         once = sch.get("once_per", "day")
         f = [name, kind, sch.get("at", "-"), str(every), ",".join(map(str, days_dows(sch))), once,
