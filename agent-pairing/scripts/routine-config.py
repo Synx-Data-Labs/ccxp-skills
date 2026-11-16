@@ -167,7 +167,7 @@ def validate(name, r, root):
         errs.append("routine '%s': bad days %r (daily, weekdays or a list of mon..sun)" % (name, d))
     if "once_per" in sch and sch["once_per"] not in ("day", "week"):
         errs.append("routine '%s': once_per must be day or week" % name)
-    if sch.get("once_per") == "week" and isinstance(d, list) and {"sun", "mon"} <= set(d) and len(set(d)) < 7:
+    if sch.get("once_per") == "week" and isinstance(d, list) and all(x in DAYS for x in d) and {"sun", "mon"} <= set(d) and len(set(d)) < 7:
         errs.append("routine '%s': a once_per week window cannot wrap from sun to mon" % name)
     if r.get("on_failure", "stop") not in ("stop", "continue"):
         errs.append("routine '%s': on_failure must be stop or continue" % name)
@@ -237,7 +237,10 @@ def resolve(args):
                 probs.append((path, line, "routine '%s': allow is honored only from the profile file; ignored" % name))
                 del entry["allow"]
             cand = deep_merge(merged.get(name, {}), entry)
-            errs = validate(name, cand, args["skills_root"])
+            try:
+                errs = validate(name, cand, args["skills_root"])
+            except Exception as exc:  # a malformed value must not take every routine down
+                errs = ["routine '%s': cannot validate (%s)" % (name, type(exc).__name__)]
             if errs:
                 for e in errs:
                     probs.append((path, line, e + ("; keeping previous definition" if name in merged else "; routine dropped")))

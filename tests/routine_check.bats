@@ -145,3 +145,10 @@ check() { printf '%s\n' "$1" >"$REPO/dev/.routines.yml"; run --separate-stderr b
   check $'routines:\n  r:\n    schedule: {days: weekdays, at: ~}\n    steps: [{skill: "/rca"}]'
   [ "$status" -eq 0 ]
 }
+
+@test "an unhashable days entry is reported, and the other routines survive" {
+  check $'routines:\n  x:\n    steps: [{skill: "/rca"}]\n    schedule: {days: [[mon]], once_per: week}'
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"bad days"* ]]
+  [[ "$output" != *Traceback* ]]
+}
