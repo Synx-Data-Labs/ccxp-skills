@@ -313,7 +313,7 @@ Y
   [ "$output" = "standup 2026-11-13" ]
   [[ "$stderr" == *"bad also_claims entry"* ]]
   # the invalid override was dropped, so the built-in standup -> retro coupling still holds
-  run at "$FRI_NOON" list
+  run --separate-stderr at "$FRI_NOON" list
   [ "$output" = "ipm 2026-11-09" ]
 }
 
