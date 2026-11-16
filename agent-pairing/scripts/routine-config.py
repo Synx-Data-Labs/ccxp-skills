@@ -37,6 +37,15 @@ class Problem(Exception):
 
 def load(path):
     """-> (data, lines) where lines maps 'routines.<name>' / top key to a 1-based line; raises Problem."""
+    try:
+        return _load(path)
+    except Problem:
+        raise
+    except Exception as exc:  # unreadable, not UTF-8, unhashable keys...: skip the file, never crash the run
+        raise Problem("cannot read: %s: %s" % (type(exc).__name__, exc))
+
+
+def _load(path):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     lines = {}
@@ -80,8 +89,10 @@ def load(path):
 
 def deep_merge(a, b, path=()):
     """dicts merge key by key; None deletes a key; a new schedule `every` replaces an old `at` and vice versa."""
-    if not isinstance(a, dict) or not isinstance(b, dict):
+    if not isinstance(b, dict):
         return b
+    if not isinstance(a, dict):
+        a = {}
     out = dict(a)
     if path == ("schedule",):
         if "every" in b and "at" not in b:
@@ -92,8 +103,19 @@ def deep_merge(a, b, path=()):
         if v is None:
             out.pop(k, None)
         else:
-            out[k] = deep_merge(a[k], v, path + (k,)) if k in a else v
+            out[k] = deep_merge(a.get(k), v, path + (k,)) if isinstance(v, dict) else v
     return out
+
+
+def tz_known(tz):
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(tz)
+        return True
+    except ImportError:
+        return True  # cannot check
+    except Exception:
+        return False
 
 
 def skill_exists(name, root):
@@ -164,8 +186,8 @@ def validate(name, r, root):
     lim = [v for v in (sch.get("at"), nb) if isinstance(v, str) and HHMM.fullmatch(v)]
     if isinstance(na, str) and HHMM.fullmatch(na) and any(v > na for v in lim):
         errs.append("routine '%s': at/not_before is later than not_after (the routine would never be due)" % name)
-    if "tz" in r and not (isinstance(r["tz"], str) and re.fullmatch(r"[A-Za-z0-9_+./-]+", r["tz"])):
-        errs.append("routine '%s': bad tz" % name)
+    if "tz" in r and not (isinstance(r["tz"], str) and re.fullmatch(r"[A-Za-z0-9_+./-]+", r["tz"]) and tz_known(r["tz"])):
+        errs.append("routine '%s': bad or unknown tz %r" % (name, r["tz"]))
     return errs
 
 
