@@ -100,5 +100,5 @@ TODO_LIB_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # Normalised frontmatter `type:` (lowercase; quotes, trailing comment and CR
 # stripped), matching what lint_tasks.py accepts.
 function todo-task-type() {
-  todo-fm-get "$1" type | tr -d '\r"'"'" | sed -E 's/[[:space:]]*#.*$//; s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]'
+  todo-fm-get "$1" type | tr -d '\r"'"'" | sed -E 's/^[[:space:]]+//; s/[[:space:]]*#.*$//; s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]'
 }
