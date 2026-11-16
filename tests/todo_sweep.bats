@@ -385,3 +385,11 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   [[ "$output" != *"UNBLOCK"*"$B"* ]]
   [[ "$output" == *"UNBLOCK"*"$C"* ]]
 }
+
+@test "plan: a mixed task-id plus person: blocker is not unblocked when the task leaves (T20261114-352324)" {
+  _task $A t "Blocked by $D, person:person-a"
+  _queue $A
+  _sw plan
+  [ "$status" -eq 3 ]
+  [[ "$output" != *"UNBLOCK"* ]]
+}
