@@ -16,6 +16,12 @@ estimation: 1
 # target-path: /abs/path/to/<repo>     # only when reusing an existing checkout with WIP
 # source-url: <canonical URL> # generic intake task (written by /to-task; dedup key)
 # support-issue: <canonical issue URL> # legacy alias for source-url, pre-dates the /support -> /to-task rename
+# when: 2026-11-14T14:00       # time to act: YYYY-MM-DD or YYYY-MM-DDTHH:MM (optional Z/offset) — never reorders the queue
+# when-end: 2026-11-14T15:00   # optional end of a window (not before `when`)
+# place: [office, vpn]         # context needed to do the work (slugs); absent = anywhere
+# person: [person-a]           # aliases involved (call, review, handoff) — never emails or real names
+# type: feature                # chore|feature|bug|event|research|spike|rca|support|other; `event` needs `when`
+#   (waiting on someone: `status: Blocked by person:<alias>` or `ext:<text>`, no new field)
 # support-report: on                   # opt in to outward status reports (default off; later phase)
 #
 # Runtime fields written by tooling — do NOT hand-author:

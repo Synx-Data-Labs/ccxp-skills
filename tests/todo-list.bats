@@ -155,3 +155,14 @@ EOF
   [ "$status" -eq 0 ]
   [[ "$output" == *"total: 0"* ]]
 }
+
+@test "list: --type event shows only event tasks (T20261114-352324)" {
+  mkdir -p dev/TODO
+  printf -- '---\nstatus: Open\nestimation: 1\ntype: event\nwhen: 2099-01-01\n---\n\n# T20000101-000001: Evt\n' > dev/TODO/T20000101-000001-e.md
+  printf -- '---\nstatus: Open\nestimation: 1\n---\n\n# T20000101-000002: Work\n' > dev/TODO/T20000101-000002-w.md
+  printf '# TODO Queue\n\n- [T20000101-000001](T20000101-000001-e.md): Evt\n- [T20000101-000002](T20000101-000002-w.md): Work\n' > dev/TODO/queue.md
+  run bash "$REPO_ROOT/todo/scripts/todo-list.sh" --type event
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T20000101-000001"* ]]
+  [[ "$output" != *"| T20000101-000002 |"* ]]
+}

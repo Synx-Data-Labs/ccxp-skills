@@ -16,6 +16,13 @@ TODO_DIR="$TODO_QUEUE_DIR/dev/TODO"
 PARKING_DIR="$TODO_QUEUE_DIR/dev/PARKING"
 
 function todo-list-main() {
+  # --type <t>: only rows whose frontmatter `type:` equals <t> (e.g. event);
+  # events sort by `when:` ("Events this week" is `--type event`).
+  local type_filter=""
+  if [ "${1:-}" = "--type" ]; then
+    [ -n "${2:-}" ] || { printf 'usage: todo-list.sh [--type <t>]\n' >&2; return 2; }
+    type_filter="$2"
+  fi
   if [ ! -f "$QUEUE_FILE" ]; then
     printf 'No dev/TODO/queue.md found at %s\n' "$QUEUE_FILE"
     return 0
@@ -51,6 +58,9 @@ function todo-list-main() {
       continue
     fi
 
+    if [ -n "$type_filter" ] && [ "$(todo-fm-get "$task_file" type)" != "$type_filter" ]; then
+      continue
+    fi
     total=$((total+1))
     status="$(todo-fm-get "$task_file" status)"
     all_statuses="${all_statuses}${status}"$'\n'

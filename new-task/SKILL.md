@@ -83,6 +83,15 @@ template's own instructions), then:
 - <the gathered Problem bullets>
 ```
 
+**Dimensions (optional, never invented).** Set `when`, `when-end`, `place`,
+`person` in the frontmatter only when the request states them ("call with
+person A on Friday 14:00, needs VPN" gives `when: <date>T14:00`,
+`person: [person-a]`, `place: [vpn]`); omit them otherwise. Use aliases for
+people, never emails or real names. `type: event` is only for a task that
+*is* the event itself (it requires `when`); work merely tied to an event
+mentions it in prose or `related:`. A task waiting on someone gets
+`status: Blocked by person:<alias>`. Semantics: `todo/SKILL.md` "Task metadata".
+
 `repo-conventions/templates/task.md` has no `Type` concept of its own — this
 bullet is a forward-compatible seed. When `/drive` Phase 2 later grows this
 file into the full `design-doc.md` structure, its `## TLDR` gets its own

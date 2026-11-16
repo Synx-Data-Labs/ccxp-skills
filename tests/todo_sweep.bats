@@ -373,3 +373,15 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   [ -e "$R/dev/PARKING/$B-t.md" ]
   [ -z "$(_ids)" ]
 }
+
+@test "plan: a typed non-task blocker (person:/ext:) is never stale and never unblocked (T20261114-352324)" {
+  _task $A t "Blocked by person:person-a"
+  _task $B t "Blocked by ext:vendor reply"
+  _task $C t "Blocked by $D"
+  _queue $A $B $C
+  _sw plan
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"UNBLOCK"*"$A"* ]]
+  [[ "$output" != *"UNBLOCK"*"$B"* ]]
+  [[ "$output" == *"UNBLOCK"*"$C"* ]]
+}

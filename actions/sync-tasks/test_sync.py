@@ -1789,5 +1789,26 @@ class GetProjectIdTests(unittest.TestCase):
             self.assertNotIn("number=1", sent_args)
 
 
+class DimensionKeysTests(unittest.TestCase):
+    """T20261114-352324: sync.py has no key allowlist; the new keys must pass
+    through frontmatter parsing unchanged and typed blockers add no task ids."""
+    def test_dimension_keys_round_trip(self):
+        import tempfile, os
+        text = ("---\nstatus: Open\nestimation: 1\nwhen: 2026-11-14T14:00\n"
+                "when-end: 2026-11-14T15:00\nplace: [office, vpn]\n"
+                "person: [person-a]\ntype: event\n---\n\n# T20260101-000001: x\n")
+        with tempfile.TemporaryDirectory() as d:
+            p = os.path.join(d, "T20260101-000001-x.md")
+            open(p, "w").write(text)
+            meta = sync.get_frontmatter(p)
+        for k in ("when", "when-end", "place", "person", "type"):
+            self.assertIn(k, meta)
+        self.assertEqual(str(meta["type"]), "event")
+
+    def test_typed_blockers_yield_no_task_ids(self):
+        self.assertEqual(sync.extract_blockers({"status": "Blocked by person:person-a"}), "")
+        self.assertEqual(sync.extract_blockers({"status": "Blocked by ext:vendor reply"}), "")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

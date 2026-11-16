@@ -277,3 +277,13 @@ append_queue_line() {
   run bash "$SCRIPT" --nth 0; [ "$status" -eq 2 ]
   run bash "$SCRIPT" --exclude; [ "$status" -eq 2 ]
 }
+
+@test "next: type: event tasks are never picked, even first in the queue (T20261114-352324)" {
+  write_task T20000101-000001 "An event" Open $'type: event\nwhen: 2099-01-01'
+  write_task T20000101-000002 "Real work" Open
+  printf '# TODO Queue\n\n- [T20000101-000001](T20000101-000001-slug.md): An event\n- [T20000101-000002](T20000101-000002-slug.md): Real work\n' > dev/TODO/queue.md
+  run bash "$SCRIPT" --skip-gated
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T20000101-000002"* ]]
+  [[ "$output" != *"T20000101-000001"* ]]
+}
