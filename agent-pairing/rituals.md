@@ -51,3 +51,43 @@ Task: T20261107-228304. Owner decision: use the persona's own periodic wake as t
 - The persona needs a release of this plugin to reach installs (persona refresh: `persona-refresh.md`).
 - Not built here: the old usage-cost warning of the launchd wrapper (separate follow-up task); event-driven
   CI wake (CI failures are still found by the persona's polling at the same check points).
+
+## Routines (configurable rituals)
+
+Task: T20261114-144275 (part 1 of the routines epic T20261114-267875). `routine-due.sh` generalizes `ritual-due.sh`:
+named routines come from a config file instead of the hard-coded three. The persona still switches over in part 3;
+until then `ritual-due.sh` is what the persona runs, and with no config file `routine-due.sh` prints exactly the same.
+
+- **Limits**: a routine fires only while a persona session is open, at the check points above (no cron, no launchd, no cloud routine).
+- **Commands**: `bash <plugin-dir>/agent-pairing/scripts/routine-due.sh [--repo DIR] list | claim | done <routine> <key> | release <routine> <key> | show <routine> | check`.
+  - `list` and `claim` behave as in `ritual-due.sh`, in declaration order (built-ins first).
+  - `check` lints the merged config and prints `<file>:<line>: <message>`; exit 1 when it finds a problem.
+- **Layers** (later wins, merged per routine; dicts deep-merge, so one key can be overridden, lists and scalars replace):
+  1. `agent-pairing/routines.default.yml`: `standup`, `ipm`, `retro`.
+  2. `<hub repo>/dev/.routines.yml`: tracked, reviewed, no secrets. A profile `routines-file:` replaces this path.
+  3. `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines.yml`: machine-local, never committed (`CCXP_ROUTINES_PROFILE_FILE` overrides the path).
+- **Schema**: top-level keys `routines:` (map name to routine), `here:` (list of place slugs) and, profile only, `routines-file:`; any other key fails `check`.
+
+```yaml
+routines:
+  inbox:
+    description: clean the inbox
+    schedule: {days: weekdays, at: "07:30", once_per: day}   # at must be quoted
+    steps:
+      - {skill: "/email-triage", args: "--window 24h"}
+    report: journal
+  retro: {enabled: false}
+  standup:
+    schedule: {at: "08:30"}
+```
+
+- **Routine keys** (all optional but `steps`): `description`, `enabled`, `schedule`, `steps` (`{skill, args}` list), `on_failure` (`stop|continue`),
+  `report` (`slack|journal|none`), `tz` (IANA name), `also_claims` (a claim also claims the named routine with the same key; `standup` declares `[retro]`),
+  `allow` (honored only from the profile file), `scope` (`repo`, the default, or `any` for repo-less routines such as the inbox).
+- **Schedule keys**: `at` or `every` (`5m`, `2h`, `1d`; not both), `days` (`daily`, `weekdays` or a list of `mon`..`sun`), `once_per` (`day` or `week`), `not_before`, `not_after` (all `"HH:MM"`).
+  - A `week` key is the date of the earliest listed day in the ISO week (ipm gives Monday, retro gives Friday); a window wrapping Sunday to Monday is rejected.
+  - `at` gates only the day the key names; a missed run catches up on later days of the window.
+  - `every:` routines are listed as `<routine> every`, never claimed (run inline), and `done <routine> every` rewrites one `<routine>.last` marker.
+- **Failure handling**: a routine whose override is invalid keeps its previous definition and prints one warning; an unparsable file is skipped whole. The standup is never silenced.
+- **YAML reader**: `python3 -I` with PyYAML, else `yq -o=json` (no line numbers or duplicate-name detection), else the three built-ins compiled into the script plus one warning.
+- **Markers**: as above; `scope: any` routines keep theirs under `ccxp-rituals/_any/`.

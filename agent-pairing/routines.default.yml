@@ -1,0 +1,20 @@
+# Built-in routines (T20261114-144275): today's three rituals expressed as routines.
+# Overridden by the tracked <hub repo>/dev/.routines.yml, then by the profile file
+# ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines.yml. See agent-pairing/rituals.md "Routines".
+routines:
+  standup:
+    description: Daily standup; its Friday run is the retro (/ccxp Phase 2b)
+    schedule: {days: daily, once_per: day}
+    steps:
+      - {skill: "/ccxp"}
+    also_claims: [retro]
+  ipm:
+    description: Iteration planning, Monday; a missed Monday catches up Tue-Fri
+    schedule: {days: weekdays, once_per: week}
+    steps:
+      - {skill: "/ipm"}
+  retro:
+    description: Weekly retrospective, Friday; a missed Friday catches up on the weekend
+    schedule: {days: [fri, sat, sun], once_per: week}
+    steps:
+      - {skill: "/retro"}
