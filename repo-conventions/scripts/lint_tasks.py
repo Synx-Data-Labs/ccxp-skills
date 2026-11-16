@@ -262,7 +262,7 @@ def check_dimensions(ctx):
                        f"YYYY-MM-DDTHH:MM (optional seconds, Z or offset)")
     if "when" in k and "when-end" in k:
         a, b = _text(k["when"]), _text(k["when-end"])
-        if WHEN_RE.match(a) and WHEN_RE.match(b) and b[:16] < a[:16]:
+        if WHEN_RE.match(a) and WHEN_RE.match(b) and b[:min(len(a), len(b), 16)] < a[:min(len(a), len(b), 16)]:
             out.append(f"when-end '{b}' is before when '{a}'")
     for key in ("place", "person"):
         if key not in k:
@@ -281,7 +281,7 @@ def check_dimensions(ctx):
         if t not in TYPES:
             out.append(f"type '{_text(k['type'])}' must be one of "
                        f"{', '.join(sorted(TYPES))}")
-        elif t == "event" and "when" not in k:
+        elif t == "event" and not _text(k.get("when") or ""):
             out.append("type: event requires 'when' (an event is a dated "
                        "task, never implementation work)")
     return out

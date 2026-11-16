@@ -73,7 +73,7 @@ function todo-next-main() {
     esac
     # `type: event` is a dated calendar entry, never implementation work
     # (T20261114-352324): never the pick, gated or not.
-    [ "$(todo-fm-get "$task_file" type)" = "event" ] && continue
+    [ "$(todo-task-type "$task_file")" = "event" ] && continue
     if [ "$skip_gated" = 1 ] && todo-gated "$status"; then continue; fi
     if [ -n "$exclude" ]; then
       case "$exclude" in *",$id,"*) continue ;; esac

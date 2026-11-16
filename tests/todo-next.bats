@@ -287,3 +287,11 @@ append_queue_line() {
   [[ "$output" == *"T20000101-000002"* ]]
   [[ "$output" != *"T20000101-000001"* ]]
 }
+
+@test "next: quoted or commented type: event is still skipped (T20261114-352324)" {
+  write_task T20000101-000001 "An event" Open $'type: "Event" # calendar\nwhen: 2099-01-01'
+  write_task T20000101-000002 "Real work" Open
+  printf '# TODO Queue\n\n- [T20000101-000001](T20000101-000001-slug.md): An event\n- [T20000101-000002](T20000101-000002-slug.md): Real work\n' > dev/TODO/queue.md
+  run bash "$SCRIPT" --skip-gated
+  [[ "$output" != *"T20000101-000001"* ]]
+}
