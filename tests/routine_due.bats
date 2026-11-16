@@ -267,7 +267,7 @@ Y
   want="$(python3 -I "$REPO_ROOT/agent-pairing/scripts/routine-config.py" --default "$REPO_ROOT/agent-pairing/routines.default.yml" rows)"
   mkdir -p "$BATS_TEST_TMPDIR/nopy"
   for t in python3 yq; do printf '#!/bin/sh\nexit 1\n' >"$BATS_TEST_TMPDIR/nopy/$t"; chmod +x "$BATS_TEST_TMPDIR/nopy/$t"; done
-  got="$(PATH="$BATS_TEST_TMPDIR/nopy:$PATH" bash -c '. "$1"; rt-config rows ""' _ "$RT" 2>/dev/null)"
+  got="$(PATH="$BATS_TEST_TMPDIR/nopy:$PATH" bash -c '. "$1"; rt-builtin-rows' _ "$RT" 2>/dev/null)"
   [ "$got" = "$want" ]
 }
 

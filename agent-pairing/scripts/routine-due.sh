@@ -33,6 +33,11 @@ function rt-minutes() {
 
 function rt-hm() { echo $((10#${1%%:*} * 60 + 10#${1##*:})); }
 
+# the compiled-in built-ins (must equal the rows of routines.default.yml; a bats test guards the drift)
+function rt-builtin-rows() {
+  printf 'standup\tat\t-\t0\t1,2,3,4,5,6,7\tday\t-\t-\t-\trepo\tretro\nipm\tat\t-\t0\t1,2,3,4,5\tweek\t-\t-\t-\trepo\t-\nretro\tat\t-\t0\t5,6,7\tweek\t-\t-\t-\trepo\t-\n'
+}
+
 # Rows (TSV, "-" = empty) from the merged config; warnings go to stderr once per call.
 function rt-config() {
   local mode=$1 repo_top=${2:-} profile tracked=""
@@ -43,7 +48,7 @@ function rt-config() {
     # no YAML reader: the compiled-in built-ins keep today's behavior (identical to ritual-due.sh)
     if [ "$mode" = rows ]; then
       echo "routine-due: warning: neither PyYAML nor yq found; using the built-in routines only" >&2
-      printf 'standup\tat\t-\t0\t1,2,3,4,5,6,7\tday\t-\t-\t-\trepo\tretro\nipm\tat\t-\t0\t1,2,3,4,5\tweek\t-\t-\t-\trepo\t-\nretro\tat\t-\t0\t5,6,7\tweek\t-\t-\t-\trepo\t-\n'
+      rt-builtin-rows
       return 0
     fi
     echo "routine-due: neither PyYAML nor yq found; cannot read the routine config" >&2
@@ -194,7 +199,7 @@ function routine-due() {
       [ "${CCXP_RITUALS:-1}" = 0 ] && return 0
       [ -n "$(rd-base)" ] || return 0
       [ -e "$(rd-base)/off" ] && return 0
-      rows="$(rt-config rows "$top")" || { echo "routine-due: warning: could not read the routine config" >&2; rows=""; }
+      rows="$(rt-config rows "$top")" || { echo "routine-due: warning: could not read the routine config; using the built-in routines" >&2; rows="$(rt-builtin-rows)"; }
       case "$verb" in
         list) rt-list "$top" "$rows" ;;
         claim) rt-claim "$top" "$rows" ;;
