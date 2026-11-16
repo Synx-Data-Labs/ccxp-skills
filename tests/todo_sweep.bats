@@ -393,3 +393,10 @@ _sw() { run bash "$SWEEP" "$@" --root "$R"; }
   [ "$status" -eq 3 ]
   [[ "$output" != *"UNBLOCK"* ]]
 }
+
+@test "plan: words merely ending in ext: or person: (context:) do not hold a task-id block (T20261114-352324)" {
+  _task $A t "Blocked by $D — see context: notes"
+  _queue $A
+  _sw plan
+  [[ "$output" == *"UNBLOCK"* ]]
+}

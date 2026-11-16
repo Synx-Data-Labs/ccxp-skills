@@ -109,7 +109,7 @@ function sw_blockers() {
   local status="$1"
   [[ "$status" =~ ^Blocked\ by\ T[0-9]+-[0-9]+ ]] || return 0
   # A typed non-task wait (person:/ext:) alongside task ids keeps the block.
-  [[ "$status" =~ (person|ext): ]] && return 0
+  [[ "$status" =~ (^|[^[:alnum:]_])(person|ext): ]] && return 0
   sed -E "s/^Blocked by ($SW_ID_RE(,? +(and +)?$SW_ID_RE)*).*/\\1/" <<<"$status" | grep -oE "$SW_ID_RE"
 }
 
