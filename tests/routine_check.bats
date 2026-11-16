@@ -152,3 +152,14 @@ check() { printf '%s\n' "$1" >"$REPO/dev/.routines.yml"; run --separate-stderr b
   [[ "$output" == *"bad days"* ]]
   [[ "$output" != *Traceback* ]]
 }
+
+@test "an unquoted date in args, a recursive alias and a dangling option do not crash" {
+  printf 'routines:\n  r:\n    steps: [{skill: "/rca", args: 2026-11-16}]\n' >"$REPO/dev/.routines.yml"
+  run bash "$RT" --repo "$REPO" show r
+  [ "$status" -eq 0 ]
+  check $'routines:\n  r:\n    description: &a {k: *a}\n    steps: [{skill: "/rca"}]'
+  [ "$status" -eq 1 ]
+  [[ "$output" != *Traceback* ]]
+  run python3 -I "$REPO_ROOT/agent-pairing/scripts/routine-config.py" --default
+  [ "$status" -eq 2 ]
+}
