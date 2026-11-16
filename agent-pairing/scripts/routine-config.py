@@ -236,10 +236,11 @@ def resolve(args):
             if "allow" in entry and not is_profile:
                 probs.append((path, line, "routine '%s': allow is honored only from the profile file; ignored" % name))
                 del entry["allow"]
-            cand = deep_merge(merged.get(name, {}), entry)
             try:
+                cand = deep_merge(merged.get(name, {}), entry)
                 errs = validate(name, cand, args["skills_root"])
-            except Exception as exc:  # a malformed value must not take every routine down
+                json.dumps(cand, default=str)  # a recursive alias fails here, not later in show
+            except (Exception, RecursionError) as exc:  # a malformed value must not take every routine down
                 errs = ["routine '%s': cannot validate (%s)" % (name, type(exc).__name__)]
             if errs:
                 for e in errs:
@@ -297,6 +298,9 @@ def main(argv):
     while i < len(argv):
         a = argv[i]
         if a in ("--default", "--tracked", "--profile", "--skills-root"):
+            if i + 1 >= len(argv):
+                print("routine-config: %s needs a value" % a, file=sys.stderr)
+                return 2
             args[a[2:].replace("-", "_")] = argv[i + 1]
             i += 2
         else:
@@ -322,7 +326,7 @@ def main(argv):
             print("routine-due: unknown routine '%s'" % (rest[1] if len(rest) > 1 else ""), file=sys.stderr)
             return 3
         for k, v in r.items():
-            print("%s: %s" % (k, json.dumps(v)))
+            print("%s: %s" % (k, json.dumps(v, default=str)))
         return 0
     print("routine-config: unknown mode '%s'" % mode, file=sys.stderr)
     return 2
