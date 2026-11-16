@@ -17,7 +17,7 @@ PARKING_DIR="$TODO_QUEUE_DIR/dev/PARKING"
 
 function todo-list-main() {
   # --type <t>: only rows whose frontmatter `type:` equals <t> (e.g. event);
-  # events sort by `when:` ("Events this week" is `--type event`).
+  # "Events this week" is `--type event`.
   local type_filter=""
   if [ "${1:-}" = "--type" ]; then
     [ -n "${2:-}" ] || { printf 'usage: todo-list.sh [--type <t>]\n' >&2; return 2; }
@@ -58,7 +58,7 @@ function todo-list-main() {
       continue
     fi
 
-    if [ -n "$type_filter" ] && [ "$(todo-fm-get "$task_file" type)" != "$type_filter" ]; then
+    if [ -n "$type_filter" ] && [ "$(todo-task-type "$task_file")" != "$type_filter" ]; then
       continue
     fi
     total=$((total+1))

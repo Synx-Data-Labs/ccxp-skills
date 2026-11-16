@@ -96,3 +96,9 @@ print((d - datetime.timedelta(days=d.weekday())).isoformat())
 # _session/task_claim.sh, dev/TODO/, etc. relative to the *sourcing* script,
 # not the caller's own cwd.
 TODO_LIB_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# Normalised frontmatter `type:` (lowercase; quotes, trailing comment and CR
+# stripped), matching what lint_tasks.py accepts.
+function todo-task-type() {
+  todo-fm-get "$1" type | tr -d '\r"'"'" | sed -E 's/[[:space:]]*#.*$//; s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]'
+}

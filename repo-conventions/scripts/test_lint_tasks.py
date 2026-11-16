@@ -439,6 +439,12 @@ class DimensionsTest(unittest.TestCase):
         errs = self.lint("when: 2026-11-14\nwhen-end: 2026-11-13")
         self.assertTrue(any("before" in m for m in errs))
 
+    def test_when_end_date_same_day_as_datetime_when_ok(self):
+        self.assertEqual(self.lint("when: 2026-11-14T10:00\nwhen-end: 2026-11-14"), [])
+
+    def test_event_with_null_when_fails(self):
+        self.assertTrue(any("requires 'when'" in m for m in self.lint("type: event\nwhen:")))
+
     def test_email_in_person_or_place(self):
         self.assertTrue(any("email" in m for m in self.lint("person: a@b.com")))
         self.assertTrue(any("email" in m for m in self.lint("place: [x@y.org]")))
