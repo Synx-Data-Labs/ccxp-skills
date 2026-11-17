@@ -205,3 +205,24 @@ Parking lot: 0 parked'
   run bash "$REPO_ROOT/ccxp/scripts/render-standup.sh" "$BATS_TEST_TMPDIR/e.json" "$BATS_TEST_TMPDIR/j.json"
   [[ "$output" != *"Today*"* && "$output" != *"Waiting on"* && "$output" != *"Events this week"* ]]
 }
+
+@test "an impossible when date or SESSION_TODAY never crashes with a traceback" {
+  task 1 Open "when: 2026-13-45"
+  task 2 Open "when: 2026-11-16"
+  run bash "$Q" --when today; [ "$status" -eq 0 ]; [ "$(ids)" = "2" ]
+  SESSION_TODAY=bogus run bash "$Q" --when today
+  [ "$status" -eq 2 ]; [[ "$output" != *Traceback* ]]
+}
+
+@test "an inverted when-end window is clamped to the start day" {
+  task 1 Open "when: 2026-11-16" "when-end: 2026-11-15"
+  run bash "$Q" --when today; [ "$(ids)" = "1" ]
+  run bash "$Q" --when overdue; [ -z "$(ids)" ]
+}
+
+@test "an empty --when value is a usage error; todo-next --when bogus fails instead of reading as empty" {
+  run bash "$Q" --when ""; [ "$status" -eq 2 ]
+  task 1 Open
+  run bash "$NEXT" --when bogus; [ "$status" -eq 2 ]
+  run bash "$NEXT" --check --when bogus; [ "$status" -eq 2 ]
+}

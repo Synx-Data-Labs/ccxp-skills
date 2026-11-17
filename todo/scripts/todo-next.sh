@@ -58,7 +58,8 @@ function todo-next-main() {
     dim_filter=1
     [ "$here" = 1 ] && qargs+=(--here)
     [ -n "$when" ] && qargs+=(--when "$when")
-    dim_ids="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" "${qargs[@]}" | grep -oE '^T[0-9]+-[0-9]+' || true)"
+    dim_ids="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" "${qargs[@]}")" || return 2
+    dim_ids="$(grep -oE '^T[0-9]+-[0-9]+' <<<"$dim_ids" || true)"
   elif [ "$check" = 0 ] && [ "$nth" -eq 0 ]; then
     local due
     due="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" --when today 2>/dev/null | grep -E '^T[0-9]+-[0-9]+' || true)"
