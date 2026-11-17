@@ -140,6 +140,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 |-------|---------|
 | `slack` | Send a Slack notification to a configured channel |
 | `routine` | List, run, enable and report configured routines |
+| `nightly-check` | Find failed nightly runs of the last day and run `/rca` or `/labrun-rca` per run |
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
 | `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a content-hash `.envrc` and a standalone `refresh-env` helper |

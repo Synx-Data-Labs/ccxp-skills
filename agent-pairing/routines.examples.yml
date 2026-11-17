@@ -15,9 +15,8 @@ routines:
       - {skill: "/email-triage", args: "--window 24h --no-slack"}
       # - {skill: "/email-triage", args: "--clean --window 24h --no-slack"}   # not implemented yet (T20261116-391393)
     report: slack
-  # Nightly check (not enabled yet): ONE step whose skill does the detection itself and runs /rca (or /labrun-rca
-  # when the run has an alert thread) per failed run. The skill lands with T20261116-179192; copy this block then
-  # (the loader drops a routine whose skill does not exist yet).
+  # Nightly check: ONE step whose skill does the detection itself and runs /rca (or /labrun-rca when the run has an
+  # alert thread) per failed nightly run (T20261116-179192). Copy this block to enable it.
   #
   #   nightly-check:
   #     description: Investigate every failed nightly run of the last day
