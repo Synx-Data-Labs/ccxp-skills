@@ -342,3 +342,75 @@ Y
   CCXP_RITUALS=0 run at "$MON_NOON" check
   [ "$status" -eq 1 ]
 }
+
+# --- starter routines (T20261114-195064) ---
+
+EX="$REPO_ROOT/agent-pairing/routines.examples.yml"
+MON_0730=1794231000   # 2026-11-09 Mon 07:30 CST
+MON_0800X=1794232800  # 2026-11-09 Mon 08:00 CST
+TUE_0800=1794319200   # 2026-11-10 Tue 08:00 CST
+
+@test "starter routines: the examples file passes check as the tracked layer" {
+  cp "$EX" "$REPO/dev/.routines.yml"
+  run at "$MON_NOON" check
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "starter routines: inbox and a second 08:00 routine each fire once at their time over a day, a second check is silent" {
+  cp "$EX" "$REPO/dev/.routines.yml"
+  # nightly-check is a commented example until its skill exists (T20261116-179192): simulate it in the profile layer
+  profile <<'Y'
+routines:
+  ipm: {enabled: false}
+  retro: {enabled: false}
+  nightly-check:
+    schedule: {days: daily, at: "08:00", once_per: day}
+    steps: [{skill: "/rca"}]
+Y
+  run at "$((MON_0730 - 60))" list
+  [[ "$output" != *inbox* ]]
+  run at "$MON_0730" claim
+  [ "$output" = "inbox 2026-11-09" ]
+  run at "$MON_0730" claim
+  [ -z "$output" ]
+  run at "$MON_0800X" claim
+  [ "$output" = "nightly-check 2026-11-09" ]
+  run at "$MON_0800X" claim
+  [ -z "$output" ]
+  # done keeps them quiet for the rest of the day, the next day they are due again
+  run at "$MON_0800X" done inbox 2026-11-09
+  run at "$MON_0800X" done nightly-check 2026-11-09
+  run at "$MON_NOON" list
+  [[ "$output" != *inbox* ]]
+  [[ "$output" != *nightly-check* ]]
+  run at "$TUE_0800" list
+  [[ "$output" == *"inbox 2026-11-10"* ]]
+  [[ "$output" == *"nightly-check 2026-11-10"* ]]
+}
+
+@test "starter routines: alerts is an every: routine, listed as every and never claimed" {
+  cp "$EX" "$REPO/dev/.routines.yml"
+  run at "$MON_NOON" list
+  [[ "$output" == *"alerts every"* ]]
+  run at "$MON_NOON" claim
+  [[ "$output" != *alerts* ]]
+}
+
+@test "starter routines: a disabled built-in does not fire while the starters still do" {
+  cp "$EX" "$REPO/dev/.routines.yml"
+  profile <<'Y'
+routines:
+  standup: {enabled: false}
+Y
+  run at "$MON_0730" list
+  [[ "$output" != *standup* ]]
+  [[ "$output" == *"inbox 2026-11-09"* ]]
+}
+
+@test "starter routines: no step of the examples reaches a send-type operation" {
+  run grep -Ei 'send_message|forward|reply|trash|spam|delete' "$EX"
+  # the file may only mention them in comments that say never; no step line carries one
+  run bash -c "grep -E '^\s*- \{skill' '$EX' | grep -Ei 'send|forward|reply|trash|spam|delete'"
+  [ "$status" -ne 0 ]
+}

@@ -123,7 +123,7 @@ right now."
 - `scripts/trash.sh` — the delete-by-trash helper behind the ccxp-agent "Deleting things" rule (`/usr/bin/trash`, else `mv` into `~/.Trash/<stamp>-<label>/` with a `MANIFEST.tsv`); tests: `bats tests/trash.bats`
 - `persona-refresh.md` — the persona refreshes itself after a `/plugin` update
 - `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `wtf.json` ("where to find"), the UserPromptSubmit `hooks/terms-hook.sh`)
-- `rituals.md` — daily standup, Monday IPM and Friday retro dispatched by the persona's "Rituals due" check (`scripts/ritual-due.sh`); tests: `bats tests/ritual_due.bats`; its "Routines" section covers the config-driven `scripts/routine-due.sh` (`scripts/routine-config.py`, `routines.default.yml`; tests: `bats tests/routine_due.bats tests/routine_check.bats`)
+- `rituals.md` — daily standup, Monday IPM and Friday retro dispatched by the persona's "Routines due" check (`scripts/routine-due.sh`; `scripts/ritual-due.sh` stays for installs that have not refreshed); `routines.examples.yml` holds the starter routines; tests: `bats tests/ritual_due.bats`; its "Routines" section covers the config-driven `scripts/routine-due.sh` (`scripts/routine-config.py`, `routines.default.yml`; tests: `bats tests/routine_due.bats tests/routine_check.bats`)
 - `alerts.md` — the persona's "Slack alerts check": reads #slack-automation-alerts and starts one `labrun-rca` job per unanswered failure alert (`scripts/alerts-due.sh`); tests: `bats tests/alerts_due.bats`
 - `decisions.md` — the agent's decisions log (`ledger.sh decision ...`, `ccxp-decisions.json`/`.md`)
 - `superpowers:dispatching-parallel-agents` — the general pattern this

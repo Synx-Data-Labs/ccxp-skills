@@ -1,0 +1,36 @@
+# Starter routines (T20261114-195064, routines part 3a). Examples, not enabled by the plugin: copy the blocks you
+# want into the tracked <hub repo>/dev/.routines.yml (reviewed, no secrets) or the machine-local profile file
+# ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines.yml, then try `/routine run <name> --dry-run`.
+# `allow:` is honored only from the profile file, so it is deliberately absent here; see agent-pairing/rituals.md.
+# `at` and the times below must be quoted. Days and day boundaries use America/Chicago unless `tz:` is set.
+routines:
+  # Inbox: a read-only summary, then archive, label and draft replies for the owner to review. It never sends,
+  # replies, forwards or deletes mail. The second step is the mail-changing one and needs the profile-only
+  # `allow:` grants (T20261116-391393 defines the skill and the names); without them only the summary runs.
+  inbox:
+    description: Summarize the inbox, then archive, label and draft replies for review (never sends)
+    schedule: {days: weekdays, at: "07:30", once_per: day}
+    scope: any
+    steps:
+      - {skill: "/email-triage", args: "--window 24h --no-slack"}
+      - {skill: "/email-triage", args: "--clean --window 24h --no-slack"}
+    report: slack
+  # Nightly check (not enabled yet): ONE step whose skill does the detection itself and runs /rca (or /labrun-rca
+  # when the run has an alert thread) per failed run. The skill lands with T20261116-179192; copy this block then
+  # (the loader drops a routine whose skill does not exist yet).
+  #
+  #   nightly-check:
+  #     description: Investigate every failed nightly run of the last day
+  #     schedule: {days: daily, at: "08:00", once_per: day}
+  #     steps:
+  #       - {skill: "/nightly-check"}
+  # Alerts: registered only so `/routine list|show|disable` covers it. The persona's inline "Slack alerts check"
+  # does the work and an `every:` routine is never claimed as a job; do not run it by hand.
+  alerts:
+    description: Slack alerts check (run inline by the persona, never as a job)
+    schedule: {every: 5m}
+    steps:
+      - {skill: "/labrun-rca"}
+  # Standup is built in (see routines.default.yml); override only what you want to change.
+  standup:
+    schedule: {at: "08:30"}

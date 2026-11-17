@@ -506,7 +506,8 @@ No step waits on a human in a ritual job:
 
 #### Ritual job bookkeeping
 
-- The job's last action, run by the `/ccxp` agent inside the job as its prompt directs, is `ritual-due.sh --repo <session repo> done <ritual> <key>` (`agent-pairing/rituals.md`).
+- Run by `/routine run standup` (the persona's dispatch): the runner does `done`/`release` from the step outcome, so do not call `ritual-due.sh` yourself; record a partial run as a `failed` step with the reason in its note.
+- Otherwise (a job whose prompt directs it) the last action, run by the `/ccxp` agent inside the job, is `ritual-due.sh --repo <session repo> done <ritual> <key>` (`agent-pairing/rituals.md`).
 - A partial run (the standup not posted, a read-back that failed or found the post missing, or the doc PR not merged) must run `ritual-due.sh release <ritual> <key>` instead of `done`, so the ritual is due again at the next check; `done` is only for a run that finished. A read-back that was impossible only because no channel ID is configured (`UNVERIFIED`) does not make the run partial when the post itself succeeded: report `done` and keep the `UNVERIFIED` note, so the standup is not posted twice.
 
 ### Phase 2a: Monday IPM — optional, not auto-invoked
