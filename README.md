@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 54 skills in one step:
+so `/plugin` can install all 55 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
