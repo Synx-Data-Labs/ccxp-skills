@@ -18,7 +18,7 @@ Usage: task-query.sh [filters] [--group-by when|place|person|type] [--json]
   --json              machine-readable output
 Env: TODO_QUEUE_DIR (default .), SESSION_TODAY=YYYY-MM-DD or CCXP_RITUAL_NOW
 (epoch seconds or ISO) with CCXP_RITUAL_TZ for the clock, CCXP_ROUTINES_PROFILE_FILE
-(default ${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-routines.yml) for `here:`.
+(set by task-query.sh to <profile dir>/ccxp-routines.yml) for `here:`.
 Exit: 0 ok (also when nothing matches), 2 bad usage.
 """
 import datetime
@@ -137,8 +137,9 @@ def last_edit(path):
 
 
 def here_places():
-    prof = os.environ.get("CCXP_ROUTINES_PROFILE_FILE") or os.path.join(
-        os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude"), "ccxp-routines.yml")
+    prof = os.environ.get("CCXP_ROUTINES_PROFILE_FILE")
+    if not prof:
+        return []
     try:
         lines = open(prof, encoding="utf-8").read().split("\n")
     except OSError:
