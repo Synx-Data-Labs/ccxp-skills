@@ -8,7 +8,7 @@
 # requires reading and interpreting free-form task-body prose, a judgment
 # call this token-free script can't make.
 #
-#   todo-next.sh [--skip-gated] [--check] [--exclude T<id>[,T<id>...]] [--nth N]
+#   todo-next.sh [--skip-gated] [--check] [--exclude T<id>[,T<id>...]] [--nth N] [--here] [--when W]
 #     --skip-gated  also skip gated tasks (the SUPERVISED/BLOCKED/needs manual/sign-off
 #                   words, or a `Blocked by` status; see todo-gated in _lib.sh). Used by
 #                   /drive's auto-pick; the default listing still shows them.
@@ -18,6 +18,11 @@
 #                   status is `Blocked by` one of them
 #     --nth N       list only the Nth survivor (1-based) instead of the first 3; with --check,
 #                   exit 0 only when at least N survive
+#     --here        only tasks with no `place:` or a place in the profile file's `here:` list
+#     --when W      only tasks whose `when` matches W (today|tomorrow|week|overdue|<date>)
+#                   Both are filters only (T20261114-380745): the pick is still the first
+#                   match in queue order. Without them, tasks due today are listed first under
+#                   a "Due today" line, informational; it never reorders the queue.
 set -euo pipefail
 
 TODO_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,14 +33,16 @@ TODO_QUEUE_DIR="${TODO_QUEUE_DIR:-.}"
 QUEUE_FILE="$TODO_QUEUE_DIR/dev/TODO/queue.md"
 
 function todo-next-main() {
-  local skip_gated=0 check=0 exclude="" nth=0
+  local skip_gated=0 check=0 exclude="" nth=0 here=0 when=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --skip-gated) skip_gated=1 ;;
       --check) check=1 ;;
       --exclude) [ $# -ge 2 ] || { printf 'usage: --exclude needs a comma list of task ids\n' >&2; return 2; }; exclude=",$2,"; shift ;;
       --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { printf 'usage: --nth needs a positive integer\n' >&2; return 2; }; nth="$2"; shift ;;
-      *) printf 'usage: todo-next.sh [--skip-gated] [--check] [--exclude T<id>,...] [--nth N]\n' >&2; return 2 ;;
+      --here) here=1 ;;
+      --when) [ -n "${2:-}" ] || { printf 'usage: --when needs a value\n' >&2; return 2; }; when="$2"; shift ;;
+      *) printf 'usage: todo-next.sh [--skip-gated] [--check] [--exclude T<id>,...] [--nth N] [--here] [--when W]\n' >&2; return 2 ;;
     esac
     shift
   done
@@ -45,7 +52,21 @@ function todo-next-main() {
     return 0
   fi
 
-  local total=0 picked=0 total_entries=0
+  local total=0 picked=0 total_entries=0 dim_ids="" dim_filter=0 qargs=()
+  local query="$TODO_SCRIPTS_DIR/task-query.sh"
+  if [ "$here" = 1 ] || [ -n "$when" ]; then
+    dim_filter=1
+    [ "$here" = 1 ] && qargs+=(--here)
+    [ -n "$when" ] && qargs+=(--when "$when")
+    dim_ids="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" "${qargs[@]}" | grep -oE '^T[0-9]+-[0-9]+' || true)"
+  elif [ "$check" = 0 ] && [ "$nth" -eq 0 ]; then
+    local due
+    due="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" --when today 2>/dev/null | grep -E '^T[0-9]+-[0-9]+' || true)"
+    if [ -n "$due" ]; then
+      printf 'Due today (informational, does not reorder the queue):\n'
+      printf '%s\n' "$due" | while IFS= read -r l; do printf '  %s\n' "$l"; done
+    fi
+  fi
   local -a lines=()
   while IFS= read -r line; do
     lines+=("$line")
@@ -74,6 +95,9 @@ function todo-next-main() {
     # `type: event` is a dated calendar entry, never implementation work
     # (T20261114-352324): never the pick, gated or not.
     [ "$(todo-task-type "$task_file")" = "event" ] && continue
+    if [ "$dim_filter" = 1 ]; then
+      case $'\n'"$dim_ids"$'\n' in *$'\n'"$id"$'\n'*) : ;; *) continue ;; esac
+    fi
     if [ "$skip_gated" = 1 ] && todo-gated "$status"; then continue; fi
     if [ -n "$exclude" ]; then
       case "$exclude" in *",$id,"*) continue ;; esac

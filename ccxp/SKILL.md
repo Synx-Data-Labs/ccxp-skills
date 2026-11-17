@@ -347,6 +347,8 @@ Judgment keys (full schema in the script header; all optional except `top5`):
 - `links{<thread key>: "<…|Tid>"}` — mrkdwn links for Blockers.
 - `retro_gap` — Friday ticks only: pass the line from `bash <skills-root>/_session/retro_gap.sh` verbatim (omit when silent). Detector only; Phase 2b still runs `/retro`.
 
+Three optional sections come from `standup-data.sh`'s `dimensions` (read-only, `CCXP_CRON_MODE=1` safe), each omitted when empty: Today (`when` today or overdue), Waiting on (tasks `Blocked by person:<alias>`, grouped by alias, with days since the last edit) and Events this week (`type: event` within 7 days, by date). They render after Top 5 next; the trim ladder drops them at its last level.
+
 The journal doc renders Resolved, Nightly health, PRs needing attention, Top 5 next, Epic progress (verbatim `epic-status.sh render`; never omitted), Weekly focus progress, Task attribution by location (omitted on a no-data day), Open escalations and Housekeeping. A failed data section renders "unavailable", never as a clean answer. To act on an epic rather than report it, see `/epic`.
 
 **"Today's plan" is retired** — the Top 5 next section supersedes it (item 1 *is* today's plan); keeping both would just duplicate the same ranking under two headings.

@@ -18,3 +18,14 @@ routines:
     schedule: {days: [fri, sat, sun], once_per: week}
     steps:
       - {skill: "/retro"}
+# Examples (T20261114-380745), not enabled here: copy into dev/.routines.yml to use.
+#  today:
+#    description: Tasks due today or overdue, grouped by place
+#    schedule: {days: daily, at: "08:00", once_per: day}
+#    steps:
+#      - {skill: "/todo list --when today,overdue --group-by place"}
+#  waiting:
+#    description: Everything blocked on a person, grouped by alias
+#    schedule: {days: [mon], once_per: week}
+#    steps:
+#      - {skill: "/todo list --waiting-on any --group-by person"}
