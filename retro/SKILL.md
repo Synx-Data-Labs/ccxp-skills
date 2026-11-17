@@ -199,7 +199,9 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 
 #### Focus list grade (the main accountability check)
 
-For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is: this grading pass is dormant by design wherever the ceremony isn't run, not broken. Render every `Task` cell as `T<id> — {title}` so the list reads without opening each task.
+For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is: this grading pass is dormant by design wherever the ceremony isn't run, not broken.
+
+Render every `Task` cell as `T<id> — {title}` so the list reads without opening each task.
 
 - **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
 - **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will carry over automatically next IPM.
@@ -219,7 +221,7 @@ bash <skills-root>/retro/scripts/estimation-revisions.sh \
 
 #### Delivered but not planned
 
-Closures from Phase 1 step 10 whose task ID is not in this week's `ipm-weekly.md` list. Together with the Shipped and Dropped counts this is the Monday-picked vs Friday-finished comparison. A chronically straggling task simply keeps showing as Dropped from one retro to the next; there is no bump counter. Render each as `T<id> — {title}`; skip when no IPM ran this week.
+Closures from Phase 1 step 10 whose task ID is not in this week's `ipm-weekly.md` list. With the Shipped and Dropped counts this is the Monday-picked vs Friday-finished comparison; a chronic straggler just keeps showing as Dropped. Render each as `T<id> — {title}`; skip when no IPM ran this week.
 
 #### What went well (keep doing)
 
