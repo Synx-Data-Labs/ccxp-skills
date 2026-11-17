@@ -53,7 +53,7 @@ if [ -n "$ipm" ]; then
 fi
 
 # Staleness bound: _ipm_current() intentionally serves other callers (rca,
-# ccxp Phase 1.1/2a.1.5/2a.5b) "newest committed, however old" — but here BASE
+# ccxp Phase 1.1, /ipm step 1.5/5b) "newest committed, however old" — but here BASE
 # maps a task to the *current/upcoming* board iteration, so an old result is
 # wrong, not just old. If BASE is more than 14 days behind TODAY, discard it
 # and let the existing Tier-2 fallthrough below take over. GNU date then BSD

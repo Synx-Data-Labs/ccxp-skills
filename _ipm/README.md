@@ -27,7 +27,7 @@ current + 7 == next). The write is **update-forward-only** — an existing later
 **Best-effort:** a non-YAML/legacy task file is left untouched (exit 0, no output);
 a missing task-file argument is a usage error (exit 64). It never hard-fails a caller.
 
-**Callers:** `/rca` (Step 6, `current`), `/retro` (Phase 4a action items, `current`),
+**Callers:** `/retro` (Phase 4a action items, `current`),
 `/address-pr` (follow-up doc-conformance task, `next`), `/drive` (blockers `current`,
 follow-ups `next`). This is the single primitive those creators use so a task placed in
 an iteration always carries a matching `scheduled:` (the desync T20260626-190842 fixed).
