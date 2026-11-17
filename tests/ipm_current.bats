@@ -27,7 +27,7 @@ mk_ipm() {
 
 # --- core: staging-stub excluded even when its date == today -----------------
 
-@test "2a.1.5 case: at Monday IPM the still-staged stub is skipped; previous commit wins" {
+@test "ipm step 1.5 case: at Monday IPM the still-staged stub is skipped; previous commit wins" {
   mk_ipm 2026-06-01 no      # last week's committed IPM
   mk_ipm 2026-06-08 yes     # this week's stub (date == today, still staged)
   run env IPM_TODAY=2026-06-08 bash -c "source '$REPO_ROOT/_ipm/current.sh'; _ipm_current '$JDIR'"
@@ -35,9 +35,9 @@ mk_ipm() {
   [[ "$output" == *"2026-06-01-ipm-weekly.md" ]]
 }
 
-@test "2a.5b case: once the stub's staging header is dropped, it becomes current" {
+@test "ipm step 5b case: once the stub's staging header is dropped, it becomes current" {
   mk_ipm 2026-06-01 no
-  mk_ipm 2026-06-08 no      # 2a.5 committed this week's IPM (header gone)
+  mk_ipm 2026-06-08 no      # ipm step 5 committed this week's IPM (header gone)
   run env IPM_TODAY=2026-06-08 bash -c "source '$REPO_ROOT/_ipm/current.sh'; _ipm_current '$JDIR'"
   [ "$status" -eq 0 ]
   [[ "$output" == *"2026-06-08-ipm-weekly.md" ]]

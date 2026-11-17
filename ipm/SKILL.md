@@ -175,7 +175,7 @@ Write `dev/JOURNAL/YYYY-MM-DD-ipm-weekly.md`.
 - **Revise-in-place if a `/stage` stub already exists at this path** — `/stage` may have already created `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` during the prior week, header `**Status**: Pre-IPM staging` plus a populated `## Candidates` section. Don't create cold (it'd clobber the staged rationale): edit in place, populate the Committed table, and **drop the `**Status**: Pre-IPM staging` marker line** so `_ipm/current.sh` starts selecting it as committed. Create cold only when no stub exists.
 - Deliverables: (a) the committed list — carry-over + new picks + infra/tooling, one table, in `queue.md` order (see template below), (b) cuts with reasons, (c) notes/escalations, (d) a disposition for every carry-over candidate from step 1.5 (accepted into the committed list, or re-cut under `## Considered but cut`). This is a record of what was committed, not a schedule — `/drive` works it off `queue.md` order day-to-day, same as any other week.
 
-**Render every task reference as a clickable markdown link.** In every table below (Committed this iteration, Carry-over candidates, Mid-week additions, Considered but cut), the `Task` column is a link, not bare text — `[T<id>](<issue-url>)`, built via the same map-free resolver the daily standup uses (`/ccxp` Phase 1.4):
+**Render every task reference as a clickable markdown link.** In every table below (Committed this iteration, Carry-over candidates, Mid-week additions, Considered but cut), the `Task` column is a link plus the title, not bare text — `[T<id>](<issue-url>) — {title}` (append the task's title after the link), built via the same map-free resolver the daily standup uses (`/ccxp` Phase 1.4):
 
 ```bash
 source <skills-root>/_taskid/url.sh
