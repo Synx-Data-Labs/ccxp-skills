@@ -1,7 +1,7 @@
 ---
 name: nightly-check
 description: Use when the user explicitly asks to check the nightly runs, or a routine step calls it — list failed nightly runs of the last day and run /rca (or /labrun-rca when the run has an alert thread) for each
-argument-hint: "[--repo owner/repo] [--window-hours 24] [--max 3]"
+argument-hint: "[--repo owner/repo] [--window-hours 26] [--max 3]"
 ---
 
 # /nightly-check
