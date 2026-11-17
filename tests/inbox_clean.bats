@@ -122,6 +122,12 @@ setup() {
   [ "$status" -eq 5 ]
 }
 
+@test "unattended run without --routine is refused (the gate does not fail open)" {
+  CCXP_CRON_MODE=1 run bash "$IC" plan --dry-run <<<$'abc123\tarchive'
+  [ "$status" -eq 5 ]
+  [[ "$output" != *unlabel_thread* ]]
+}
+
 @test "run-routine allowed: send-type capabilities are never grantable, also as gmail.<name>" {
   printf 'routines:\n  inbox:\n    allow: [gmail.send, send, reply, gmail.forward, trash, gmail.spam, gmail.draft]\n' >"$CCXP_ROUTINES_PROFILE_FILE"
   for c in send gmail.send reply gmail.forward trash gmail.spam; do
