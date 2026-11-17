@@ -91,6 +91,9 @@ setup() {
   printf 'archive\tabc123\tTRASH\n' >"$BATS_TEST_TMPDIR/bad.tsv"
   run bash "$IC" undo "$BATS_TEST_TMPDIR/bad.tsv"; [ "$status" -eq 4 ]
   [[ "$output" != *label_thread* ]]
+  printf 'label\tabc123\tccxp/x\narchive\tabc123\tTRASH\n' >"$BATS_TEST_TMPDIR/bad2.tsv"
+  run bash "$IC" undo "$BATS_TEST_TMPDIR/bad2.tsv"; [ "$status" -eq 4 ]
+  [[ "$output" != *unlabel_thread* ]]
   run bash "$IC" check-tool '.*'; [ "$status" -eq 1 ]
   run bash "$IC" check-tool 'create_dra.t'; [ "$status" -eq 1 ]
 }
