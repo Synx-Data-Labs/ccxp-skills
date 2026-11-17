@@ -32,14 +32,14 @@ Cleans the inbox after `/email-triage` has read it: archives noise, labels what 
 | `create_draft` | `gmail.draft` | a draft for the owner to review, never sent |
 
 - Never called, never grantable: `send_message`, `reply`, `forward`, trash, spam, delete, `update_draft`, any `*_message_labels` call. `bash $IC check-tool <tool>` exits 4 for these.
-- `gmail.*` capabilities come from the profile file's `allow:` only (`bash <skills-root>/routine/scripts/run-routine.sh allowed <routine> <cap>`). An interactive run has the owner present and checks none.
+- `gmail.*` capabilities come from the profile file's `allow:` only (`bash <skills-root>/routine/scripts/run-routine.sh allowed <routine> <cap>`). An interactive run has the owner present and checks none; an unattended run (`CCXP_CRON_MODE=1`, any routine step) must pass `--routine` to `plan`.
 
 ## Workflow
 
 1. **Read**: `search_threads` for `in:inbox newer_than:<window>`; classify as `/email-triage` does (notification vs actionable). Read bodies only for a thread that may need a draft; bodies never go to repo files, the journal, Slack or the plan.
 2. **Decide**, one line per thread, TSV `thread_id<TAB>archive|label|draft[<TAB>label]`:
    - `archive`: notifications and newsletters. The script adds the `ccxp/archived` label first so the mail stays findable.
-   - `label`: actionable threads that stay in the inbox, with a short label such as `ccxp/needs-reply`.
+   - `label`: actionable threads that stay in the inbox, with a label in the `ccxp/` namespace such as `ccxp/needs-reply` (the script refuses any other label).
    - `draft`: only a thread that is a plain human question you can answer from the thread itself. Anything involving money, commitments, legal or a customer is `label`, not `draft`.
    - When unsure, leave the thread alone.
 3. **Plan**: pipe the TSV to `bash $IC plan [--dry-run] [--routine <name>]`. Exit 4 means a refused action, 5 a missing capability: fix the plan, never work around it. Without `--dry-run` it prints `undo=<file>`; no Gmail call before that line.

@@ -65,8 +65,11 @@ setup() {
 
 @test "plan refuses bad thread ids, system labels and an empty plan" {
   run bash "$IC" plan <<<$'not-hex!\tarchive'; [ "$status" -eq 4 ]
-  run bash "$IC" plan <<<$'abc123\tlabel\tINBOX'; [ "$status" -eq 4 ]
-  run bash "$IC" plan <<<$'abc123\tlabel\tTRASH'; [ "$status" -eq 4 ]
+  for l in INBOX TRASH trash Spam inbox Unread CATEGORY_PROMOTIONS ccxp ccxp/ other/x; do
+    run bash "$IC" plan <<<$'abc123\tlabel\t'"$l"; [ "$status" -eq 4 ]
+  done
+  run bash "$IC" plan <<<$'\n\n'; [ "$status" -eq 3 ]
+  [ ! -e "$CCXP_INBOX_CLEAN_DIR" ]
   run bash "$IC" plan <<<$'abc123\tlabel'; [ "$status" -eq 4 ]
   run bash "$IC" plan </dev/null; [ "$status" -eq 3 ]
 }
@@ -82,6 +85,20 @@ setup() {
   [[ "$output" == *$'label_thread\tabc123\tINBOX'* ]]
   [[ "$output" == *$'unlabel_thread\tabc123\tccxp/archived'* ]] || [[ "$output" == *$'unlabel_thread\tabc123'* ]]
   [[ "$output" == *$'MANUAL\t0a1b2c3d'* ]]
+}
+
+@test "undo refuses a tampered note; check-tool matches names literally" {
+  printf 'archive\tabc123\tTRASH\n' >"$BATS_TEST_TMPDIR/bad.tsv"
+  run bash "$IC" undo "$BATS_TEST_TMPDIR/bad.tsv"; [ "$status" -eq 4 ]
+  [[ "$output" != *label_thread* ]]
+  run bash "$IC" check-tool '.*'; [ "$status" -eq 1 ]
+  run bash "$IC" check-tool 'create_dra.t'; [ "$status" -eq 1 ]
+}
+
+@test "plan runs under the system bash 3.2 when present" {
+  [ -x /bin/bash ] || skip
+  run /bin/bash "$IC" plan --dry-run <<<$'abc123\tarchive'
+  [ "$status" -eq 0 ]
 }
 
 @test "plan without an undo dir makes no plan" {
@@ -105,6 +122,11 @@ setup() {
 @test "run-routine allowed: send-type capabilities are never grantable, also as gmail.<name>" {
   printf 'routines:\n  inbox:\n    allow: [gmail.send, send, reply, gmail.forward, trash, gmail.spam, gmail.draft]\n' >"$CCXP_ROUTINES_PROFILE_FILE"
   for c in send gmail.send reply gmail.forward trash gmail.spam; do
+    run bash "$RR" --repo "$REPO" allowed inbox "$c"
+    [ "$status" -ne 0 ]
+  done
+  printf 'routines:\n  inbox:\n    allow: [Send, gmail.send_message, gmail.trash_thread, gmail.delete, gmail.draft]\n' >"$CCXP_ROUTINES_PROFILE_FILE"
+  for c in Send gmail.send_message gmail.trash_thread gmail.delete; do
     run bash "$RR" --repo "$REPO" allowed inbox "$c"
     [ "$status" -ne 0 ]
   done
