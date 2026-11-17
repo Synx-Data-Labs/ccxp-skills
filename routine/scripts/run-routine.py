@@ -21,7 +21,7 @@ RR_DIR = os.environ.get("RR_DIR", "")
 NAME = os.environ.get("RR_NAME", "")
 OUTCOMES = ("ok", "nothing-to-do", "failed", "needs-human", "skipped")
 MAX_ATTEMPTS = 4  # one first run plus the 3 retries a day that part 1's design allows
-KEY_RE = re.compile(r"^(\d{4}-\d{2}-\d{2}|every|manual-\d+)$")
+KEY_RE = re.compile(r"(\d{4}-\d{2}-\d{2}|every|manual-\d+)", re.ASCII)
 
 
 def die(msg, code=2):
@@ -153,7 +153,7 @@ def main(argv):
         idx, status = a[1], a[2]
         if status not in OUTCOMES[:4]:
             die("bad outcome '%s' (ok, nothing-to-do, failed, needs-human)" % status)
-        if not idx.isdigit() or not 1 <= int(idx) <= len(rec["steps"]):
+        if not (idx.isascii() and idx.isdigit()) or not 1 <= int(idx) <= len(rec["steps"]):
             die("bad step index '%s'" % idx)
         st = rec["steps"][int(idx) - 1]
         st.update(status=status, started=st["started"] or now(), finished=now(), note=oneline(a[3] if len(a) > 3 else ""))
