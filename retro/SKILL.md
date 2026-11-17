@@ -51,9 +51,7 @@ Collect the rest over `START`..`END`. Do all reads in parallel:
 7. **Slack escalations**: `bash <skills-root>/_threads/threads.sh list` — what needed human intervention (counts: `.escalations`). **This is one clone's view, never the week's total**: `drive-threads.json` is gitignored, per-clone state by design (a shared file would race between concurrent sessions), so escalations posted from other clones, concurrent autopilot slots, or as plain channel messages are not in it. Treat the count as a floor and cross-check live Slack (`$DRIVE_ESCALATION_CHANNEL_ID` / the escalation channel) for the window before reporting a number; state both in the retro.
 8. **Previous retro**: Read `PRIOR_RETRO` — check if prior action items were addressed, and extract the `CI pass rate` cell (e.g. `76% (...)`) so Phase 3 can report the delta vs this retro.
 9. **This week's IPM commit**: Read `IPM_FILE` (`dev/JOURNAL/<THIS_MONDAY>-ipm-weekly.md`) — the focus list to grade. If it is empty/missing (no IPM ran this Monday — holiday, off day, or pre-rollout), note "No IPM commit this week" and skip Phase 2's focus grading + Phase 3's focus rows.
-10. **Last 2 ipm-weekly files**: Read the previous two `dev/JOURNAL/*-ipm-weekly.md` to detect tasks bumped 3+ IPMs in a row. A task is "bumped" if it appeared in a ipm-weekly and is still in `dev/TODO/` (not in JOURNAL as Done) — i.e. it didn't ship that week. Three consecutive bumps is a process smell worth flagging.
-
-    Each IPM file's header records `**Scheduled**: YYYY-MM-DD` (the Monday date of that IPM commit; set by `/ipm` step 5). The bump-counter collects task IDs cited in each of the 3 most-recent IPM files; a task that appears in all 3 sets is bumped 3x. No reliance on Project-side iteration mapping — the IPM file dates are the join key.
+10. **Closures in the window**: list the `dev/JOURNAL/` task closures dated in the window (`T<id>` plus title). Phase 2 diffs them against `IPM_FILE`'s list to find work delivered but not planned. No earlier IPM files are read: there is no bump counter.
 
 11. **Cron utilization** (the feedback loop for tuning cron frequency without extra tokens): locate the ccxp cron clone's log dir — `crontab -l` names the `daily-ccxp.sh` path; its repo root contains `.claude-ccxp-logs/`. Fall back to `<current-repo-root>/.claude-ccxp-logs` if crontab is unreadable; if neither exists, report "no cron logs reachable from this clone" and skip the Phase 3 cron rows. For each `ccxp-YYYYMMDD.log` in the window (gunzip `.log.gz` archives as needed):
 
@@ -201,7 +199,7 @@ Organize findings into three categories. Be specific — cite task IDs, PR numbe
 
 #### Focus list grade (the main accountability check)
 
-For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is: this grading pass, and the bump-counter below, are dormant by design wherever the ceremony isn't run, not broken.
+For each task on this week's `ipm-weekly.md`, classify the outcome. Skip this section if no IPM ran this week — which is the common case for a repo that treats `/ipm` as the opt-in, ad-hoc tool it now is: this grading pass is dormant by design wherever the ceremony isn't run, not broken. Render every `Task` cell as `T<id> — {title}` so the list reads without opening each task.
 
 - **Shipped** — PR merged this week and the task closed as Done, whether it's already sitting in `dev/JOURNAL/` (the expected case — `/drive` journal-moves immediately on every close) or still in `dev/TODO/` with `status: Done` (a hand-closed task, or one closed by a session predating that change — `dev/JOURNAL/`-only is a stale check that undercounts these). Compute `actual` from PR `created → merged`. Compare `revised est` (from ipm-weekly.md) vs `actual`; flag when ratio > 2x or < 0.5x.
 - **In flight** — task started (Status `In Progress` or `Review`) but not merged. It will carry over automatically next IPM.
@@ -219,7 +217,9 @@ bash <skills-root>/retro/scripts/estimation-revisions.sh \
 - Read the four arc shapes as estimation-discipline signal: no revisions + actual ≈ est = good; no revisions + actual ≫ est = under-estimated; revised upward, actual ≈ latest = healthy discovery; revised downward = scope-cut to fit budget.
 - Feed the per-task arc into the Phase 5 **Revisions** column.
 
-Cross-reference the previous 2 ipm-weekly files (Phase 1 step 10): if a Dropped task appeared in **all three** of this week, last week, and the week before, mark it **bumped 3x** and surface it under "What needs improvement" — repeated bumping means either the task is mis-prioritized, mis-estimated, or genuinely lower priority than it was filed at.
+#### Delivered but not planned
+
+Closures from Phase 1 step 10 whose task ID is not in this week's `ipm-weekly.md` list. Together with the Shipped and Dropped counts this is the Monday-picked vs Friday-finished comparison. A chronically straggling task simply keeps showing as Dropped from one retro to the next; there is no bump counter. Render each as `T<id> — {title}`; skip when no IPM ran this week.
 
 #### What went well (keep doing)
 
@@ -354,9 +354,7 @@ Compute and report these metrics for the review period:
 | Parking lot size | PARKING count |
 | Net backlog change | new tasks created - tasks completed |
 | Focus list grade | `{shipped}/{total}` shipped, `{in_flight}` in flight, `{partial}` partial, `{dropped}` dropped (skip if no IPM this week) |
-| Focus budget hit rate | `{committed}h committed / {actual}h spent` — compute by summing revised est for shipped tasks vs PR cycle-time totals; report ratio (e.g. `1.4x` means actual was 40% over commit) |
-| Tasks bumped 3x | comma-separated task IDs that appeared on this week's, last week's, AND the prior week's focus lists without shipping (or "None") |
-| Escalated via /top | `N tasks escalated` (Phase 4b — `/top`'d to the front of `queue.md`, tasks bumped 3×). Include the IDs if N > 0; pure-text "None" if N = 0 |
+| Plan adherence | `{shipped}/{planned}` planned tasks shipped, `{unplanned}` unplanned shipped (skip if no IPM this week) |
 | Cron active time | avg + range of active model min/day from Phase 1 step 11 (e.g. `27 min avg, 16–39`) — flag if trending down with a growing backlog (sessions starving) or up against flat throughput (churn) |
 | Cron cost | avg + range $/day (e.g. `$11.7 avg, $6.5–13.9`); flag a band shift vs the prior retro — the gate should keep this flat while the hourly cron cuts latency |
 | Cron preflight ratio | `fires/total` hourly fires that launched claude (e.g. `3/24`); `n/a (pre-gate)` for pre-rollout days. A ratio near 1.0 means the gate never skips (signals always present — fine); near 0 with a stale backlog means probes may be missing real signals |
@@ -384,27 +382,13 @@ For each "needs improvement" finding, create a concrete, actionable task:
 5. After writing each file, stamp its `scheduled:` into the **current** iteration so the action item lands on the board's Iterations view, not just the backlog: `bash <skills-root>/_ipm/stamp-scheduled.sh dev/TODO/<id>-<slug>.md current` (token-free: committed IPM → Project API → next-Monday fallback; update-forward-only).
 6. Do NOT create tasks for "what's fine" or "what went well" — those are informational
 
-### Phase 4b: Escalate chronically-deferred tasks
-
-`scheduled:` is **update-forward-only and is never cleared here** — it is the task's last-scheduling record, and a *past* `scheduled` already reads as a fresh candidate to `/todo next` (committed ⟺ `scheduled` ≥ current Monday), so no zombie-clearing hygiene pass is needed. Instead this phase acts on chronic deferral.
-
-- **Rule**: For every task flagged **bumped 3×** by the bump-counter (Phase 1 step 10 / Phase 2 — cited in all 3 most-recent ipm-weekly files without shipping), run `/top <id>` to move it to the front of `dev/TODO/queue.md`.
-- Idempotent — a no-op if it's already at the front. (There is no `priority:` field to set — `todo/SKILL.md` retired it; position in `queue.md` **is** priority, so `/top` is the escalation mechanism, matching `lifecycle.md`'s "Iteration assignment" section.)
-
-- **Why**: a task surfaced and cut three IPMs running that nobody parked is one the team keeps deciding matters but defers.
-- Escalating it to the front of the queue forces it up `/todo next`'s pick order so the next IPM (or the next `/drive` pull, for a repo not running IPM) is likely to commit it; the human's release valve is to consciously park it (`/todo sweep`) if it genuinely shouldn't escalate.
-
-**What this does NOT touch**: `scheduled:` on any task (never cleared); files in `dev/PARKING/` and `dev/JOURNAL/`; tasks not flagged by the bump-counter.
-
-**Report**: add an "Escalated N tasks via /top (bumped 3×)" line to the metrics table (Phase 3) and the Slack summary (Phase 6); include the task IDs (or "None").
-
 ### Phase 4c: Skill quality review
 
 Grade the skills exercised this week and improve the single worst offender. This is the recurring skill-quality loop; it consumes the Phase 2 grade and Phase 3 metrics. **Hard cap: act on at most one skill per retro.** Remaining candidates are listed in the report (Phase 5), not acted on.
 
 **Step 1 — gather candidate signals (graceful degradation; no signal is a hard dependency):**
 
-- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks bumped 3x (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-immediate-move task still sitting in `dev/TODO/`.
+- **Outcome (always available):** attribute this week's pain to skills. Coarse attribution by domain when no audit block is present — many PR review iterations / reopened threads → `address-pr` or `drive` prose; CI failures or reverts after `/drive` arcs → `drive` prose; tasks repeatedly Dropped (from Phase 2) → the planning skills (`todo`, `ccxp`). Exact attribution when a "Skills invoked" audit block is present: grep both the week's JOURNAL (`dev/JOURNAL/<this-week>-T*.md`) **and** any `dev/TODO/T*.md` with `status: Done` (a task closed but not yet swept by the Phase 2b backstop) for `## Skills invoked` — JOURNAL-only misses a hand-closed or pre-immediate-move task still sitting in `dev/TODO/`.
 - **Authoring (always available):** `python3 <skills-root>/skill-conventions/scripts/skill_score.py <skill…>` in the ccxp-skills checkout — deterministic 0–100 score, per-check breakdown, and maturity level (`skill-conventions` §10). Lowest score / broken refs escalate.
 - **Real-use feedback (when logged):** `python3 <skills-root>/skill-conventions/scripts/skill_feedback.py list` — open items are observed misbehavior; a skill with any is a strong candidate. The fix follows §10's loop: failing eval case first, then the prose edit, then `codify`.
 - **Compliance (when available):** grep the week's JOURNAL audit blocks for skills that should have fired but were skipped, or fired at the wrong phase. Absent the audit block, skip this signal.
@@ -511,7 +495,7 @@ right choice, same as the IPM template).
 |------|--------|-----------------|-----------|---------|--------|-------|
 | T... | Carry-over | 2h | filed `1h` → `2h` (scope discovered) | Shipped | 4h | 2x over — design pass missed the registry side |
 | T... | New pick | 1d | no revisions | In flight | — | Carries over next IPM |
-| T... | New pick | 4h | no revisions | Dropped | — | Bumped 3x — surface in "needs improvement" |
+| T... | New pick | 4h | no revisions | Dropped | — | Dropped again — surface in "needs improvement" |
 | T... | Mid-week addition | 1h | filed `1h` | Shipped | 1h | Red-pipeline auto-promote (Phase 1.2 RCA) — fit slack cleanly |
 
 The **Revisions** column is the per-task arc from `retro/scripts/estimation-revisions.sh` (Phase 2). `no revisions` = the estimate held all week.

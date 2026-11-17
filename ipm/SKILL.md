@@ -68,22 +68,6 @@ Read all `dev/TODO/*.md` files. Tasks with Status `In Progress` or `Review` are 
 - **A claim pins ownership of the work, not the iteration it's tracked in:** the IPM still has full discretion to *defer* a claimed task to a later iteration instead of carrying it (set its `scheduled:` to a future Monday in step 5).
 - What it must never do is leave a claimed task's `scheduled:` untouched and let it drift from the IPM's intent.
 
-**Bump-2x reassessment — force a decision before the third commit.** An unconditionally-carried task becomes a "we'll get to it" comfort blanket that absorbs accountability without shipping. `/retro`'s bump-3x detector catches this, but only retrospectively, after the third wasted week — catch it here, one step earlier. (Both detectors only fire for a repo that actually runs this ceremony — dormant by design, not broken, wherever `/ipm` is never invoked.)
-
-- **Detection** (same file-date join key `/retro` uses, no Project-side iteration mapping): read the last 2 committed `*-ipm-weekly.md` files (`PREV_IPM=$(bash <skills-root>/_ipm/current.sh)` gives the newest; the one before it is the next-older `dev/JOURNAL/*-ipm-weekly.md` by date).
-- For each task in this week's carry-over set, check whether it appears as a carried/in-flight row in the committed list of **both** prior IPMs — if so, committing it now would be its 3rd consecutive carry: flag it **"Bumped 2x — reassess"**.
-- For each flagged task, force an explicit disposition below — never a silent re-carry.
-
-- **Re-commit** — keep it as a carry-over, but record a one-line "still the right call" reason in the IPM `## Notes` (e.g. "blocker cleared this week, finishing now").
-- **Won't fix** — close it (journal-move stub), exactly as a task was after its third bump in a real observed case.
-- **Defer** — move it out of this iteration: advance its `scheduled:` to a future Monday and pre-append it to that Monday's stub, identical to the step 5 "Cut candidates — advance, never clear" mechanics.
-
-**Unattended (the cron default): auto-defer + a Slack note.**
-
-- Never silently re-commit, and never hard-block the IPM waiting on a human — a blocking wait would stall the whole unattended commit.
-- Auto-defer the flagged task per the bullet above and post one line to `#acme-dev-notifications`: `*IPM bump-2x*: T<id> deferred — carried 3 IPMs without shipping; reassess (re-commit / Won't fix / defer) by reply.`
-- `/retro`'s bump-3x detection is unchanged — it remains the safety net for anything that slips through.
-
 ### 1.5 Seed carry-over candidates (from last IPM's cuts)
 
 Cuts must not vanish. Read the previous IPM file — `PREV_IPM=$(bash <skills-root>/_ipm/current.sh)`.
@@ -94,7 +78,7 @@ Cuts must not vanish. Read the previous IPM file — `PREV_IPM=$(bash <skills-ro
 The survivors are **carry-over candidates** — tasks a prior IPM deliberately deferred. They enter this IPM's candidate pool alongside `/todo next` (step 2), but are **not** auto-committed and their `scheduled:` is **not** advanced by being a candidate.
 
 - The IPM still decides per task in step 4: **accept** (place in the committed list → gets `scheduled` in step 5) or **re-cut** (re-list under `## Considered but cut` with a reason).
-- No silent drops — a perpetually-deferred task recurring across consecutive IPM files is exactly the chronic-deferral signal `/retro`'s bump-counter surfaces.
+- No silent drops — a perpetually-deferred task recurring across consecutive IPM files is visible in plain sight as a repeat "Dropped" row in `/retro`'s Monday-vs-Friday diff.
 
 ### 2 Pick candidates
 
@@ -202,7 +186,7 @@ taskid-mdlink T<id>      # -> [T<id>](https://github.com/…/issues/…)
 
 In the same step, for each task in the committed list (carry-over, new pick, or infra/tooling), edit the task file in `dev/TODO/` to set `scheduled: ${SCHEDULED}` in its YAML frontmatter.
 
-- **Always overwrite**, never skip — when a task moves between IPMs (carried over, or a business-priority shift pulling it from a later iteration), the new IPM's Monday becomes the authoritative scheduled date. The task file's git log preserves the full `scheduled` history; retro's bump-counter walks the IPM files themselves rather than the task file's current value.
+- **Always overwrite**, never skip — when a task moves between IPMs (carried over, or a business-priority shift pulling it from a later iteration), the new IPM's Monday becomes the authoritative scheduled date. The task file's git log preserves the full `scheduled` history.
 - **Applies to claimed / peer-owned tasks too** — being claimed does not exempt a task from `scheduled:` advancement. Editing only that field is an IPM planning action (re-tracking the iteration), not a touch on the peer's branch/PR/work — not a collective-ownership violation.
 - `scheduled:` is the only iteration record there is (no board to derive from) — a carry-over whose `scheduled:` is left stale stays pinned to the old iteration even though the IPM prose "carried" it. Carrying a task in the prose and advancing its `scheduled:` are one action, not two: do both, every claimed task included.
 

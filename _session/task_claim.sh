@@ -682,7 +682,7 @@ _tc_release_others() {
   # Status handling: only an actively-claimed-but-now-abandoned task
   # (In Progress) is returned to the pickable pool (→ Open). Every other status
   # is PRESERVED, just shorn of its claim:
-  #   - `Design`: a completed design pass is durable progress and the IPM Tier-2
+  #   - `Design`: a completed design pass is durable progress and the IPM
   #     eligibility marker (T20260730-256265).
   #   - `Blocked by T<id>` (the compound blocked status): resetting it to Open
   #     would re-inject a still-blocked task and destroy the blocker linkage

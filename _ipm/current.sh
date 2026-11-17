@@ -14,13 +14,12 @@
 # lexically == chronologically.
 #
 # A SINGLE selector serves every caller:
-#   - /rca Step 6 (mid-week-addition auto-promote target) -> newest committed
 #   - /ccxp Phase 1.1 standup "current weekly focus" -> newest committed
-#   - /ccxp Phase 2a.1.5 (seed carry-over from last IPM) -> 2a.1.5 runs BEFORE
-#       2a.5, so this week's file is still a staging stub (excluded) and "newest
+#   - /ipm step 1.5 (seed carry-over from last IPM) -> runs BEFORE the commit
+#       step, so this week's file is still a staging stub (excluded) and "newest
 #       committed" already means last week's. An index-based "previous" would
 #       wrongly return empty here.
-#   - /ccxp Phase 2a.5b (ROADMAP) -> runs AFTER 2a.5, so this week's file is now
+#   - /ipm step 5b (ROADMAP) -> runs AFTER 2a.5, so this week's file is now
 #       committed and is "newest committed".
 #
 # Usage:

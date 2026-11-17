@@ -457,7 +457,7 @@ miss streak on the daily standup, 2026-07-30 through 2026-08-05. Don't let a fai
    (final report) so it's visible in the cron log. Something's wrong beyond the known MCP flakiness.
 
 - **Scope note.** This fallback is wired only into this phase and `/ipm` step 6 (Weekly Focus) — the two sends across this file and `/ipm` that fire unconditionally on their cadence (daily / weekly).
-- The other `slack_send_message` call sites (Phase 0.5's reclaim-sweep and claim-gap summaries in this file, the IPM bump-2x note, `/ipm` step 5b's ROADMAP-failure escalation) are conditional — they post only when something's already been found — so an occasional miss there is lower-stakes than losing a guaranteed daily/weekly notification.
+- The other `slack_send_message` call sites (Phase 0.5's reclaim-sweep and claim-gap summaries in this file, `/ipm` step 5b's ROADMAP-failure escalation) are conditional — they post only when something's already been found — so an occasional miss there is lower-stakes than losing a guaranteed daily/weekly notification.
 - Extending the same pattern to those sites is a reasonable follow-up, not done here to keep this change scoped to the tracked failure.
 
 #### 1.4a Same-tick completion check (every tick that posts or journals)
@@ -527,8 +527,7 @@ Run `/retro` before starting any focused work. This ensures the weekly retrospec
 1. Run `/retro` to generate the weekly retrospective
 2. The retro will:
    - Review the full week's work
-   - **Grade the week's `ipm-weekly.md`**: shipped / in flight / partial / dropped, plus estimate-vs-actual deltas
-   - Flag any task bumped 3+ IPMs in a row (process smell)
+   - **Grade the week's `ipm-weekly.md`**: shipped / in flight / partial / dropped, plus estimate-vs-actual deltas, and any delivered-but-not-planned closures
    - Create action items as new tasks in `dev/TODO/`
    - Write a retro report to `dev/JOURNAL/`
    - Slack a summary
