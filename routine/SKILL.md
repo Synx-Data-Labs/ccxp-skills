@@ -43,7 +43,7 @@ Runs and manages routines: named step lists defined by part 1 (`agent-pairing/ri
 ## Safety
 
 - A step inherits the authorization of the job, nothing more. A routine never publishes, promotes, tags, releases or deletes (`trash.sh` only).
-- `allow:` (capabilities beyond what a skill declares) counts only from the profile file; part 1's loader drops it from the tracked and default layers with a warning. Check with `bash $RR allowed <name> <capability>` (exit 0 = granted). `send` is never grantable.
+- `allow:` (capabilities beyond what a skill declares) counts only from the profile file; part 1's loader drops it from the tracked and default layers with a warning. Check with `bash $RR allowed <name> <capability>` (exit 0 = granted). `send`, `reply`, `forward`, `trash` and `spam` (also as `gmail.<name>`) are never grantable; `gmail.archive|label|draft` are the mail capabilities `/inbox-clean` checks.
 - Never ask a question mid-run when unattended; a step that cannot go on is `needs-human`.
 
 ## Important Notes

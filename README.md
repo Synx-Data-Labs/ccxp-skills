@@ -143,6 +143,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `nightly-check` | Find failed nightly runs of the last day and run `/rca` or `/labrun-rca` per run |
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
+| `inbox-clean` | Archive, label and draft replies for review in the Gmail inbox; never sends |
 | `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a content-hash `.envrc` and a standalone `refresh-env` helper |
 | `secrets-check` | Pre-PR secret-handling check: runs the repo's `scripts/lint-secret-handling.sh --diff` and reports masked findings |
 
