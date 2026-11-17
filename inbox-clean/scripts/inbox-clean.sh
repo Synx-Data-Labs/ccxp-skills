@@ -48,6 +48,7 @@ function ic-plan() {
       *) ic-die "plan: unknown argument '$1'"; return ;;
     esac
   done
+  [ "${CCXP_CRON_MODE:-}" != 1 ] || [ -n "$routine" ] || { IC_RC=5 ic-die "unattended run (CCXP_CRON_MODE=1) needs --routine"; return; }
   local -a labels=() archives=() drafts=() undo=()
   local has_label=" " seen_cap=" "   # space-delimited sets (no bash 4 associative arrays: stock macOS bash is 3.2)
   while IFS=$'\t' read -r tid action arg || [ -n "${tid:-}" ]; do
