@@ -514,6 +514,9 @@ Moved to `dev/JOURNAL/` this retro, in PR #N:
 ## What needs improvement
 (findings from Phase 2, with citations and linked action items)
 
+## Delivered but not planned
+(skip if no IPM this week; `T<id> — {title}` per closure from Phase 1 step 10 not on the IPM list)
+
 ## What's fine as-is
 (findings from Phase 2)
 

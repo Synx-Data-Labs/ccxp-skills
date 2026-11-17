@@ -15,11 +15,12 @@
 #
 # A SINGLE selector serves every caller:
 #   - /ccxp Phase 1.1 standup "current weekly focus" -> newest committed
+#   - /rca (reads the current IPM file for the scheduled date)
 #   - /ipm step 1.5 (seed carry-over from last IPM) -> runs BEFORE the commit
 #       step, so this week's file is still a staging stub (excluded) and "newest
 #       committed" already means last week's. An index-based "previous" would
 #       wrongly return empty here.
-#   - /ipm step 5b (ROADMAP) -> runs AFTER 2a.5, so this week's file is now
+#   - /ipm step 5b (ROADMAP) -> runs AFTER the commit step, so this week's file is now
 #       committed and is "newest committed".
 #
 # Usage:
