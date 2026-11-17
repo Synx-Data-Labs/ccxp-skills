@@ -127,7 +127,7 @@ function run-routine() {
     disable) rr-set-enabled "$top" "${1:?disable needs a routine}" false ;;
     allowed)
       name="${1:?allowed needs a routine}"; key="${2:?allowed needs a capability}"
-      [[ "$key" =~ ^(gmail\.)?(send|reply|forward|trash|spam)$ ]] && { echo "run-routine: '$key' is never grantable" >&2; return 1; }
+      [[ "$(tr '[:upper:]' '[:lower:]' <<<"$key")" =~ ^(gmail\.)?(send|reply|forward|trash|untrash|spam|delete)([_.-].*)?$ ]] && { echo "run-routine: '$key' is never grantable" >&2; return 1; }
       rt-config show "$top" "$name" | python3 -I -c '
 import json, sys
 cap = sys.argv[1]
