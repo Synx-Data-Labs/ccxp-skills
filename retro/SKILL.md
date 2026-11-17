@@ -496,11 +496,11 @@ right choice, same as the IPM template).
 | T... | Carry-over | 2h | filed `1h` → `2h` (scope discovered) | Shipped | 4h | 2x over — design pass missed the registry side |
 | T... | New pick | 1d | no revisions | In flight | — | Carries over next IPM |
 | T... | New pick | 4h | no revisions | Dropped | — | Dropped again — surface in "needs improvement" |
-| T... | Mid-week addition | 1h | filed `1h` | Shipped | 1h | Red-pipeline auto-promote (Phase 1.2 RCA) — fit slack cleanly |
+| T... | Mid-week addition | 1h | filed `1h` | Shipped | 1h | Manually appended — fit slack cleanly |
 
 The **Revisions** column is the per-task arc from `retro/scripts/estimation-revisions.sh` (Phase 2). `no revisions` = the estimate held all week.
 
-Grade mid-week additions separately from the committed list (mid-week estimation-vs-actual is a separate signal): if cumulative mid-week hours > slack reserve, flag in "needs improvement" — additions pushed committed work into next week. If the mid-week-addition count is consistently 0, that's also a signal — either the rhythm has no mid-week surprises (great) or appenders aren't using the convention (worth checking).
+Grade mid-week additions separately from the committed list (mid-week estimation-vs-actual is a separate signal): if the cumulative mid-week hours were large, flag in "needs improvement" — additions pushed committed work into next week. If the mid-week-addition count is consistently 0, that's also a signal — either the rhythm has no mid-week surprises (great) or appenders aren't using the convention (worth checking).
 
 ## Journal sweep
 (skip if Phase 2b swept zero tasks)
@@ -593,7 +593,7 @@ Send a Slack summary to `RETRO_SLACK_CHANNEL` if set, else `CCXP_SLACK_CHANNEL` 
 
 ```
 *Weekly Retro* (YYYY-MM-DD)
-- Focus: {shipped}/{total} shipped, {dropped} dropped, budget {ratio}x ({over|under})
+- Focus: {shipped}/{total} shipped, {dropped} dropped, {unplanned} unplanned shipped
 - {N} tasks completed, {M} PRs merged, CI {P}% green
 - Top win: {one-liner}
 - Top improvement area: {one-liner}

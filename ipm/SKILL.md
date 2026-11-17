@@ -230,7 +230,7 @@ Then **pre-append** each cut task to next-Monday's pre-IPM stub `dev/JOURNAL/${N
 
 ## Mid-week additions (appended after IPM commit)
 
-*Initialize empty at IPM commit. Tasks added throughout the week — via `/rca` red-pipeline auto-promotion (see `/rca` Step 6), `/stage` skill, or manual append — land here as a plain running list, same judgment call as any other pick (no budget cap to weigh against).*
+*Initialize empty at IPM commit. Tasks added throughout the week — via `/stage` or manual append (`/rca` now promotes through `/top` and no longer edits this file) — land here as a plain running list, same judgment call as any other pick (no budget cap to weigh against).*
 
 | # | Task | Est | Added | Why this iteration |
 |---|------|-----|-------|--------------------|
