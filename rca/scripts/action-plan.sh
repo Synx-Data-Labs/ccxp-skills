@@ -20,7 +20,7 @@
 #   TASK kind=fix            file the task (our code / upstream / configuration,
 #                            transient at 3+, infrastructure whose retry failed)
 #   TASK kind=instrument     file the instrumentation task (unconfirmed)
-#   PROMOTE                  mid-week auto-promote + scheduled: stamp (steps 3-4)
+#   PROMOTE                  /top promote + scheduled: stamp (steps 3-4)
 #   NOTE reason=<text>       nothing to file
 #   IF_RETRY_FAILS <action>  the same, but only once the retry has failed
 # Exit: 0 ok, 2 usage / inconsistent inputs (nothing is printed).
