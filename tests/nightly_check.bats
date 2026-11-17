@@ -87,3 +87,19 @@ plan() { run bash -c 'bash "$1" plan --now "$2" "${@:3}"' _ "$NC" "$NOW" "$@"; }
   run bash -c 'printf "[]" | bash "$1" plan --max x' _ "$NC"
   [ "$status" -eq 2 ]
 }
+
+@test "errors: an option without a value exits 2, a malformed createdAt does not hide the other runs" {
+  run bash -c 'printf "[]" | bash "$1" plan --max' _ "$NC"
+  [ "$status" -eq 2 ]
+  json="[{\"databaseId\":1,\"event\":\"schedule\",\"workflowName\":\"N\",\"conclusion\":\"failure\",\"createdAt\":null},$(run_json 22222222222 schedule "Nightly" 2)]"
+  run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3"' _ "$json" "$NC" "$NOW"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *22222222222* ]]
+}
+
+@test "alerts: a last line without a trailing newline still routes" {
+  json="[$(run_json 11111111111 schedule "Nightly A" 2)]"
+  printf '1799990000.000100\trun 11111111111 failed' > "$BATS_TEST_TMPDIR/alerts"
+  run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3" --alerts "$4"' _ "$json" "$NC" "$NOW" "$BATS_TEST_TMPDIR/alerts"
+  [[ "$output" == *$'run\tlabrun-rca\t11111111111\t'* ]]
+}

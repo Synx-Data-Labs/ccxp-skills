@@ -27,9 +27,18 @@ function nc-die() { echo "nightly-check: $*" >&2; return "${NC_RC:-2}"; }
 # nc-plan <json-file> <window-hours> <now> <alerts-file|""> <handled-file|""> <max>
 function nc-plan() {
   local json=$1 hours=$2 now=$3 alerts=$4 handled=$5 max=$6
-  local cutoff id wf url ts n=0 route
+  local cutoff id wf url ts n=0 route rows
   cutoff=$((now - hours * 3600))
+  command -v jq >/dev/null 2>&1 || { NC_RC=3 nc-die "jq is required"; return; }
   jq -e 'type == "array"' "$json" >/dev/null 2>&1 || { NC_RC=3 nc-die "stdin is not a JSON array"; return; }
+  rows="$(mktemp)"
+  jq -r --argjson cutoff "$cutoff" '
+      [ .[] | select((.conclusion // "failure") == "failure")
+            | select(.event == "schedule"
+                     or (.event == "workflow_dispatch" and ((.workflowName // "") | test("nightly"; "i"))))
+            | select(((.createdAt // "" | try fromdateiso8601 catch 0)) >= $cutoff)
+            | {id: (.databaseId | tostring), wf: (.workflowName // "?"), url: (.url // "-"), at: (.createdAt // "")} ]
+      | sort_by(.at) | .[] | [.id, .wf, .url] | @tsv' "$json" > "$rows" || { command rm -f "$rows"; NC_RC=3 nc-die "cannot filter the run list"; return; }
   while IFS=$'\t' read -r id wf url; do
     [ -n "$id" ] || continue
     if [ -n "$handled" ] && grep -Fwq -- "$id" "$handled"; then continue; fi
@@ -41,19 +50,14 @@ function nc-plan() {
     n=$((n + 1))
     if [ "$n" -le "$max" ]; then printf 'run\t%s\t%s\t%s\t%s\t%s\n' "$route" "$id" "$wf" "$url" "$ts"
     else printf 'next\t%s\t%s\t%s\t%s\t%s\n' "$route" "$id" "$wf" "$url" "$ts"; fi
-  done < <(jq -r --argjson cutoff "$cutoff" '
-      [ .[] | select((.conclusion // "failure") == "failure")
-            | select(.event == "schedule"
-                     or (.event == "workflow_dispatch" and ((.workflowName // "") | test("nightly"; "i"))))
-            | select((.createdAt | fromdateiso8601) >= $cutoff)
-            | {id: (.databaseId | tostring), wf: (.workflowName // "?"), url: (.url // "-"), at: .createdAt} ]
-      | sort_by(.at) | .[] | [.id, .wf, .url] | @tsv' "$json")
+  done < "$rows"
+  command rm -f "$rows"
 }
 
 # first alert ts whose text mentions run id $2 (a whole number, so a longer id does not match)
 function nc-alert-ts() {
   local file=$1 id=$2 ts text
-  while IFS=$'\t' read -r ts text; do
+  while IFS=$'\t' read -r ts text || [ -n "$ts" ]; do
     if printf '%s' "$text" | grep -Eq "(^|[^0-9])${id}([^0-9]|$)"; then echo "$ts"; return 0; fi
   done < "$file"
   return 0
@@ -65,6 +69,7 @@ function nightly-check() {
   shift
   local hours=26 now="" alerts="" handled="" max=3 json
   while [ "$#" -gt 0 ]; do
+    case "$1" in --*) [ "$#" -ge 2 ] || { nc-die "option '$1' needs a value"; return; } ;; esac
     case "$1" in
       --window-hours) hours=${2:-}; shift 2 ;;
       --now) now=${2:-}; shift 2 ;;
