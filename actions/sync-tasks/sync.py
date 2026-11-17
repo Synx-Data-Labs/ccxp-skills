@@ -1223,7 +1223,7 @@ def _sync_ipm_line(status, old, new, ipm_date, ipm_map, fields):
     simpler lifecycle than task files — no TODO/PARKING/JOURNAL moves, just
     A (created, possibly still a /stage staging stub) and M (in-place edits:
     the 2a.5 commit that drops the staging marker and commits the iteration,
-    or a later Tier-3 mid-week append). Returns (actions, field_updates)."""
+    or a later in-place edit). Returns (actions, field_updates)."""
     path = new or old
     if status == "D" or not path:
         # An IPM file is a permanent JOURNAL record; deletion is not part of
