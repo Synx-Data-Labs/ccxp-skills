@@ -36,6 +36,8 @@
 #   nightly{since,total,failures[{id,name,createdAt}]}
 #   attribution{rows[{location,class,shipped,in_flight,total}]}  [] on a no-data day
 #   epics{text,slack[]}                 epic-status.sh render / render --slack
+#   dimensions{today[],waiting[],events[]}  task-query.sh rows: due today or overdue; blocked on a
+#       person (with age_days since the last edit); type: event inside the coming 7 days
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -146,6 +148,15 @@ s_epics() {
   jq -n -c --arg t "$t" --arg s "$sl" '{text:$t, slack:($s | split("\n") | map(select(length>0)))}'
 }
 
+s_dimensions() {
+  # T20261114-380745: three optional standup sections, read-only via task-query.sh.
+  local q="$ROOT/todo/scripts/task-query.sh" t w e
+  t="$(SESSION_TODAY="$today" TODO_QUEUE_DIR=. bash "$q" --when today,overdue --json)" || return 1
+  w="$(SESSION_TODAY="$today" TODO_QUEUE_DIR=. bash "$q" --waiting-on any --json)" || return 1
+  e="$(SESSION_TODAY="$today" TODO_QUEUE_DIR=. bash "$q" --type event --when week --json)" || return 1
+  jq -n -c --argjson t "$t" --argjson w "$w" --argjson e "$e" '{today:$t.tasks, waiting:$w.tasks, events:$e.tasks}'
+}
+
 section git_log '[]' s_git_log
 section merged_prs '[]' s_merged
 if OPEN_RAW="$(s_open_raw 2>/dev/null)" && jq -e . >/dev/null 2>&1 <<<"$OPEN_RAW"; then
@@ -162,6 +173,7 @@ section ipm_file '""' s_ipm
 section nightly "{\"since\":\"$since\",\"total\":0,\"failures\":[]}" s_nightly
 section attribution '[]' s_attribution
 section epics '{"text":"","slack":[]}' s_epics
+section dimensions '{"today":[],"waiting":[],"events":[]}' s_dimensions
 
 jq -n -c --arg d "$today" --arg s "$since" --argjson e "$ERRS" --argjson o "$OUT" \
   '{date:$d, since:$s, errors:$e} + $o'

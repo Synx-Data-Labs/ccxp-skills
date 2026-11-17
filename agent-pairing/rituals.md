@@ -88,6 +88,7 @@ routines:
   - A `week` key is the date of the earliest listed day in the ISO week (ipm gives Monday, retro gives Friday); a window wrapping Sunday to Monday is rejected.
   - `at` gates only the day the key names; a missed run catches up on later days of the window.
   - `every:` routines are listed as `<routine> every`, never claimed (run inline), and `done <routine> every` rewrites one `<routine>.last` marker.
+- **Example routines** (task dimensions, T20261114-380745; not in the built-in set, copy into `dev/.routines.yml`): `today` (`schedule: {days: daily, at: "08:00", once_per: day}`, step `/todo list --when today,overdue --group-by place`) and `waiting` (`schedule: {days: [mon], once_per: week}`, step `/todo list --waiting-on any --group-by person`). Add `--json` for a machine-readable result. `--here` reads the `here:` key of the profile file.
 - **Failure handling**: a routine whose override is invalid keeps its previous definition and prints one warning; an unparsable file is skipped whole. The standup is never silenced.
 - **YAML reader**: `python3 -I` with PyYAML, else `yq -o=json` (no line numbers or duplicate-name detection), else the three built-ins compiled into the script plus one warning.
 - **Markers**: as above; `scope: any` routines keep theirs under `ccxp-rituals/_any/`.

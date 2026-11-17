@@ -16,6 +16,15 @@ TODO_DIR="$TODO_QUEUE_DIR/dev/TODO"
 PARKING_DIR="$TODO_QUEUE_DIR/dev/PARKING"
 
 function todo-list-main() {
+  # Dimension filters / grouping (T20261114-380745) are answered by task-query.sh;
+  # without them the output below is unchanged (golden-file tested).
+  local a
+  for a in "$@"; do
+    case "$a" in
+      --when|--place|--here|--person|--waiting-on|--group-by|--json|--all)
+        TODO_QUEUE_DIR="$TODO_QUEUE_DIR" exec bash "$TODO_SCRIPTS_DIR/task-query.sh" "$@" ;;
+    esac
+  done
   # --type <t>: only rows whose frontmatter `type:` equals <t> (e.g. event);
   # "Events this week" is `--type event`.
   local type_filter=""

@@ -82,6 +82,13 @@ def resolved(l): [ $d.merged_prs[]? | . as $p
 def fails: $d.nightly.failures;
 def jf($id): (($j.nightly_failures // []) | map(select(.run == $id)) | first);
 def cls: ([ $d.attribution[]? | select(.class=="ccxp" or .class=="interactive") ]);
+def dimt: ($d.dimensions.today // []);
+def dimw: (($d.dimensions.waiting // []) | [ .[] as $t | $t.waiting_on[] | {a: ., t: $t} ] | group_by(.a));
+def dime: ($d.dimensions.events // []);
+def dimsec($ht; $hw; $he; $b):
+  ( if (dimt|length) > 0 then ["", $ht] + (dimt | map("\($b)\(.id) — \(.title | esc)")) else [] end ) +
+  ( if (dimw|length) > 0 then ["", $hw] + (dimw | map("\($b)\(.[0].a) — " + (map("\(.t.id) \(.t.title | esc)" + (if .t.age_days != null then " (\(.t.age_days)d)" else "" end)) | join("; ")))) else [] end ) +
+  ( if (dime|length) > 0 then ["", $he] + (dime | map("\($b)\(.when[:10]) — \(.id) \(.title | esc)")) else [] end );
 def clsum($c; $k): ([ cls[] | select(.class==$c) | .[$k] ] | add // 0);
 JQ
 
@@ -107,6 +114,7 @@ render_slack() { # $1 = trim level 0|1|2
   [ \"\", \"*📋 Top 5 next*\" ] +
   ( if (\$j.top5|length)==0 then [\"None — nothing workable in the queue\"]
     else (\$j.top5[:5] | to_entries | map(\"\(.key+1). \(.value)\")) end ) +
+  ( if \$lvl < 2 then dimsec(\"*📅 Today*\"; \"*⏳ Waiting on*\"; \"*🗓 Events this week*\"; \"• \") else [] end ) +
   ( if unavail(\"epics\") then [\"\", \"*🎯 Epic progress*\", \"unavailable (epic read failed)\"]
     elif ((\$d.epics.slack // [])|length) > 0 then [\"\", \"*🎯 Epic progress*\"] + \$d.epics.slack else [] end ) +
   ( if \$j.weekly_focus then [\"\", \"*📌 Weekly focus*\",
@@ -152,6 +160,7 @@ render_journal() {
   [ \"\", \"## Top 5 next\", \"\" ] +
   ( if (\$j.top5|length)==0 then [\"None — nothing workable in the queue\"]
     else (\$j.top5[:5] | to_entries | map(\"\(.key+1). \(.value)\")) end ) +
+  dimsec(\"## Today\"; \"## Waiting on\"; \"## Events this week\"; \"- \") +
   [ \"\", \"## Epic progress\", \"\", (if unavail(\"epics\") then \"Unavailable — epic read failed.\" else (\$d.epics.text // \"\") end) ] +
   ( if \$j.weekly_focus then [\"\", \"## Weekly focus progress\", \"\",
       \"References: \(\$d.ipm_file)\", \"\"] +

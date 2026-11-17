@@ -115,7 +115,18 @@ checks) and for a human reading this skill — don't re-derive it by hand.
 6. Show counts: total, by status, and: `N committed to active iteration` / `N claimed (M mine, K by peers)`
 7. Count files in `dev/PARKING/*.md` and show: `Parking lot: N parked`
 
+### `list` filters and grouping (task dimensions)
+
+`/todo list` takes the dimension flags below. With none of them the output is unchanged; with any, it prints the matching tasks in queue order (one line each) instead of the queue table, via `bash <skills-root>/todo/scripts/task-query.sh` (read-only, never reorders `queue.md`):
+
+- `--when today|tomorrow|week|overdue|<date>` (comma list = union; `week` is today through today+6; a `when`..`when-end` window matches when it overlaps), `--place <slug>`, `--here` (tasks with no `place:` or a place in the profile file's `here:` list; default none), `--person <alias>`, `--waiting-on <alias|any>` (matches `status: Blocked by person:<alias>`), `--type <chore|feature|bug|event|...>` (events sort by `when`).
+- `--group-by when|place|person|type`: group headers in order (dates ascending, slugs alphabetical, "(none)" last); queue order inside each group.
+- `--json`: `{today, count, tasks[], groups[]}` for routines and the persona; `--all` includes Done/Parked/Revisit (default: open only).
+- Aliases print as stored; the query never resolves one to a real name or address.
+
 ## Workflow: `next`
+
+`next` also takes `--here` and `--when <W>` as filters only (the pick is still the first match in queue order). Without them, open tasks whose `when` is today are listed first under a "Due today" line: informational, it does not reorder the queue (same rule as `deadline`). `type: event` is never picked.
 
 **Goal: quickly surface the top 3 lines of the queue worth looking at (fits
 one page).** The queue's order already encodes priority; this workflow only
