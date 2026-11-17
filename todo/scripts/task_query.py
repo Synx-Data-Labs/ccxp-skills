@@ -17,7 +17,7 @@ Usage: task-query.sh [filters] [--group-by when|place|person|type] [--json]
   --all               include Done / Parked / Revisit (default: open only)
   --json              machine-readable output
 Env: TODO_QUEUE_DIR (default .), SESSION_TODAY=YYYY-MM-DD or CCXP_RITUAL_NOW
-(epoch seconds or ISO) with CCXP_RITUAL_TZ for the clock, CCXP_ROUTINES_PROFILE
+(epoch seconds or ISO) with CCXP_RITUAL_TZ for the clock, CCXP_ROUTINES_PROFILE_FILE
 (default ${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-routines.yml) for `here:`.
 Exit: 0 ok (also when nothing matches), 2 bad usage.
 """
@@ -46,7 +46,10 @@ def usage(msg=None):
 def today_date():
     s = os.environ.get("SESSION_TODAY")
     if s:
-        return datetime.date.fromisoformat(s)
+        try:
+            return datetime.date.fromisoformat(s)
+        except ValueError:
+            usage("bad SESSION_TODAY: " + s)
     now = os.environ.get("CCXP_RITUAL_NOW")
     tz = None
     if os.environ.get("CCXP_RITUAL_TZ"):
@@ -100,7 +103,12 @@ def as_list(v):
 
 
 def parse_date(v):
-    return datetime.date.fromisoformat(v[:10]) if v and DATE_RE.match(v) else None
+    if not (v and DATE_RE.match(v)):
+        return None
+    try:
+        return datetime.date.fromisoformat(v[:10])
+    except ValueError:
+        return None   # impossible date: treated as no date, never a crash (lint reports it)
 
 
 def status_open(status):
@@ -191,7 +199,7 @@ def when_matches(t, tokens, today):
     start = parse_date(t["when"])
     if start is None:
         return False
-    end = parse_date(t["when_end"]) or start
+    end = max(parse_date(t["when_end"]) or start, start)
     for tok in tokens:
         if tok == "today":
             lo = hi = today
@@ -230,7 +238,7 @@ def main(argv):
 
     def val():
         nonlocal i
-        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--") or not argv[i + 1].strip():
             usage(argv[i] + " needs a value")
         i += 1
         return argv[i]
