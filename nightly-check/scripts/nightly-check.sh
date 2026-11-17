@@ -37,7 +37,7 @@ function nc-plan() {
             | select(.event == "schedule"
                      or (.event == "workflow_dispatch" and ((.workflowName // "") | test("nightly"; "i"))))
             | select(((.createdAt // "" | try fromdateiso8601 catch 0)) >= $cutoff)
-            | {id: (.databaseId | tostring), wf: (.workflowName // "?"), url: (.url // "-"), at: (.createdAt // "")} ]
+            | {id: (.databaseId | tostring), wf: (if (.workflowName // "") == "" then "?" else .workflowName end), url: (if (.url // "") == "" then "-" else .url end), at: (.createdAt // "")} ]
       | sort_by(.at) | .[] | [.id, .wf, .url] | @tsv' "$json" > "$rows" || { command rm -f "$rows"; NC_RC=3 nc-die "cannot filter the run list"; return; }
   while IFS=$'\t' read -r id wf url; do
     [ -n "$id" ] || continue
@@ -82,6 +82,7 @@ function nightly-check() {
   [[ "$hours" =~ ^[0-9]+$ && "$max" =~ ^[0-9]+$ ]] || { nc-die "--window-hours and --max take a whole number"; return; }
   [ -n "$now" ] || now="$(date +%s)"
   [[ "$now" =~ ^[0-9]+$ ]] || { nc-die "--now takes epoch seconds"; return; }
+  hours=$((10#$hours)) max=$((10#$max)) now=$((10#$now))   # no octal reading of 08 or 09
   for f in "$alerts" "$handled"; do
     [ -z "$f" ] || [ -r "$f" ] || { nc-die "cannot read '$f'"; return; }
   done
