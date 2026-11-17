@@ -102,18 +102,19 @@ function ic-plan() {
 }
 
 function ic-undo() {
-  local file="${1:?undo needs a file}" action tid label
+  local file="${1:?undo needs a file}" action tid label out=""
   [ -r "$file" ] || { IC_RC=3 ic-die "cannot read $file"; return; }
   while IFS=$'\t' read -r action tid label; do
     [[ "$tid" =~ ^[0-9a-f]{6,32}$ ]] || { IC_RC=4 ic-die "bad undo line"; return; }
     [[ "$label" =~ ^(ccxp/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*|INBOX)$ ]] || { IC_RC=4 ic-die "bad undo line"; return; }
     case "$action" in
-      archive) printf 'label_thread\t%s\t%s\n' "$tid" "$label" ;;
-      label) printf 'unlabel_thread\t%s\t%s\n' "$tid" "$label" ;;
-      draft) printf 'MANUAL\t%s\tremove the draft by hand (no delete call is made)\n' "$tid" ;;
+      archive) out+="label_thread"$'\t'"$tid"$'\t'"$label"$'\n' ;;
+      label) out+="unlabel_thread"$'\t'"$tid"$'\t'"$label"$'\n' ;;
+      draft) out+="MANUAL"$'\t'"$tid"$'\t'"remove the draft by hand (no delete call is made)"$'\n' ;;
       *) IC_RC=4 ic-die "bad undo line"; return ;;
     esac
   done <"$file"
+  printf '%s' "$out"   # printed only after every line validated
 }
 
 function inbox-clean() {
