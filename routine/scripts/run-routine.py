@@ -49,7 +49,7 @@ def now():
 
 
 def path(key):
-    if not KEY_RE.match(key):
+    if not KEY_RE.fullmatch(key):
         die("bad key '%s' (use the key claim printed, or omit it for a manual run)" % key)
     return os.path.join(RR_DIR, "%s-%s.json" % (NAME, key))
 
@@ -131,12 +131,13 @@ def main(argv):
         rec = load(key)
         n = rec.get("attempt", 0) if rec else 0
         print(n)
-        return 1 if n >= MAX_ATTEMPTS else 0
+        # an every: routine has one constant key and no per-day claim, so it has no cap
+        return 1 if n >= MAX_ATTEMPTS and key != "every" else 0
     if verb == "begin":
         prev = load(key)
         steps = [{"step": i, "skill": st.get("skill", ""), "status": "pending", "started": None, "finished": None, "note": ""}
                  for i, st in enumerate(steps_of(d), 1)]
-        rec = {"routine": NAME, "key": key, "attempt": (prev.get("attempt", 0) if prev else 0) + 1,
+        rec = {"routine": NAME, "key": key, "attempt": 1 if key == "every" else (prev.get("attempt", 0) if prev else 0) + 1,
                "status": "running", "started": now(), "finished": None,
                "on_failure": d.get("on_failure", "stop"), "report": d.get("report", "journal"),
                "summary": "", "claim": "none", "steps": steps}
@@ -172,13 +173,13 @@ def main(argv):
         else:
             claim = None
         if claim is None:
-            failed = any(s["status"] == "failed" for s in rec["steps"])
+            failed = status == "failed" or any(s["status"] == "failed" for s in rec["steps"])
             if not failed:
                 claim = "done"  # ok, nothing-to-do and needs-human (reported once, never retried)
             elif rec["on_failure"] == "continue" and all_ran:
                 claim = "done"  # a flaky step does not re-fire the whole routine
             else:
-                claim = "capped" if rec["attempt"] >= MAX_ATTEMPTS else "release"
+                claim = "capped" if rec["attempt"] >= MAX_ATTEMPTS and key != "every" else "release"
         rec["claim"] = claim
         save(key, rec)
         print("status=%s claim=%s attempt=%d" % (status, claim, rec["attempt"]))

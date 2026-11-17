@@ -49,7 +49,9 @@ function rr-py() {
 }
 
 function rr-set-enabled() {
-  local name=$1 val=$2 file
+  local top=$1 name=$2 val=$3 file
+  [[ "$name" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || { rr-die "bad routine name '$name'"; return; }
+  rt-config show "$top" "$name" >/dev/null 2>&1 || { RR_RC=3 rr-die "unknown routine '$name'"; return; }
   file="$(rr-profile-file)"
   [ -n "$file" ] || { rr-die "no profile file (set CCXP_ROUTINES_PROFILE_FILE or run under a profile)"; return; }
   python3 -I -c 'import yaml' 2>/dev/null || { RR_RC=3 rr-die "enable/disable needs PyYAML (the profile file is rewritten)"; return; }
@@ -62,9 +64,11 @@ try:
         doc = yaml.safe_load(f) or {}
 except FileNotFoundError:
     doc = {}
-if not isinstance(doc, dict) or not isinstance(doc.get("routines", {}), dict):
+if not isinstance(doc, dict) or not isinstance(doc.get("routines") or {}, dict):
     sys.exit("run-routine: %s is not a routine config; fix it by hand first" % path)
-r = doc.setdefault("routines", {})
+if doc.get("routines") is None:
+    doc["routines"] = {}
+r = doc["routines"]
 if not isinstance(r.get(name), dict):
     r[name] = {}
 r[name]["enabled"] = val == "true"
@@ -111,14 +115,14 @@ function run-routine() {
       echo "$out"
       claim="$(sed -n 's/.*claim=\([a-z]*\).*/\1/p' <<<"$out")"
       case "$claim" in
-        done) routine-due --repo "${top:-.}" "done" "$name" "$key" ;;
-        release | capped) routine-due --repo "${top:-.}" release "$name" "$key" ;;
+        done) routine-due --repo "${top:-.}" "done" "$name" "$key" || echo "::warning::run-routine: could not mark $name $key done (routine disabled or unknown?); the record is written" >&2 ;;
+        release | capped) routine-due --repo "${top:-.}" release "$name" "$key" || echo "::warning::run-routine: could not release $name $key (routine disabled or unknown?); the record is written" >&2 ;;
       esac
       status="${out#status=}"; status="${status%% *}"
       [ -n "$status" ] ;;
     list) rr-list "$top" ;;
-    enable) rr-set-enabled "${1:?enable needs a routine}" true ;;
-    disable) rr-set-enabled "${1:?disable needs a routine}" false ;;
+    enable) rr-set-enabled "$top" "${1:?enable needs a routine}" true ;;
+    disable) rr-set-enabled "$top" "${1:?disable needs a routine}" false ;;
     allowed)
       name="${1:?allowed needs a routine}"; key="${2:?allowed needs a capability}"
       [ "$key" != send ] || { echo "run-routine: 'send' is never grantable" >&2; return 1; }
@@ -128,7 +132,8 @@ cap = sys.argv[1]
 for line in sys.stdin:
     k, _, v = line.partition(": ")
     if k == "allow":
-        sys.exit(0 if cap in json.loads(v) else 1)
+        a = json.loads(v)
+        sys.exit(0 if isinstance(a, list) and cap in a else 1)
 sys.exit(1)' "$key" ;;
     *) echo "usage: run-routine.sh [--repo DIR] plan|begin|step|finish|attempts|last|list|enable|disable|allowed ..." >&2; return 2 ;;
   esac

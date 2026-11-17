@@ -204,3 +204,42 @@ PY
   run rr allowed keeper label
   [ "$status" -ne 0 ]
 }
+
+@test "every: routine has no retry cap and its attempt counter resets" {
+  printf '  ticker:\n    schedule: {every: 5m}\n    steps: [{skill: "/todo"}]\n' >>"$REPO/dev/.routines.yml"
+  for n in 1 2 3 4 5; do
+    rr begin ticker --key every >/dev/null
+    rr step ticker every 1 failed x >/dev/null
+    run rr finish ticker every
+    [ "$output" = "status=failed claim=release attempt=1" ]
+  done
+  run rr attempts ticker every
+  [ "$status" -eq 0 ]
+}
+
+@test "finish with no step recorded is failed and releases the claim" {
+  due claim >/dev/null
+  rr begin stopper --key 2026-11-13
+  run rr finish stopper 2026-11-13 "aborted"
+  [ "$output" = "status=failed claim=release attempt=1" ]
+}
+
+@test "a key with a trailing newline is rejected; enable of an unknown routine fails; scalar allow grants nothing" {
+  run rr begin stopper --key $'2026-11-13\n'
+  [ "$status" -ne 0 ]
+  run rr enable inbxo
+  [ "$status" -ne 0 ]
+  [ ! -e "$CCXP_ROUTINES_PROFILE_FILE" ] || ! grep -q inbxo "$CCXP_ROUTINES_PROFILE_FILE"
+  printf 'routines:\n  keeper:\n    allow: archive\n' >"$CCXP_ROUTINES_PROFILE_FILE"
+  run rr allowed keeper arch
+  [ "$status" -ne 0 ]
+}
+
+@test "finish of a disabled routine still prints the status and exits 0" {
+  rr begin stopper --key 2026-11-13
+  rr step stopper 2026-11-13 1 ok
+  rr disable stopper
+  run bash "$RR" --repo "$REPO" finish stopper 2026-11-13 "late"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"status=ok claim=done"* ]]
+}
