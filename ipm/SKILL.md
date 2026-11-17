@@ -98,17 +98,17 @@ The survivors are **carry-over candidates** — tasks a prior IPM deliberately d
 
 ### 2 Pick candidates
 
-Run `/todo next` to get the top 5 ranked tasks (`Design` or `Open`) off `dev/TODO/queue.md`. **There is no separate scoring** — `queue.md`'s position *is* the priority; `/todo next` is a flat top-to-bottom walk (skipping only `Done`/peer-claimed/legacy-`Revisit`), not a deadline/urgency/unblocks computation (see `../todo/SKILL.md` Workflow: `next`).
+Run `/todo next` for the top 5 tasks (`Design` or `Open`) off `dev/TODO/queue.md`. **There is no separate scoring** — `queue.md`'s position *is* the priority; `/todo next` is a flat top-to-bottom walk (skipping only `Done`/peer-claimed/legacy-`Revisit`), not a deadline/urgency/unblocks computation (see `../todo/SKILL.md` Workflow: `next`).
 
-Do not second-guess that ordering, and do not re-derive a ranking the queue already encodes — a wrong order is a `/top`/`/stage`/hand-edit fix to `queue.md`, not something to work around here.
+Do not re-derive a ranking the queue already encodes: a wrong order is a `/top`/`/stage`/hand-edit fix to `queue.md`.
 
-**Dimension-tagged candidates.** Also list, as inputs to the owner's choice and never as auto-picks: tasks whose `when:` or `deadline` falls inside the coming iteration, and `type: event` tasks inside it (`bash <skills-root>/todo/scripts/task-query.sh --when week` and `--type event`, widened to the iteration window with explicit dates). They never reorder the queue; events are skipped by `/todo next`.
+**Dimension-tagged candidates.** List `when:`/`deadline` and `type: event` tasks in the coming iteration (`task-query.sh`) as owner inputs, never auto-picks.
 
 **Also fold in the staged candidates.** Look for this week's pre-IPM stub directly at `dev/JOURNAL/${SCHEDULED}-ipm-weekly.md` — not via `_ipm/current.sh`, which deliberately skips it (the selector returns the last *committed* IPM, never the still-`Pre-IPM staging` stub).
 
 - If it exists, read its `## Candidates` section — each entry was appended via `/stage` through the week and carries its own one-line rationale ("Why this iteration"), a signal the plain queue walk doesn't carry on its own.
 - Merge these into the candidate pool alongside the `/todo next` top-5, dedupe by task ID.
-- A staged candidate is a deliberate human/skill nomination, so weight its rationale when ordering — but it still passes through step 4's commit decision like any other pick.
+- A staged candidate is a deliberate nomination: weight its rationale, but it still passes step 4's commit decision.
 
 **Cron-mode eligibility filter.**
 
