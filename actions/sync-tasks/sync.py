@@ -1222,7 +1222,7 @@ def _sync_ipm_line(status, old, new, ipm_date, ipm_map, fields):
     """Handle one git-diff line for an ipm-weekly.md file. IPM files have a
     simpler lifecycle than task files — no TODO/PARKING/JOURNAL moves, just
     A (created, possibly still a /stage staging stub) and M (in-place edits:
-    the 2a.5 commit that drops the staging marker and commits the iteration,
+    the /ipm commit step that drops the staging marker and commits the iteration,
     or a later in-place edit). Returns (actions, field_updates)."""
     path = new or old
     if status == "D" or not path:
