@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# todo/scripts/task-query.sh and the dimension flags of todo-list.sh / todo-next.sh,
+# todo/scripts/task-query.sh (runs task_query.py) and the dimension flags of todo-list.sh / todo-next.sh,
 # plus the standup `dimensions` section (T20261114-380745). Offline, fixture dev/TODO.
 
 load test_helper
