@@ -243,3 +243,11 @@ PY
   [ "$status" -eq 0 ]
   [[ "$output" == *"status=ok claim=done"* ]]
 }
+
+@test "non-ASCII digits in a key or a step index are rejected cleanly" {
+  run rr begin stopper --key "２０２６-11-13"
+  [ "$status" -ne 0 ]
+  rr begin stopper --key 2026-11-13 >/dev/null
+  run rr step stopper 2026-11-13 "²" ok
+  [ "$status" -eq 2 ]
+}
