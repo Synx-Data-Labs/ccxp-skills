@@ -15,8 +15,6 @@ run_json() {
     "$1" "$2" "$3" "${5:-failure}" "$at" "$1"
 }
 
-plan() { run bash -c 'bash "$1" plan --now "$2" "${@:3}"' _ "$NC" "$NOW" "$@"; }
-
 @test "filter: schedule runs and nightly-named dispatch runs only" {
   json="[$(run_json 11111111111 schedule "Nightly Build" 2),$(run_json 22222222222 workflow_dispatch "Nightly Test" 3),$(run_json 33333333333 workflow_dispatch "Release" 3),$(run_json 44444444444 push "Nightly Build" 3),$(run_json 55555555555 pull_request "CI" 1)]"
   run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3"' _ "$json" "$NC" "$NOW"
@@ -102,4 +100,19 @@ plan() { run bash -c 'bash "$1" plan --now "$2" "${@:3}"' _ "$NC" "$NOW" "$@"; }
   printf '1799990000.000100\trun 11111111111 failed' > "$BATS_TEST_TMPDIR/alerts"
   run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3" --alerts "$4"' _ "$json" "$NC" "$NOW" "$BATS_TEST_TMPDIR/alerts"
   [[ "$output" == *$'run\tlabrun-rca\t11111111111\t'* ]]
+}
+
+@test "numbers: leading zeros are not read as octal" {
+  json="[$(run_json 11111111111 schedule "Nightly" 2)]"
+  run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3" --window-hours 08 --max 09' _ "$json" "$NC" "$NOW"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *11111111111* ]]
+}
+
+@test "columns: an empty workflow name keeps the columns aligned" {
+  at="$(date -u -r $((NOW - 3600)) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$((NOW - 3600))" +%Y-%m-%dT%H:%M:%SZ)"
+  json="[{\"databaseId\":7,\"event\":\"schedule\",\"workflowName\":\"\",\"conclusion\":\"failure\",\"createdAt\":\"$at\",\"url\":\"https://x/runs/7\"}]"
+  run bash -c 'printf "%s" "$1" | bash "$2" plan --now "$3"' _ "$json" "$NC" "$NOW"
+  [ "$(printf '%s' "$output" | cut -f4)" = "?" ]
+  [ "$(printf '%s' "$output" | cut -f5)" = "https://x/runs/7" ]
 }
