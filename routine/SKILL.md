@@ -49,4 +49,4 @@ Runs and manages routines: named step lists defined by part 1 (`agent-pairing/ri
 ## Important Notes
 
 - `last` reads `${CCXP_ROUTINES_RUN_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines}/<repo-key>/<routine>-<key>.json`; the record holds step outcomes and one summary line, nothing else.
-- Starter routines (`inbox`, `nightly-check`, `alerts`, `standup`, `today`, `waiting`) are defined in later parts; a step that must fan out is a skill that does its own detection.
+- Starter routines are documented in `agent-pairing/routines.examples.yml` (`agent-pairing/rituals.md` "Routines"); a step that must fan out is a skill that does its own detection.

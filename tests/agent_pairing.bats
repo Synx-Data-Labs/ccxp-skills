@@ -250,16 +250,22 @@ EOF
   [ "$(grep -n '^## Repo freshness' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Exception: `/autopilot`' "$f" | cut -d: -f1)" ]
   grep -q 'Bash is read-only except this closed list of carve-outs' "$f"
   # a guard against the persona silently ballooning, not a precise budget
-  [ "$(wc -c < "$f")" -lt 48000 ]
+  [ "$(wc -c < "$f")" -lt 48500 ]
 }
 
-@test "asset: Rituals due section runs ritual-due.sh claim at start/turn/wake, one job per check, carve-out named" {
+@test "asset: Routines due section runs routine-due.sh claim at start/turn/wake, one job per check, /routine run, carve-out named" {
   local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
-  grep -q '^## Rituals due$' "$f"
-  grep -q 'agent-pairing/scripts/ritual-due.sh claim' "$f"
+  grep -q '^## Routines due$' "$f"
+  run grep -q '^## Rituals due$' "$f"
+  [ "$status" -ne 0 ]
+  grep -q 'agent-pairing/scripts/routine-due.sh claim' "$f"
   grep -q 'dispatch ONE background job' "$f"
-  grep -q '`ritual-due.sh` of "Rituals due"' "$f"
+  grep -q '/routine run <routine> --key <key>' "$f"
+  grep -q 'CCXP_CRON_MODE=1' "$f"
+  grep -q '## Authorization' "$f"
+  grep -q '`routine-due.sh` of "Routines due"' "$f"
   grep -q 'agent-pairing/rituals.md' "$f"
+  [ -x "$REPO_ROOT/agent-pairing/scripts/routine-due.sh" ]
   [ -x "$REPO_ROOT/agent-pairing/scripts/ritual-due.sh" ]
   [ -f "$REPO_ROOT/agent-pairing/rituals.md" ]
 }
@@ -674,4 +680,15 @@ install_outdated_agent() {
   grep -q '\*\*One path\*\*: a failed run that has an alert' "$f"
   [ -x "$REPO_ROOT/agent-pairing/scripts/alerts-due.sh" ]
   [ -f "$REPO_ROOT/agent-pairing/alerts.md" ]
+}
+
+@test "rituals.md: starter routines, make-your-own recipe, honest limits and persona-refresh note (T20261114-195064)" {
+  local f="$REPO_ROOT/agent-pairing/rituals.md"
+  grep -q 'routines.examples.yml' "$f"
+  grep -q 'Make your own routine' "$f"
+  grep -q 'routine-due.sh check' "$f"
+  grep -q 'Limits (honest bound)' "$f"
+  grep -q 'about 1 hour' "$f"
+  grep -q 'CCXP_PERSONA_AUTO_REFRESH=0' "$f"
+  [ -f "$REPO_ROOT/agent-pairing/routines.examples.yml" ]
 }

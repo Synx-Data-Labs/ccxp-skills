@@ -1,6 +1,8 @@
-# Rituals due (daily standup, Monday IPM, Friday retro)
+# Routines due (daily standup, Monday IPM, Friday retro, and your own)
 
-The ccxp-agent persona runs the team rituals itself. There is no external scheduler (no routine, no
+The ccxp-agent persona runs the team rituals itself, and since T20261114-195064 every configured routine (see
+"Routines" below): its "Routines due" check calls `routine-due.sh claim` and dispatches `/routine run <name> --key <key>`.
+The three built-ins behave exactly as the sections up to "Routines" describe; `ritual-due.sh` stays for installs that have not refreshed. There is no external scheduler (no routine, no
 GitHub Actions cron, no `claude --bg` timer): the persona piggybacks on the places it already wakes up.
 Task: T20261107-228304. Owner decision: use the persona's own periodic wake as the trigger.
 
@@ -55,8 +57,8 @@ Task: T20261107-228304. Owner decision: use the persona's own periodic wake as t
 ## Routines (configurable rituals)
 
 Task: T20261114-144275 (part 1 of the routines epic T20261114-267875). `routine-due.sh` generalizes `ritual-due.sh`:
-named routines come from a config file instead of the hard-coded three. The persona still switches over in part 3;
-until then `ritual-due.sh` is what the persona runs, and with no config file `routine-due.sh` prints exactly the same.
+named routines come from a config file instead of the hard-coded three. The persona runs `routine-due.sh` (part 3,
+T20261114-195064); with no config file it prints exactly what `ritual-due.sh` prints.
 
 - **Limits**: a routine fires only while a persona session is open, at the check points above (no cron, no launchd, no cloud routine).
 - **Commands**: `bash <plugin-dir>/agent-pairing/scripts/routine-due.sh [--repo DIR] list | claim | done <routine> <key> | release <routine> <key> | show <routine> | check`.
@@ -93,3 +95,15 @@ routines:
 - **YAML reader**: `python3 -I` with PyYAML, else `yq -o=json` (no line numbers or duplicate-name detection), else the three built-ins compiled into the script plus one warning.
 - **Markers**: as above; `scope: any` routines keep theirs under `ccxp-rituals/_any/`.
 - **Running** (T20261114-400715, part 2): the `/routine` skill runs a routine on demand, records each run under `ccxp-routines/` and applies `on_failure`; see `routine/SKILL.md`.
+- **Starter routines** (T20261114-195064): `agent-pairing/routines.examples.yml` documents `inbox`, `nightly-check` (commented until its
+  skill exists, T20261116-179192), `alerts` and a `standup` override; `tests/routine_due.bats` lints it and simulates a day.
+  - `inbox`: weekdays 07:30, a read-only `/email-triage` summary then a mail-changing clean step (archive, label, drafts for review; it never sends, replies, forwards or deletes; needs profile-only `allow:` grants, T20261116-391393). `report: slack` and `--no-slack` on both steps give one message.
+  - `alerts`: an `every: 5m` registration so `/routine list|show|disable` covers it; the persona's inline "Slack alerts check" does the work, and an `every:` routine is never claimed as a job.
+  - `standup`, `ipm`, `retro` stay built in; `today` and `waiting` are the commented examples in `routines.default.yml`.
+- **Make your own routine**: copy a starter block into `dev/.routines.yml` (shared, reviewed) or the profile file (this machine), set `schedule.at` (quoted) and `days`,
+  check it with `routine-due.sh check`, preview it with `/routine run <name> --dry-run` (writes nothing, calls no skill), then leave it enabled.
+  Each routine fires once per `once_per` window, and only while a persona session is open.
+- **Limits (honest bound)**: routines fire only while a Claude Code session with the persona is open, at the check points above; the worst-case lag between
+  a routine becoming due and its job starting is about 1 hour with autopilot idle waits, and with no autopilot and no user turn it waits for the next turn.
+- **Persona refresh**: the persona change reaches installs through `persona-refresh.md` (automatic on the next prompt after a plugin update);
+  an install with `CCXP_PERSONA_AUTO_REFRESH=0` keeps the old "Rituals due" path (`ritual-due.sh`, the three built-ins only) until refreshed by hand.
