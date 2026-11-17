@@ -32,7 +32,7 @@ Cleans the inbox after `/email-triage` has read it: archives noise, labels what 
 | `create_draft` | `gmail.draft` | a draft for the owner to review, never sent |
 
 - Never called, never grantable: `send_message`, `reply`, `forward`, trash, spam, delete, `update_draft`, any `*_message_labels` call. `bash $IC check-tool <tool>` exits 4 for these.
-- `gmail.*` capabilities come from the profile file's `allow:` only (`bash <skills-root>/routine/scripts/run-routine.sh allowed <routine> <cap>`). An interactive run has the owner present and checks none; an unattended run (`CCXP_CRON_MODE=1`, any routine step) must pass `--routine` to `plan`.
+- `gmail.*` capabilities come from the profile file's `allow:` only (`bash <skills-root>/routine/scripts/run-routine.sh allowed <routine> <cap>`). An interactive run has the owner present and checks none; an unattended run (the job prompt says unattended or `CCXP_CRON_MODE=1`, any routine step; the script can only see the env var) must pass `--routine` to `plan`.
 
 ## Workflow
 
