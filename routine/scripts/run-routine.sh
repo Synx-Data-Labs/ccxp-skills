@@ -42,11 +42,12 @@ function rr-dir() {
 
 # run the python helper with the routine's merged definition
 function rr-py() {
-  local top=$1 name=$2 show
+  local top=$1 name=$2 show dir
   shift 2
   [[ "$name" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || { rr-die "bad routine name '$name'"; return; }
   show="$(rt-config show "$top" "$name")" || { RR_RC=3 rr-die "unknown routine '$name'"; return; }
-  RR_NAME="$name" RR_SHOW="$show" RR_DIR="$(rr-dir "$top")" python3 -I "$_RR_DIR/run-routine.py" "$@"
+  dir="$(rr-dir "$top")" || return
+  RR_NAME="$name" RR_SHOW="$show" RR_DIR="$dir" python3 -I "$_RR_DIR/run-routine.py" "$@"
 }
 
 function rr-set-enabled() {
