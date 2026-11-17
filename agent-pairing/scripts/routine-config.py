@@ -307,7 +307,7 @@ def main(argv):
             rest.append(a)
             i += 1
     if not rest:
-        print("usage: routine-config.py [--default F --tracked F --profile F --skills-root D] rows|check|show NAME", file=sys.stderr)
+        print("usage: routine-config.py [--default F --tracked F --profile F --skills-root D] rows|all|check|show NAME", file=sys.stderr)
         return 2
     merged, probs, _here = resolve(args)
     mode = rest[0]
@@ -319,6 +319,12 @@ def main(argv):
         print("routine-due: warning: %s%s: %s" % (f, ":%d" % ln if ln else "", msg), file=sys.stderr)
     if mode == "rows":
         rows(merged)
+        return 0
+    if mode == "all":
+        # every routine, disabled ones included: name, enabled, schedule (for /routine list)
+        for name, r in merged.items():
+            print("%s\t%s\t%s" % (name, "false" if r.get("enabled", True) is False else "true",
+                                  json.dumps(r.get("schedule", {}), default=str, sort_keys=True)))
         return 0
     if mode == "show":
         r = merged.get(rest[1] if len(rest) > 1 else "")
