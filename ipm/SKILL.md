@@ -42,7 +42,7 @@ echo "This IPM is Scheduled = ${SCHEDULED}"
 
 Every task added (or re-committed) to this IPM — carry-over, new pick, infra/tooling, or mid-week addition — gets `scheduled: ${SCHEDULED}` written into its task-file YAML frontmatter (handled in step 5). The IPM file header (prose document, not a task file) also records `**Scheduled**: ${SCHEDULED}`.
 
-**Source of truth for iteration**: the task files themselves — there is no GitHub Project board. `scheduled:` in a task's own frontmatter, plus the committed `dev/JOURNAL/*-ipm-weekly.md` files, fully answer "what's in / left from iteration N." Step 5a's drain gate (below) and `/retro`'s bump-counter both walk these plain files directly.
+**Source of truth for iteration**: the task files themselves — there is no GitHub Project board. `scheduled:` in a task's own frontmatter, plus the committed `dev/JOURNAL/*-ipm-weekly.md` files, fully answer "what's in / left from iteration N." Step 5a's drain gate (below) and `/retro`'s Monday-vs-Friday diff both walk these plain files directly.
 
 For mid-week additions, the Scheduled date is the current iteration's Monday (i.e. this week's IPM commit).
 
