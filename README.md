@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 52 skills in one step:
+so `/plugin` can install all 53 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -139,6 +139,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | Skill | Purpose |
 |-------|---------|
 | `slack` | Send a Slack notification to a configured channel |
+| `routine` | List, run, enable and report configured routines |
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
 | `1password-env-setup` | Bootstrap a repo's `.env` via `op inject`, plus a content-hash `.envrc` and a standalone `refresh-env` helper |

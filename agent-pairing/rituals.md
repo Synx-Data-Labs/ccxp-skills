@@ -91,3 +91,4 @@ routines:
 - **Failure handling**: a routine whose override is invalid keeps its previous definition and prints one warning; an unparsable file is skipped whole. The standup is never silenced.
 - **YAML reader**: `python3 -I` with PyYAML, else `yq -o=json` (no line numbers or duplicate-name detection), else the three built-ins compiled into the script plus one warning.
 - **Markers**: as above; `scope: any` routines keep theirs under `ccxp-rituals/_any/`.
+- **Running** (T20261114-400715, part 2): the `/routine` skill runs a routine on demand, records each run under `ccxp-routines/` and applies `on_failure`; see `routine/SKILL.md`.
