@@ -264,6 +264,7 @@ EOF
   grep -q 'CCXP_CRON_MODE=1' "$f"
   grep -q '## Authorization' "$f"
   grep -q '`routine-due.sh` of "Routines due"' "$f"
+  grep -q 'run-routine.sh attempts <routine> <key>' "$f"
   grep -q 'agent-pairing/rituals.md' "$f"
   [ -x "$REPO_ROOT/agent-pairing/scripts/routine-due.sh" ]
   [ -x "$REPO_ROOT/agent-pairing/scripts/ritual-due.sh" ]

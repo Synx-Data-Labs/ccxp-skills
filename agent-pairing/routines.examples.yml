@@ -4,16 +4,16 @@
 # `allow:` is honored only from the profile file, so it is deliberately absent here; see agent-pairing/rituals.md.
 # `at` and the times below must be quoted. Days and day boundaries use America/Chicago unless `tz:` is set.
 routines:
-  # Inbox: a read-only summary, then archive, label and draft replies for the owner to review. It never sends,
-  # replies, forwards or deletes mail. The second step is the mail-changing one and needs the profile-only
-  # `allow:` grants (T20261116-391393 defines the skill and the names); without them only the summary runs.
+  # Inbox: a read-only summary today. The mail-changing step (archive, label, draft replies for the owner to review;
+  # it never sends, replies, forwards or deletes) lands with T20261116-391393 and needs profile-only `allow:` grants;
+  # add its step then (the commented line below). `report: slack` plus `--no-slack` on each step gives one message.
   inbox:
-    description: Summarize the inbox, then archive, label and draft replies for review (never sends)
+    description: Summarize the inbox (and later archive, label and draft replies for review; never sends)
     schedule: {days: weekdays, at: "07:30", once_per: day}
     scope: any
     steps:
       - {skill: "/email-triage", args: "--window 24h --no-slack"}
-      - {skill: "/email-triage", args: "--clean --window 24h --no-slack"}
+      # - {skill: "/email-triage", args: "--clean --window 24h --no-slack"}   # not implemented yet (T20261116-391393)
     report: slack
   # Nightly check (not enabled yet): ONE step whose skill does the detection itself and runs /rca (or /labrun-rca
   # when the run has an alert thread) per failed run. The skill lands with T20261116-179192; copy this block then
@@ -24,8 +24,8 @@ routines:
   #     schedule: {days: daily, at: "08:00", once_per: day}
   #     steps:
   #       - {skill: "/nightly-check"}
-  # Alerts: registered only so `/routine list|show|disable` covers it. The persona's inline "Slack alerts check"
-  # does the work and an `every:` routine is never claimed as a job; do not run it by hand.
+  # Alerts: registered only so `/routine list|show` shows it. The persona's inline "Slack alerts check" does the
+  # work, unconditionally, and an `every:` routine is never claimed as a job; do not run it by hand.
   alerts:
     description: Slack alerts check (run inline by the persona, never as a job)
     schedule: {every: 5m}

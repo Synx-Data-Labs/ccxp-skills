@@ -97,8 +97,8 @@ routines:
 - **Running** (T20261114-400715, part 2): the `/routine` skill runs a routine on demand, records each run under `ccxp-routines/` and applies `on_failure`; see `routine/SKILL.md`.
 - **Starter routines** (T20261114-195064): `agent-pairing/routines.examples.yml` documents `inbox`, `nightly-check` (commented until its
   skill exists, T20261116-179192), `alerts` and a `standup` override; `tests/routine_due.bats` lints it and simulates a day.
-  - `inbox`: weekdays 07:30, a read-only `/email-triage` summary then a mail-changing clean step (archive, label, drafts for review; it never sends, replies, forwards or deletes; needs profile-only `allow:` grants, T20261116-391393). `report: slack` and `--no-slack` on both steps give one message.
-  - `alerts`: an `every: 5m` registration so `/routine list|show|disable` covers it; the persona's inline "Slack alerts check" does the work, and an `every:` routine is never claimed as a job.
+  - `inbox`: weekdays 07:30, a read-only `/email-triage` summary today; the mail-changing clean step (archive, label, drafts for review; it never sends, replies, forwards or deletes; profile-only `allow:` grants) comes with T20261116-391393 and is a commented line in the example until then. `report: slack` and `--no-slack` give one message.
+  - `alerts`: an `every: 5m` registration so `/routine list|show` shows it; the persona's inline "Slack alerts check" does the work unconditionally (disabling the routine does not stop it), and an `every:` routine is never claimed as a job.
   - `standup`, `ipm`, `retro` stay built in; `today` and `waiting` are the commented examples in `routines.default.yml`.
 - **Make your own routine**: copy a starter block into `dev/.routines.yml` (shared, reviewed) or the profile file (this machine), set `schedule.at` (quoted) and `days`,
   check it with `routine-due.sh check`, preview it with `/routine run <name> --dry-run` (writes nothing, calls no skill), then leave it enabled.

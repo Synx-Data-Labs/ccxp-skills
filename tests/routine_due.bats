@@ -403,14 +403,17 @@ Y
 routines:
   standup: {enabled: false}
 Y
-  run at "$MON_0730" list
+  run at "$MON_NOON" list
   [[ "$output" != *standup* ]]
   [[ "$output" == *"inbox 2026-11-09"* ]]
+  # without the disable the standup (moved to 08:30 by the example) would be due at noon
+  : >"$CCXP_ROUTINES_PROFILE_FILE"
+  run at "$MON_NOON" list
+  [[ "$output" == *"standup 2026-11-09"* ]]
 }
 
 @test "starter routines: no step of the examples reaches a send-type operation" {
-  run grep -Ei 'send_message|forward|reply|trash|spam|delete' "$EX"
-  # the file may only mention them in comments that say never; no step line carries one
-  run bash -c "grep -E '^\s*- \{skill' '$EX' | grep -Ei 'send|forward|reply|trash|spam|delete'"
+  # comments may say "never sends"; no step line (live or commented) carries a send-type word
+  run bash -c "grep -E '^\s*#?\s*- \{skill' '$EX' | grep -Ei 'send|forward|reply|trash|spam|delete'"
   [ "$status" -ne 0 ]
 }
