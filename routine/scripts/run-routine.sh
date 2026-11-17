@@ -14,7 +14,7 @@
 #   enable|disable <routine>                 write the machine-local profile file only
 #   allowed <routine> <capability>           exit 0 only when the profile file grants it (`send` is never grantable)
 #
-# Records: ${CCXP_ROUTINES_RUN_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines}/<repo-key>/<routine>-<key>.json
+# Records: ${CCXP_ROUTINES_RUN_DIR:-<profile dir>/ccxp-routines}/<repo-key>/<routine>-<key>.json
 # (<repo-key> as the ritual markers use; `_any` outside a repo). A manual run (no key) touches no claim.
 set -euo pipefail
 
@@ -30,7 +30,8 @@ function rr-profile-file() { echo "${CCXP_ROUTINES_PROFILE_FILE:-${CCXP_PROFILE_
 # record dir for the repo at $1 ("" = no repo)
 function rr-dir() {
   local top=$1 base key
-  base="${CCXP_ROUTINES_RUN_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-routines}"
+  base="${CCXP_ROUTINES_RUN_DIR:-${CCXP_PROFILE_DIR:+$CCXP_PROFILE_DIR/ccxp-routines}}"
+  [ -n "$base" ] || { echo "run-routine: no profile dir (set CCXP_ROUTINES_RUN_DIR)" >&2; return 1; }
   if [ -n "$top" ]; then
     key="$(CCXP_RITUAL_DIR="${CCXP_RITUAL_DIR:-/x}" rd-marker-dir "$top")"
     echo "$base/$(basename "$key")"
