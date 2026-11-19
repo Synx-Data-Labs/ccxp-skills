@@ -130,9 +130,9 @@ JSON
 
 @test "hud-data.sh: no issues config means no lookup and issues:null" {
   _fixture
-  run bash -c "echo '{\"cwd\":\"$BATS_TEST_TMPDIR\"}' | bash '$DATA'"
+  run bash -c "echo '{\"cwd\":\"$BATS_TEST_TMPDIR\"}' | HUD_NIGHTLY_OFF=1 bash '$DATA'"
   [ "$(jq -c .issues <<<"$output")" = "null" ]
-  [ ! -e "$GH_LOG" ]
+  ! grep -q "issue list" "$GH_LOG" 2>/dev/null
 }
 
 @test "hud-data.sh: stdin issues.repo adds the issues object next to the other keys" {

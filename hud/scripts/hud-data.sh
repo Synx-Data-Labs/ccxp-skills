@@ -30,7 +30,7 @@
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
-#    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached gh refresh (hud-issues.sh)
+#    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached refresh (hud-issues.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
