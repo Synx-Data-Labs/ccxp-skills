@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -23,6 +23,12 @@ export type QueueConfig = {
   source: QueueSource
 }
 
+/** Customer-issue stats cell source (opt-in): the GitHub issues of `repo` (`owner/name`); `ghConfigDir` is the gh config dir (account) to read them with. */
+export type IssuesConfig = {
+  repo: string
+  ghConfigDir?: string
+}
+
 export type HudConfig = {
   enabled: boolean
   userMessage: boolean
@@ -41,6 +47,8 @@ export type HudConfig = {
   ci?: CiConfig
   /** Queue cell source; undefined means `{ source: 'default-branch' }`. A project file's value replaces the user file's. */
   queue?: QueueConfig
+  /** Customer-issue stats cell; undefined (the default) hides the cell and runs no lookup. */
+  issues?: IssuesConfig
 }
 
 /** Rolling-24h and lifetime autopilot progress (`autopilot-state.sh stats`); absent when there is nothing to show. */
@@ -131,6 +139,15 @@ export type Queue = {
 /** The largest queue length seen over the last 180 days, the last 30 days and the last 7 days. */
 export type QueueHwm = { d180: number; d30: number; d7: number }
 
+/** Customer-issue stats (hud-issues.sh): open issues, the open ones not yet delivered, and the max open over 180 / 30 / 7 days. */
+export type Issues = {
+  open: number
+  /** Open issues without the delivered status label; never above `open`. */
+  undelivered: number
+  /** Absent when unknown; always d180 >= d30 >= d7 >= open. */
+  hwm?: QueueHwm
+}
+
 /** SynxDB nightly (hud-nightly.sh): red and green days in the last 30 UTC days, and the last 7 days as a strip. */
 export type Nightly = {
   /** Days in the last 30 on which some nightly run failed or timed out. */
@@ -190,6 +207,8 @@ export type HelperData = {
   ci: Ci | null
   /** Nightly last-7-days strip and 30-day green and red day counts (cached by the helper), null when unknown. */
   nightly: Nightly | null
+  /** Customer-issue stats; null when not configured or unknown. */
+  issues: Issues | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */
   plugin: PluginVersion | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */

@@ -1,12 +1,12 @@
 // ccxp-hud config: pure functions only (no `$`), so the unit tests can pin them.
 // Missing, empty or malformed input always means the defaults, which are ON.
 
-import type { CiConfig, Field, HudConfig, QueueConfig, QueueSource } from '../types'
+import type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource } from '../types'
 import { FILL_DEFAULT, parseFillColor } from './fill'
 
-export type { CiConfig, Field, HudConfig, QueueConfig, QueueSource }
+export type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource }
 
-export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'ci', 'rate', 'cost', 'lastat']
+export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
 export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']
@@ -17,7 +17,7 @@ export const DEFAULTS: HudConfig = {
   band: true,
   userBorder: 'quote',
   userColor: 'suggestion',
-  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'ci', 'lastat'],
+  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'ci', 'lastat'], // `issues` draws nothing until `issues` (the repo) is configured
   pollSeconds: 15,
   ctxWarn: 75,
   ctxCrit: 50,
@@ -69,6 +69,21 @@ export function parseQueue(x: unknown): QueueConfig | undefined {
   return QUEUE_SOURCES.includes(source) ? { source } : undefined
 }
 
+/** `issues` as `{repo, ghConfigDir?}` (or a bare `owner/name`); anything invalid means no issues cell. The directory is a plain path (an absolute path or `~/...`, no control characters). */
+export function parseIssues(x: unknown): IssuesConfig | undefined {
+  const raw: unknown = typeof x === 'string' ? { repo: x } : x
+  if (!isRecord(raw) || typeof raw.repo !== 'string') return undefined
+  const repo = raw.repo.trim()
+  if (!REPO_RE.test(repo)) return undefined
+  const out: IssuesConfig = { repo }
+  if (typeof raw.ghConfigDir === 'string') {
+    const dir = raw.ghConfigDir.trim()
+    // eslint-disable-next-line no-control-regex
+    if (/^(\/|~\/)[^\u0000-\u001f]{0,500}$/.test(dir)) out.ghConfigDir = dir
+  }
+  return out
+}
+
 /** Parses one config file's text into the keys that are valid; never throws. */
 export function parseConfigText(text: string | undefined | null): Partial<HudConfig> {
   if (!text) return {}
@@ -95,6 +110,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if ('ci' in raw) out.ci = parseCi(raw.ci)
   if ('queue' in raw) out.queue = parseQueue(raw.queue)
+  if ('issues' in raw) out.issues = parseIssues(raw.issues)
   return out
 }
 

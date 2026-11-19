@@ -149,14 +149,12 @@ sl-hwm-sample() {
   return 0
 }
 
-# $1 repo root $2 current queue length -> `{"d180":N,"d30":N,"d7":N}` (d180 >= d30 >= d7 >= current), or
-# nothing when $2 is not a number. Samples the length, kicks the detached backfill, then reads both series.
-sl-queue-hwm() {
-  local root="$1" total="$2" dir key now
+# $1 key (sl-hwm-key) $2 current length -> `{"d180":N,"d30":N,"d7":N}` (d180 >= d30 >= d7 >= current) from the
+# hist-<key> and samples-<key> series; nothing when $2 is not a number. Local files only. Shared with hud-issues.sh.
+sl-hwm-windows() {
+  local key="$1" total="$2" dir now
   [[ "$total" =~ ^[0-9]+$ ]] || return 0
-  sl-hwm-sample "$root" "$total"
-  sl-hwm-backfill "$root"
-  dir=$(_hw-dir); key=$(sl-hwm-key "$root"); now=$(_hw-now)
+  dir=$(_hw-dir); now=$(_hw-now)
   { cat "$dir/hist-$key" "$dir/samples-$key" 2>/dev/null || true; } | LC_ALL=C sort -s -n -k1,1 | awk -F'\t' -v now="$now" -v cur="$total" '
     BEGIN { c180 = now - 180 * 86400; c30 = now - 30 * 86400; c7 = now - 7 * 86400 }
     $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
@@ -169,4 +167,14 @@ sl-queue-hwm() {
       if (k180 > m180) m180 = k180; if (k30 > m30) m30 = k30; if (k7 > m7) m7 = k7
       if (cur > m7) m7 = cur; if (m7 > m30) m30 = m7; if (m30 > m180) m180 = m30
       printf "{\"d180\":%d,\"d30\":%d,\"d7\":%d}\n", m180, m30, m7 }' 2>/dev/null || true
+}
+
+# $1 repo root $2 current queue length -> `{"d180":N,"d30":N,"d7":N}`, or nothing when $2 is not a number.
+# Samples the length, kicks the detached backfill, then reads both series.
+sl-queue-hwm() {
+  local root="$1" total="$2"
+  [[ "$total" =~ ^[0-9]+$ ]] || return 0
+  sl-hwm-sample "$root" "$total"
+  sl-hwm-backfill "$root"
+  sl-hwm-windows "$(sl-hwm-key "$root")" "$total"
 }

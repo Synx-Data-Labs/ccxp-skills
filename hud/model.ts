@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -163,6 +163,26 @@ export function parseHelper(stdout: string): HelperData | null {
       nightly = { red: Math.min(31, Math.floor(o.red)), ...(green !== undefined ? { green } : {}), strip: o.strip }
     }
   }
+  const is = r.issues
+  let issues: Issues | null = null
+  if (typeof is === 'object' && is !== null && !Array.isArray(is)) {
+    // Untrusted: whole non-negative counts only; undelivered is capped at open, the windows are nested (and at least the open count).
+    const o = is as Record<string, unknown>
+    const cnt = (x: unknown) => Math.max(0, Math.floor(num(x)))
+    if (typeof o.open === 'number' && Number.isFinite(o.open) && o.open >= 0 && typeof o.undelivered === 'number' && Number.isFinite(o.undelivered) && o.undelivered >= 0) {
+      const open = cnt(o.open)
+      issues = { open, undelivered: Math.min(cnt(o.undelivered), open) }
+      const h = o.hwm
+      if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
+        const hw = h as Record<string, unknown>
+        if ([hw.d180, hw.d30, hw.d7].every(x => typeof x === 'number' && Number.isFinite(x))) {
+          const d7 = Math.max(cnt(hw.d7), open)
+          const d30 = Math.max(cnt(hw.d30), d7)
+          issues.hwm = { d180: Math.max(cnt(hw.d180), d30), d30, d7 }
+        }
+      }
+    }
+  }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
   if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
@@ -189,6 +209,7 @@ export function parseHelper(stdout: string): HelperData | null {
     queue,
     ci,
     nightly,
+    issues,
     plugin,
     last_input_at: num(r.last_input_at),
   }
@@ -600,6 +621,10 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
       const n = h?.nightly
       return n ? one(...nightlyVariants(n, false)) : null
     }
+    case 'issues': {
+      const i = h?.issues
+      return i ? one(...issuesVariants(i, false)) : null
+    }
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
@@ -687,16 +712,41 @@ export function nightlyVariants(n: Nightly, full = false): Variants {
   ]
 }
 
+/**
+ * The customer-issues cell. Band: `issues 12 open / 7 undelivered · max 18 180d / 15 30d / 12 7d`, then `issues 12 open / 7 undeliv. · max 18/15/12`
+ * (180d/30d/7d), then `issues 12/7`, then `issues 12`. The undelivered count is in the warning colour while above 0; the max block is
+ * dim, warning-coloured when the open count is at its 180-day high. Details (`full`) never abbreviates:
+ * `issues 12 open | 7 not delivered | max open 18 in 180 days / 15 in 30 days / 12 in 7 days`. A missing watermark just drops the max block.
+ */
+export function issuesVariants(i: Issues, full = false): Variants {
+  const hw = i.hwm
+  const tone = hw && i.open >= hw.d180 && hw.d180 > 0 ? 'warning' : undefined
+  const und = (text: string): Seg => ({ text, color: i.undelivered > 0 ? 'warning' : undefined, dim: i.undelivered === 0 })
+  if (full) {
+    const long: Seg[] = [{ text: `issues ${i.open} open` }, { text: ' | ', dim: true }, und(`${i.undelivered} not delivered`)]
+    if (hw) long.push({ text: ' | ', dim: true }, { text: `max open ${hw.d180} in 180 days / ${hw.d30} in 30 days / ${hw.d7} in 7 days`, dim: !tone, color: tone })
+    return [long]
+  }
+  const head = (undTxt: string): Seg[] => [{ text: `issues ${i.open} open / ` }, und(undTxt)]
+  const out: Seg[][] = []
+  if (hw) {
+    out.push([...head(`${i.undelivered} undelivered`), { text: ` · max ${hw.d180} 180d / ${hw.d30} 30d / ${hw.d7} 7d`, dim: !tone, color: tone }])
+    out.push([...head(`${i.undelivered} undeliv.`), { text: ` · max ${hw.d180}/${hw.d30}/${hw.d7}`, dim: !tone, color: tone }])
+  } else out.push(head(`${i.undelivered} undelivered`))
+  out.push([{ text: `issues ${i.open}/` }, und(`${i.undelivered}`)], [{ text: `issues ${i.open}` }])
+  return out
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'queue', 'nightly', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'nightly', 'issues', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -843,6 +893,7 @@ const DETAIL_STEPS = {
   ap: [],
   queue: [],
   nightly: [],
+  issues: [],
   you: ['drop:url'],
 } as const
 
@@ -877,6 +928,9 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
 
   // 0b. the nightly right after CI, so the two build-health signals read together: the band's cell with its labels in full (7-day strip, 30-day green and red days)
   if (h?.nightly) add([one('nightly', ...nightlyVariants(h.nightly, true))], DETAIL_STEPS.nightly)
+
+  // 0c. the customer-issue stats (opt-in), right after the nightly: open, not delivered, max open over 180 / 30 / 7 days, labels in full
+  if (h?.issues) add([one('issues', ...issuesVariants(h.issues, true))], DETAIL_STEPS.issues)
 
   // 1. where you are
   add(
