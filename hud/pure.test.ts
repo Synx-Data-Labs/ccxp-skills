@@ -1,9 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, withConfig, withEnabled } from './config'
+import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, parseIssues, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -1620,6 +1620,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   jobs: /READY|WORKING/,
   queue: /^queue /,
   nightly: /^nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
+  issues: /^issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
   ci: /^CI \(/,
   rate: /5-hour limit/,
   cost: /API-equivalent cost \$/,
@@ -1638,6 +1639,7 @@ test('details is a superset of the band: every band cell has a details counterpa
     autopilot: { ...AP, next_wake_at: stalled, stats: STATS },
     queue: AP_Q,
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
+    issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
     plugin: PLUGIN_NEW,
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
   }
@@ -1655,7 +1657,7 @@ test('details is a superset of the band: every band cell has a details counterpa
   }
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
-  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })
 
 // ---- CI ETA --------------------------------------------------------------------------------------
@@ -1732,4 +1734,38 @@ test('config: ci.eta is on unless explicitly false; withConfig keeps a hand-set 
   expect(JSON.parse(withConfig(old, { ci: { workflow: 'new.yml' } })).ci).toEqual({ workflow: 'new.yml', eta: false })
   expect(JSON.parse(withConfig(old, { ci: null })).ci).toBeNull()
   expect(JSON.parse(withConfig('{"ci": {"workflow": "old.yml"}}', { ci: { workflow: 'new.yml' } })).ci).toEqual({ workflow: 'new.yml' })
+})
+
+// ---- customer-issue stats cell (opt-in; the helper's lookups are tested in tests/hud_issues.bats) ----------------
+
+test('issues: opt-in config, validated; the cell is off until a repo is set', async () => {
+  expect(DEFAULTS.issues).toBeUndefined()
+  expect(parseConfigText('{"issues": {"repo": "acme/support", "ghConfigDir": "~/.config/gh-acme"}}').issues).toEqual({ repo: 'acme/support', ghConfigDir: '~/.config/gh-acme' })
+  expect(parseIssues('acme/support')).toEqual({ repo: 'acme/support' })
+  for (const bad of [null, 5, {}, { repo: 'nope' }, { repo: 'a/b c' }, { repo: 'a/b;rm' }]) expect(parseIssues(bad)).toBeUndefined()
+  expect(parseIssues({ repo: 'a/b', ghConfigDir: 'relative/dir' })).toEqual({ repo: 'a/b' })
+  expect(parseIssues({ repo: 'a/b', ghConfigDir: '/x\ny' })).toEqual({ repo: 'a/b' })
+  // no helper data (not configured): no cell
+  expect(text(bandRows(withHelper({}), { ...DEFAULTS }, 200))).not.toContain('issues')
+})
+
+test('issues: parseHelper keeps whole counts, caps undelivered at open and nests the windows', async () => {
+  const h = parseHelper(JSON.stringify({ ...BASE, issues: { open: 5, undelivered: 9, hwm: { d180: 1, d30: 2, d7: 3 } } }))!
+  expect(h.issues).toEqual({ open: 5, undelivered: 5, hwm: { d180: 5, d30: 5, d7: 5 } })
+  expect(parseHelper(JSON.stringify({ ...BASE, issues: { open: 'x', undelivered: 1 } }))!.issues).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, issues: { open: 4, undelivered: 2 } }))!.issues).toEqual({ open: 4, undelivered: 2 })
+  expect(parseHelper(JSON.stringify({ ...BASE, issues: null }))!.issues).toBeNull()
+})
+
+test('issues: band forms shrink, details spell it out', async () => {
+  const i = { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } }
+  const forms = issuesVariants(i, false).map(v => v.map(x => x.text).join(''))
+  expect(forms).toEqual(['issues 12 open / 7 undelivered · max 18 180d / 15 30d / 12 7d', 'issues 12 open / 7 undeliv. · max 18/15/12', 'issues 12/7', 'issues 12'])
+  expect(issuesVariants(i, true)[0].map(x => x.text).join('')).toBe('issues 12 open | 7 not delivered | max open 18 in 180 days / 15 in 30 days / 12 in 7 days')
+  expect(issuesVariants({ open: 3, undelivered: 0 }, false).map(v => v.map(x => x.text).join(''))[0]).toBe('issues 3 open / 0 undelivered')
+  // at the 180-day high the max block is warning-coloured
+  expect(issuesVariants({ open: 18, undelivered: 1, hwm: { d180: 18, d30: 18, d7: 18 } }, false)[0].some(x => x.color === 'warning' && x.text.includes('max'))).toBe(true)
+  const cfg = { ...DEFAULTS, issues: { repo: 'acme/support' } }
+  expect(text(bandRows(withHelper({ issues: i }), cfg, 200))).toContain('issues 12 open / 7 undelivered')
+  expect(text(bandRows(withHelper({ issues: i }), { ...cfg, fields: ['repo'] }, 200))).not.toContain('issues')
 })

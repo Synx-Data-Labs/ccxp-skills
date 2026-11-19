@@ -30,12 +30,13 @@
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
+#    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached gh refresh (hud-issues.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
 # `ci_ttl` (poll seconds), and `show_version` (bool, default true),
-# `queue_source` ("default-branch" default, also for absent or unknown | "working-tree" opt-in). Never exits non-zero: any failure prints "{}" so the mod
+# `issues` ({repo,gh_config_dir?} or null = off), `queue_source` ("default-branch" default, also for absent or unknown | "working-tree" opt-in). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
 # time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` unless queue_source is working-tree, and only when a queue exists).
 
@@ -50,6 +51,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-queue-hwm.sh"
 # shellcheck source=hud-nightly.sh
 . "$_HD_DIR/hud-nightly.sh"
+# shellcheck source=hud-issues.sh
+. "$_HD_DIR/hud-issues.sh"
 
 hud-data() {
   local input cwd session_id ci_cfg ci_ttl show_version queue_source
@@ -117,6 +120,12 @@ hud-data() {
   nightly=$(hud-nightly-json 2>/dev/null) || nightly="null"
   [ -n "$nightly" ] || nightly="null"
 
+  local issues="null" issues_repo issues_gh
+  issues_repo=$(printf '%s' "$input" | jq -r '.issues.repo // empty | strings' 2>/dev/null) || issues_repo=""
+  issues_gh=$(printf '%s' "$input" | jq -r '.issues.gh_config_dir // empty | strings' 2>/dev/null) || issues_gh=""
+  if [ -n "$issues_repo" ]; then issues=$(hud-issues-json "$issues_repo" "$issues_gh" 2>/dev/null) || issues="null"; fi
+  [ -n "$issues" ] || issues="null"
+
   local plugin
   plugin=$(hud-version-json "$(cd "$_HD_DIR/../.." && pwd)" "$show_version" 2>/dev/null) || plugin="null"
   [ -n "$plugin" ] || plugin="null"
@@ -128,7 +137,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson nightly "$nightly" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -143,7 +152,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), stats: $apstats} end),
-       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, plugin: $plugin,
+       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
 
