@@ -139,36 +139,13 @@ ap-status() {
 }
 
 # Atomic write: jq filter applied to the current state via temp file + mv.
-# Serialized with a mkdir lock (pid file inside; a lock older than 5 s (a write takes milliseconds) is a
+# Serialized with a lock file (holds the pid; a lock older than 5 s (a write takes milliseconds) is a
 # crashed writer and is broken, inside the 10 s a waiter retries), so two cycles finishing close together never interleave read-modify-write.
-# Age of directory $1 in seconds; 0 when it is gone.
-_ap_lock_age() {
-  local m; m=$(stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null) || m=""
-  [ -n "$m" ] || { echo 0; return 0; }
-  echo $(( $(date +%s) - m ))
-}
-# Break stale lock $1 without ever removing a live one. Breakers serialize on "$1.brk" (mkdir) and re-check the
-# age while holding it: a waiter that saw the lock stale earlier may find a peer already re-took it fresh, and
-# removing that lock (an empty dir rmdirs fine) would let two writers hold it at once.
-_ap_break_stale() {
-  local lock="$1" brk="$1.brk"
-  if ! mkdir "$brk" 2>/dev/null; then
-    [ "$(_ap_lock_age "$brk")" -gt 5 ] && { rmdir "$brk" 2>/dev/null || true; }   # a crashed breaker's marker
-    return 0
-  fi
-  if [ "$(_ap_lock_age "$lock")" -gt 5 ]; then rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; fi
-  rmdir "$brk" 2>/dev/null || true
-}
-_ap_lock() {
-  local f lock i=0; f=$(ap-state-file); lock="$f.lock"
-  while ! mkdir "$lock" 2>/dev/null; do
-    [ "$(_ap_lock_age "$lock")" -gt 5 ] && _ap_break_stale "$lock"
-    i=$(( i + 1 )); [ "$i" -le 200 ] || return 1
-    sleep 0.05
-  done
-  printf '%s' "$$" > "$lock/pid" 2>/dev/null || true
-}
-_ap_unlock() { local lock; lock="$(ap-state-file).lock"; rm -f "$lock/pid" 2>/dev/null; rmdir "$lock" 2>/dev/null || true; }
+# Lock mechanics live in _session/lock.sh (an atomic noclobber lock file; never mkdir, see there).
+# shellcheck source=/dev/null
+. "$(_ap_dir)/../../_session/lock.sh"
+_ap_lock() { lock_acquire "$(ap-state-file).lock" 5 200 0.05; }
+_ap_unlock() { lock_release "$(ap-state-file).lock"; }
 
 _ap_update() {
   local f tmp rc=0; f=$(ap-state-file); tmp="$f.tmp.$$"
