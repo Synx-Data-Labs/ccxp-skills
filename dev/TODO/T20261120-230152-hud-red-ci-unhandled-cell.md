@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Job 1339 analysis (n362), owner 2026-11-20 "then fix n362"
 description: HUD red-CI cell showing unhandled failed CI runs across watched repos
 type: feature
+claimed_by: cc1-50ac6891:538b00fb3e0f3942
+claimed_role: interactive
+scheduled: 2026-11-16
 ---
 
 # T20261120-230152: HUD red-CI cell for unhandled failed runs (n362 step 1)
