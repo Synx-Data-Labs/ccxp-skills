@@ -59,3 +59,5 @@ reprioritize.
 - [T20261120-230152](T20261120-230152-hud-red-ci-unhandled-cell.md): HUD red-CI cell for unhandled failed runs (n362 step 1)
 - [T20261120-645606](T20261120-645606-hud-staleness-cells-alerts-autopilot.md): HUD staleness cells for alerts check and autopilot (n362 step 2)
 - [T20261120-369900](T20261120-369900-hud-latest-version-recheck-on-plugin-change.md): HUD latest-version cache re-check on plugin change (n362 step 3)
+- [T20261120-154507](T20261120-154507-persona-autopilot-health-red-and-restart.md): Autopilot health - overdue autopilot is red and offers a restart (n362 step 4)
+- [T20261120-105513](T20261120-105513-persona-idle-wake-readonly-checks.md): Persona idle wake with read-only alert and CI checks (n362 step 5)
