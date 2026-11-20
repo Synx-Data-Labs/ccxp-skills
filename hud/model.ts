@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Redci, Snapshot } from '../types'
+import type { Alerts, ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Redci, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -197,6 +197,13 @@ export function parseHelper(stdout: string): HelperData | null {
       }
     }
   }
+  const al = r.alerts
+  let alerts: Alerts | null = null
+  if (typeof al === 'object' && al !== null && !Array.isArray(al)) {
+    // Untrusted: a whole non-negative epoch and a boolean; nothing else is ever drawn.
+    const o = al as Record<string, unknown>
+    if (typeof o.checked_at === 'number' && Number.isFinite(o.checked_at) && o.checked_at >= 0) alerts = { checked_at: Math.floor(o.checked_at), held: o.held === true }
+  }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
   if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
@@ -225,6 +232,7 @@ export function parseHelper(stdout: string): HelperData | null {
     redci,
     nightly,
     issues,
+    alerts,
     plugin,
     last_input_at: num(r.last_input_at),
   }
@@ -663,6 +671,10 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
       const i = h?.issues
       return i ? one(...issuesVariants(i, false)) : null
     }
+    case 'alerts': {
+      const a = h?.alerts
+      return a ? one(...alertsVariants(a, nowMs)) : null
+    }
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
@@ -775,16 +787,35 @@ export function issuesVariants(i: Issues, full = false): Variants {
   return out
 }
 
+/** Minutes after which a Slack alerts check counts as stale (warning colour). */
+export const ALERTS_STALE_MIN = 30
+
+/**
+ * The Slack-alerts-check cell. A check within 30 minutes: `alerts checked 12m ago` (dim), narrowing to `alerts 12m`. Older: the same in
+ * the warning colour (`alerts checked 3h ago`). Never checked: `alerts never checked` (warning). Alerts held back under the cap:
+ * `alerts held` (error) wins over the age. `full` (details) is the long form only.
+ */
+export function alertsVariants(a: Alerts, nowMs: number, full = false): Variants {
+  if (a.held) return [[{ text: 'alerts held', color: 'error' }]]
+  if (a.checked_at <= 0) return [[{ text: 'alerts never checked', color: 'warning' }], [{ text: 'alerts ?', color: 'warning' }]]
+  const stale = (nowMs / 1000 - a.checked_at) / 60 > ALERTS_STALE_MIN
+  const age = formatAge(a.checked_at, nowMs).replace(' ago', '')
+  const tone = stale ? { color: 'warning' } : { dim: true }
+  const long: Seg[] = [{ text: age === 'just now' ? 'alerts checked just now' : `alerts checked ${age} ago`, ...tone }]
+  if (full) return [long]
+  return [long, [{ text: age === 'just now' ? 'alerts now' : `alerts ${age}`, ...tone }]]
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'queue', 'nightly', 'issues', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'nightly', 'issues', 'alerts', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:alerts', 'drop:alerts', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'drop:cost', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:alerts', 'drop:alerts', 'drop:queue', 'drop:nightly', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -932,6 +963,7 @@ const DETAIL_STEPS = {
   queue: [],
   nightly: [],
   issues: [],
+  alerts: [],
   you: ['drop:url'],
 } as const
 
@@ -969,6 +1001,9 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
 
   // 0c. the customer-issue stats (opt-in), right after the nightly: open, not delivered, max open over 180 / 30 / 7 days, labels in full
   if (h?.issues) add([one('issues', ...issuesVariants(h.issues, true))], DETAIL_STEPS.issues)
+
+  // 0d. the Slack alerts check staleness (on unless `alerts: false`), after the issues: long form
+  if (h?.alerts) add([one('alerts', ...alertsVariants(h.alerts, nowMs, true))], DETAIL_STEPS.alerts)
 
   // 1. where you are
   add(
