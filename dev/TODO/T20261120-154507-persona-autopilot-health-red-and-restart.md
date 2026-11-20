@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Job 1339 analysis B(3) option 1 (L117), owner choice 2026-11-20
 description: Persona treats overdue autopilot as a red HUD item and offers a one-line restart
 type: feature
 related: T20261120-645606
+claimed_by: cc1-50ac6891:4e719af42e9ae3b0
+claimed_role: interactive
+scheduled: 2026-11-16
 ---
 
 # T20261120-154507: Autopilot health - overdue autopilot is red and offers a restart (n362 step 4)
