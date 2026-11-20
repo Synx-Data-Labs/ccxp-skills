@@ -33,6 +33,7 @@ _HV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 HVR_TTL=21600
 HVR_RETRY=900
+HVR_MIN_RECHECK=60 # a plugin.json change re-checks at most once a minute (two live plugin roots must not ping-pong the shared cache)
 HVR_TIMEOUT=8
 HVR_REMOTE_DEFAULT="https://github.com/Synx-Data-Labs/ccxp-skills.git"
 HVR_SEMVER_RE='^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(-[0-9A-Za-z.-]{1,40})?$'
@@ -141,8 +142,9 @@ hud-version-json() {
     [[ "$cached_pm" =~ ^-?[0-9]+$ ]] || cached_pm=-1
   fi
 
-  # Due: the TTL ran out, or the plugin.json differs from the one the cache was written for (an old cache without "pm" counts as changed once).
-  if { [ $((now - fetched)) -ge "$HVR_TTL" ] || [ "$cached_pm" != "$pm" ]; } && mkdir -p "$dir" 2>/dev/null; then
+  # Due: the TTL ran out, or the plugin.json differs from the one the cache was written for (an old cache without "pm" counts as changed once),
+  # but a change re-checks no more often than every HVR_MIN_RECHECK seconds.
+  if { [ $((now - fetched)) -ge "$HVR_TTL" ] || { [ "$cached_pm" != "$pm" ] && [ $((now - fetched)) -ge "$HVR_MIN_RECHECK" ]; }; } && mkdir -p "$dir" 2>/dev/null; then
     local lock="$dir/latest.lock"
     if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; fi
     if mkdir "$lock" 2>/dev/null; then

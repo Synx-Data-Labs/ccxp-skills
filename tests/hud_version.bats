@@ -126,7 +126,9 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
   git -C "$HUD_VERSION_REMOTE" tag ccxp-skills--v5.2.0
   run _ver "$root"
   [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
-  # The plugin is updated in place (plugin.json mtime moves): ONE re-check, well inside the 6 h TTL.
+  # The plugin is updated in place (plugin.json mtime moves): ONE re-check, well inside the 6 h TTL
+  # (the cache is a couple of minutes old by then; a change inside the first minute waits for it).
+  jq -c '.fetched -= 120' "$HUD_VERSION_STATE_DIR/latest.json" > "$BATS_TEST_TMPDIR/c" && mv "$BATS_TEST_TMPDIR/c" "$HUD_VERSION_STATE_DIR/latest.json"
   touch -t 203001010000 "$root/.claude-plugin/plugin.json"
   run _ver "$root"
   [ "$(jq -r .latest <<<"$output")" = "5.2.0" ]
@@ -140,7 +142,7 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
 @test "a cache written before the mtime was recorded (no pm) re-checks once; a failed re-check keeps the old answer and records the mtime (no retry storm)" {
   local root; root=$(_plugin 5.0.0)
   mkdir -p "$HUD_VERSION_STATE_DIR"
-  printf '{"latest":"5.1.0","fetched":%s}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
+  printf '{"latest":"5.1.0","fetched":%s}\n' "$(( $(date +%s) - 120 ))" > "$HUD_VERSION_STATE_DIR/latest.json"
   export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/gone"
   run _ver "$root"
   [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
@@ -155,7 +157,7 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
   local root; root=$(_plugin 5.0.0)
   _remote ccxp-skills--v5.1.0
   mkdir -p "$HUD_VERSION_STATE_DIR"
-  printf '{"latest":"5.0.0","fetched":%s,"pm":"1; echo pwned"}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
+  printf '{"latest":"5.0.0","fetched":%s,"pm":"1; echo pwned"}\n' "$(( $(date +%s) - 120 ))" > "$HUD_VERSION_STATE_DIR/latest.json"
   run _ver "$root"
   [ "$output" = '{"installed":"5.0.0","latest":"5.1.0"}' ]
 }
@@ -223,4 +225,16 @@ _plugin_urls() {
   grep -q 'git ls-remote --tags' "$VER"
   grep -q 'GIT_TERMINAL_PROMPT=0' "$VER"
   ! grep -nE 'curl|wget|\bgh |token|TOKEN' "$VER"
+}
+
+@test "two plugin roots sharing one cache do not ping-pong: a pm mismatch re-checks at most once a minute" {
+  _remote ccxp-skills--v5.1.0
+  local a b; a=$(_plugin 5.0.0)
+  run _ver "$a"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
+  # another session's plugin root (different mtime) reads the same cache: fetched is seconds old, so no lookup
+  b="$BATS_TEST_TMPDIR/plugin-b"; mkdir -p "$b/.claude-plugin"; cp "$a/.claude-plugin/plugin.json" "$b/.claude-plugin/"; touch -t 203001010000 "$b/.claude-plugin/plugin.json"
+  git -C "$HUD_VERSION_REMOTE" tag ccxp-skills--v5.2.0
+  run _ver "$b"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
 }
