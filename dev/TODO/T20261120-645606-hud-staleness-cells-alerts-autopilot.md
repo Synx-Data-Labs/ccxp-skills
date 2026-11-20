@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Job 1339 analysis (n362), owner 2026-11-20 "then fix n362"
 description: HUD staleness cells - alerts checked Xm ago, stalled autopilot when next_wake_at is overdue
 type: feature
 related: T20261120-230152
+claimed_by: cc1-50ac6891:8a3d643f5ec9366f
+claimed_role: interactive
+scheduled: 2026-11-16
 ---
 
 # T20261120-645606: HUD staleness cells for alerts check and autopilot (n362 step 2)
