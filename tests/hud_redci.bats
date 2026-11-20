@@ -26,6 +26,8 @@ case "$1 $2" in
     case "$*" in
       *"--status failure"*) cat "$d/fail.json" ;;
       *"--status success"*) cat "$d/succ.json" ;;
+      *"--status timed_out"*) if [ -e "$d/timed.json" ]; then cat "$d/timed.json"; else echo '[]'; fi ;;
+      *"--status startup_failure"*) echo '[]' ;;
     esac ;;
 esac
 EOS
@@ -99,10 +101,10 @@ _redci() { # $1 repos json
   [ "$output" = '{"n":0,"items":[]}' ]
 }
 
-@test "no failures: answered n=0 with ONE gh call" {
+@test "no failures: answered n=0 with three cheap list calls and nothing else" {
   run _redci '["acme/widgets"]'
   [ "$output" = '{"n":0,"items":[]}' ]
-  [ "$(wc -l < "$GH_LOG" | tr -d ' ')" = 1 ]
+  [ "$(wc -l < "$GH_LOG" | tr -d ' ')" = 3 ] # failure, timed_out, startup_failure: one call each
   grep -q -- '--status failure' "$GH_LOG"
 }
 
@@ -114,8 +116,26 @@ _redci() { # $1 repos json
   run _redci '["acme/widgets"]'; [ "$(jq -r .n <<<"$output")" = 1 ]
   touch "$BATS_TEST_TMPDIR/gh.fail"
   local f
-  for f in "$HUD_REDCI_STATE_DIR"/*.json; do jq -c '.fetched = 1' "$f" > "$f.t" && mv "$f.t" "$f"; done
+  for f in "$HUD_REDCI_STATE_DIR"/*.json; do jq -c --argjson d "$(( $(date +%s) - 400 ))" '.attempted = 1 | .fetched = $d' "$f" > "$f.t" && mv "$f.t" "$f"; done
   run _redci '["acme/widgets"]'; [ "$(jq -r .n <<<"$output")" = 1 ]
+  # the data time did not move, only the attempt time
+  [ "$(jq -r '.attempted - .fetched' "$HUD_REDCI_STATE_DIR"/*.json)" -ge 399 ]
+}
+
+@test "data older than 6 hours is not shown when refreshes keep failing (the repo counts as unknown)" {
+  printf '[%s]' "$(_run 12100001 Tests trunk push 600)" > "$BATS_TEST_TMPDIR/fail.json"
+  _redci '["acme/widgets"]' >/dev/null
+  touch "$BATS_TEST_TMPDIR/gh.fail"
+  local f
+  for f in "$HUD_REDCI_STATE_DIR"/*.json; do jq -c --argjson d "$(( $(date +%s) - 30000 ))" '.attempted = 1 | .fetched = $d' "$f" > "$f.t" && mv "$f.t" "$f"; done
+  run _redci '["acme/widgets"]'; [ "$output" = null ]
+}
+
+@test "a timed_out run counts too (gh lists it under its own status)" {
+  printf '[%s]' "$(_run 12200001 Nightly trunk schedule 600)" > "$BATS_TEST_TMPDIR/timed.json"
+  run _redci '["acme/widgets"]'
+  [ "$(jq -r .n <<<"$output")" = 1 ]
+  grep -q -- '--status timed_out' "$GH_LOG"
 }
 
 @test "within the TTL the cache answers and gh is not called again" {
