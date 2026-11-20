@@ -712,3 +712,18 @@ install_outdated_agent() {
   jq '.next_wake_at = "2026-10-28T09:00:00Z"' "$st" > "$st.t" && mv "$st.t" "$st"
   [ "$(AUTOPILOT_STATE_FILE="$st" AUTOPILOT_NOW="2026-10-28T10:00:00Z" bash "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" overdue)" = 3600 ]
 }
+
+@test "asset: Idle wake rule runs idle-wake.sh plan, one ScheduleWakeup per schedule line, only the two read-only checks, opt-out named (T20261120-105513)" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^## Idle wake$' "$f"
+  grep -q 'agent-pairing/scripts/idle-wake.sh plan' "$f"
+  grep -q 'prompt `\[idle-wake\]`' "$f"
+  grep -q 'ONLY the Slack alerts check and the CI failure detection' "$f"
+  grep -q 'CCXP_IDLE_WAKE=0' "$f"
+  grep -q '`idle-wake.sh` of "Idle wake"' "$f"
+  [ -x "$REPO_ROOT/agent-pairing/scripts/idle-wake.sh" ]
+  [ -f "$REPO_ROOT/agent-pairing/idle-wake.md" ]
+  # the section sits after "Routines due" and before "Writing a job prompt"
+  [ "$(grep -n '^## Routines due' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Idle wake' "$f" | cut -d: -f1)" ]
+  [ "$(grep -n '^## Idle wake' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Writing a job prompt' "$f" | cut -d: -f1)" ]
+}

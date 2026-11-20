@@ -124,6 +124,7 @@ right now."
 - `persona-refresh.md` — the persona refreshes itself after a `/plugin` update
 - `terms.md` — the agent's acronym memory (`scripts/terms.sh`, `wtf.json` ("where to find"), the UserPromptSubmit `hooks/terms-hook.sh`)
 - `rituals.md` — daily standup, Monday IPM and Friday retro dispatched by the persona's "Routines due" check (`scripts/routine-due.sh`; `scripts/ritual-due.sh` stays for installs that have not refreshed); `routines.examples.yml` holds the starter routines; tests: `bats tests/ritual_due.bats`; its "Routines" section covers the config-driven `scripts/routine-due.sh` (`scripts/routine-config.py`, `routines.default.yml`; tests: `bats tests/routine_due.bats tests/routine_check.bats`)
+- `idle-wake.md` — the persona's "Idle wake": with autopilot off and a session open, one `ScheduleWakeup` every 30 minutes runs only the read-only alerts and CI checks (`scripts/idle-wake.sh`, opt-out `CCXP_IDLE_WAKE=0`); tests: `bats tests/idle_wake.bats`
 - `alerts.md` — the persona's "Slack alerts check": reads #slack-automation-alerts and starts one `labrun-rca` job per unanswered failure alert (`scripts/alerts-due.sh`), plus the autopilot-health offer (`autopilot-state.sh overdue`); tests: `bats tests/alerts_due.bats`
 - `decisions.md` — the agent's decisions log (`ledger.sh decision ...`, `ccxp-decisions.json`/`.md`)
 - `superpowers:dispatching-parallel-agents` — the general pattern this
