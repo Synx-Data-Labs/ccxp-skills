@@ -13,14 +13,14 @@
 #     (local greps, no network; the dispatcher writes the id there when it takes the failure on).
 # n = 0 prints {"n":0,"items":[]} (answered, all clear); no repos, bad input or no answer yet prints "null".
 #
-# Cost: per repo ONE `gh run list --status failure` per refresh, plus (only when something failed) one
-# `gh repo view` and one `gh run list --status success`. Refreshes are at most every HRC_MIN_TTL (300 s,
+# Cost: per repo one `gh run list --status <s>` for each of failure, timed_out and startup_failure (gh treats them
+# as separate statuses) per refresh, plus (only when something failed) one `gh repo view` and one `gh run list --status success`. Refreshes are at most every HRC_MIN_TTL (300 s,
 # or the poll when longer), detached, 5 s timeout per call, lock dir per repo. The HUD never calls gh
 # per redraw: it prints the cache at once.
 #
 # gh JSON is untrusted: only numbers, an enumerated repo name and a printable, truncated workflow name
 # survive the jq mapping. Arguments go to gh as an argv array, never through a shell string. gh missing,
-# signed out or offline keeps the old answer. Nothing from gh's stdout or stderr is passed on.
+# signed out or offline keeps the old answer, but never longer than 6 hours (then the repo counts as unknown). Nothing from gh's stdout or stderr is passed on.
 #
 # Test hooks: CCXP_HUD_REDCI_SYNC=1 refreshes in the foreground; HUD_REDCI_STATE_DIR relocates the cache
 # (default <profile>/state/hud-redci); HUD_REDCI_CONTEXT_DIR / HUD_REDCI_LEDGER_FILE relocate the handled sources.
@@ -31,6 +31,7 @@ HRC_MIN_TTL=300
 HRC_TIMEOUT=5
 HRC_MAX_AGE_SEC=604800
 HRC_MAX_REPOS=8
+HRC_MAX_STALE=21600
 
 hrc-state-dir() { printf '%s' "${HUD_REDCI_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-redci}"; }
 
@@ -67,10 +68,20 @@ hrc-refresh() {
   now=$(date +%s)
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   fails="$tmp.f"; succ="$tmp.s"; handled="$tmp.h"
-  if hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --status failure --limit 30 --json databaseId,workflowName,event,headBranch,createdAt >"$fails" 2>/dev/null \
-     && jq -e 'type == "array"' "$fails" >/dev/null 2>&1; then
+  local st ok=1
+  : >"$fails.all"
+  for st in failure timed_out startup_failure; do
+    if hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --status "$st" --limit 30 --json databaseId,workflowName,event,headBranch,createdAt >"$fails.one" 2>/dev/null \
+       && jq -e 'type == "array"' "$fails.one" >/dev/null 2>&1; then
+      cat "$fails.one" >>"$fails.all"
+    else
+      ok=0; break
+    fi
+  done
+  [ "$ok" = 1 ] && jq -s 'add' "$fails.all" >"$fails" 2>/dev/null || ok=0
+  if [ "$ok" = 1 ] && jq -e 'type == "array"' "$fails" >/dev/null 2>&1; then
     if [ "$(jq 'length' "$fails" 2>/dev/null || echo 0)" = 0 ]; then
-      state=$(jq -nc --argjson now "$now" '{items: [], fetched: $now}')
+      state=$(jq -nc --argjson now "$now" '{items: [], fetched: $now, attempted: $now}')
     else
       branch=""
       hrc-run-timeout "$HRC_TIMEOUT" gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name >"$tmp" 2>/dev/null || true
@@ -93,15 +104,16 @@ hrc-refresh() {
             | select((.id | IN($h[])) | not)
             | . as $r | select(([$ok[] | select(.k == ($r.wf + "|" + $r.br) and .at > $r.at)] | length) == 0)]
         | sort_by(-.at) as $items
-        | {items: ($items | map({wf, at, repo: $repo})), fetched: $now}' "$fails" 2>/dev/null) || state=""
+        | {items: ($items | map({wf, at, repo: $repo})), fetched: $now, attempted: $now}' "$fails" 2>/dev/null) || state=""
     fi
   fi
   if [ -z "$state" ]; then
-    state=$(jq -c --argjson now "$now" '.fetched = $now' "$file" 2>/dev/null) || state=""
-    [ -n "$state" ] || state="{\"items\":null,\"fetched\":$now}"
+    # The data time (`fetched`) stays; only the attempt time moves, so a long outage cannot make old reds look fresh.
+    state=$(jq -c --argjson now "$now" '.attempted = $now' "$file" 2>/dev/null) || state=""
+    [ -n "$state" ] || state="{\"items\":null,\"fetched\":0,\"attempted\":$now}"
   fi
   printf '%s\n' "$state" >"$tmp" && mv -f "$tmp" "$file"
-  rm -f "$tmp" "$fails" "$succ" "$handled" 2>/dev/null
+  rm -f "$tmp" "$fails" "$fails.all" "$fails.one" "$succ" "$handled" 2>/dev/null
   return 0
 }
 
@@ -116,17 +128,19 @@ hud-redci-json() {
   local ttl=$HRC_MIN_TTL
   [ "$poll" -le "$ttl" ] || ttl=$poll
 
-  local dir now key file fetched cached lock all='[]' answered=0
+  local dir now key file fetched data_at cached lock all='[]' answered=0
   dir=$(hrc-state-dir)
   now=$(date +%s)
   for repo in "${repos[@]}"; do
     key=$(printf '%s' "$repo" | cksum | cut -d' ' -f1)
     file="$dir/$key.json"
-    fetched=0; cached=""
+    fetched=0; cached=""; data_at=0
     if [ -r "$file" ]; then
       cached=$(jq -c '.' "$file" 2>/dev/null) || cached=""
-      fetched=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || fetched=0
+      data_at=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || data_at=0
+      fetched=$(jq -r '((.attempted // .fetched // 0) | floor)' <<<"${cached:-null}" 2>/dev/null) || fetched=0
       [[ "$fetched" =~ ^[0-9]+$ ]] || fetched=0
+      [[ "$data_at" =~ ^[0-9]+$ ]] || data_at=0
     fi
     if [ $((now - fetched)) -ge "$ttl" ] && command -v gh >/dev/null 2>&1 && mkdir -p "$dir" 2>/dev/null; then
       lock="$dir/$key.lock"
@@ -145,6 +159,10 @@ hud-redci-json() {
     # Untrusted cache: only the known keys, typed, survive.
     local part
     part=$(jq -c 'if (.items | type) == "array" then [.items[] | select(type == "object" and (.wf | type) == "string" and (.at | type) == "number" and (.repo | type) == "string") | {wf: (.wf | .[0:40]), at: (.at | floor), repo: (.repo | .[0:100])}] else null end' <<<"${cached:-null}" 2>/dev/null) || part=""
+    # Data older than HRC_MAX_STALE (refreshes keep failing) counts as no answer for this repo.
+    data_at=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || data_at=0
+    [[ "$data_at" =~ ^[0-9]+$ ]] || data_at=0
+    [ $((now - data_at)) -le "$HRC_MAX_STALE" ] || part=""
     if [ -n "$part" ] && [ "$part" != "null" ]; then
       answered=1
       all=$(jq -c --argjson p "$part" '. + $p' <<<"$all")

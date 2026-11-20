@@ -462,7 +462,7 @@ function redciVariants(r: Redci): Variants | null {
 
 /**
  * The top CI row, or null (nothing configured or answered, or switched off in `fields`). Starts full at every width.
- * The configured workflow's cell and the unhandled-red-CI cell share this one row; the red-CI cell is the last to shrink away.
+ * The configured workflow's cell and the unhandled-red-CI cell share this one row; the red-CI cell shrinks after the configured workflow's cell loses its optional parts.
  */
 function ciRow(snap: Snapshot, cfg: HudConfig, width: number, nowMs: number): Seg[] | null {
   const ci = snap.helper?.ci

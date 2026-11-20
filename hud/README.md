@@ -104,7 +104,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 - Red is red: any workflow that FAILED on the repo's default branch or from a schedule, in the last 7 days, counts, whatever it is called (Upstream Sync and Tests too). PR-branch failures do not.
 - A failure is dropped when a later successful run of the same workflow on the same branch exists (superseded), or when its run id appears in a `ccxp-context/` file, the job ledger or a `dev/TODO/` file (handled: the dispatcher writes the id there when it takes a failure on).
 - Watched repos: `redci.repos`, else the `ci.repo` repo; never guessed from the session repo.
-- Cost: `hud/scripts/hud-redci.sh` answers from a cache (`<profile>/state/hud-redci/`), at most one detached refresh per repo every 5 minutes (or the poll when longer): one `gh run list --status failure` call, plus a repo lookup and a success listing only when something failed; 5 s timeout, lock dir. The band never calls `gh`. The JSON is untrusted: only a count and three printable names survive.
+- Cost: `hud/scripts/hud-redci.sh` answers from a cache (`<profile>/state/hud-redci/`), at most one detached refresh per repo every 5 minutes (or the poll when longer): one `gh run list` per status that gh lists separately (`failure`, `timed_out`, `startup_failure`), plus a repo lookup and a success listing only when something failed; 5 s timeout, lock dir. When refreshes keep failing the old answer is kept for at most 6 hours, then the repo counts as unknown. The band never calls `gh`. The JSON is untrusted: only a count and three printable names survive.
 - Limit: it is passive (visible on a live terminal); overnight push is not part of this cell.
 
 ## CI cell
