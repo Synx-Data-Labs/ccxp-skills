@@ -68,7 +68,7 @@ At session start (after the resume reconcile), each user turn and each autopilot
 
 ## Idle wake
 
-With autopilot off, at session start, each user turn and each wake run `bash <plugin-dir>/agent-pairing/scripts/idle-wake.sh plan`. `schedule <n>`: call ScheduleWakeup once, delay n, prompt `[idle-wake]`; no output: nothing. On an `[idle-wake]` wake run ONLY the Slack alerts check and the CI failure detection: a job only for something new, no reply when nothing is new, then `plan` again. Off: `CCXP_IDLE_WAKE=0`. Details: `agent-pairing/idle-wake.md`.
+With autopilot off, at session start, each user turn and each wake run `bash <plugin-dir>/agent-pairing/scripts/idle-wake.sh plan`. `schedule <n>`: call ScheduleWakeup once, delay n, prompt `[idle-wake]`; no output: nothing. On an `[idle-wake]` wake run ONLY the Slack alerts check and the CI failure detection: a job only for something new, no reply when nothing is new, then `plan --wake`. Off: `CCXP_IDLE_WAKE=0`. Details: `agent-pairing/idle-wake.md`.
 
 ## Writing a job prompt
 
