@@ -819,9 +819,9 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
     if (f === 'ap' && it) {
       const sv = apStatsVariants(snap.helper!.autopilot!)
       if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(tier === 'wide' ? 0 : tier === 'compact' ? 1 : 3, sv.length - 1) })
-      // A loop days late is dead, not "due": the band says so (warn colour) right after the AP cells. Not shown while paused or busy.
+      // A loop days late is dead, not "due": the band says so (red) right after the AP cells. Not shown while paused or busy.
       const late = stalledFor(snap.helper!.autopilot!, nowMs)
-      if (late > 0) items.push({ field: 'stall', variants: [[{ text: `stalled ${formatSpan(late, false)}`, color: 'warning' }]], at: 0 })
+      if (late > 0) items.push({ field: 'stall', variants: [[{ text: `stalled ${formatSpan(late, false)}`, color: 'error', bold: true }]], at: 0 })
     }
   }
   // The repo cell already carries the branch (or `detached <sha>`): do not say it twice.
@@ -1027,7 +1027,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   } else if (ap && ap.next_wake_at > 0) {
     const late = stalledFor(ap, nowMs)
     if (late > 0) {
-      wakeItem = one('wake', [{ text: `next loop overdue ${formatSpan(late, true)}`, color: 'warning' }])
+      wakeItem = one('wake', [{ text: `next loop overdue ${formatSpan(late, true)}`, color: 'error', bold: true }])
     } else if (formatIn(ap.next_wake_at, nowMs) === 'now') {
       wakeItem = one('wake', [{ text: 'next loop due', dim: true }])
     } else {

@@ -1427,7 +1427,7 @@ test('next loop: not yet due shows the clock and wait; due within the 10-minute 
   expect(stallLines({ next_wake_at: secs(-STALL_GRACE_SEC) })[3]).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due') // exactly the grace: still due
 })
 
-test('next loop: beyond the grace it is overdue, warn-coloured, with how late (minutes, hours, days) and no upcoming wake time', async () => {
+test('next loop: beyond the grace it is overdue, red, with how late (minutes, hours, days) and no upcoming wake time', async () => {
   const at = (late: number) => stallLines({ next_wake_at: secs(-late) })[3]
   expect(at(STALL_GRACE_SEC + 1)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 10m')
   expect(at(25 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 25m')
@@ -1436,7 +1436,7 @@ test('next loop: beyond the grace it is overdue, warn-coloured, with how late (m
   expect(at(2 * 86400)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 2d')
   expect(at(2 * 86400)).not.toMatch(/due$|\d\d:\d\d|\(in /)
   const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: secs(-86400) } }) as any, DEFAULTS, 200, STALL_NOW)
-  expect(rows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('warning')
+  expect(rows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('error')
   // the queue line still follows
   expect(stallLines({ next_wake_at: secs(-86400) })[4]).toBe(QLINE)
 })
@@ -1465,13 +1465,13 @@ test('next loop: a wake less than a second away reads as due, not `(now)`; the b
   expect(sawStalledAlone).toBe(true)
 })
 
-test('next loop: formatSpan and stalledFor; the single-line band shows a short warn-coloured `stalled 2d` only beyond the grace', async () => {
+test('next loop: formatSpan and stalledFor; the single-line band shows a short red `stalled 2d` only beyond the grace', async () => {
   expect([formatSpan(59, true), formatSpan(600, true), formatSpan(3900, true), formatSpan(7200, true), formatSpan(2 * 86400 + 16 * 3600, true), formatSpan(2 * 86400 + 16 * 3600, false), formatSpan(3900, false)]).toEqual(['0m', '10m', '1h 5m', '2h', '2d 16h', '2d', '1h'])
   expect(stalledFor({ ...AP, next_wake_at: secs(-STALL_GRACE_SEC) } as any, STALL_NOW)).toBe(0)
   expect(stalledFor({ ...AP, next_wake_at: secs(-STALL_GRACE_SEC - 1) } as any, STALL_NOW)).toBe(STALL_GRACE_SEC + 1)
   const band = (ap: object, cols = 200) => bandRows(withHelper({ autopilot: { ...AP, ...ap } }) as any, NOCI, cols, STALL_NOW)
   expect(text(band({ next_wake_at: secs(-2 * 86400 - 16 * 3600) }))).toContain('AP 2/6h 3 loops ✓2 merged │ stalled 2d │')
-  expect(band({ next_wake_at: secs(-2 * 86400) }).flat().find(x => x.text.startsWith('stalled'))).toEqual({ text: 'stalled 2d', color: 'warning' })
+  expect(band({ next_wake_at: secs(-2 * 86400) }).flat().find(x => x.text.startsWith('stalled'))).toEqual({ text: 'stalled 2d', color: 'error', bold: true })
   expect(text(band({ next_wake_at: secs(-120) }))).not.toContain('stalled')
   expect(text(band({ next_wake_at: secs(300) }))).not.toContain('stalled')
   expect(text(band({ next_wake_at: secs(-STALL_GRACE_SEC - 60) }))).toContain('stalled 11m')

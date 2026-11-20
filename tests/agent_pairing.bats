@@ -693,3 +693,13 @@ install_outdated_agent() {
   grep -q 'CCXP_PERSONA_AUTO_REFRESH=0' "$f"
   [ -f "$REPO_ROOT/agent-pairing/routines.examples.yml" ]
 }
+
+@test "asset: Autopilot health rule runs autopilot-state.sh overdue, offers a restart once per hour, never restarts unasked (T20261120-154507)" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '^\*\*Autopilot health\*\*' "$f"
+  grep -q 'autopilot/scripts/autopilot-state.sh overdue' "$f"
+  grep -q 'Say once per hour' "$f"
+  grep -q 'Never restart it unasked' "$f"
+  grep -q '^## Autopilot health$' "$REPO_ROOT/agent-pairing/alerts.md"
+  [ -x "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" ]
+}
