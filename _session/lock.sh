@@ -6,8 +6,9 @@
 #                            (the ubuntu-latest runner's coreutils) lets several concurrent callers win.
 # lock_age <path>            seconds since <path> was modified; 0 when it is gone
 # lock_break_stale <lock> <max-age>
-#                            remove the lock when older than <max-age> seconds, without ever removing a
-#                            live one: breakers serialize on <lock>.brk and re-check the age while holding it
+#                            remove the lock when older than <max-age> seconds; breakers serialize on <lock>.brk
+#                            and re-check the age while holding it, so a lock a peer just re-took is left alone
+#                            (only a holder that outlives <max-age> and releases inside that re-check window can lose it)
 # lock_acquire <lock> <max-age> <tries> <pause>
 #                            lock_try, breaking a stale lock, retrying <tries> times <pause> seconds apart
 # lock_release <lock>        remove the lock if it is still ours (it holds our pid)

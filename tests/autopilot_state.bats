@@ -1450,6 +1450,7 @@ _ap_on() { _ap start >/dev/null; }
   owner="$(cat "$AUTOPILOT_STATE_FILE.lock" 2>/dev/null || true)"
   : > "$BATS_TEST_TMPDIR/release"
   wait "$apid"; wait "$bpid"
+  [ "$(cat "$shim/calls" | wc -l)" -ge 2 ]   # A looked at the age, then re-checked it before deciding
   [ "$alive" = 1 ]
   [ "$owner" = "$bpid" ]
   [ "$(_j '.slots | keys | join(",")')" = "2" ]
