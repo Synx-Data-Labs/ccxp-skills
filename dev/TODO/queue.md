@@ -56,3 +56,6 @@ reprioritize.
 - [T20261109-179471](T20261109-179471-rituals-usage-cost-warning.md): Usage-cost warning for the persona-driven daily rituals
 - [T20261109-584639](T20261109-584639-verify-rituals-live-after-release.md): Verify the persona-driven daily rituals live after the release
 - [T20261112-143063](T20261112-143063-configurable-customer-rulebook-hook.md): Configurable customer-provided rule book (config key, pending-export hook, generic renderer)
+- [T20261120-230152](T20261120-230152-hud-red-ci-unhandled-cell.md): HUD red-CI cell for unhandled failed runs (n362 step 1)
+- [T20261120-645606](T20261120-645606-hud-staleness-cells-alerts-autopilot.md): HUD staleness cells for alerts check and autopilot (n362 step 2)
+- [T20261120-369900](T20261120-369900-hud-latest-version-recheck-on-plugin-change.md): HUD latest-version cache re-check on plugin change (n362 step 3)
