@@ -16,6 +16,11 @@ export type CiConfig = {
   eta?: boolean
 }
 
+/** Repos watched for unhandled red CI (`owner/name` each). Unset means the `ci.repo` repo when set, else nothing (never the session repo); an empty list switches it off. */
+export type RedciConfig = {
+  repos: string[]
+}
+
 /** Where the queue cell reads dev/TODO from: the repo's default branch on origin (default; git object reads, no checkout) or this clone's working tree (opt-in). */
 export type QueueSource = 'working-tree' | 'default-branch'
 
@@ -45,6 +50,8 @@ export type HudConfig = {
   version: boolean
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
+  /** Unhandled-red-CI watch list; see RedciConfig. */
+  redci?: RedciConfig
   /** Queue cell source; undefined means `{ source: 'default-branch' }`. A project file's value replaces the user file's. */
   queue?: QueueConfig
   /** Customer-issue stats cell; undefined (the default) hides the cell and runs no lookup. */
@@ -168,6 +175,9 @@ export type Ci = {
   eta?: CiEta
 }
 
+/** Failed runs (default branch or schedule, any workflow) not superseded by a later success and not yet handled. */
+export type Redci = { n: number; items: Array<{ wf: string; at: number; repo: string }> }
+
 /** Typical duration of the workflow's recent successful runs (see `hud/scripts/hud-ci.sh`). */
 export type CiEta = { start: number; typ: number; min: number; max: number; n: number }
 
@@ -205,6 +215,8 @@ export type HelperData = {
   queue: Queue | null
   /** Last run of the configured CI workflow (cached by the helper), null when unconfigured or unknown. */
   ci: Ci | null
+  /** Unhandled red CI across the watched repos (hud-redci.sh), null when not watching or no answer yet. */
+  redci: Redci | null
   /** Nightly last-7-days strip and 30-day green and red day counts (cached by the helper), null when unknown. */
   nightly: Nightly | null
   /** Customer-issue stats; null when not configured or unknown. */

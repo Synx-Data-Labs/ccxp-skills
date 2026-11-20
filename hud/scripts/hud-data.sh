@@ -29,13 +29,14 @@
 #                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
+#    "redci": null | {"n","items":[{"wf","at","repo"}]},   # unhandled failed runs (default branch or schedule, any workflow) of the repos in stdin `redci`; cached, detached refresh (hud-redci.sh)
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached refresh (hud-issues.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
-# `ci_ttl` (poll seconds), and `show_version` (bool, default true),
+# `ci_ttl` (poll seconds), `redci` (array of owner/name repos to watch for unhandled red CI; [] or absent = off), and `show_version` (bool, default true),
 # `issues` ({repo,gh_config_dir?} or null = off), `queue_source` ("default-branch" default, also for absent or unknown | "working-tree" opt-in). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
 # time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` unless queue_source is working-tree, and only when a queue exists).
@@ -45,6 +46,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-lib.sh"
 # shellcheck source=hud-ci.sh
 . "$_HD_DIR/hud-ci.sh"
+# shellcheck source=hud-redci.sh
+. "$_HD_DIR/hud-redci.sh"
 # shellcheck source=hud-version.sh
 . "$_HD_DIR/hud-version.sh"
 # shellcheck source=hud-queue-hwm.sh
@@ -116,6 +119,11 @@ hud-data() {
   ci=$(hud-ci-json "$repo_root" "$ci_cfg" "$ci_ttl" 2>/dev/null) || ci="null"
   [ -n "$ci" ] || ci="null"
 
+  local redci redci_repos
+  redci_repos=$(printf '%s' "$input" | jq -c '.redci // []' 2>/dev/null) || redci_repos="[]"
+  redci=$(hud-redci-json "$redci_repos" "$ci_ttl" "$repo_root/dev/TODO" 2>/dev/null) || redci="null"
+  [ -n "$redci" ] || redci="null"
+
   local nightly
   nightly=$(hud-nightly-json 2>/dev/null) || nightly="null"
   [ -n "$nightly" ] || nightly="null"
@@ -137,7 +145,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson redci "$redci" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -152,7 +160,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), stats: $apstats} end),
-       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, plugin: $plugin,
+       ledger: $ledger, queue: $queue, ci: $ci, redci: $redci, nightly: $nightly, issues: $issues, plugin: $plugin,
        last_input_at: $last_input_at}'
 }
 

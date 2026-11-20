@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Redci, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -153,6 +153,20 @@ export function parseHelper(stdout: string): HelperData | null {
       }
     }
   }
+  const rc = r.redci
+  let redci: Redci | null = null
+  if (typeof rc === 'object' && rc !== null && !Array.isArray(rc)) {
+    // Untrusted: a whole count (0-999) and at most 3 items whose workflow name is printable text; nothing else is ever drawn.
+    const o = rc as Record<string, unknown>
+    if (typeof o.n === 'number' && Number.isFinite(o.n) && o.n >= 0) {
+      const items = (Array.isArray(o.items) ? o.items : [])
+        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x))
+        .map(x => ({ wf: str(x.wf).replace(/[^ -~]/g, '').slice(0, 40), at: num(x.at), repo: str(x.repo).replace(/[^ -~]/g, '').slice(0, 100) }))
+        .filter(x => x.wf !== '')
+        .slice(0, 3)
+      redci = { n: Math.min(999, Math.floor(o.n)), items }
+    }
+  }
   const ni = r.nightly
   let nightly: Nightly | null = null
   if (typeof ni === 'object' && ni !== null && !Array.isArray(ni)) {
@@ -208,6 +222,7 @@ export function parseHelper(stdout: string): HelperData | null {
     ledger,
     queue,
     ci,
+    redci,
     nightly,
     issues,
     plugin,
@@ -429,11 +444,34 @@ function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
   return [mk(true, true, true, true, true), mk(false, true, true, true, true), mk(false, false, true, true, true), mk(false, false, false, true), mk(false, false, false, false)]
 }
 
-/** The top CI row, or null (no `ci` configured, switched off in `fields`, or no answer yet). Starts full at every width. */
+/**
+ * The unhandled-red-CI cell: `✗ 2 unhandled CI (Nightly Orchestrator 11-20, Upstream Sync 11-20)`, shrinking to
+ * `✗ 2 unhandled CI`. Every segment is flagged `alert` (reverse video, bold) like a red CI row. Null when
+ * nothing is unhandled (or not watching).
+ */
+function redciVariants(r: Redci): Variants | null {
+  if (r.n <= 0) return null
+  const flag = (segs: Seg[]): Seg[] => segs.map(x => ({ ...x, alert: true, bold: true, dim: false }))
+  const list = r.items.map(i => `${truncate(i.wf, 24)}${i.at > 0 ? ` ${shortDate(i.at)}` : ''}`).join(', ')
+  const more = r.n > r.items.length ? `, +${r.n - r.items.length}` : ''
+  return [
+    flag([{ text: `✗ ${r.n} unhandled CI`, color: 'error', marker: true }, ...(list ? [{ text: ` (${list}${more})`, color: 'error' }] : [])]),
+    flag([{ text: `✗ ${r.n} unhandled CI`, color: 'error', marker: true }]),
+  ]
+}
+
+/**
+ * The top CI row, or null (nothing configured or answered, or switched off in `fields`). Starts full at every width.
+ * The configured workflow's cell and the unhandled-red-CI cell share this one row; the red-CI cell is the last to shrink away.
+ */
 function ciRow(snap: Snapshot, cfg: HudConfig, width: number, nowMs: number): Seg[] | null {
   const ci = snap.helper?.ci
-  if (!cfg.ci || !ci) return null
-  return fitRow([{ field: 'ci', variants: ciRowVariants(ci, cfg.ci.workflow, nowMs), at: 0 }], ['step:ci', 'step:ci', 'step:ci', 'step:ci'], width)
+  const rv = snap.helper?.redci ? redciVariants(snap.helper.redci) : null
+  const items: Item[] = []
+  if (cfg.ci && ci) items.push({ field: 'ci', variants: ciRowVariants(ci, cfg.ci.workflow, nowMs), at: 0 })
+  if (rv) items.push({ field: 'redci', variants: rv, at: 0 })
+  if (items.length === 0) return null
+  return fitRow(items, ['step:ci', 'step:redci', 'step:ci', 'step:ci', 'step:ci'], width)
 }
 
 /**
