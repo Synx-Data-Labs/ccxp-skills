@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Job 1339 analysis B(3) option 2 (L119), owner choice 2026-11-20
 description: Persona idle wake every 30 min running only the read-only alerts and CI checks
 type: feature
 related: T20261120-230152
+claimed_by: cc1-50ac6891:eb7b7bb8f366d63a
+claimed_role: interactive
+scheduled: 2026-11-16
 ---
 
 # T20261120-105513: Persona idle wake with read-only alert and CI checks (n362 step 5)
