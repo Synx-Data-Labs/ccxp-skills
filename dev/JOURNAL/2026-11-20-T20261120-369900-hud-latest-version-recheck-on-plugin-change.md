@@ -31,6 +31,7 @@ scheduled: 2026-11-16
 ## Solution
 
 - `hvr-plugin-mtime` reads the mtime (BSD `stat -f`, then GNU `stat -c`); `hud-version-json` treats the cache as due when the TTL expired OR `pm` differs from the current mtime; `hvr-refresh` writes `pm` on success and on failure (a failed re-check keeps the old answer and waits the usual ~15 minutes, no retry storm).
+- Review fix: two live plugin roots (an old and a new session during an update) share one cache, so a plain mismatch test would re-check on every render; a change now re-checks at most once a minute (`HVR_MIN_RECHECK`).
 - Alternatives rejected:
   - shorter TTL: more `git ls-remote` calls for everyone to fix a once-per-update event;
   - hooking `/reload-plugins`: no such hook, and a plain update in a new session would still miss it.
