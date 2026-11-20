@@ -198,3 +198,10 @@ Explicitly out of scope for the **Project-board mirror** — note these limits a
 - T20260616-308030 — retirement of the soft session-visualization layer (claim/heartbeat/read/release/prune + the 4 Project fields)
 - hub-repo#91 / build-pipeline-repo#748 — Tasks-as-Issues mirror (the workflow that creates the Project items this lib writes to)
 - build-pipeline-repo `T20260611-104067` — peer-mode parallel dev that the on-main `task_claim.sh` lock arbitrates
+
+## Lock files (`lock.sh`)
+
+- Scripts that serialize a read-modify-write (`autopilot-state.sh`, `ledger.sh`) source `_session/lock.sh` and call `lock_acquire` / `lock_release`
+- The lock is a file created by bash's noclobber redirection (`O_CREAT|O_EXCL`), never by `mkdir`: uutils `mkdir` (the ubuntu-latest runner's coreutils) can let several concurrent callers win
+- A stale lock is broken under a `<lock>.brk` marker with a second age check, so a live holder's lock is never removed; a legacy directory lock is still recognised and removed once stale
+- Tests: `tests/ledger.bats` and `tests/autopilot_state.bats` (stale-then-retaken, and mkdir-independence cases)

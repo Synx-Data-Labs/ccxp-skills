@@ -73,6 +73,8 @@
 # Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
 # shellcheck source=/dev/null
 [ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
+# shellcheck source=/dev/null
+. "$(dirname "${BASH_SOURCE[0]}")/../../_session/lock.sh"
 ledger-file() {
   printf '%s' "${CCXP_LEDGER_FILE:-${CCXP_PROFILE_DIR:-}/ccxp-ledger.json}"
 }
@@ -495,37 +497,16 @@ decisions-archive() {
 }
 
 # $1 jq filter over the normalized decisions; remaining args are jq args. Sets DECISIONS_LAST.
-# The read-modify-write runs under a mkdir lock (<file>.lock; waits up to ~10s, a lock older than 60s is stale).
+# The read-modify-write runs under a lock file (<file>.lock; waits up to ~10s, a lock older than 60s is stale).
 decisions-update() { ledger-with-lock "$(decisions-file).lock" decisions-update-locked "$@"; }
 
-# True when lock dir $1 is older than a minute.
-ledger-lock-stale() { [[ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; }
-
-# Break stale lock $1 without ever removing a live one. Breakers serialize on "$1.brk" (mkdir) and re-check
-# the age while holding it: a waiter that saw the lock stale earlier may find a peer already re-took it fresh,
-# and removing that lock (an empty dir rmdirs fine) would let two writers hold it at once.
-ledger-break-stale() {
-  local lock="$1" brk="$1.brk"
-  if ! mkdir "$brk" 2>/dev/null; then
-    ! ledger-lock-stale "$brk" || rmdir "$brk" 2>/dev/null || true   # a crashed breaker's marker
-    return 0
-  fi
-  ! ledger-lock-stale "$lock" || rmdir "$lock" 2>/dev/null || true
-  rmdir "$brk" 2>/dev/null || true
-}
-
-# $1 lock dir, then a command: run it under a mkdir lock (waits up to ~10s, a lock older than 60s is stale).
+# $1 lock file, then a command: run it under an exclusive lock (waits up to ~10s, a lock older than 60s is stale).
+# Lock mechanics live in _session/lock.sh (an atomic noclobber lock file; never mkdir, see there).
 ledger-with-lock() {
-  local lock="$1" rc i; shift
-  mkdir -p "$(dirname "$lock")" 2>/dev/null || return 1
-  for ((i = 0; i < 100; i++)); do
-    mkdir "$lock" 2>/dev/null && break
-    ! ledger-lock-stale "$lock" || ledger-break-stale "$lock"
-    sleep 0.1
-  done
-  [[ -d "$lock" && $i -lt 100 ]] || { echo "ledger: could not lock $lock" >&2; return 1; }
+  local lock="$1" rc; shift
+  lock_acquire "$lock" 60 100 0.1 || { echo "ledger: could not lock $lock" >&2; return 1; }
   "$@"; rc=$?
-  rmdir "$lock" 2>/dev/null
+  lock_release "$lock"
   return $rc
 }
 
@@ -818,7 +799,7 @@ ledger-context-check() {
 
 # $1 id (d<n> | n<k> | i<k> | a<k> | r<n> | k<n>, case-insensitive), $2 abs path.
 # Exit 2 usage / bad id form / bad path; exit 1 refused (unknown id, unreadable or newer-schema file, lock timeout).
-# Decisions go through decisions-update (its mkdir lock); ledger rows through ledger-update under <ledger>.lock, which only
+# Decisions go through decisions-update (its lock file); ledger rows through ledger-update under <ledger>.lock, which only
 # other `context set` calls take: start/finish/next/park stay unlocked (last write wins), so run a batch while the dispatcher is idle.
 ledger-context-set() {
   local usage="usage: ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path>"
