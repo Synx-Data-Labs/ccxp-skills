@@ -203,5 +203,5 @@ Explicitly out of scope for the **Project-board mirror** — note these limits a
 
 - Scripts that serialize a read-modify-write (`autopilot-state.sh`, `ledger.sh`) source `_session/lock.sh` and call `lock_acquire` / `lock_release`
 - The lock is a file created by bash's noclobber redirection (`O_CREAT|O_EXCL`), never by `mkdir`: uutils `mkdir` (the ubuntu-latest runner's coreutils) can let several concurrent callers win
-- A stale lock is broken under a `<lock>.brk` marker with a second age check, so a live holder's lock is never removed; a legacy directory lock is still recognised and removed once stale
+- A stale lock is broken under a `<lock>.brk` marker with a second age check, so a lock a peer just re-took is left alone (a holder slower than the stale age is treated as crashed); a legacy directory lock is still recognised and removed once stale
 - Tests: `tests/ledger.bats` and `tests/autopilot_state.bats` (stale-then-retaken, and mkdir-independence cases)

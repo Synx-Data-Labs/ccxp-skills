@@ -896,6 +896,7 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   local alive=0; kill -0 "$apid" 2>/dev/null && alive=1
   : > "$BATS_TEST_TMPDIR/release"
   wait "$apid"; wait "$bpid"
+  [ "$(cat "$shim/calls" | wc -l)" -ge 2 ]   # A looked at the age, then re-checked it before deciding
   [ "$alive" = 1 ]
   [ "$(cat "$BATS_TEST_TMPDIR/a.out")" = "d1" ]
   [ ! -e "$(dj).lock" ]
