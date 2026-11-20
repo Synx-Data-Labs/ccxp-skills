@@ -1448,7 +1448,7 @@ _ap_on() { _ap start >/dev/null; }
   _j_set '.next_wake_at = "2026-10-28T09:49:59Z"'
   run _ap overdue; [ "$output" = 601 ]
   _j_set '.next_wake_at = "2026-10-26T18:00:00Z"'
-  run _ap overdue; [ "$output" = $(( 40 * 3600 + 600 - 600 )) ] # 2026-10-26T18:00 to 2026-10-28T10:00 = 40 h
+  run _ap overdue; [ "$output" = 144000 ] # 2026-10-26T18:00 to 2026-10-28T10:00 = 40 h of total lateness
   run _ap overdue 7200; [ "$output" = 144000 ]
   run _ap overdue 99999999; [ "$output" = 0 ]
   run _ap overdue x; [ "$status" -eq 2 ]
