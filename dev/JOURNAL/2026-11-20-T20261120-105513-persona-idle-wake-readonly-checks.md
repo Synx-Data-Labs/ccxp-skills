@@ -32,6 +32,7 @@ scheduled: 2026-11-16
 
 - `agent-pairing/scripts/idle-wake.sh plan|status`: records the pending wake time in `<profile>/ccxp-idle/next-at`; prints `schedule <seconds>` only when enabled, autopilot is not on and no wake is pending (pending until due plus 2 minutes); interval default 30 min, never below 5; opt-out `CCXP_IDLE_WAKE=0` or `config.json` `{"enabled": false}`.
 - Persona "Idle wake" rule and `agent-pairing/idle-wake.md` (what runs, cost, limits); SKILL.md lists the doc.
+- Review fix: a wake fires at its recorded time, so a plain `plan` on the wake still saw it as pending and the chain stopped after one wake; the `[idle-wake]` wake now runs `plan --wake`, which ignores the pending record (test "plan --wake ..."); the autopilot-on test no longer has a conditional assertion.
 - Alternatives rejected:
   - running the checks inside the script: the Slack read is MCP-only and jobs belong to the persona;
   - a cron or launchd poller: owner decision d115 rejects it, and it needs tokens.

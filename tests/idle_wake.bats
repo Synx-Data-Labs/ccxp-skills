@@ -20,6 +20,15 @@ _iw() { bash "$SCRIPT" "$@"; }
   CCXP_IDLE_NOW=1001900 run _iw plan; [ "$status" -eq 1 ] # due + 100 s: inside the 2-minute grace
 }
 
+@test "plan --wake (the [idle-wake] wake itself) ignores the pending record and schedules the next wake: the chain continues" {
+  _iw plan >/dev/null
+  CCXP_IDLE_NOW=1001800 run _iw plan; [ "$status" -eq 1 ] # a plain plan at the due time sees the pending wake
+  CCXP_IDLE_NOW=1001800 run _iw plan --wake; [ "$status" -eq 0 ]; [ "$output" = "schedule 1800" ]
+  [ "$(cat "$CCXP_IDLE_DIR/next-at")" = 1003600 ]
+  CCXP_IDLE_NOW=1001810 run _iw plan; [ "$status" -eq 1 ] # and the new one is pending
+  CCXP_IDLE_WAKE=0 CCXP_IDLE_NOW=1003600 run _iw plan --wake; [ "$status" -eq 1 ] # opt-out still wins
+}
+
 @test "after the wake is due plus the grace (it fired, or the session died) the next plan schedules again" {
   _iw plan >/dev/null
   CCXP_IDLE_NOW=1001921 run _iw plan; [ "$status" -eq 0 ]; [ "$output" = "schedule 1800" ]
@@ -28,10 +37,8 @@ _iw() { bash "$SCRIPT" "$@"; }
 
 @test "autopilot on means no idle wake (its own wakes carry the checks); off, paused or no state file schedules" {
   printf '%s' '{"status":"on","schema":2,"started_at":"2026-10-28T10:00:00Z","end_time":"2099-01-01T00:00:00Z"}' > "$AUTOPILOT_STATE_FILE"
-  AUTOPILOT_NOW="2026-10-28T10:00:00Z" run _iw plan
-  if [ "$(bash "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" status)" = on ]; then
-    [ "$status" -eq 1 ]; [ -z "$output" ]
-  fi
+  [ "$(bash "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" status)" = on ] # the fixture really is autopilot on
+  run _iw plan; [ "$status" -eq 1 ]; [ -z "$output" ]
   rm -f "$AUTOPILOT_STATE_FILE"
   run _iw plan; [ "$status" -eq 0 ]
 }

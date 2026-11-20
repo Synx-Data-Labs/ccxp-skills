@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# idle-wake.sh [plan | status]
+# idle-wake.sh [plan [--wake] | status]
 #
 # Token-free, network-free state for the ccxp-agent persona's "Idle wake" (T20261120-105513, n362): with autopilot
 # off and a session open, the persona schedules ONE ScheduleWakeup every 30 minutes that runs only the two read-only
@@ -10,7 +10,9 @@
 #            enabled, autopilot not on, and no wake still pending. Prints nothing and exits 1 otherwise (disabled,
 #            autopilot on, or a wake is already pending). A state failure exits 3 with a message on stderr.
 #            A recorded wake counts as pending until it is due plus a 2-minute grace; after that (the wake fired,
-#            or the session ended and never fired it) the next `plan` schedules again.
+#            or the session ended and never fired it) the next `plan` schedules again. `plan --wake` is for the
+#            `[idle-wake]` wake itself: the wake that just fired is the recorded one, so it ignores the pending
+#            record and schedules the next wake at once (without it the chain would stop after the first wake).
 #   status   one line: "enabled|disabled <reason>" and the recorded next wake epoch (0 = none).
 #
 # Opt-out: CCXP_IDLE_WAKE=0, or {"enabled": false} in ${CCXP_IDLE_DIR:-<profile dir>/ccxp-idle}/config.json.
@@ -63,14 +65,15 @@ function iw-next() {
 }
 
 function iw-plan() {
-  local dir now next gap why
+  local dir now next gap why wake=0
+  [ "${1:-}" != --wake ] || wake=1
   why="$(iw-disabled)"
   [ -z "$why" ] || return 1
   iw-autopilot-on && return 1
   dir="$(iw-dir)" || { echo "idle-wake: no profile dir; set CCXP_IDLE_DIR" >&2; return 3; }
   now="$(iw-now)"; next="$(iw-next)"
   # Pending: a wake is recorded and not yet more than 2 minutes past due.
-  if [ "$next" -gt 0 ] && [ "$now" -le $((next + 120)) ]; then return 1; fi
+  if [ "$wake" = 0 ] && [ "$next" -gt 0 ] && [ "$now" -le $((next + 120)) ]; then return 1; fi
   gap=$(( $(iw-minutes) * 60 ))
   { mkdir -p "$dir" && echo $((now + gap)) >"$dir/next-at"; } || { echo "idle-wake: cannot write $dir" >&2; return 3; }
   echo "schedule $gap"
@@ -85,9 +88,9 @@ function iw-status() {
 
 function idle-wake() {
   case "${1:-}" in
-    plan) iw-plan ;;
+    plan) shift; iw-plan "$@" ;;
     status) iw-status ;;
-    *) echo "usage: idle-wake.sh plan | status" >&2; return 2 ;;
+    *) echo "usage: idle-wake.sh plan [--wake] | status" >&2; return 2 ;;
   esac
 }
 

@@ -8,12 +8,13 @@ red CI or a Slack alert was only noticed at the next user turn or autopilot wake
 
 - **Scheduling**: at session start, each user turn and each wake the persona runs `bash <plugin-dir>/agent-pairing/scripts/idle-wake.sh plan`.
   - `schedule <seconds>`: the persona calls `ScheduleWakeup` once with that delay and the prompt `[idle-wake]`.
+  - `plan --wake` is the same call made by the `[idle-wake]` wake itself: it ignores the pending record and schedules the next wake.
   - No output (exit 1): nothing to do. Autopilot is on (its own wakes carry the checks), the idle wake is off, or a wake is already pending.
   - A recorded wake counts as pending until it is due plus 2 minutes; after that (it fired, or the session ended) the next `plan` schedules again.
 - **The wake** (`[idle-wake]`): the persona runs ONLY
   1. `alerts-due.sh check` and, when it prints a window, the Slack alerts check of the persona (its own 5-minute rate limit applies);
   2. the CI failure detection (one `gh run list --status failure` per repo in scope), as in "CI failure response".
-  - A job is started only for something new (an unhandled failed run, an unanswered failure alert). Nothing new: no job, no reply, then `plan` again to schedule the next wake.
+  - A job is started only for something new (an unhandled failed run, an unanswered failure alert). Nothing new: no job, no reply, then `plan --wake` to schedule the next wake (a wake fires at its recorded time, so a plain `plan` would still see it as pending and the chain would stop).
   - It never runs the Routines due check, the repo-freshness fetch or anything else, and never replies to the owner just to say nothing happened.
 
 ## Opt-out and knobs
