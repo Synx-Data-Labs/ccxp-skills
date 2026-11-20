@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, parseIssues, parseRedci, redciRepos, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, alertsVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -1621,6 +1621,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   queue: /^queue /,
   nightly: /^nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
   issues: /^issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
+  alerts: /^alerts checked \d+h ago/,
   ci: /^CI \(/,
   rate: /5-hour limit/,
   cost: /API-equivalent cost \$/,
@@ -1640,6 +1641,7 @@ test('details is a superset of the band: every band cell has a details counterpa
     queue: AP_Q,
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
     issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
+    alerts: { checked_at: Math.floor(DETAIL_NOW / 1000) - 3 * 3600, held: false },
     plugin: PLUGIN_NEW,
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
   }
@@ -1657,7 +1659,7 @@ test('details is a superset of the band: every band cell has a details counterpa
   }
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
-  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'alerts checked 3h ago', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })
 
 // ---- CI ETA --------------------------------------------------------------------------------------
@@ -1823,4 +1825,39 @@ test('red CI row shrinks by width, shares the row with the configured CI cell, a
   }
   const green = bandRows(withHelper({ ci: { state: 'passing', at: RUN_AT }, redci: RC }) as any, { ...CI, fields: ['ci'] }, 200)
   expect(text(green)).toMatch(/✓ passing .* │ ✗ 2 unhandled CI/)
+// ---- Slack alerts-check staleness cell ----
+const ANOW = Date.UTC(2026, 10, 20, 12, 0, 0)
+const aSec = Math.floor(ANOW / 1000)
+
+test('parseHelper: alerts keeps a whole non-negative epoch and a boolean; anything else is no cell', async () => {
+  const al = (x: unknown) => parseHelper(JSON.stringify({ ...BASE, alerts: x }))!.alerts
+  expect(al({ checked_at: aSec, held: true })).toEqual({ checked_at: aSec, held: true })
+  expect(al({ checked_at: 0, held: false })).toEqual({ checked_at: 0, held: false })
+  expect(al({ checked_at: 5, held: 'yes' })).toEqual({ checked_at: 5, held: false })
+  for (const bad of [null, 'x', 3, [], {}, { checked_at: -1 }, { checked_at: 'a' }]) expect(al(bad)).toBeNull()
+})
+
+test('alerts cell: fresh is dim, older than 30 minutes warns, never checked warns, held is an error that wins', async () => {
+  const v = (a: any, full = false) => alertsVariants(a, ANOW, full)
+  expect(v({ checked_at: aSec - 12 * 60, held: false })).toEqual([[{ text: 'alerts checked 12m ago', dim: true }], [{ text: 'alerts 12m', dim: true }]])
+  expect(v({ checked_at: aSec - 31 * 60, held: false })[0][0]).toEqual({ text: 'alerts checked 31m ago', color: 'warning' })
+  expect(v({ checked_at: aSec - 3 * 3600, held: false })[1][0].text).toBe('alerts 3h')
+  expect(v({ checked_at: aSec - 10, held: false })[0][0].text).toBe('alerts checked just now')
+  expect(v({ checked_at: 0, held: false })[0][0]).toEqual({ text: 'alerts never checked', color: 'warning' })
+  expect(v({ checked_at: aSec - 60, held: true })).toEqual([[{ text: 'alerts held', color: 'error' }]])
+  expect(v({ checked_at: aSec - 12 * 60, held: false }, true).length).toBe(1)
+})
+
+test('alerts cell: drawn in the band when the helper has it, off with `alerts` out of fields, never in the way of a narrow row', async () => {
+  const s = withHelper({ ci: null, alerts: { checked_at: aSec - 3 * 3600, held: false } }) as any
+  expect(text(bandRows(s, NOCI, 200, ANOW))).toContain('alerts checked 3h ago')
+  expect(text(bandRows(s, { ...NOCI, fields: ['repo'] }, 200, ANOW))).not.toContain('alerts')
+  for (const cols of [20, 40, 60, 80, 120]) for (const row of bandRows(s, NOCI, cols, ANOW)) expect(row.reduce((n: number, x: any) => n + x.text.length, 0)).toBeLessThanOrEqual(Math.max(20, cols - 2))
+  expect(text(bandRows(withHelper({ ci: null, alerts: null }) as any, NOCI, 200, ANOW))).not.toContain('alerts')
+})
+
+test('config: `alerts` is a boolean switch; the default shows the cell', async () => {
+  expect(DEFAULTS.alerts).toBeUndefined()
+  expect(mergeConfig(parseConfigText('{"alerts": false}'), {}).alerts).toBe(false)
+  expect(mergeConfig(parseConfigText('{"alerts": "no"}'), {}).alerts).toBeUndefined()
 })
