@@ -1825,6 +1825,8 @@ test('red CI row shrinks by width, shares the row with the configured CI cell, a
   }
   const green = bandRows(withHelper({ ci: { state: 'passing', at: RUN_AT }, redci: RC }) as any, { ...CI, fields: ['ci'] }, 200)
   expect(text(green)).toMatch(/✓ passing .* │ ✗ 2 unhandled CI/)
+})
+
 // ---- Slack alerts-check staleness cell ----
 const ANOW = Date.UTC(2026, 10, 20, 12, 0, 0)
 const aSec = Math.floor(ANOW / 1000)
