@@ -14,7 +14,8 @@
 #             "(latest)", "(X available)" and plain); null while unknown (no lookup yet, offline, no tag).
 #
 # Never blocks the caller: it answers from an on-disk cache and, when the cache is older than
-# 6 h, starts ONE detached refresh (8 s timeout, lock dir, no credential prompt). Offline or
+# 6 h OR the running plugin.json changed since the cache was written (its mtime is stored in the
+# cache as "pm"; an update or reinstall of the plugin re-checks once, not after the TTL), starts ONE detached refresh (8 s timeout, lock dir, no credential prompt). Offline or
 # git missing: the old answer is kept and the next try is ~15 min later. Remote output is
 # untrusted: only strings that match the tag pattern survive.
 #
@@ -89,9 +90,19 @@ hvr-highest-tag() {
   printf '%s' "$best"
 }
 
-# $1 cache file $2 remote
+# $1 plugin root -> mtime (epoch) of its plugin.json, "0" when unreadable. BSD stat first, then GNU.
+hvr-plugin-mtime() {
+  local f="$1/.claude-plugin/plugin.json" m
+  m=$(stat -f %m "$f" 2>/dev/null) || m=""
+  [[ "$m" =~ ^[0-9]+$ ]] || m=$(stat -c %Y "$f" 2>/dev/null) || m=""
+  [[ "$m" =~ ^[0-9]+$ ]] || m=0
+  printf '%s' "$m"
+}
+
+# $1 cache file $2 remote $3 plugin.json mtime recorded as "pm" (default 0)
 hvr-refresh() {
-  local file="$1" remote="$2" tmp now latest="" prev=""
+  local file="$1" remote="$2" pm="${3:-0}" tmp now latest="" prev=""
+  [[ "$pm" =~ ^[0-9]+$ ]] || pm=0
   now=$(date +%s)
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   if command -v git >/dev/null 2>&1 \
@@ -100,10 +111,10 @@ hvr-refresh() {
   fi
   prev=$(jq -r '.latest // ""' "$file" 2>/dev/null) || prev=""
   if [ -n "$latest" ]; then
-    jq -n -c --arg l "$latest" --argjson f "$now" '{latest: $l, fetched: $f}' >"$tmp"
+    jq -n -c --arg l "$latest" --argjson f "$now" --argjson pm "$pm" '{latest: $l, fetched: $f, pm: $pm}' >"$tmp"
   else
     # Failed or no tag: keep the old answer and try again in ~15 min.
-    jq -n -c --arg l "$prev" --argjson f "$((now - HVR_TTL + HVR_RETRY))" '{latest: $l, fetched: $f}' >"$tmp"
+    jq -n -c --arg l "$prev" --argjson f "$((now - HVR_TTL + HVR_RETRY))" --argjson pm "$pm" '{latest: $l, fetched: $f, pm: $pm}' >"$tmp"
   fi
   mv -f "$tmp" "$file"
   rm -f "$tmp" 2>/dev/null
@@ -116,7 +127,8 @@ hud-version-json() {
   local installed; installed=$(hvr-installed "$root")
   [ -n "$installed" ] || { printf 'null'; return 0; }
 
-  local dir file now fetched=0 cached="" latest=""
+  local dir file now fetched=0 cached="" latest="" pm=0 cached_pm=-1
+  pm=$(hvr-plugin-mtime "$root")
   dir=$(hvr-state-dir)
   file="$dir/latest.json"
   now=$(date +%s)
@@ -125,18 +137,21 @@ hud-version-json() {
     fetched=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || fetched=0
     [[ "$fetched" =~ ^[0-9]+$ ]] || fetched=0
     [ "$fetched" -le "$now" ] || fetched=0 # a future timestamp (clock skew, hand edit) must not stop refreshes
+    cached_pm=$(jq -r '(.pm // -1) | floor' <<<"${cached:-null}" 2>/dev/null) || cached_pm=-1
+    [[ "$cached_pm" =~ ^-?[0-9]+$ ]] || cached_pm=-1
   fi
 
-  if [ $((now - fetched)) -ge "$HVR_TTL" ] && mkdir -p "$dir" 2>/dev/null; then
+  # Due: the TTL ran out, or the plugin.json differs from the one the cache was written for (an old cache without "pm" counts as changed once).
+  if { [ $((now - fetched)) -ge "$HVR_TTL" ] || [ "$cached_pm" != "$pm" ]; } && mkdir -p "$dir" 2>/dev/null; then
     local lock="$dir/latest.lock"
     if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; fi
     if mkdir "$lock" 2>/dev/null; then
       if [ "${CCXP_HUD_VERSION_SYNC:-}" = 1 ]; then
-        hvr-refresh "$file" "$remote"
+        hvr-refresh "$file" "$remote" "$pm"
         rmdir "$lock" 2>/dev/null || true
         cached=$(jq -c '.' "$file" 2>/dev/null) || cached=""
       else
-        ( hvr-refresh "$file" "$remote"; rmdir "$lock" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+        ( hvr-refresh "$file" "$remote" "$pm"; rmdir "$lock" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
         disown 2>/dev/null || true
       fi
     fi

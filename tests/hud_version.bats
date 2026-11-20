@@ -34,6 +34,9 @@ _plugin() {
   printf '%s' "$d"
 }
 
+# $1 = plugin root -> its plugin.json mtime, the way the cache records it ("pm")
+_pm() { ( source "$VER"; hvr-plugin-mtime "$1" ); }
+
 _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
 
 @test "semver compare is numeric, not a string compare" {
@@ -103,18 +106,65 @@ _ver() { bash -c "source '$VER'; hud-version-json '$1' '${2:-1}'"; }
 }
 
 @test "a fresh cache is used without any lookup (6 h poll)" {
+  local root; root=$(_plugin 5.0.0)
   mkdir -p "$HUD_VERSION_STATE_DIR"
-  printf '{"latest":"7.0.0","fetched":%s}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
+  printf '{"latest":"7.0.0","fetched":%s,"pm":%s}\n' "$(date +%s)" "$(_pm "$root")" > "$HUD_VERSION_STATE_DIR/latest.json"
   export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/gone"
-  run _ver "$(_plugin 5.0.0)"
+  run _ver "$root"
   [ "$output" = '{"installed":"5.0.0","latest":"7.0.0"}' ]
   [ ! -d "$HUD_VERSION_STATE_DIR/latest.lock" ]
+  [ "$(jq -r .fetched "$HUD_VERSION_STATE_DIR/latest.json")" -ge $(( $(date +%s) - 5 )) ] # and the cache was not rewritten into a retry state
+}
+
+@test "a changed plugin.json re-checks once, inside the TTL; an unchanged one does not (and refreshes record its mtime)" {
+  _remote ccxp-skills--v5.1.0
+  local root; root=$(_plugin 5.0.0)
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
+  [ "$(jq -r .pm "$HUD_VERSION_STATE_DIR/latest.json")" = "$(_pm "$root")" ]
+  # A new release appears; the cache is fresh and plugin.json is untouched: still the old answer, no lookup.
+  git -C "$HUD_VERSION_REMOTE" tag ccxp-skills--v5.2.0
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
+  # The plugin is updated in place (plugin.json mtime moves): ONE re-check, well inside the 6 h TTL.
+  touch -t 203001010000 "$root/.claude-plugin/plugin.json"
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.2.0" ]
+  [ "$(jq -r .pm "$HUD_VERSION_STATE_DIR/latest.json")" = "$(_pm "$root")" ]
+  # ... and not again: the next tag is not seen until the TTL (or another change).
+  git -C "$HUD_VERSION_REMOTE" tag ccxp-skills--v5.3.0
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.2.0" ]
+}
+
+@test "a cache written before the mtime was recorded (no pm) re-checks once; a failed re-check keeps the old answer and records the mtime (no retry storm)" {
+  local root; root=$(_plugin 5.0.0)
+  mkdir -p "$HUD_VERSION_STATE_DIR"
+  printf '{"latest":"5.1.0","fetched":%s}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
+  export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/gone"
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
+  [ "$(jq -r .pm "$HUD_VERSION_STATE_DIR/latest.json")" = "$(_pm "$root")" ]
+  _remote ccxp-skills--v5.9.0
+  export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/remote"
+  run _ver "$root"
+  [ "$(jq -r .latest <<<"$output")" = "5.1.0" ] # retry is ~15 min away, not on every redraw
+}
+
+@test "a garbage pm in the cache counts as changed; it never reaches the output" {
+  local root; root=$(_plugin 5.0.0)
+  _remote ccxp-skills--v5.1.0
+  mkdir -p "$HUD_VERSION_STATE_DIR"
+  printf '{"latest":"5.0.0","fetched":%s,"pm":"1; echo pwned"}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
+  run _ver "$root"
+  [ "$output" = '{"installed":"5.0.0","latest":"5.1.0"}' ]
 }
 
 @test "garbage in the cache never reaches the output" {
   mkdir -p "$HUD_VERSION_STATE_DIR"
-  printf '{"latest":"9.9.9; echo pwned","fetched":%s}\n' "$(date +%s)" > "$HUD_VERSION_STATE_DIR/latest.json"
-  run _ver "$(_plugin 5.0.0)"
+  local root; root=$(_plugin 5.0.0)
+  printf '{"latest":"9.9.9; echo pwned","fetched":%s,"pm":%s}\n' "$(date +%s)" "$(_pm "$root")" > "$HUD_VERSION_STATE_DIR/latest.json"
+  run _ver "$root"
   [ "$output" = '{"installed":"5.0.0","latest":null}' ]
 }
 
