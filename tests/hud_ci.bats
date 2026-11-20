@@ -52,7 +52,7 @@ _hud_ci() { # $1 repo, $2 ci config json
 
 OK_RUN='[{"status":"completed","conclusion":"success","createdAt":"2026-10-26T03:00:00Z"}]'
 
-@test "no network tools or URLs in the helpers; only hud-ci.sh runs gh" {
+@test "no network tools or URLs in the helpers; only hud-ci.sh (and hud-redci.sh) run gh" {
   ! grep -nE 'curl|wget|https?://' "$HUD" "$CI"
   ! grep -nE '\bgh ' "$HUD"
 }
