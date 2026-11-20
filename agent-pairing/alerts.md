@@ -20,6 +20,14 @@ routine, no workflow, no launchd: the persona piggybacks on the places it alread
 - **Dispatch**: per `dispatch` line one background job, repo context block resolved from the run URL's `owner/repo`, whose prompt runs `/labrun-rca <channel_id> <ts>` through the Skill tool. Job title and context file carry the run id and the `ts`: that is the dedupe record. Pre-authorized: the one thread reply (d2-3) and task filing and driving per the CI-failure rule (d0-4); no publish, promote, tag or release.
 - **One path**: when the CI-failure response finds a failed run that has an alert in the channel, it dispatches the `labrun-rca` job instead of a bare `/rca` job. A failed run with no alert keeps the `/rca` job.
 
+## Autopilot health
+
+- **Check points**: session start and every user turn: `bash <plugin-dir>/autopilot/scripts/autopilot-state.sh overdue` (read-only, token-free).
+  - A number above 0 means autopilot is on, no cycle is running, and `next_wake_at` is past by more than the 10-minute grace: the loop is dead, not due. The same rule colours the HUD `stalled` cell red (`hud/model.ts` `stalledFor`).
+  - 0 means healthy, paused, busy, off or no wake time yet: nothing to say.
+- **Offer**: at most once per hour the persona says one line, `Autopilot stalled <span>: say "restart autopilot" and I run /autopilot on.` On the owner's yes it runs `/autopilot on` itself (the autopilot exception of the persona). It never restarts autopilot unasked.
+- Why: on 2026-11-20 autopilot was `on` with `next_wake_at` two days overdue and nobody noticed (n362); the Slack and CI checks piggyback on autopilot wakes, so a dead loop also meant no overnight coverage.
+
 ## Known limit
 
 The persona runs only while a session is open: no overnight coverage; autopilot wakes give partial cover. The next

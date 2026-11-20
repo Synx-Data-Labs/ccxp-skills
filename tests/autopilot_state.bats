@@ -1436,3 +1436,29 @@ _ap_on() { _ap start >/dev/null; }
   grep -q -- '--flags autopilot' "$REPO_ROOT/autopilot/parallel.md"
   grep -q '/drive T<id> --auto-selected' "$REPO_ROOT/autopilot/parallel.md"
 }
+
+@test "overdue: seconds late beyond the grace; 0 when due, within the grace, paused, busy, off or without a wake time" {
+  _ap start >/dev/null
+  _j_set() { jq "$1" "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"; }
+  run _ap overdue; [ "$output" = 0 ] # no wake time yet
+  _j_set '.next_wake_at = "2026-10-28T09:59:00Z"'
+  run _ap overdue; [ "$output" = 0 ] # 60 s late: inside the 600 s grace
+  _j_set '.next_wake_at = "2026-10-28T09:50:00Z"'
+  run _ap overdue; [ "$output" = 0 ] # exactly the grace
+  _j_set '.next_wake_at = "2026-10-28T09:49:59Z"'
+  run _ap overdue; [ "$output" = 601 ]
+  _j_set '.next_wake_at = "2026-10-26T18:00:00Z"'
+  run _ap overdue; [ "$output" = $(( 40 * 3600 + 600 - 600 )) ] # 2026-10-26T18:00 to 2026-10-28T10:00 = 40 h
+  run _ap overdue 7200; [ "$output" = 144000 ]
+  run _ap overdue 99999999; [ "$output" = 0 ]
+  run _ap overdue x; [ "$status" -eq 2 ]
+  _ap pause >/dev/null
+  run _ap overdue; [ "$output" = 0 ] # paused
+  _ap resume >/dev/null
+  _j_set '.next_wake_at = "2026-10-26T18:00:00Z"'
+  _ap busy on >/dev/null
+  run _ap overdue; [ "$output" = 0 ] # a cycle is running: its stored wake time is stale by design
+  _ap busy off >/dev/null
+  _ap off >/dev/null
+  run _ap overdue; [ "$output" = 0 ]
+}

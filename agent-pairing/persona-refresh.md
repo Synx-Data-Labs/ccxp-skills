@@ -36,3 +36,8 @@ There is no manual update command: `/ccxp-skills:update` and the `/agent-pairing
 - Migration: `/ccxp-skills:update` was removed in the next release. Its opt-in auto-update hook is gone too;
   if you had that auto-update turned on, the native `autoUpdate` key it set stays in effect and the leftover
   `ccxp-skills-auto-update.json` is harmless.
+
+## Persona size
+
+- `tests/agent_pairing.bats` caps `assets/ccxp-agent.md` at 48500 bytes (a guard against ballooning, not a budget). New persona rules stay at a few lines; detail goes to a doc under `agent-pairing/` (e.g. `alerts.md`) and the persona names it.
+- Persona changes reach a running session only through this refresh hook: after the plugin update, the next prompt refreshes `<profile>/agents/ccxp-agent.md`, and a restart picks up behavior that does not show at once.

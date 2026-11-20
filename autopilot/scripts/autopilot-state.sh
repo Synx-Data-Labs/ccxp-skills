@@ -34,6 +34,9 @@
 #                               log + state counters (see ap-stats)
 #   delay <outcome>             seconds until the next wake
 #   remaining                   seconds until next_wake_at (0 when due)
+#   overdue [grace-seconds]     seconds the next loop is late BEYOND the grace (default 600), 0 when it is
+#                               not stalled: status on, no cycle running, a known wake time past by more
+#                               than the grace. Same rule as the HUD stalled cell (hud/model.ts stalledFor)
 #   eligible <task-file>        exit 0 when the status line allows auto-driving (not
 #                               gated: see todo-gated in todo/scripts/_lib.sh)
 #   pickable [repo-root]        pick | drift | none: pick = /drive could take a task
@@ -227,6 +230,19 @@ ap-remaining() {
   [ -n "$w" ] || { echo 0; return 0; }
   we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
   if [ -n "$we" ] && [ -n "$now" ] && [ "$we" -gt "$now" ]; then echo $(( we - now )); else echo 0; fi
+}
+
+ap-overdue() {
+  local grace="${1:-600}" f w we now late
+  [[ "$grace" =~ ^[0-9]+$ ]] || { echo "overdue [grace-seconds]: a whole number" >&2; return 2; }
+  [ "$(ap-status)" = on ] && ! _ap_is_busy || { echo 0; return 0; }
+  f=$(ap-state-file)
+  w=$(jq -r '.next_wake_at // empty' "$f" 2>/dev/null || true)
+  [ -n "$w" ] || { echo 0; return 0; }
+  we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
+  [ -n "$we" ] && [ -n "$now" ] || { echo 0; return 0; }
+  late=$(( now - we ))
+  if [ "$late" -gt "$grace" ]; then echo "$late"; else echo 0; fi
 }
 
 # Shared by start (when on) and resume: dispatch only if due and not busy.
@@ -1030,7 +1046,7 @@ autopilot-state() {
   case "$cmd" in
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
-    remaining) ap-remaining ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
+    remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
     slots) ap-slots ;; guard) ap-guard ;; hold) ap-hold "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
