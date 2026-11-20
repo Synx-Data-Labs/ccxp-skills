@@ -498,13 +498,29 @@ decisions-archive() {
 # The read-modify-write runs under a mkdir lock (<file>.lock; waits up to ~10s, a lock older than 60s is stale).
 decisions-update() { ledger-with-lock "$(decisions-file).lock" decisions-update-locked "$@"; }
 
+# True when lock dir $1 is older than a minute.
+ledger-lock-stale() { [[ -n "$(find "$1" -maxdepth 0 -mmin +1 2>/dev/null)" ]]; }
+
+# Break stale lock $1 without ever removing a live one. Breakers serialize on "$1.brk" (mkdir) and re-check
+# the age while holding it: a waiter that saw the lock stale earlier may find a peer already re-took it fresh,
+# and removing that lock (an empty dir rmdirs fine) would let two writers hold it at once.
+ledger-break-stale() {
+  local lock="$1" brk="$1.brk"
+  if ! mkdir "$brk" 2>/dev/null; then
+    ! ledger-lock-stale "$brk" || rmdir "$brk" 2>/dev/null || true   # a crashed breaker's marker
+    return 0
+  fi
+  ! ledger-lock-stale "$lock" || rmdir "$lock" 2>/dev/null || true
+  rmdir "$brk" 2>/dev/null || true
+}
+
 # $1 lock dir, then a command: run it under a mkdir lock (waits up to ~10s, a lock older than 60s is stale).
 ledger-with-lock() {
   local lock="$1" rc i; shift
   mkdir -p "$(dirname "$lock")" 2>/dev/null || return 1
   for ((i = 0; i < 100; i++)); do
     mkdir "$lock" 2>/dev/null && break
-    [[ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]] && rmdir "$lock" 2>/dev/null
+    ! ledger-lock-stale "$lock" || ledger-break-stale "$lock"
     sleep 0.1
   done
   [[ -d "$lock" && $i -lt 100 ]] || { echo "ledger: could not lock $lock" >&2; return 1; }

@@ -875,6 +875,32 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   [ "$(bash "$LEDGER" decision add "after stale lock")" = "d9" ]
 }
 
+@test "decision: a lock seen stale but re-taken by a live writer is not broken (T20261120-258991)" {
+  local shim="$BATS_TEST_TMPDIR/shim" real; real="$(command -v find)"; mkdir -p "$shim"
+  # The first find A makes calls the lock stale (its early look); later calls are real.
+  printf '%s\n' '#!/usr/bin/env bash' "echo x >> '$shim/calls'" \
+    "if [ \"\$(wc -l < '$shim/calls')\" -eq 1 ]; then echo \"\$1\"; exit 0; fi" "exec '$real' \"\$@\"" > "$shim/find"
+  chmod +x "$shim/find"
+  # B is a live writer holding the lock now.
+  D="$BATS_TEST_TMPDIR" bash -c 'source "$1"; w() { : > "$D/held"; until [ -e "$D/release" ]; do sleep 0.02; done; }; ledger-with-lock "$2" w' \
+    holder "$LEDGER" "$(dj).lock" 3>&- &
+  local bpid=$!
+  until [ -e "$BATS_TEST_TMPDIR/held" ]; do sleep 0.02; done
+  PATH="$shim:$PATH" bash "$LEDGER" decision add "from A" > "$BATS_TEST_TMPDIR/a.out" 3>&- &
+  local apid=$! i
+  for ((i = 0; i < 500; i++)); do
+    kill -0 "$apid" 2>/dev/null || break
+    [ "$(cat "$shim/calls" 2>/dev/null | wc -l)" -ge 2 ] && break
+    sleep 0.02
+  done
+  local alive=0; kill -0 "$apid" 2>/dev/null && alive=1
+  : > "$BATS_TEST_TMPDIR/release"
+  wait "$apid"; wait "$bpid"
+  [ "$alive" = 1 ]
+  [ "$(cat "$BATS_TEST_TMPDIR/a.out")" = "d1" ]
+  [ ! -e "$(dj).lock" ]
+}
+
 @test "decision: the counter is capped at 8 digits so refs always stay valid" {
   run bash "$LEDGER" set-counter d 999999999
   [ "$status" -eq 2 ]

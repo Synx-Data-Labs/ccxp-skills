@@ -1427,6 +1427,35 @@ _ap_on() { _ap start >/dev/null; }
   [ "$(_j '.slots | keys | join(",")')" = "1,2,3" ]
 }
 
+@test "state lock: a lock seen stale but re-taken by a live writer is not broken (T20261120-258991)" {
+  _ap_on
+  local shim="$BATS_TEST_TMPDIR/shim" real; real="$(command -v stat)"; mkdir -p "$shim"
+  # The first stat A makes reports an ancient mtime (its early look at the stale lock); later calls are real.
+  printf '%s\n' '#!/usr/bin/env bash' "echo x >> '$shim/calls'" \
+    "if [ \"\$(wc -l < '$shim/calls')\" -eq 1 ]; then echo 1; exit 0; fi" "exec '$real' \"\$@\"" > "$shim/stat"
+  chmod +x "$shim/stat"
+  # B is a live writer holding the lock now.
+  bash -c 'source "$1"; _ap_lock; : > "$2/held"; until [ -e "$2/release" ]; do sleep 0.02; done; _ap_unlock' holder "$SCRIPT" "$BATS_TEST_TMPDIR" 3>&- &
+  local bpid=$!
+  until [ -e "$BATS_TEST_TMPDIR/held" ]; do sleep 0.02; done
+  PATH="$shim:$PATH" bash "$SCRIPT" busy on T20261106-000002 --slot 2 3>&- &
+  local apid=$! i
+  for ((i = 0; i < 500; i++)); do
+    kill -0 "$apid" 2>/dev/null || break
+    [ "$(cat "$shim/calls" 2>/dev/null | wc -l)" -ge 2 ] && break
+    sleep 0.02
+  done
+  local alive=0 owner=""
+  kill -0 "$apid" 2>/dev/null && alive=1
+  owner="$(cat "$AUTOPILOT_STATE_FILE.lock/pid" 2>/dev/null || true)"
+  : > "$BATS_TEST_TMPDIR/release"
+  wait "$apid"; wait "$bpid"
+  [ "$alive" = 1 ]
+  [ "$owner" = "$bpid" ]
+  [ "$(_j '.slots | keys | join(",")')" = "2" ]
+  [ ! -e "$AUTOPILOT_STATE_FILE.lock" ]
+}
+
 @test "SKILL.md and parallel.md document max_dop (default 1, raising to 8), the guard and per-slot dispatch" {
   grep -q 'max_dop' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q 'config set max_dop 8' "$REPO_ROOT/autopilot/SKILL.md"
