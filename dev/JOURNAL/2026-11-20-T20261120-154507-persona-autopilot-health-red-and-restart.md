@@ -33,6 +33,8 @@ scheduled: 2026-11-16
 - `autopilot/scripts/autopilot-state.sh overdue [grace]`: seconds late beyond the grace; 0 when not stalled (off, paused, cycle running, no wake time); the same rule as `stalledFor`.
 - HUD: the `stalled` cell and the details overdue line use the error colour, bold.
 - Persona: an "Autopilot health" rule (session start and each user turn: run `overdue`; above 0: say once per hour `Autopilot stalled <span>: say "restart autopilot" and I run /autopilot on.`; never restart unasked); details in `agent-pairing/alerts.md`; the persona-refresh doc notes the size cap.
+- Persona CI detection also follows the owner's "red is red" ruling (any default-branch or schedule run, whatever the workflow), and the condensing dropped only duplicated wording (kept: run-id dedupe sentence, ack-only re-emit note).
+- Review fixes: `overdue` prints the total lateness (wording corrected), the dedupe sentence was restored, and a test ties the 600 s grace across the persona, the script and `hud/model.ts` and runs `overdue` on a seeded state.
 - Alternatives rejected:
   - auto-restarting autopilot: the owner asked for an offer; restarting changes what runs unattended;
   - a second top-row item: the existing cell, now red, is the one stalled signal.

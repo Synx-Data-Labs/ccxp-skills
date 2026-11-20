@@ -702,4 +702,13 @@ install_outdated_agent() {
   grep -q 'Never restart it unasked' "$f"
   grep -q '^## Autopilot health$' "$REPO_ROOT/agent-pairing/alerts.md"
   [ -x "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" ]
+  # the persona's 10-minute grace is the HUD's grace and the script's default (one rule, three places)
+  grep -q 'STALL_GRACE_SEC = 600' "$REPO_ROOT/hud/model.ts"
+  grep -q 'grace="${1:-600}"' "$REPO_ROOT/autopilot/scripts/autopilot-state.sh"
+  grep -q '10-minute grace' "$f"
+  # and it runs against a seeded state: overdue prints the total lateness, healthy prints 0
+  local st="$BATS_TEST_TMPDIR/ap.json"
+  AUTOPILOT_STATE_FILE="$st" AUTOPILOT_NOW="2026-10-28T10:00:00Z" bash "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" start >/dev/null
+  jq '.next_wake_at = "2026-10-28T09:00:00Z"' "$st" > "$st.t" && mv "$st.t" "$st"
+  [ "$(AUTOPILOT_STATE_FILE="$st" AUTOPILOT_NOW="2026-10-28T10:00:00Z" bash "$REPO_ROOT/autopilot/scripts/autopilot-state.sh" overdue)" = 3600 ]
 }

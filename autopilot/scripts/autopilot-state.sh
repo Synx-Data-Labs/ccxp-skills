@@ -34,9 +34,9 @@
 #                               log + state counters (see ap-stats)
 #   delay <outcome>             seconds until the next wake
 #   remaining                   seconds until next_wake_at (0 when due)
-#   overdue [grace-seconds]     seconds the next loop is late BEYOND the grace (default 600), 0 when it is
-#                               not stalled: status on, no cycle running, a known wake time past by more
-#                               than the grace. Same rule as the HUD stalled cell (hud/model.ts stalledFor)
+#   overdue [grace-seconds]     seconds the next loop is late (total lateness), reported only when it exceeds
+#                               the grace (default 600), else 0: status on, no cycle running, a known wake
+#                               time past by more than the grace. Same rule as the HUD stalled cell (hud/model.ts stalledFor)
 #   eligible <task-file>        exit 0 when the status line allows auto-driving (not
 #                               gated: see todo-gated in todo/scripts/_lib.sh)
 #   pickable [repo-root]        pick | drift | none: pick = /drive could take a task
