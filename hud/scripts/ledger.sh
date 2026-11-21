@@ -388,8 +388,6 @@ ledger-render-text() {
     "Ledger: " + $md'
 }
 
-# Reply tail in the user-mandated order (Running, Next, Parked, Ledger line), plain text, no markdown.
-# $1 optional TL;DR text (printed first), $2 "no" to leave out the Decisions lines.
 # Parse a context file name: tokens n|k<digits>-, then r|j<digits>- (j is legacy, printed as r), then t<8 digits>-<6 digits>-, each once
 # and in that order; the first non-token starts the slug. A legacy trailing -t|T<taskid> is read as t. Prints "n= r= t= slug=".
 ledger-ctxname() {
@@ -402,6 +400,8 @@ ledger-ctxname() {
   printf 'n=%s r=%s t=%s slug=%s\n' "$n" "$r" "$t" "$b"
 }
 
+# Reply tail in the user-mandated order (Running, Next, Parked, Ledger line), plain text, no markdown.
+# $1 optional TL;DR text (printed first), $2 "no" to leave out the Decisions lines.
 ledger-reply() {
   local md dec=""; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"

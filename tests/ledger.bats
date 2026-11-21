@@ -334,6 +334,8 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   run --separate-stderr bash "$LEDGER" start 1222 "job" --context /ctx/j1222-slug-t20261109-338243.md
   [ "$status" -eq 0 ]
   [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" park k6 --context /ctx/r1222-t20261109-338243-slug.md
+  [ -z "$stderr" ]
   run --separate-stderr bash "$LEDGER" park k5 --context /ctx/j1222-slug.md
   [ "$status" -eq 0 ]
   [ -z "$stderr" ]
