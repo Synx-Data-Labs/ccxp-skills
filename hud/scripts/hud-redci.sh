@@ -2,7 +2,9 @@
 # Unhandled red-CI count for the ccxp-hud band (hud-data.sh sources this).
 #
 # hud-redci-json <repos_json_array> <poll_seconds> [todo_dir]
-#   prints {"n":N,"items":[{"wf","at","repo"}...]} (newest first, at most 3 items) or "null".
+#   prints {"n":N,"items":[{"wf","at","repo","id","ev","br","url"}...]} (newest first, at most 3 items) or "null".
+# hud-redci-list <repos_json> [poll] [todo_dir]   one tab-separated line per unhandled item (id, workflow, event, branch, age, url).
+# CLI: `bash hud-redci.sh list [owner/name ...]` prints that list for the given repos (default: the HUD config's redci/ci repos).
 #
 # Red is red: for every watched repo (an `owner/name` list from the HUD config, never guessed from the
 # session repo) a run counts when it FAILED (failure, timed_out, startup_failure) on the repo's default
@@ -14,7 +16,8 @@
 # n = 0 prints {"n":0,"items":[]} (answered, all clear); no repos, bad input or no answer yet prints "null".
 #
 # Cost: per repo one `gh run list --status <s>` for each of failure, timed_out and startup_failure (gh treats them
-# as separate statuses) per refresh, plus (only when something failed) one `gh repo view` and one `gh run list --status success`. Refreshes are at most every HRC_MIN_TTL (300 s,
+# as separate statuses) per refresh, plus (only when something failed) one `gh repo view` and, per distinct failing (workflow, branch) pair (at most HRC_MAX_PAIRS = 20), one `gh run list --workflow <id> --branch <b> --status success --limit 1`
+# (a repo-wide success window loses the successes of workflows that ran long ago on a busy repo, so superseded failures stayed counted). Refreshes are at most every HRC_MIN_TTL (300 s,
 # or the poll when longer), detached, 5 s timeout per call, lock dir per repo. The HUD never calls gh
 # per redraw: it prints the cache at once.
 #
@@ -32,6 +35,8 @@ HRC_TIMEOUT=5
 HRC_MAX_AGE_SEC=604800
 HRC_MAX_REPOS=8
 HRC_MAX_STALE=21600
+HRC_MAX_PAIRS=20
+HRC_URL_BASE="https://github.com"
 
 hrc-state-dir() { printf '%s' "${HUD_REDCI_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-redci}"; }
 
@@ -64,14 +69,14 @@ hrc-handled-ids() {
 
 # $1 cache file $2 repo $3 todo dir
 hrc-refresh() {
-  local file="$1" repo="$2" todo="$3" tmp fails succ branch now state="" handled
+  local file="$1" repo="$2" todo="$3" tmp fails succ branch now state="" handled cand one
   now=$(date +%s)
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
-  fails="$tmp.f"; succ="$tmp.s"; handled="$tmp.h"
+  fails="$tmp.f"; succ="$tmp.s"; handled="$tmp.h"; cand="$tmp.c"; one="$tmp.o"
   local st ok=1
   : >"$fails.all"
   for st in failure timed_out startup_failure; do
-    if hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --status "$st" --limit 30 --json databaseId,workflowName,event,headBranch,createdAt >"$fails.one" 2>/dev/null \
+    if hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --status "$st" --limit 30 --json databaseId,workflowDatabaseId,workflowName,event,headBranch,createdAt >"$fails.one" 2>/dev/null \
        && jq -e 'type == "array"' "$fails.one" >/dev/null 2>&1; then
       cat "$fails.one" >>"$fails.all"
     else
@@ -87,24 +92,37 @@ hrc-refresh() {
       hrc-run-timeout "$HRC_TIMEOUT" gh repo view "$repo" --json defaultBranchRef --jq .defaultBranchRef.name >"$tmp" 2>/dev/null || true
       branch=$(head -n1 "$tmp" 2>/dev/null | head -c 200)
       [[ "$branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$ ]] || branch=""
-      hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --status success --limit 50 --json workflowName,headBranch,createdAt >"$succ" 2>/dev/null || echo '[]' >"$succ"
-      jq -e 'type == "array"' "$succ" >/dev/null 2>&1 || echo '[]' >"$succ"
       hrc-handled-ids "$todo" >"$handled"
-      state=$(jq -c --argjson now "$now" --argjson maxage "$HRC_MAX_AGE_SEC" --arg branch "$branch" --arg repo "${repo#*/}" \
-        --slurpfile succ "$succ" --rawfile handled "$handled" '
+      # Candidates: failed runs inside the window that are on the default branch or scheduled and not handled.
+      jq -c --argjson now "$now" --argjson maxage "$HRC_MAX_AGE_SEC" --arg branch "$branch" --rawfile handled "$handled" '
         def ts: (. // "") | tostring | fromdateiso8601? // 0;
         ($handled | split("\n") | map(select(. != ""))) as $h
-        | ($succ[0] | map(select(type == "object") | {k: ((.workflowName // "") + "|" + (.headBranch // "")), at: (.createdAt | ts)})) as $ok
         | [.[] | select(type == "object")
-            | {id: ((.databaseId // 0) | tostring), wf: ((.workflowName // "") | tostring | gsub("[^ -~]"; "") | .[0:40]),
-               br: ((.headBranch // "") | tostring), ev: ((.event // "") | tostring), at: (.createdAt | ts)}
+            | {id: ((.databaseId // 0) | tostring), wid: ((.workflowDatabaseId // 0) | tostring),
+               wf: ((.workflowName // "") | tostring | gsub("[^ -~]"; "") | .[0:40]),
+               br: ((.headBranch // "") | tostring | gsub("[^A-Za-z0-9._/-]"; "") | .[0:100]),
+               ev: ((.event // "") | tostring | gsub("[^a-z_]"; "") | .[0:30]), at: (.createdAt | ts)}
             | select(.at > 0 and ($now - .at) <= $maxage)
             | select($branch != "" and .br == $branch or .ev == "schedule")
             | select(.wf != "")
-            | select((.id | IN($h[])) | not)
-            | . as $r | select(([$ok[] | select(.k == ($r.wf + "|" + $r.br) and .at > $r.at)] | length) == 0)]
+            | select((.id | IN($h[])) | not)]' "$fails" >"$cand" 2>/dev/null || echo '[]' >"$cand"
+      # Superseded: ask once per distinct (workflow, branch) for its newest success. Never a repo-wide window:
+      # a busy repo pushes an older workflow's success out of any newest-N listing.
+      : >"$succ"
+      local wid wf br n=0 wsel
+      while IFS=$'\t' read -r wid wf br; do
+        [ -n "$br" ] || continue
+        n=$((n + 1)); [ "$n" -le "$HRC_MAX_PAIRS" ] || break
+        wsel="$wid"; { [ "$wid" != 0 ] && [[ "$wid" =~ ^[0-9]+$ ]]; } || wsel="$wf"
+        if hrc-run-timeout "$HRC_TIMEOUT" gh run list --repo "$repo" --workflow "$wsel" --branch "$br" --status success --limit 1 --json createdAt >"$one" 2>/dev/null \
+           && jq -e 'type == "array"' "$one" >/dev/null 2>&1; then
+          jq -c --arg wf "$wf" --arg br "$br" '.[] | select(type == "object") | {k: ($wf + "|" + $br), at: ((.createdAt // "") | tostring | fromdateiso8601? // 0)}' "$one" >>"$succ" 2>/dev/null || true
+        fi
+      done < <(jq -r '[.[] | [.wid, .wf, .br]] | unique | .[] | @tsv' "$cand" 2>/dev/null)
+      state=$(jq -c --argjson now "$now" --arg repo "${repo#*/}" --arg base "$HRC_URL_BASE/$repo/actions/runs" --slurpfile ok "$succ" '
+        [.[] | . as $r | select(([$ok[] | select(.k == ($r.wf + "|" + $r.br) and .at > $r.at)] | length) == 0)]
         | sort_by(-.at) as $items
-        | {items: ($items | map({wf, at, repo: $repo})), fetched: $now, attempted: $now}' "$fails" 2>/dev/null) || state=""
+        | {items: ($items | map({wf, at, repo: $repo, id, ev, br, url: ($base + "/" + .id)})), fetched: $now, attempted: $now}' "$cand" 2>/dev/null) || state=""
     fi
   fi
   if [ -z "$state" ]; then
@@ -113,11 +131,12 @@ hrc-refresh() {
     [ -n "$state" ] || state="{\"items\":null,\"fetched\":0,\"attempted\":$now}"
   fi
   printf '%s\n' "$state" >"$tmp" && mv -f "$tmp" "$file"
-  rm -f "$tmp" "$fails" "$fails.all" "$fails.one" "$succ" "$handled" 2>/dev/null
+  rm -f "$tmp" "$fails" "$fails.all" "$fails.one" "$succ" "$handled" "$cand" "$one" 2>/dev/null
   return 0
 }
 
-hud-redci-json() {
+# Every unhandled item of all watched repos (newest first) as a JSON array, or "null" when no repo has an answer.
+hrc-all() {
   local repos_json="$1" poll="${2:-0}" todo="${3:-}" repo
   local -a repos=()
   while IFS= read -r repo; do
@@ -158,7 +177,7 @@ hud-redci-json() {
     fi
     # Untrusted cache: only the known keys, typed, survive.
     local part
-    part=$(jq -c 'if (.items | type) == "array" then [.items[] | select(type == "object" and (.wf | type) == "string" and (.at | type) == "number" and (.repo | type) == "string") | {wf: (.wf | .[0:40]), at: (.at | floor), repo: (.repo | .[0:100])}] else null end' <<<"${cached:-null}" 2>/dev/null) || part=""
+    part=$(jq -c 'if (.items | type) == "array" then [.items[] | select(type == "object" and (.wf | type) == "string" and (.at | type) == "number" and (.repo | type) == "string") | {wf: (.wf | .[0:40]), at: (.at | floor), repo: (.repo | .[0:100]), id: ((.id // "") | tostring | select(test("^[0-9]{1,20}$")) // ""), ev: ((.ev // "") | tostring | gsub("[^a-z_]"; "") | .[0:30]), br: ((.br // "") | tostring | gsub("[^A-Za-z0-9._/-]"; "") | .[0:100]), url: ((.url // "") | tostring | select(test("^https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$")) // "")}] else null end' <<<"${cached:-null}" 2>/dev/null) || part=""
     # Data older than HRC_MAX_STALE (refreshes keep failing) counts as no answer for this repo.
     data_at=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || data_at=0
     [[ "$data_at" =~ ^[0-9]+$ ]] || data_at=0
@@ -169,5 +188,44 @@ hud-redci-json() {
     fi
   done
   [ "$answered" = 1 ] || { printf 'null'; return 0; }
-  jq -c '{n: length, items: (sort_by(-.at) | .[0:3])}' <<<"$all" 2>/dev/null || printf 'null'
+  jq -c 'sort_by(-.at)' <<<"$all" 2>/dev/null || printf 'null'
 }
+
+hud-redci-json() {
+  local all
+  all=$(hrc-all "$@") || all=null
+  [ -n "$all" ] && [ "$all" != null ] || { printf 'null'; return 0; }
+  jq -c '{n: length, items: .[0:3]}' <<<"$all" 2>/dev/null || printf 'null'
+}
+
+# hud-redci-list <repos_json> [poll] [todo_dir]: one line per unhandled item, newest first (tab separated):
+# run id, workflow, event, branch, age, url. Same cache and refresh rules as the cell.
+hud-redci-list() {
+  local all now
+  all=$(hrc-all "${1:-null}" "${2:-0}" "${3:-}") || all=null
+  [ -n "$all" ] && [ "$all" != null ] || { printf 'no answer (no watched repo, or gh unavailable)\n'; return 0; }
+  now=$(date +%s)
+  [ "$(jq 'length' <<<"$all")" != 0 ] || { printf 'all clear: no unhandled red CI\n'; return 0; }
+  jq -r --argjson now "$now" '.[] | [.id, .wf, .ev, .br, "\(((($now - .at) / 3600) | floor))h ago", .url] | @tsv' <<<"$all"
+}
+
+# Watched repos for the CLI: args, else the HUD config (project file, then user file): redci.repos, else ci.repo.
+hrc-config-repos() {
+  local f out
+  for f in "${PWD}/.claude/ccxp-hud.json" "${CCXP_PROFILE_DIR:-}/ccxp-hud.json"; do
+    [ -r "$f" ] || continue
+    out=$(jq -c 'if has("redci") then (.redci | if type == "array" then . else .repos end) elif (.ci | type) == "object" and (.ci.repo | type) == "string" then [.ci.repo] else empty end' "$f" 2>/dev/null) || out=""
+    [ -n "$out" ] && [ "$out" != null ] && { printf '%s' "$out"; return 0; }
+  done
+  printf '[]'
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  case "${1:-}" in
+    list)
+      shift
+      if [ "$#" -gt 0 ]; then rj=$(printf '%s\n' "$@" | jq -R . | jq -sc .); else rj=$(hrc-config-repos); fi
+      CCXP_HUD_REDCI_SYNC=1 hud-redci-list "$rj" 0 "$PWD/dev/TODO" ;;
+    *) printf 'usage: hud-redci.sh list [owner/name ...]\n' >&2; exit 2 ;;
+  esac
+fi
