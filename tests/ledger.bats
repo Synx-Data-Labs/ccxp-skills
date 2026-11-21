@@ -1310,3 +1310,101 @@ cx_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
   [ "$status" -eq 2 ]
   [[ "$output" == *CCXP_CONTEXT_DIR* ]]
 }
+
+# --- task per job (T20261121-412600) ---
+
+@test "task: start --task stores the id (upper-cased); a repeated start keeps it; bad ids and --task with --no-task are refused" {
+  bash "$LEDGER" start 7 "job" --flags repo-changing --context /c/7.md
+  bash "$LEDGER" start 7 "job" --task t20261121-412600
+  bash "$LEDGER" start 7 "job again"
+  [ "$(bash "$LEDGER" show | jq -r '.running[0] | [.task, .no_task, .flags] | join("|")')" = "T20261121-412600||repo-changing" ]
+  run bash "$LEDGER" start 7 "job" --task nonsense
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" start 7 "job" --task T20261121-412600 --no-task "why"
+  [ "$status" -eq 2 ]
+  run bash "$LEDGER" start 7 "job" --task
+  [ "$status" -ne 0 ]
+}
+
+@test "task: start --no-task stores the reason; it needs a value, rejects credentials, and --task replaces it" {
+  bash "$LEDGER" start 8 "job" --flags repo-changing --no-task "machine state: disk cleanup"
+  [ "$(bash "$LEDGER" show | jq -r '.running[0] | [.task, .no_task] | join("|")')" = "|machine state: disk cleanup" ]
+  run bash "$LEDGER" start 8 "job" --no-task
+  [ "$status" -ne 0 ]
+  run bash "$LEDGER" start 8 "job" --no-task ""
+  [ "$status" -ne 0 ]
+  local fake; fake="ghp_$(printf 'A%.0s' {1..30})"
+  run bash "$LEDGER" start 8 "job" --no-task "$fake"
+  [ "$status" -eq 2 ]
+  bash "$LEDGER" start 8 "job" --task T20261121-412600
+  [ "$(bash "$LEDGER" show | jq -r '.running[0] | [.task, .no_task] | join("|")')" = "T20261121-412600|" ]
+}
+
+@test "task: check fails with NO-TASK for a repo-changing row with neither a task nor a reason, and passes once given" {
+  bash "$LEDGER" start 9 "job" --flags repo-changing --context /c/9.md
+  run bash "$LEDGER" check - <<<"r9 job"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO-TASK r9"* ]]
+  bash "$LEDGER" start 9 "job" --task T20261121-412600
+  run bash "$LEDGER" check - <<<"r9 job"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"NO-TASK"* ]]
+  bash "$LEDGER" start 10 "job" --flags repo-changing --context /c/10.md --no-task "read-only lookup"
+  run bash "$LEDGER" check - <<<"$(printf 'r9 a\nr10 b')"
+  [ "$status" -eq 0 ]
+}
+
+@test "task: reply shows (no task) on the Running row of an untasked repo-changing job, the reason for an exception, nothing otherwise" {
+  bash "$LEDGER" start 11 "untasked" --flags repo-changing --context /c/11.md
+  bash "$LEDGER" start 12 "excused" --flags repo-changing --context /c/12.md --no-task "machine state"
+  bash "$LEDGER" start 13 "tasked" --flags repo-changing --context /c/13.md --task T20261121-412600
+  bash "$LEDGER" start 14 "plain" --context /c/14.md
+  run bash "$LEDGER" reply
+  [[ "$output" == *"] untasked (no task)"* ]]
+  [[ "$output" == *"] excused (no task: machine state)"* ]]
+  [[ "$output" == *"] tasked"$'\n'* ]]
+  [[ "$output" == *"] plain"$'\n'* ]]
+  [ "$(grep -c "(no task" <<<"$output")" = "2" ]
+  grep -Eq '^- r11 \[[0-9:-]*\] untasked \(no task\)$' "$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
+}
+
+@test "task: finish warns on stderr for an untasked repo-changing job, still exits 0 and removes the row" {
+  bash "$LEDGER" start 15 "untasked" --flags repo-changing
+  run --separate-stderr bash "$LEDGER" finish 15
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"warning: r15 is a repo-changing job that ended without a task id"* ]]
+  [ "$(bash "$LEDGER" show | jq '.running | length')" = "0" ]
+}
+
+@test "task: finish stays quiet for a tasked job, a declared exception and a job without the flag" {
+  bash "$LEDGER" start 16 "a" --flags repo-changing --task T20261121-412600
+  bash "$LEDGER" start 17 "b" --flags repo-changing --no-task "queue move"
+  bash "$LEDGER" start 18 "c"
+  for n in 16 17 18; do
+    run --separate-stderr bash "$LEDGER" finish "$n"
+    [ "$status" -eq 0 ]
+    [ -z "$stderr" ]
+  done
+}
+
+@test "task: backward compatible - rows and calls without the new flag or fields are never checked or marked" {
+  bash "$LEDGER" start 19 "old style" --context /c/19.md --agent general-purpose/sonnet --flags autopilot
+  run bash "$LEDGER" check - <<<"r19 old style"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"NO-TASK"* ]]
+  run bash "$LEDGER" reply
+  [[ "$output" != *"no task"* ]]
+  # a ledger file written before the fields existed reads as empty task / no_task
+  printf '%s' '{"schema":3,"lifetime_jobs":20,"running":[{"job":20,"title":"legacy","context":"/c/20.md","flags":"repo-changing","resumed":0,"started_at":"10:00"}],"next":[],"parked":[],"ref_counters":{"n":0,"s":0,"k":0}}' > "$CCXP_LEDGER_FILE"
+  [ "$(bash "$LEDGER" show | jq -r '.running[0] | [.task, .no_task] | join("|")')" = "|" ]
+  run bash "$LEDGER" check - <<<"r20 legacy"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"NO-TASK r20"* ]]
+}
+
+@test "task: --flags accepts repo-changing in a comma list; reconcile still prints the flags column" {
+  bash "$LEDGER" start 21 "dead" --context /c/21.md --flags needs-confirmation,repo-changing
+  run bash "$LEDGER" reconcile --alive ""
+  IFS=$'\t' read -r job title ctx prompt started agent flags rest <<<"$output"
+  [ "$job" = "21" ]; [ "$flags" = "needs-confirmation,repo-changing" ]
+}
