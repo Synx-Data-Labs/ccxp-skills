@@ -21,6 +21,7 @@ bash <plugin>/hud/scripts/ledger.sh reply [--tldr "<t>"]                        
 bash <plugin>/hud/scripts/ledger.sh check <replyfile|->                           # draft reply vs ledger: MISSING / EXTRA / NO-CONTEXT refs, exit 1
 bash <plugin>/hud/scripts/ledger.sh set-counter <n|s|k|d> <value>                # initialise a ref counter exactly (d = the decisions counter)
 bash <plugin>/hud/scripts/ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path> # repoint a stored context (Done rows, decisions too; see below)
+bash <plugin>/hud/scripts/ledger.sh ctxname <file name>   # parse a context file name into n= r= t= slug= (see "Context file naming")
 ```
 
 The JSON is the source of truth: the dispatcher composes the Running / Next / Parked sections of each reply from `render` (or `show`) and changes them only through these calls, so reply and file cannot drift.
