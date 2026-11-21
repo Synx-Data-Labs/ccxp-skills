@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261121-261197](T20261121-261197-hud-redci-supersede-and-list.md): HUD red-CI counts superseded failures; add hud-redci.sh list
 - [T20261121-359191](T20261121-359191-context-file-naming-n-r-t-slug.md): Context file naming convention n<k>-r<job>-t<taskid>-slug
 - [T20261121-412600](T20261121-412600-task-per-job-rule-and-ledger-check.md): Task-per-job rule and ledger check
 - [T20261101-115518](T20261101-115518-rewire-todo-and-queue-skills-to-repo-resolve.md): Rewire todo and queue skills to repo-resolve

@@ -25,7 +25,15 @@ case "$1 $2" in
   "run list")
     case "$*" in
       *"--status failure"*) cat "$d/fail.json" ;;
-      *"--status success"*) cat "$d/succ.json" ;;
+      *"--status success"*)
+        # like real gh: filter by --workflow (id or name) and --branch first, newest first, then --limit
+        wf=""; br=""; lim=30; prev=""
+        for a in "$@"; do
+          case "$prev" in --workflow) wf="$a" ;; --branch) br="$a" ;; --limit) lim="$a" ;; esac
+          prev="$a"
+        done
+        jq -c --arg wf "$wf" --arg br "$br" --argjson lim "$lim" \
+          '[.[] | select(($wf == "" or (.workflowName == $wf) or ((.workflowDatabaseId // 0 | tostring) == $wf)) and ($br == "" or .headBranch == $br))] | sort_by(.createdAt) | reverse | .[0:$lim]' "$d/succ.json" ;;
       *"--status timed_out"*) if [ -e "$d/timed.json" ]; then cat "$d/timed.json"; else echo '[]'; fi ;;
       *"--status startup_failure"*) echo '[]' ;;
     esac ;;
@@ -41,7 +49,8 @@ _iso() { # $1 = seconds ago
 }
 
 # $1 id, $2 workflow, $3 branch, $4 event, $5 seconds ago -> one run object
-_run() { printf '{"databaseId":%s,"workflowName":"%s","headBranch":"%s","event":"%s","createdAt":"%s"}' "$1" "$2" "$3" "$4" "$(_iso "$5")"; }
+_wid() { printf '%s' "$1" | cksum | cut -d' ' -f1; } # stable fake workflow id per name
+_run() { printf '{"databaseId":%s,"workflowDatabaseId":%s,"workflowName":"%s","headBranch":"%s","event":"%s","createdAt":"%s"}' "$1" "$(_wid "$2")" "$2" "$3" "$4" "$(_iso "$5")"; }
 
 _redci() { # $1 repos json
   ( source "$REDCI"; hud-redci-json "$1" 15 "$BATS_TEST_TMPDIR/todo" )
@@ -71,7 +80,7 @@ _redci() { # $1 repos json
 
 @test "a later success of the same workflow and branch supersedes the failure; another workflow does not" {
   printf '[%s,%s]' "$(_run 55555555 Nightly trunk schedule 7200)" "$(_run 66666666 Tests trunk push 7200)" > "$BATS_TEST_TMPDIR/fail.json"
-  printf '[{"workflowName":"Nightly","headBranch":"trunk","createdAt":"%s"}]' "$(_iso 3600)" > "$BATS_TEST_TMPDIR/succ.json"
+  printf '[%s]' "$(_succ Nightly trunk 3600)" > "$BATS_TEST_TMPDIR/succ.json"
   run _redci '["acme/widgets"]'
   [ "$(jq -r .n <<<"$output")" = 1 ]
   [ "$(jq -r '.items[0].wf' <<<"$output")" = Tests ]
@@ -79,7 +88,7 @@ _redci() { # $1 repos json
 
 @test "an earlier success does not supersede a later failure" {
   printf '[%s]' "$(_run 77777777 Nightly trunk schedule 3600)" > "$BATS_TEST_TMPDIR/fail.json"
-  printf '[{"workflowName":"Nightly","headBranch":"trunk","createdAt":"%s"}]' "$(_iso 7200)" > "$BATS_TEST_TMPDIR/succ.json"
+  printf '[%s]' "$(_succ Nightly trunk 7200)" > "$BATS_TEST_TMPDIR/succ.json"
   run _redci '["acme/widgets"]'
   [ "$(jq -r .n <<<"$output")" = 1 ]
 }
@@ -180,5 +189,59 @@ _redci() { # $1 repos json
 
 @test "hud-data.sh runs no gh; hud-redci.sh has no curl, wget or URLs" {
   ! grep -nE '\bgh ' "$HUD"
-  ! grep -nE 'curl|wget|https?://' "$REDCI"
+  ! grep -nE 'curl|wget' "$REDCI"
+  [ "$(grep -cE 'https?://' "$REDCI")" -le 3 ] # the HRC_URL_BASE constant and the cache-url pattern, comments aside
+}
+
+# $1 workflow, $2 branch, $3 seconds ago -> one success object (the shape `gh run list --json workflowName,headBranch,createdAt,workflowDatabaseId` gives)
+_succ() { printf '{"workflowDatabaseId":%s,"workflowName":"%s","headBranch":"%s","createdAt":"%s"}' "$(_wid "$1")" "$1" "$2" "$(_iso "$3")"; }
+
+@test "real data shape: a success of an older workflow outside the newest-50 repo window still supersedes (T1355)" {
+  printf '[%s,%s,%s]' "$(_run 20000001 'SynxDB2 Install Test' trunk workflow_dispatch 90000)" \
+    "$(_run 20000002 'SynxDB2 Install Test' trunk workflow_dispatch 89000)" "$(_run 20000003 'PXF Promote' trunk workflow_dispatch 87000)" > "$BATS_TEST_TMPDIR/fail.json"
+  {
+    printf '['
+    local i; for i in $(seq 1 60); do printf '%s,' "$(_succ "Busy Build $i" trunk $((600 + i)))"; done
+    printf '%s,%s]' "$(_succ 'SynxDB2 Install Test' trunk 86000)" "$(_succ 'PXF Promote' trunk 95000)"
+  } > "$BATS_TEST_TMPDIR/succ.json"
+  run _redci '["acme/widgets"]'
+  [ "$(jq -r .n <<<"$output")" = 1 ]
+  [ "$(jq -r '.items[0].wf' <<<"$output")" = "PXF Promote" ] # its only success is EARLIER than the failure
+}
+
+@test "a success on another branch does not supersede (same-branch rule)" {
+  printf '[%s]' "$(_run 21000001 'CE Install Test' trunk workflow_dispatch 9000)" > "$BATS_TEST_TMPDIR/fail.json"
+  printf '[%s]' "$(_succ 'CE Install Test' fix/smoke 3000)" > "$BATS_TEST_TMPDIR/succ.json"
+  run _redci '["acme/widgets"]'
+  [ "$(jq -r .n <<<"$output")" = 1 ]
+}
+
+@test "success lookups are per distinct (workflow, branch): one call each, newest only" {
+  printf '[%s,%s,%s]' "$(_run 22000001 W1 trunk push 900)" "$(_run 22000002 W1 trunk push 800)" "$(_run 22000003 W2 trunk push 700)" > "$BATS_TEST_TMPDIR/fail.json"
+  run _redci '["acme/widgets"]'
+  [ "$(jq -r .n <<<"$output")" = 3 ]
+  [ "$(grep -c -- '--status success' "$GH_LOG")" = 2 ]
+  grep -q -- '--status success.*--limit 1\|--limit 1.*--status success' "$GH_LOG"
+}
+
+@test "items carry id, event, branch and a run url; the list subcommand prints one line per unhandled run" {
+  printf '[%s,%s]' "$(_run 23000001 Nightly trunk schedule 7200)" "$(_run 23000002 'Install Test' trunk workflow_dispatch 3600)" > "$BATS_TEST_TMPDIR/fail.json"
+  run _redci '["acme/widgets"]'
+  [ "$(jq -r '.items[0].id' <<<"$output")" = 23000002 ]
+  [ "$(jq -r '.items[0].ev' <<<"$output")" = workflow_dispatch ]
+  [ "$(jq -r '.items[0].url' <<<"$output")" = "https://github.com/acme/widgets/actions/runs/23000002" ]
+  rm -f "$HUD_REDCI_STATE_DIR"/*.json
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$REDCI" list acme/widgets
+  [ "$status" = 0 ]
+  [ "$(wc -l <<<"$output" | tr -d ' ')" = 2 ]
+  [[ "${lines[0]}" == 23000002$'\t'"Install Test"$'\t'workflow_dispatch$'\t'trunk$'\t'1h\ ago$'\t'https://github.com/acme/widgets/actions/runs/23000002 ]]
+  [[ "${lines[1]}" == 23000001$'\t'Nightly$'\t'schedule* ]]
+}
+
+@test "list: all clear and unknown repo messages; bad usage exits 2" {
+  cd "$BATS_TEST_TMPDIR"
+  run bash "$REDCI" list acme/widgets; [[ "$output" == "all clear"* ]]
+  run bash "$REDCI" list "bad name"; [[ "$output" == "no answer"* ]]
+  run bash "$REDCI" nope; [ "$status" = 2 ]
 }
