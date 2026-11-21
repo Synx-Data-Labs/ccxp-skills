@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 3
 source: Owner 2026-11-21 via home session; brief ccxp-skills-task-per-job-brief.md (job 1351)
 type: feature
 scheduled: 2026-11-16
-claimed_by: cc1-50ac6891:1f7f610151b0e6c3
-claimed_role: interactive
+claimed_by:
+claimed_role:
 ---
 
 # T20261121-412600: Task-per-job rule and ledger check
@@ -45,8 +45,13 @@ claimed_role: interactive
 
 - [x] `bats tests/agent_pairing.bats` passes, including the size guard (persona under 48500 bytes).
 - [x] `bats tests/ledger.bats` covers `--task`, `--no-task`, `check` failure, the Running-row text, the `finish` warning and backward compatibility (old calls and old ledger files).
-- [ ] Repo lint (`lint_tasks.py`, markdown lint) passes on the changed files.
+- [x] Repo lint (`lint_tasks.py`, markdown lint) passes on the changed files.
 
 ## Done criteria
 
 - Both PRs merged through `/address-pr` (plain `--rebase`); this task moved to `dev/JOURNAL/`.
+
+## Closed
+
+- PR 687 (persona rule, doc, task, queue; merged) and the ledger check PR (this one). Persona size after: 48482 bytes (guard: under 48500).
+- Choices: `--flags repo-changing` marks a repo-changing row; `--no-task "<reason>"` is a declared exception (no `finish` warning); `check` prints `NO-TASK r<n>`; the Running row shows `(no task)` or `(no task: <reason>)`.
