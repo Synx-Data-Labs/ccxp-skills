@@ -4,6 +4,8 @@ estimation: 3
 source: Owner 2026-11-21 via home session; brief ccxp-skills-task-per-job-brief.md (job 1351)
 type: feature
 scheduled: 2026-11-16
+claimed_by: cc1-50ac6891:1f7f610151b0e6c3
+claimed_role: interactive
 ---
 
 # T20261121-412600: Task-per-job rule and ledger check
