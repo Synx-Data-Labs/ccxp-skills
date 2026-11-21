@@ -52,11 +52,13 @@ ledger.sh context set <id> <abs path>    # prints "<id>: <path>"
 
 ## Context file naming
 
-- **Next item `n<k>`**: the context file is `n<k>-j<job>-<slug>[-t<taskid>].md` under `${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-context/` (example `n305-j1222-release-ccxp-skills-t20261109-338243.md`; `<taskid>` like `T20261109-338243` is written in lowercase in the name, and both the `j<job>` and the `t<taskid>` part are left out when the item has no job or no task). The name shows how the next item, its job and its task relate.
-- **Running or parked row (no Next item)**: `j<job>-<slug>[-t<taskid>].md`. No check runs on `start` or `park`, so these names never warn.
-- **Legacy**: `n<k>-<slug>[-T<taskid>].md` (and old `r<n>-`/`k<n>-` names) stay accepted silently; existing files are not renamed. The check is a prefix test, so it cannot tell `n3-slug.md` from `n3-j5-slug.md` and never looks at the task part; the new form is preferred through the warning text, this page and the persona.
+- **Form** (decision d142, replacing d106, d120): `n<k>-r<job>-t<taskid>-<slug>.md` under `${CLAUDE_CONFIG_DIR:-~/.claude}/ccxp-context/`, always in the order n, r, t, slug (example `n305-r1222-t20261109-338243-release-ccxp-skills.md`). `n<k>` is the Next item ref, `r<job>` the job number as an r-ref (job 1222 = `r1222`), `t<taskid>` the task id lowercased (`T20261109-338243` becomes `t20261109-338243`).
+- **Next item content**: the file starts with cmd-clickable `file://` URL lines pointing at the item's source task file (`dev/TODO/T<id>-*.md`).
+- **Absent parts** are left out, the order stays: job-only `r<job>-[t<taskid>-]<slug>.md`; Next item without a job `n<k>-[t<taskid>-]<slug>.md`; parked `k<n>-<slug>.md`.
+- **Grammar**: read left to right, each token at most once and only in that order: `n<digits>-` (or `k<digits>-`), `r<digits>-`, `t<8 digits>-<6 digits>-`; the first thing that is not a token starts the slug. So the slug must not start with a word that is one of `n r t k j` plus digits only (write `robot-r2-d2`, not `r2-d2`). `ledger.sh ctxname <file>` prints the parse.
+- **Legacy** stays accepted silently, existing files are not renamed: `n<k>-j<job>-<slug>[-t<taskid>].md`, `n<k>-<slug>[-T<taskid>].md`, `j<n>-...`, `r<n>-...`, `k<n>-...`. `ctxname` reads `j<job>` as `r` and a trailing `-t|T<taskid>` as `t`.
 - **Sequence**: reserve the ref first with `ledger.sh ref next n` (prints `n<k>`), write the file under that name, then `ledger.sh next add "<text>" --ref n<k> --context <that file>`.
-- **Soft check**: when the context basename does not start with `<ref>-`, `next add` prints a warning on stderr that names the new pattern; the item is still added and the exit status is unchanged. Without `--ref` the ref is assigned by `next add` itself, so the warning compares against the ref it assigned.
+- **Soft check**: when the context basename does not start with `<ref>-`, `next add` prints a warning on stderr that names the new pattern; `start` and `park` never warn; the item is still added and the exit status is unchanged. Without `--ref` the ref is assigned by `next add` itself, so the warning compares against the ref it assigned.
 
 ## Decisions log
 

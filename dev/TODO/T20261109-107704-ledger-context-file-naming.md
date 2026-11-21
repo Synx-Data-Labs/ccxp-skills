@@ -13,3 +13,5 @@ description: Next-item context files are named n<k>-<slug>-T<taskid>.md; ledger.
 - Rule: a Next item's context file is `n<k>-<slug>-T<taskid>.md` (T part omitted without a task); reserve the ref with `ledger.sh ref next n`, write the file, then `next add --ref n<k> --context <file>`.
 - Done when: `ledger.sh next add` warns (stderr, exit unchanged) on a non-matching name with BATS coverage, `hud/scripts/ledger.md` and `hud/README.md` document it, and the ccxp-agent persona states it (second PR, under ~600 bytes).
 - Out of scope: renaming existing context files (owner's local state), a version bump or release.
+
+> Superseded by [T20261121-359191](T20261121-359191-context-file-naming-n-r-t-slug.md): the name is now `n<k>-r<job>-t<taskid>-<slug>.md` (d142). This history is unchanged.
