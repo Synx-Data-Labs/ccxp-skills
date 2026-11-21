@@ -878,11 +878,11 @@ ledger() {
     start)
       ledger-args "$@" || return 2
       ledger-int "${POS[0]:-}" || return 2
+      [[ "$HAVE_TASK" == true && "$HAVE_NOTASK" == true ]] && { echo "ledger: --task and --no-task are exclusive" >&2; return 2; }
       local title; title=$(printf '%s' "${POS[1]:-}" | tr -d '\000-\037\177' | cut -c1-120)
       if [[ "$PSTDIN" == true ]]; then
         PF=$(ledger-save-prompt "$((10#${POS[0]}))") || return 2; HAVE_PF=true
       fi
-      [[ "$HAVE_TASK" == true && "$HAVE_NOTASK" == true ]] && { echo "ledger: --task and --no-task are exclusive" >&2; return 2; }
       local SHA=""; [[ "$HAVE_PF" == true && -f "$PF" ]] && SHA=$(ledger-sha "$PF")
       ledger-log-start "$((10#${POS[0]}))"
       ledger-update '(.running | map(select(.job == $n)) | .[0]) as $old
