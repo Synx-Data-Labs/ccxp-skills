@@ -18,8 +18,10 @@
 #   ledger.sh next add "<text>" [--context <abs-path>] [--ref n<k>]   open a "Next:" item; prints its ref
 #                                 (auto-increments the n counter; --ref picks one, error if taken)
 #                                 warns on stderr (exit status unchanged) when the context file name does not start with "<ref>-";
-#                                 convention n<k>-j<job>-<slug>[-t<taskid>].md (legacy n<k>-<slug>[-T<taskid>].md stays accepted; a job without
-#                                 a Next item uses j<job>-<slug>[-t<taskid>].md): reserve with "ref next n", write the file, then add --ref n<k>
+#                                 convention n<k>-r<job>-t<taskid>-<slug>.md (parts n, r, t in that order, each left out when absent; legacy
+#                                 n<k>-j<job>-<slug>[-t<taskid>].md, n<k>-<slug>[-T<taskid>].md, j/r/k<n>- names stay accepted):
+#                                 reserve with "ref next n", write the file, then add --ref n<k>
+#   ledger.sh ctxname <file>      parse a context file name into "n= r= t= slug=" (legacy j<job> prints as r, trailing -t<taskid> as t)
 #   ledger.sh next done <ref>     close it (n3, N3 or 3; legacy i3/a2 refs work too); kept in "done" (last 20)
 #   ledger.sh next set <ref> [--text <t>] [--context <abs-path>]   edit an open item
 #   ledger.sh set-counter <n|s|k> <value>   set a ref counter exactly (to initialise it)
@@ -388,6 +390,18 @@ ledger-render-text() {
 
 # Reply tail in the user-mandated order (Running, Next, Parked, Ledger line), plain text, no markdown.
 # $1 optional TL;DR text (printed first), $2 "no" to leave out the Decisions lines.
+# Parse a context file name: tokens n|k<digits>-, then r|j<digits>- (j is legacy, printed as r), then t<8 digits>-<6 digits>-, each once
+# and in that order; the first non-token starts the slug. A legacy trailing -t|T<taskid> is read as t. Prints "n= r= t= slug=".
+ledger-ctxname() {
+  local b="${1##*/}" n="" r="" t="" re_t='^[tT]([0-9]{8}-[0-9]{6})-(.*)$' re_tail='^(.*)-[tT]([0-9]{8}-[0-9]{6})$'
+  b="${b%.md}"
+  [[ "$b" =~ ^([nk][0-9]+)-(.*)$ ]] && { n="${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"; }
+  [[ "$b" =~ ^[rj]([0-9]+)-(.*)$ ]] && { r="r${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"; }
+  [[ "$b" =~ $re_t ]] && { t="t${BASH_REMATCH[1]}"; b="${BASH_REMATCH[2]}"; }
+  [[ -z "$t" && "$b" =~ $re_tail ]] && { t="t${BASH_REMATCH[2]}"; b="${BASH_REMATCH[1]}"; }
+  printf 'n=%s r=%s t=%s slug=%s\n' "$n" "$r" "$t" "$b"
+}
+
 ledger-reply() {
   local md dec=""; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"
@@ -996,16 +1010,18 @@ ledger() {
         *) echo "usage: ledger.sh context set <d<n>|n<k>|r<n>|k<n>> <abs path>" >&2; return 2 ;;
       esac ;;
     authz) ledger-authz "$@" ;;
+    ctxname) [[ -n "${1:-}" ]] || { echo "usage: ledger.sh ctxname <file name>" >&2; return 2; }
+      ledger-ctxname "$1" ;;
     check) ledger-check "${1:-}" ;;
     next | input | action) case "${1:-}" in
         add) shift; ledger-args "$@" || return 2
           [[ -n "$CTX" ]] || echo "ledger: warning: next add without --context (every item needs a context file)" >&2
           local added; added=$(ledger-add "${POS[0]:-}" "$CTX" "$REF") || return $?
           printf '%s\n' "$added"
-          # soft naming check: a Next item's context file is n<k>-j<job>-<slug>[-t<taskid>].md; the legacy n<k>-<slug>[-T<taskid>].md also passes
+          # soft naming check: a Next item's context file is n<k>-r<job>-t<taskid>-<slug>.md; every legacy form also passes
           # (prefix test only; reserve the ref first: ref next n, then --ref)
           [[ -z "$CTX" || "${CTX##*/}" == "$added"-* ]] \
-            || echo "ledger: warning: context file ${CTX##*/} should start with $added- (n<k>-j<job>-<slug>[-t<taskid>].md, legacy n<k>-<slug>[-T<taskid>].md also accepted; reserve the ref with 'ref next n', then pass --ref)" >&2 ;;
+            || echo "ledger: warning: context file ${CTX##*/} should start with $added- (n<k>-r<job>-t<taskid>-<slug>.md, parts left out when absent; legacy n<k>-j<job>-<slug>[-t<taskid>].md and n<k>-<slug>[-T<taskid>].md also accepted; reserve the ref with 'ref next n', then pass --ref)" >&2 ;;
         done) ledger-done "${2:-}" ;;
         set) shift; ledger-args "$@" || return 2; ledger-set "${POS[0]:-}" ;;
         *) echo "usage: ledger.sh next add <text> [--context <path>] [--ref nN] | next done <ref> | next set <ref> [--text t] [--context p]  (input/action: deprecated aliases)" >&2; return 2 ;;

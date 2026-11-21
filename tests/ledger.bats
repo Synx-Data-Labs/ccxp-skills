@@ -258,34 +258,79 @@ setup() { export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/sub/ledger.json"; }
   [[ "$stderr" == *"should start with n3-"* ]]
 }
 
-@test "next add accepts the n<k>-j<job>-<slug>-t<taskid> name silently, also via ref next n then --ref" {
+@test "next add accepts n<k>-r<job>-t<taskid>-<slug> and its absent-part forms silently, also via ref next n then --ref" {
   ref=$(bash "$LEDGER" ref next n)
   [ "$ref" = "n1" ]
-  run --separate-stderr bash "$LEDGER" next add "a" --ref "$ref" --context /ctx/n1-j1222-release-t20261109-338243.md
+  run --separate-stderr bash "$LEDGER" next add "a" --ref "$ref" --context /ctx/n1-r1222-t20261109-338243-release.md
   [ "$status" -eq 0 ]
   [ "$output" = "n1" ]
   [ -z "$stderr" ]
-  run --separate-stderr bash "$LEDGER" next add "b" --context /ctx/n2-j1222-slug.md
-  [ "$status" -eq 0 ]
+  run --separate-stderr bash "$LEDGER" next add "b" --context /ctx/n2-r1222-slug.md
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "c" --context /ctx/n3-t20261109-338243-slug.md
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "d" --context /ctx/n4-slug.md
   [ -z "$stderr" ]
 }
 
-@test "next add warning names the n<k>-j<job> pattern and keeps the legacy form accepted" {
+@test "next add accepts every legacy context name silently (n-j-slug-t, n-slug-T)" {
+  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/n1-j1222-release-t20261109-338243.md
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "b" --context /ctx/n2-j1222-slug.md
+  [ -z "$stderr" ]
+  run --separate-stderr bash "$LEDGER" next add "c" --context /ctx/n3-slug-T20261109-338243.md
+  [ -z "$stderr" ]
+}
+
+@test "next add warning names the n<k>-r<job>-t<taskid>-<slug> pattern and the legacy forms" {
   run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/notes.md
   [ "$status" -eq 0 ]
   [[ "$stderr" == *"should start with n1-"* ]]
-  [[ "$stderr" == *"n<k>-j<job>-<slug>[-t<taskid>].md"* ]]
-  [[ "$stderr" == *"legacy n<k>-<slug>[-T<taskid>].md"* ]]
+  [[ "$stderr" == *"n<k>-r<job>-t<taskid>-<slug>.md"* ]]
+  [[ "$stderr" == *"legacy n<k>-j<job>-<slug>[-t<taskid>].md and n<k>-<slug>[-T<taskid>].md"* ]]
 }
 
 @test "next add still warns for a job-only name (no n<k>- prefix)" {
-  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/j1222-slug-t20261109-338243.md
+  run --separate-stderr bash "$LEDGER" next add "a" --context /ctx/r1222-t20261109-338243-slug.md
   [ "$status" -eq 0 ]
   [[ "$stderr" == *"should start with n1-"* ]]
 }
 
+@test "ctxname parses the new grammar and its absent-part forms" {
+  run bash "$LEDGER" ctxname /ctx/n305-r1222-t20261109-338243-release-x.md
+  [ "$output" = "n=n305 r=r1222 t=t20261109-338243 slug=release-x" ]
+  run bash "$LEDGER" ctxname n3-slug.md
+  [ "$output" = "n=n3 r= t= slug=slug" ]
+  run bash "$LEDGER" ctxname r5-t20261109-107704-a.md
+  [ "$output" = "n= r=r5 t=t20261109-107704 slug=a" ]
+  run bash "$LEDGER" ctxname n7-t20261109-107704-a.md
+  [ "$output" = "n=n7 r= t=t20261109-107704 slug=a" ]
+  run bash "$LEDGER" ctxname k4-park.md
+  [ "$output" = "n=k4 r= t= slug=park" ]
+}
+
+@test "ctxname does not misparse a slug that merely starts with r or t digits" {
+  run bash "$LEDGER" ctxname n3-r5-robot-r2-d2.md
+  [ "$output" = "n=n3 r=r5 t= slug=robot-r2-d2" ]
+  run bash "$LEDGER" ctxname n1-r2d2-x.md
+  [ "$output" = "n=n1 r= t= slug=r2d2-x" ]
+  run bash "$LEDGER" ctxname r5-t2-notes.md
+  [ "$output" = "n= r=r5 t= slug=t2-notes" ]
+}
+
+@test "ctxname still reads every legacy name" {
+  run bash "$LEDGER" ctxname n305-j1222-release-t20261109-338243.md
+  [ "$output" = "n=n305 r=r1222 t=t20261109-338243 slug=release" ]
+  run bash "$LEDGER" ctxname n3-slug-T20261109-338243.md
+  [ "$output" = "n=n3 r= t=t20261109-338243 slug=slug" ]
+  run bash "$LEDGER" ctxname j9-x.md
+  [ "$output" = "n= r=r9 t= slug=x" ]
+  run bash "$LEDGER" ctxname r9-x.md
+  [ "$output" = "n= r=r9 t= slug=x" ]
+}
+
 # Regression guard (passes before and after the pattern change): start and park have no name check.
-@test "start and park stay silent for job-only j<job>-<slug>[-t<taskid>] context names" {
+@test "start and park stay silent for job-only r<job>-[t<taskid>-]<slug> and legacy j<job> context names" {
   run --separate-stderr bash "$LEDGER" start 1222 "job" --context /ctx/j1222-slug-t20261109-338243.md
   [ "$status" -eq 0 ]
   [ -z "$stderr" ]
