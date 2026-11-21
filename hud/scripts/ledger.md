@@ -77,15 +77,31 @@ ledger.sh reply [--tldr "<t>"] [--no-decisions]                  # adds "Decisio
 
 ## Resume after a restart
 
-A restart ends running subagents but leaves their `running` rows. `start` can record what a restart needs: `--prompt-stdin` (saves stdin as `ccxp-prompts/<n>.md` next to the ledger, mode 600; refused when it looks like a credential) or `--prompt-file <abs path>` (stores the path), `--agent <type>/<model>`, `--flags autopilot,needs-confirmation,detached`. A repeated `start` keeps what is stored; `finish` removes the saved prompt copy. Never store secrets in a prompt.
+A restart ends running subagents but leaves their `running` rows. `start` can record what a restart needs: `--prompt-stdin` (saves stdin as `ccxp-prompts/<n>.md` next to the ledger, mode 600; refused when it looks like a credential) or `--prompt-file <abs path>` (stores the path), `--agent <type>/<model>`, `--flags autopilot,needs-confirmation,detached,repo-changing`, `--task T<id>` or `--no-task "<reason>"` (see "Task per job"). A repeated `start` keeps what is stored; `finish` removes the saved prompt copy. Never store secrets in a prompt.
 
 `reconcile --alive 531,533` (or `--alive -` to read the list from stdin; the list is required and may be empty, `""`) prints each running row not in the list as one tab-separated line: `job title context prompt started_at agent flags resumed prompt_check started_on`, with `-` for an empty field (and for a prompt file that is gone). `prompt_check` compares the saved prompt with the hash taken when it was saved: `ok`, `changed`, `unknown` (row without a hash) or `-` (no prompt); `started_on` is the first start's date (`YYYY-MM-DD`, `-` for old rows). ListAgents only sees the dispatcher's own session, so a job of another live session on the same profile also looks dead. Only the dispatcher can call ListAgents, so it passes the live job numbers. `resumed <n>` bumps the row's restart count and keeps its job number. Old rows without a prompt show `-` (not resumable). The ccxp-agent persona ("On session start") has the dispatcher's steps and safety rules.
+
+## Task per job
+
+Every job that changes a repo with `dev/TODO/` files a task first (persona rule and exceptions: `agent-pairing/task-per-job.md`, T20261121-412600). The ledger checks it mechanically for rows marked as repo-changing.
+
+```bash
+ledger.sh start <n> "<title>" --flags repo-changing [--context ...]   # dispatcher: the job changes a repo
+ledger.sh start <n> "<title>" --task T<id>                            # job: once /new-task filed (or reused) the task
+ledger.sh start <n> "<title>" --flags repo-changing --no-task "<reason>"   # declared exception (read-only, machine state, queue move, typed /drive ...)
+```
+
+- `--task` takes `T<yyyymmdd>-<6 digits>` (or a legacy `T<n>`; case does not matter, stored upper-case). `--no-task` takes a reason of at most 200 characters (credential-looking text is refused). The two are exclusive on one call; each replaces the other, and a repeated `start` without either keeps what is stored.
+- A row is "untasked" when its flags contain `repo-changing` and it has neither `task` nor `no_task`. Rows without the flag, and every older ledger file, are never untasked: existing calls and files behave as before.
+- `check` prints `NO-TASK r<n> (...)` for each untasked row and exits 1 (with MISSING / EXTRA / NO-CONTEXT).
+- The Running row in `reply`, `render` and `ccxp-ledger.md` ends with `(no task)` for an untasked row and `(no task: <reason>)` for a declared exception; a row with a task shows nothing extra.
+- `finish` prints `ledger: warning: r<n> is a repo-changing job that ended without a task id ...` on stderr for an untasked row (the exit status stays 0 and the row is removed as usual). A declared `--no-task` is not a miss, so it does not warn.
 
 ## File shape (schema 3)
 
 ```json
 {"schema":3,"updated_at":"2026-10-30T12:40:47Z","next_job":7,"lifetime_jobs":6,
- "running":[{"job":6,"title":"new job","context":"/tmp/ctx/6.md","prompt":"","agent":"","flags":"","resumed":0,"started_at":"14:09"}],
+ "running":[{"job":6,"title":"new job","context":"/tmp/ctx/6.md","prompt":"","agent":"","flags":"","task":"","no_task":"","resumed":0,"started_at":"14:09"}],
  "next":[{"ref":"n1","text":"do it","context":"/tmp/n.md","added_at":"2026-10-30T12:40:47Z"}],
  "done":[],
  "parked":[{"id":"k7","context":"/tmp/c7.md","title":"Park me"}],

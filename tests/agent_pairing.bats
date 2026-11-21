@@ -727,3 +727,15 @@ install_outdated_agent() {
   [ "$(grep -n '^## Routines due' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Idle wake' "$f" | cut -d: -f1)" ]
   [ "$(grep -n '^## Idle wake' "$f" | cut -d: -f1)" -lt "$(grep -n '^## Writing a job prompt' "$f" | cut -d: -f1)" ]
 }
+
+@test "asset: task-per-job rule names /new-task, /drive, the exceptions doc, decisions into git and the ledger flag (T20261121-412600)" {
+  local f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md" d="$REPO_ROOT/agent-pairing/task-per-job.md"
+  grep -q '\*\*Task per job\*\*' "$f"
+  grep -q 'agent-pairing/task-per-job.md' "$f"
+  grep -q '`/new-task`' "$f"; grep -q '/drive T<id>' "$f"
+  grep -q 'dev/TODO' "$f"; grep -q 'design section' "$f"
+  grep -q '`repo-changing`' "$f"; grep -q -- '--no-task' "$f"; grep -q -- '--task T<id>' "$f"
+  [ -f "$d" ]
+  for w in 'Read-only' 'Machine-state' 'ledger' '/top' '/address-pr' '/land' 'dev/TODO/' 'd-ref'; do grep -q -- "$w" "$d"; done
+  [ "$(wc -c < "$f")" -lt 48500 ]
+}

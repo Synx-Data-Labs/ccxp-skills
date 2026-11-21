@@ -43,8 +43,8 @@ claimed_role: interactive
 
 ## Test plan
 
-- [ ] `bats tests/agent_pairing.bats` passes, including the size guard (persona under 48500 bytes).
-- [ ] `bats tests/ledger.bats` covers `--task`, `--no-task`, `check` failure, the Running-row text, the `finish` warning and backward compatibility (old calls and old ledger files).
+- [x] `bats tests/agent_pairing.bats` passes, including the size guard (persona under 48500 bytes).
+- [x] `bats tests/ledger.bats` covers `--task`, `--no-task`, `check` failure, the Running-row text, the `finish` warning and backward compatibility (old calls and old ledger files).
 - [ ] Repo lint (`lint_tasks.py`, markdown lint) passes on the changed files.
 
 ## Done criteria

@@ -3,7 +3,9 @@
 #
 #   ledger.sh start <n> <title> [--context <abs-path>]   job r<n> started (lifetime_jobs = highest n ever)
 #       start also takes [--started-at HH:MM] [--prompt-file <abs-path> | --prompt-stdin] [--agent <type[/model]>] [--flags a,b]
-#       (flags: autopilot, needs-confirmation, detached); --prompt-stdin saves stdin as <ledger dir>/ccxp-prompts/<n>.md (mode 600)
+#       (flags: autopilot, needs-confirmation, detached, repo-changing); --prompt-stdin saves stdin as <ledger dir>/ccxp-prompts/<n>.md (mode 600)
+#       start also takes [--task T<id> | --no-task "<reason>"]: a repo-changing row needs one of them (check fails with NO-TASK, reply shows
+#       "(no task)", finish warns on stderr); a repeated start keeps what is stored
 #   ledger.sh finish <n>                                 job r<n> no longer running (drops its saved prompt copy)
 #   ledger.sh stats [--json]      jobs started in the rolling last 24 h vs the lifetime average per day (read-only; see ledger-stats)
 #   ledger.sh reconcile --alive <n,n,...|->              print running rows NOT in the alive list, one TSV line each:
@@ -45,7 +47,7 @@
 #
 # File: ${CCXP_LEDGER_FILE:-<profile>/ccxp-ledger.json}
 # {"schema":3,"updated_at","next_job","lifetime_jobs",
-#  "running":[{"job","title","context","prompt","agent","flags","resumed","started_at"}],  (started_at = HH:MM local;
+#  "running":[{"job","title","context","prompt","agent","flags","task","no_task","resumed","started_at"}],  (started_at = HH:MM local;
 #                prompt = abs path of the saved job prompt, "" = not resumable; resumed = restart count)
 #  "next":[{"ref","text","context","added_at"}],
 #  "done":[{"ref","text","context","closed_at"}],           (closed Next items, newest last, max 20)
@@ -160,6 +162,13 @@ ledger-stats() {
 
 LEDGER_EMPTY='{"schema":3,"lifetime_jobs":0,"running":[],"next":[],"parked":[],"ref_counters":{"n":0,"s":0,"k":0}}'
 
+# jq defs for the task-per-job rule: a repo-changing row (flag) with neither a task id nor a declared --no-task reason is "untasked";
+# tasknote is the text shown after its title in Running rows (empty for other rows).
+LEDGER_JQ_TASK='def rc: ((.flags | split(",") | index("repo-changing")) != null);
+  def untasked: rc and .task == "" and .no_task == "";
+  def tasknote: if rc and .task == "" then (if .no_task != "" then " (no task: " + .no_task + ")" else " (no task)" end) else "" end;
+'
+
 # Current ledger, normalized to v3; defaults when missing/corrupt. Reads old shapes too.
 ledger-read() {
   local f out; f=$(ledger-file)
@@ -170,6 +179,7 @@ ledger-read() {
        running: [(.running // [])[] | select(type == "object")
                  | {job: (.job | numbers // 0), title: (.title | strings // ""), context: (.context | strings // ""),
                   prompt: (.prompt | strings // ""), sha: (.sha | strings // ""), started_on: (.started_on | strings // ""), agent: (.agent | strings // ""), flags: (.flags | strings // ""),
+                  task: (.task | strings // ""), no_task: (.no_task | strings // ""),
                   resumed: (.resumed | numbers // 0), started_at: (.started_at | strings // "")}],
        next: [((.next // []) + (.inputs // []) + (.actions // []))[]
               | select(type == "object" and (.ref | strings))
@@ -190,14 +200,14 @@ ledger-read() {
 ledger-render() {
   local md tmp; md=$(ledger-md-file)
   tmp=$(mktemp "$md.XXXXXX") || return 0
-  if printf '%s' "$1" | jq -r --arg md "$md" --argjson az "$(authz-effective-if-file)" '
+  if printf '%s' "$1" | jq -r --arg md "$md" --argjson az "$(authz-effective-if-file)" "$LEDGER_JQ_TASK"'
       def enc: split("/") | map(@uri) | join("/");
       def item($head): "- " + $head + "\n  "
         + (if .context != "" then "file://" + (.context | enc) else "(none)" end);
       def sect($name; $items): "## " + $name + " (" + ($items | length | tostring) + ")\n"
         + (if ($items | length) == 0 then "- none" else ($items | join("\n")) end) + "\n";
       "# CCXP ledger\n\nUpdated: " + (.updated_at // "") + "\n\nLedger: file://" + ($md | enc) + "\n\n"
-      + sect("Running"; [.running[] | item("r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)")]) + "\n"
+      + sect("Running"; [.running[] | item("r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)\(tasknote)")]) + "\n"
       + sect("Next"; [.next[] | item("\(.ref) \(.text)")]) + "\n"
       + sect("Parked"; [.parked[] | item(.id + (if .title then " " + .title else "" end))])
       + (if ($az | length) == 0 then "" else "\n" + sect("Authorization"; [$az[] | "- " + .key + ": " + .value]) end)' > "$tmp" 2>/dev/null; then
@@ -269,7 +279,7 @@ ledger-ctx() {
 ledger-args() {
   POS=(); CTX=""; TTL=""; TXT=""; REF=""; HAVE_CTX=false; HAVE_TTL=false; HAVE_TXT=false
   QUOTE=""; NOTE=""; SCOPE=""; SRC=""; HAVE_SCOPE=false; ALL=false; JSON=false
-  PF=""; AGT=""; FLG=""; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
+  PF=""; AGT=""; FLG=""; TASK=""; NOTASK=""; HAVE_TASK=false; HAVE_NOTASK=false; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --context) [[ $# -ge 2 ]] || { echo "ledger: --context needs a path" >&2; return 2; }
@@ -287,9 +297,14 @@ ledger-args() {
       --agent) [[ $# -ge 2 ]] || { echo "ledger: --agent needs a value" >&2; return 2; }
         AGT=$(ledger-clip "$2" 80); HAVE_AGT=true; shift 2 ;;
       --flags) [[ $# -ge 2 ]] || { echo "ledger: --flags needs a value" >&2; return 2; }
-        [[ -z "$2" || "$2" =~ ^(autopilot|needs-confirmation|detached)(,(autopilot|needs-confirmation|detached))*$ ]] \
-          || { echo "ledger: --flags takes autopilot, needs-confirmation, detached (comma list): $2" >&2; return 2; }
+        [[ -z "$2" || "$2" =~ ^(autopilot|needs-confirmation|detached|repo-changing)(,(autopilot|needs-confirmation|detached|repo-changing))*$ ]] \
+          || { echo "ledger: --flags takes autopilot, needs-confirmation, detached, repo-changing (comma list): $2" >&2; return 2; }
         FLG="$2"; HAVE_FLG=true; shift 2 ;;
+      --task) [[ $# -ge 2 ]] || { echo "ledger: --task needs a task id" >&2; return 2; }
+        [[ "$2" =~ ^[Tt]([0-9]{8}-[0-9]{6}|[0-9]{1,6})$ ]] || { echo "ledger: --task must look like T20261121-412600: $2" >&2; return 2; }
+        TASK="T${2:1}"; HAVE_TASK=true; shift 2 ;;
+      --no-task) [[ $# -ge 2 && -n "$2" ]] || { echo "ledger: --no-task needs a reason" >&2; return 2; }
+        NOTASK=$(ledger-bounded "$2" 200 --no-task) || return 2; HAVE_NOTASK=true; shift 2 ;;
       --quote) [[ $# -ge 2 ]] || { echo "ledger: --quote needs a value" >&2; return 2; }
         QUOTE=$(ledger-bounded "$2" 600 --quote) || return 2; shift 2 ;;
       --note) [[ $# -ge 2 ]] || { echo "ledger: --note needs a value" >&2; return 2; }
@@ -359,12 +374,12 @@ ledger-render-text() {
   [[ "$md" == /* ]] || md="$(pwd)/$md"
   dec=$(decisions-summary)
   decisions-render-file
-  ledger-read | jq -r --arg md "$md" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
+  ledger-read | jq -r --arg md "$md" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" "$LEDGER_JQ_TASK"'
     def enc: split("/") | map(@uri) | join("/");
     def ctx: if .context != "" then "\n  file://" + (.context | enc) else "" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     sect("Next:"; [.next[] | "**\(.ref)** \(.text)" + ctx]),
-    sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
+    sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)\(tasknote)" + ctx]),
     sect("Parked:"; [.parked[] | "**\(.id)**" + (if .title then " " + .title else "" end) + ctx]),
     (if ($az | length) == 0 then empty else sect("Authorization:"; [$az[] | "  " + .key + ": " + .value]) end),
     (if $dec != "" then $dec + "\n" else empty end),
@@ -377,12 +392,12 @@ ledger-reply() {
   local md dec=""; md=$(ledger-md-file)
   [[ "$md" == /* ]] || md="$(pwd)/$md"
   [[ "${2:-}" == "no" ]] || dec=$(decisions-summary)
-  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" '
+  ledger-read | jq -r --arg md "$md" --arg tldr "${1:-}" --arg dec "$dec" --argjson az "$(authz-effective-if-file)" "$LEDGER_JQ_TASK"'
     def enc: split("/") | map(@uri) | join("/");
     def ctx: if .context != "" then "\n  file://" + (.context | enc) else "\n  context: MISSING" end;
     def sect($name; $rows): if ($rows | length) == 0 then empty else $name + "\n" + ($rows | join("\n")) + "\n" end;
     (if $tldr != "" then "TL;DR: " + $tldr + "\n" else empty end),
-    sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)" + ctx]),
+    sect("Running:"; [.running[] | "r\(.job) [\(if .started_at != "" then .started_at else "--:--" end)] \(.title)\(tasknote)" + ctx]),
     sect("Next:"; [.next[] | "\(.ref) \(.text)" + ctx]),
     sect("Parked:"; [.parked[] | .id + (if .title then " " + .title else "" end) + ctx]),
     (if ($az | length) == 0 then empty else sect("Authorization:"; [$az[] | "  " + .key + ": " + .value]) end),
@@ -404,6 +419,8 @@ ledger-check() {
   local nocx; nocx=$(ledger-read | jq -r '[(.running[] | select(.context == "") | "r\(.job)"), (.next[] | select(.context == "") | .ref),
     (.parked[] | select(.context == "") | .id)] | .[]')
   [[ -z "$nocx" ]] || { while read -r r; do echo "NO-CONTEXT $r (context file is required)"; done <<<"$nocx"; rc=1; }
+  local notask; notask=$(ledger-read | jq -r "$LEDGER_JQ_TASK"'.running[] | select(untasked) | "r\(.job)"')
+  [[ -z "$notask" ]] || { while read -r r; do echo "NO-TASK $r (repo-changing job needs --task T<id> or --no-task \"<reason>\" on ledger.sh start)"; done <<<"$notask"; rc=1; }
   [[ -z "$extra" ]] || { while read -r r; do echo "EXTRA $r (in reply, not in ledger)"; done <<<"$extra"; rc=1; }
   local bad; bad=$(decisions-malformed)
   [[ -z "$bad" ]] || { printf '%s\n' "$bad"; rc=1; }
@@ -865,6 +882,7 @@ ledger() {
       if [[ "$PSTDIN" == true ]]; then
         PF=$(ledger-save-prompt "$((10#${POS[0]}))") || return 2; HAVE_PF=true
       fi
+      [[ "$HAVE_TASK" == true && "$HAVE_NOTASK" == true ]] && { echo "ledger: --task and --no-task are exclusive" >&2; return 2; }
       local SHA=""; [[ "$HAVE_PF" == true && -f "$PF" ]] && SHA=$(ledger-sha "$PF")
       ledger-log-start "$((10#${POS[0]}))"
       ledger-update '(.running | map(select(.job == $n)) | .[0]) as $old
@@ -875,16 +893,21 @@ ledger() {
                           started_on: (if ($old.started_on // "") != "" then $old.started_on else $day end),
                           agent: (if $ha then $a else ($old.agent // "") end),
                           flags: (if $hf then $f else ($old.flags // "") end),
+                          task: (if $ht then $tk elif $hn then "" else ($old.task // "") end),
+                          no_task: (if $hn then $nt elif $ht then "" else ($old.no_task // "") end),
                           resumed: ($old.resumed // 0),
                           started_at: (if $hs then $s elif ($old.started_at // "") != "" then $old.started_at else $hm end)}] | sort_by(.job))
         | .lifetime_jobs = ([.lifetime_jobs, $n] | max)' \
         --argjson n "$((10#${POS[0]}))" --arg t "$title" --arg c "$CTX" --argjson hc "$HAVE_CTX" --arg hm "$(date +%H:%M)" --arg s "$SAT" --argjson hs "$HAVE_SAT" --arg day "$(date +%F)" --arg sha "$SHA" \
-        --arg p "$PF" --argjson hp "$HAVE_PF" --arg a "$AGT" --argjson ha "$HAVE_AGT" --arg f "$FLG" --argjson hf "$HAVE_FLG" ;;
+        --arg p "$PF" --argjson hp "$HAVE_PF" --arg a "$AGT" --argjson ha "$HAVE_AGT" --arg f "$FLG" --argjson hf "$HAVE_FLG" \
+        --arg tk "$TASK" --argjson ht "$HAVE_TASK" --arg nt "$NOTASK" --argjson hn "$HAVE_NOTASK" ;;
     finish)
       ledger-int "${1:-}" || return 2
-      local pf; pf="$(ledger-prompt-dir)/$((10#$1)).md"
+      local pf warn; pf="$(ledger-prompt-dir)/$((10#$1)).md"
+      warn=$(ledger-read | jq -r --argjson n "$((10#$1))" "$LEDGER_JQ_TASK"'.running[] | select(.job == $n and untasked) | "r\(.job)"' 2>/dev/null) || warn=""
       ledger-update '.running |= map(select(.job != $n))' --argjson n "$((10#$1))" || return 1
       [[ -f "$pf" ]] && unlink "$pf" 2>/dev/null
+      [[ -z "$warn" ]] || echo "ledger: warning: $warn is a repo-changing job that ended without a task id; file one with /new-task and drive it, or pass --no-task \"<reason>\" (see agent-pairing/task-per-job.md)" >&2
       return 0 ;;
     stats) ledger-stats "$@" ;;
     reconcile)
