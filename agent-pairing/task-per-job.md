@@ -11,7 +11,7 @@ Every job that changes a repo gets a task in that repo, so the owner's goal and 
 
 - Step 1: `/new-task` with the goal in the owner's own words plus the decisions made in chat. If a task for this work already exists (the owner named one, or `ls dev/TODO` shows it), reuse it and skip `/new-task`.
 - Step 2: `/drive T<id>` to completion, through the Skill tool. The task file, design section and journal then carry the decisions; merges go only through `/address-pr`.
-- Step 3: once the task exists, repeat the ledger start line with `--task T<id>` (a repeated `start` keeps everything else stored).
+- Step 3: once the task exists, repeat the ledger start line with `--task T<id>` (a repeated `start` keeps everything else stored). Needs the ledger check change (T20261121-412600, second PR); an older `ledger.sh` refuses `--task`, and the job ignores that failure.
 
 ## Exceptions (tight and explicit)
 
@@ -22,7 +22,7 @@ Every job that changes a repo gets a task in that repo, so the owner's goal and 
 - The owner typed a skill command that already runs the lifecycle: `/drive`, `/address-pr`, `/land` (the persona already tells the job to run it verbatim).
 - A repo without `dev/TODO/`.
 
-An exception is declared, not silent: the dispatcher passes `--no-task "<reason>"` to `ledger.sh start` for a repo-changing job that is exempt (see `hud/scripts/ledger.md`, "Task per job").
+From the ledger check change on, an exception is declared, not silent: the dispatcher passes `--no-task "<reason>"` to `ledger.sh start` for a repo-changing job that is exempt (see `hud/scripts/ledger.md`, "Task per job").
 
 ## Decisions into git
 
