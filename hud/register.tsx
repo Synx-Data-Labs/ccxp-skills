@@ -324,9 +324,9 @@ export const register: Register = on => {
     const helpRest = /^help(?:\s+([\s\S]*))?$/i.exec(rawArgs)
     // `/hud config` alone, or `/hud config show`, prints the effective configuration; `edit` or a URL opens the dialog.
     const cfgArg = (configRest?.[1] ?? '').trim()
-    const editMatch = /^edit\b\s*([\s\S]*)$/i.exec(cfgArg)
+    const editMatch = /^edit(?:\s+([\s\S]*))?$/i.exec(cfgArg)
     const isShow = cfgArg === '' || cfgArg.toLowerCase() === 'show'
-    const dialogCi = (editMatch ? editMatch[1] : cfgArg).trim() || undefined
+    const dialogCi = (editMatch ? (editMatch[1] ?? '') : cfgArg).trim() || undefined
     const arg = helpRest ? 'help' : configRest ? (isShow ? 'configshow' : 'config') : rawArgs.toLowerCase()
     try {
       const env = await envPaths($)

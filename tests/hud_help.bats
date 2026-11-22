@@ -31,7 +31,7 @@ has_topic() { topics | grep -Fxq "$1"; }
 }
 
 @test "the other cells and meta topics have a section" {
-  for t in overview ap24h stalled ci version colors details config; do
+  for t in overview ap24h stalled ci redci version colors details config; do
     has_topic "$t" || { echo "no help topic: $t"; false; }
   done
 }
