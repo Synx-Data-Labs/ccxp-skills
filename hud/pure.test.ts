@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, parseIssues, parseRedci, redciRepos, withConfig, withEnabled } from './config'
+import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, parseIssues, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
 import { alertSegs, isAlertRow } from './render'
 import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, alertsVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
@@ -1772,59 +1772,26 @@ test('issues: band forms shrink, details spell it out', async () => {
   expect(text(bandRows(withHelper({ issues: i }), { ...cfg, fields: ['repo'] }, 200))).not.toContain('issues')
 })
 
-const RC = { n: 2, items: [{ wf: 'Nightly Orchestrator', at: RUN_AT, repo: 'synxdb-build-pipeline' }, { wf: 'Upstream Sync', at: RUN_AT, repo: 'synxdb-build-pipeline' }] }
+const RUN_URL = 'https://github.com/Synx-Data-Labs/synxdb-build-pipeline/actions/runs/123456'
 
-test('config: redci takes an owner/name list (or a bare array), drops bad names, keeps an empty list', async () => {
-  expect(parseRedci({ repos: ['a/b', 'a/b', ' c/d ', 'bad name', 'x/y;ls', 5] })).toEqual({ repos: ['a/b', 'c/d'] })
-  expect(parseRedci(['a/b'])).toEqual({ repos: ['a/b'] })
-  expect(parseRedci({ repos: [] })).toEqual({ repos: [] })
-  for (const bad of [undefined, null, 'a/b', 3, {}, { repos: 'a/b' }]) expect(parseRedci(bad)).toBeUndefined()
-  expect(parseRedci({ repos: Array.from({ length: 20 }, (_, i) => `o/r${i}`) })!.repos.length).toBe(8)
+test('CI url: a failing run keeps only an exact github.com run address; other states and addresses are dropped', async () => {
+  const ci = (state: string, url: unknown) => parseHelper(JSON.stringify({ ...BASE, ci: { state, at: RUN_AT, url } }))!.ci
+  expect(ci('failing', RUN_URL)).toEqual({ state: 'failing', at: RUN_AT, url: RUN_URL })
+  expect(ci('passing', RUN_URL)).toEqual({ state: 'passing', at: RUN_AT })
+  for (const bad of ['http://github.com/o/r/actions/runs/1', 'https://evil.example/o/r/actions/runs/1', `${RUN_URL}\u001b[31m`, `${RUN_URL}/x`, 5, null]) expect(ci('failing', bad)).toEqual({ state: 'failing', at: RUN_AT })
 })
 
-test('config: the watched repos are the redci list, else the ci repo, never the session repo', async () => {
-  expect(redciRepos(DEFAULTS)).toEqual([])
-  expect(redciRepos({ ...DEFAULTS, ci: { workflow: 'n.yml' } })).toEqual([]) // a ci with no repo means the session repo: not watched
-  expect(redciRepos({ ...DEFAULTS, ci: { workflow: 'n.yml', repo: 'o/pipeline' } })).toEqual(['o/pipeline'])
-  expect(redciRepos({ ...DEFAULTS, ci: { workflow: 'n.yml', repo: 'o/pipeline' }, redci: { repos: ['o/a', 'o/b'] } })).toEqual(['o/a', 'o/b'])
-  expect(redciRepos({ ...DEFAULTS, ci: { workflow: 'n.yml', repo: 'o/pipeline' }, redci: { repos: [] } })).toEqual([])
-  expect(mergeConfig(parseConfigText('{"redci": {"repos": ["o/a"]}}'), {}).redci).toEqual({ repos: ['o/a'] })
-})
-
-test('parseHelper: redci keeps a whole count and at most 3 printable items; bad shapes mean none', async () => {
-  const rc = (x: unknown) => parseHelper(JSON.stringify({ ...BASE, redci: x }))!.redci
-  expect(rc(RC)).toEqual(RC)
-  expect(rc({ n: 0, items: [] })).toEqual({ n: 0, items: [] })
-  expect(rc({ n: 5000, items: [] })!.n).toBe(999)
-  expect(rc({ n: 4, items: [1, 2, 3, 4].map(i => ({ wf: `w${i}`, at: 1, repo: 'r' })) })!.items.length).toBe(3)
-  expect(rc({ n: 1, items: [{ wf: 'Evil\u001b[31m', at: 1, repo: 'r' }] })!.items[0].wf).toBe('Evil[31m')
-  for (const bad of [null, 'x', 3, [], { n: -1, items: [] }, { n: 'a' }, {}]) expect(rc(bad)).toBeNull()
-})
-
-test('red CI row: `✗ N unhandled CI (...)` on the top row, every segment alert; nothing unhandled draws nothing', async () => {
-  const withRc = (rc: unknown, over = {}) => ({ ...withHelper({ ci: null, redci: rc, ...over }), })
-  const rows = bandRows(withRc(RC) as any, NOCI, 160)
-  expect(rows.length).toBe(2)
-  expect(text(rows.slice(0, 1))).toMatch(/^✗ 2 unhandled CI \(Nightly Orchestrator \d\d-\d\d, Upstream Sync \d\d-\d\d\)$/)
-  expect(rows[0].every(x => x.alert === true && x.bold === true)).toBe(true)
-  expect(rows.slice(1).some(r => r.some(x => x.alert))).toBe(false)
-  expect(bandRows(withRc({ n: 0, items: [] }) as any, NOCI, 160).length).toBe(1)
-  expect(bandRows(withRc(null) as any, NOCI, 160).length).toBe(1)
-  expect(bandRows(withRc(RC) as any, { ...NOCI, fields: ['repo', 'ctx'] }, 160).length).toBe(1) // switched off with `ci` in fields
-})
-
-test('red CI row shrinks by width, shares the row with the configured CI cell, and always fits', async () => {
-  const at = (cols: number, cfg = NOCI) => text(bandRows(withHelper({ ci: null, redci: RC }) as any, { ...cfg, fields: ['ci'] }, cols).slice(0, 1))
-  expect(at(40)).toBe('✗ 2 unhandled CI')
-  expect(at(12)).toBe('✗ 2 unhandled CI') // the narrowest the band goes is 20 columns
-  const both = bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT }, redci: RC }) as any, { ...CI, fields: ['ci'] }, 200)
-  expect(both.length).toBe(1)
-  expect(text(both)).toMatch(/^CI \(nightly\.yml\) ✗ failing .* │ ✗ 2 unhandled CI/)
+test('CI row: red ends with the run address (no scheme), it is the first thing to drop when narrow; green shows none; no other workflow is drawn (d143)', async () => {
+  const row = (state: string, cols: number) => text(bandRows(withHelper({ ci: { state, at: RUN_AT, ...(state === 'failing' ? { url: RUN_URL } : {}) } }) as any, { ...CI, fields: ['ci'] }, cols).slice(0, 1))
+  expect(row('failing', 200)).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26 \(\d+[dh] ago\) github\.com\/Synx-Data-Labs\/synxdb-build-pipeline\/actions\/runs\/123456$/)
+  expect(row('failing', 60)).not.toContain('github.com')
+  expect(row('passing', 200)).not.toContain('github.com')
+  const rows = bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT, url: RUN_URL }, redci: { n: 3, items: [{ wf: 'Upstream Sync', at: RUN_AT, repo: 'r' }] } }) as any, { ...CI, fields: ['ci'] }, 200)
+  expect(text(rows)).not.toContain('unhandled')
+  expect(text(rows)).not.toContain('Upstream Sync')
   for (const cols of [20, 30, 50, 80, 120, 200]) {
-    for (const row of bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT }, redci: RC }) as any, CI, cols)) expect(row.reduce((n, x) => n + x.text.length, 0)).toBeLessThanOrEqual(Math.max(20, cols - 2))
+    for (const r of bandRows(withHelper({ ci: { state: 'failing', at: RUN_AT, url: RUN_URL } }) as any, CI, cols)) expect(r.reduce((n, x) => n + x.text.length, 0)).toBeLessThanOrEqual(Math.max(20, cols - 2))
   }
-  const green = bandRows(withHelper({ ci: { state: 'passing', at: RUN_AT }, redci: RC }) as any, { ...CI, fields: ['ci'] }, 200)
-  expect(text(green)).toMatch(/✓ passing .* │ ✗ 2 unhandled CI/)
 })
 
 // ---- Slack alerts-check staleness cell ----

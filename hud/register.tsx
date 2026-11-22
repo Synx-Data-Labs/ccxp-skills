@@ -15,7 +15,7 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { CiConfig, HudConfig, Snapshot } from '../types'
-import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, redciRepos, withEnabled } from './config'
+import { DEFAULTS, configPaths, heartbeatPath, mergeConfig, parseConfigText, withEnabled } from './config'
 import { fillStyleFor } from './fill'
 import { EMPTY, compactLine, countJobs, parseHelper, resetEpochSec } from './model'
 import { bandTree, noColorValue, userMessageTree } from './render'
@@ -160,7 +160,7 @@ async function refresh($: any, cfg: HudConfig) {
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
-      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, redci: redciRepos(cfg), ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_alerts: cfg.alerts !== false, queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
+      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_alerts: cfg.alerts !== false, queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
       timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null

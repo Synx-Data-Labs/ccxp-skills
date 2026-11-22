@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Alerts, ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Redci, Snapshot } from '../types'
+import type { Alerts, ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -145,26 +145,15 @@ export function parseHelper(stdout: string): HelperData | null {
     const state = str((c as Record<string, unknown>).state)
     if (CI_STATES.includes(state as CiState)) {
       ci = { state: state as CiState, at: num((c as Record<string, unknown>).at) }
+      // Untrusted: only an exact GitHub run address of a failing run is kept.
+      const u = str((c as Record<string, unknown>).url)
+      if (state === 'failing' && /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/actions\/runs\/\d+$/.test(u)) ci.url = u
       const e = (c as Record<string, unknown>).eta
       if (state === 'running' && typeof e === 'object' && e !== null && !Array.isArray(e)) {
         const eo = e as Record<string, unknown>
         const [start, typ, min, max, count] = [eo.start, eo.typ, eo.min, eo.max, eo.n].map(num)
         if (start > 0 && typ > 0 && min > 0 && max >= min && count >= 3) ci.eta = { start, typ, min, max, n: count }
       }
-    }
-  }
-  const rc = r.redci
-  let redci: Redci | null = null
-  if (typeof rc === 'object' && rc !== null && !Array.isArray(rc)) {
-    // Untrusted: a whole count (0-999) and at most 3 items whose workflow name is printable text; nothing else is ever drawn.
-    const o = rc as Record<string, unknown>
-    if (typeof o.n === 'number' && Number.isFinite(o.n) && o.n >= 0) {
-      const items = (Array.isArray(o.items) ? o.items : [])
-        .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x))
-        .map(x => ({ wf: str(x.wf).replace(/[^ -~]/g, '').slice(0, 40), at: num(x.at), repo: str(x.repo).replace(/[^ -~]/g, '').slice(0, 100) }))
-        .filter(x => x.wf !== '')
-        .slice(0, 3)
-      redci = { n: Math.min(999, Math.floor(o.n)), items }
     }
   }
   const ni = r.nightly
@@ -229,7 +218,6 @@ export function parseHelper(stdout: string): HelperData | null {
     ledger,
     queue,
     ci,
-    redci,
     nightly,
     issues,
     alerts,
@@ -430,7 +418,7 @@ export const isCiRed = (ci: Ci): boolean => ci.state === 'failing'
 
 /**
  * The CI row, alone on the top line: `CI (workflow) ✗ failing 10-28 (2h ago)`, shrinking to `CI ✗ failing 10-28 (2h ago)`,
- * `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗`. Red rows flag every segment `alert` (the renderer draws the row in reverse
+ * `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗`. A red row ends with the failed run's address (no scheme, so terminals link it): `... (2h ago) github.com/o/r/actions/runs/1`; it goes first when narrow. Red rows flag every segment `alert` (the renderer draws the row in reverse
  * video, bold) and the state word `marker`.
  */
 function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
@@ -438,7 +426,7 @@ function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
   const red = isCiRed(ci)
   const date = ci.at > 0 ? ` ${shortDate(ci.at)}` : ''
   const eta = ciEta(ci, nowMs)
-  const mk = (wf: boolean, word: boolean, age: boolean, dateOn: boolean, etaOn = false): Seg[] => {
+  const mk = (wf: boolean, word: boolean, age: boolean, dateOn: boolean, etaOn = false, urlOn = false): Seg[] => {
     const segs: Seg[] = [
       { text: 'CI ', bold: true },
       ...(wf ? [{ text: `(${truncate(workflow, 30)}) `, dim: true }] : []),
@@ -446,40 +434,21 @@ function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
       ...(etaOn && eta ? [{ text: ` ${eta}`, color: look.color }] : []),
       ...(dateOn && date ? [{ text: date, color: look.color }] : []),
       ...(age ? ageSegs(ci.at, nowMs) : []),
+      ...(urlOn && red && ci.url ? [{ text: ` ${ci.url.replace(/^https:\/\//, '')}` }] : []),
     ]
     return red ? segs.map(x => ({ ...x, alert: true, bold: true, dim: false })) : segs
   }
-  return [mk(true, true, true, true, true), mk(false, true, true, true, true), mk(false, false, true, true, true), mk(false, false, false, true), mk(false, false, false, false)]
-}
-
-/**
- * The unhandled-red-CI cell: `✗ 2 unhandled CI (Nightly Orchestrator 11-20, Upstream Sync 11-20)`, shrinking to
- * `✗ 2 unhandled CI`. Every segment is flagged `alert` (reverse video, bold) like a red CI row. Null when
- * nothing is unhandled (or not watching).
- */
-function redciVariants(r: Redci): Variants | null {
-  if (r.n <= 0) return null
-  const flag = (segs: Seg[]): Seg[] => segs.map(x => ({ ...x, alert: true, bold: true, dim: false }))
-  const list = r.items.map(i => `${truncate(i.wf, 24)}${i.at > 0 ? ` ${shortDate(i.at)}` : ''}`).join(', ')
-  const more = r.n > r.items.length ? `, +${r.n - r.items.length}` : ''
-  return [
-    flag([{ text: `✗ ${r.n} unhandled CI`, color: 'error', marker: true }, ...(list ? [{ text: ` (${list}${more})`, color: 'error' }] : [])]),
-    flag([{ text: `✗ ${r.n} unhandled CI`, color: 'error', marker: true }]),
-  ]
+  return [mk(true, true, true, true, true, true), mk(false, true, true, true, true, true), mk(false, false, true, true, true, true), mk(false, false, false, true), mk(false, false, false, false)]
 }
 
 /**
  * The top CI row, or null (nothing configured or answered, or switched off in `fields`). Starts full at every width.
- * The configured workflow's cell and the unhandled-red-CI cell share this one row; the red-CI cell shrinks after the configured workflow's cell loses its optional parts.
+ * It is the one configured CI workflow only (red or green); other workflows are not shown (owner decision d143).
  */
 function ciRow(snap: Snapshot, cfg: HudConfig, width: number, nowMs: number): Seg[] | null {
   const ci = snap.helper?.ci
-  const rv = snap.helper?.redci ? redciVariants(snap.helper.redci) : null
-  const items: Item[] = []
-  if (cfg.ci && ci) items.push({ field: 'ci', variants: ciRowVariants(ci, cfg.ci.workflow, nowMs), at: 0 })
-  if (rv) items.push({ field: 'redci', variants: rv, at: 0 })
-  if (items.length === 0) return null
-  return fitRow(items, ['step:ci', 'step:redci', 'step:ci', 'step:ci', 'step:ci'], width)
+  if (!cfg.ci || !ci) return null
+  return fitRow([{ field: 'ci', variants: ciRowVariants(ci, cfg.ci.workflow, nowMs), at: 0 }], ['step:ci', 'step:ci', 'step:ci', 'step:ci', 'step:ci'], width)
 }
 
 /**

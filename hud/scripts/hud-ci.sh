@@ -2,7 +2,8 @@
 # CI status data for the ccxp-hud band (hud-data.sh sources this).
 #
 # hud-ci-json <repo_root> <ci_config_json> <poll_seconds>
-#   prints {"state":"passing|failing|running|unknown","at":<epoch>[,"eta":{...}]} or "null".
+#   prints {"state":"passing|failing|running|unknown","at":<epoch>[,"url":"<failed run page>"][,"eta":{...}]} or "null".
+#   "url" is there only when the state is failing and gh gave a github.com run address: the owner drills down by hand from it.
 #
 # The CI source is CONFIGURATION, never code: <ci_config_json> is the mod's `ci`
 # block ({"workflow","branch"?,"repo"?}); null or invalid prints "null" and runs
@@ -77,7 +78,7 @@ hci-refresh() {
     branch=$(head -n1 "$tmp" 2>/dev/null | head -c 200)
     hci-valid branch "$branch" || branch=""
   fi
-  if [ -n "$branch" ] && hci-run-timeout "$HCI_TIMEOUT" gh run list --workflow "$wf" --branch "$branch" "${repo_args[@]}" --limit 20 --json status,conclusion,createdAt,startedAt,updatedAt,event >"$tmp" 2>/dev/null; then
+  if [ -n "$branch" ] && hci-run-timeout "$HCI_TIMEOUT" gh run list --workflow "$wf" --branch "$branch" "${repo_args[@]}" --limit 20 --json status,conclusion,createdAt,startedAt,updatedAt,event,url >"$tmp" 2>/dev/null; then
     state=$(jq -c --argjson now "$now" '
       def ts: (. // "") | tostring | fromdateiso8601? // 0;
       def median: sort | length as $n | if $n % 2 == 1 then .[($n - 1) / 2] else ((.[$n / 2 - 1] + .[$n / 2]) / 2 | floor) end;
@@ -93,6 +94,7 @@ hci-refresh() {
                      elif ($r.conclusion | IN("failure", "timed_out", "startup_failure")) then "failing"
                      else "unknown" end),
              at: (($r.createdAt | ts)), fetched: $now}
+            + (if $r.status == "completed" and ($r.conclusion | IN("failure", "timed_out", "startup_failure")) then {url: (($r.url // "") | tostring)} else {} end)
             + (if $r.status == "in_progress" and $start > 0 and ($ds | length) >= 3
                then {eta: {start: $start, typ: ($ds | median), min: ($ds | min), max: ($ds | max), n: ($ds | length)}} else {} end)
         end' "$tmp" 2>/dev/null) || state=""
@@ -153,6 +155,7 @@ hud-ci-json() {
   [ -z "$cached" ] || out=$(jq -c --argjson eta "$eta_on" '
       (.eta // null) as $e
       | {state, at: (.at // 0)}
+        + (if .state == "failing" and ((.url // "") | tostring | test("^https:[/][/]github[.]com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/[0-9]+$")) then {url: .url} else {} end)
         + (if $eta and ($e | type) == "object" and all($e.start, $e.typ, $e.min, $e.max, $e.n; type == "number")
            then {eta: {start: ($e.start | floor), typ: ($e.typ | floor), min: ($e.min | floor), max: ($e.max | floor), n: ($e.n | floor)}} else {} end)
       | select(.state | IN("passing", "failing", "running", "unknown"))' <<<"$cached" 2>/dev/null | head -n1) || out=""

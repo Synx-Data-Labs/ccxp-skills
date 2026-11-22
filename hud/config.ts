@@ -1,10 +1,10 @@
 // ccxp-hud config: pure functions only (no `$`), so the unit tests can pin them.
 // Missing, empty or malformed input always means the defaults, which are ON.
 
-import type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource, RedciConfig } from '../types'
+import type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource } from '../types'
 import { FILL_DEFAULT, parseFillColor } from './fill'
 
-export type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource, RedciConfig }
+export type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource }
 
 export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
@@ -59,24 +59,6 @@ export function parseCi(x: unknown): CiConfig | undefined {
   return out
 }
 
-/** `redci` as `{repos: [owner/name, ...]}` (or a bare array); invalid names are dropped, at most 8 kept; a non-list means unset. An empty list is kept: it switches the cell off. */
-export function parseRedci(x: unknown): RedciConfig | undefined {
-  const raw: unknown = Array.isArray(x) ? { repos: x } : x
-  if (!isRecord(raw) || !Array.isArray(raw.repos)) return undefined
-  const repos: string[] = []
-  for (const r of raw.repos) {
-    const name = typeof r === 'string' ? r.trim() : ''
-    if (REPO_RE.test(name) && !repos.includes(name)) repos.push(name)
-  }
-  return { repos: repos.slice(0, 8) }
-}
-
-/** The repos the red-CI cell watches: the `redci` list when set, else the `ci` repo when it names one, else none (never the session repo). */
-export function redciRepos(cfg: HudConfig): string[] {
-  if (cfg.redci) return cfg.redci.repos
-  return cfg.ci?.repo ? [cfg.ci.repo] : []
-}
-
 export const QUEUE_SOURCES: readonly QueueSource[] = ['working-tree', 'default-branch']
 
 /** `queue` as `{source}` (or a bare source string); an unknown source or shape means unset, which the HUD reads as the default (default-branch). */
@@ -127,7 +109,6 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
     if (typeof raw[key] === 'number' && Number.isFinite(raw[key])) out[key] = raw[key] as number
   }
   if ('ci' in raw) out.ci = parseCi(raw.ci)
-  if ('redci' in raw) out.redci = parseRedci(raw.redci)
   if ('queue' in raw) out.queue = parseQueue(raw.queue)
   if ('issues' in raw) out.issues = parseIssues(raw.issues)
   return out
