@@ -2,6 +2,8 @@ import { expect, test } from 'claude-code/testing'
 
 import { ALL_FIELDS, DEFAULTS, borderOf, ciFromAnswer, cleanAnswer, configPaths, heartbeatPath, mergeConfig, parseCi, parseConfigText, parseIssues, withConfig, withEnabled } from './config'
 import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, fitSegs, stripAnsi, truncateDisplay } from './fill'
+import { findTopic, helpText, parseHelp } from './help'
+import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
 import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, alertsVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
@@ -1829,4 +1831,36 @@ test('config: `alerts` is a boolean switch; the default shows the cell', async (
   expect(DEFAULTS.alerts).toBeUndefined()
   expect(mergeConfig(parseConfigText('{"alerts": false}'), {}).alerts).toBe(false)
   expect(mergeConfig(parseConfigText('{"alerts": "no"}'), {}).alerts).toBeUndefined()
+})
+
+test('parseHelp / helpText: sections, aliases, index, unknown topic, missing source', () => {
+  const src = 'intro\n## overview\nRead it.\n\n## redci | unhandled, red-ci\nFirst line.\nMore.\n'
+  const t = parseHelp(src)
+  expect(t.map(x => x.name)).toEqual(['overview', 'redci'])
+  expect(findTopic(t, '/hud help Unhandled')?.name).toBe('redci')
+  expect(helpText(src, '')).toContain('redci')
+  expect(helpText(src, 'red-ci')).toContain('More.')
+  expect(helpText(src, 'zzz')).toMatch(/no topic "zzz"/)
+  expect(helpText(undefined, '')).toMatch(/could not be read/)
+  expect(parseHelp(null)).toEqual([])
+})
+
+test('configReport: missing files mean defaults; values, sources, invalid and unknown keys are named', () => {
+  const none = configReport({ paths: { user: '/u/ccxp-hud.json', project: '/p/ccxp-hud.json' }, env: { HOME: '/h' } })
+  expect(none).toContain('/u/ccxp-hud.json  missing, so defaults apply')
+  expect(none).toContain('/h/.claude/state/hud-ci')
+  expect(none).toMatch(/alerts\s+unset; default unset \(on\); default/)
+  const some = configReport({
+    paths: { user: '/u/c.json' },
+    userText: '{"version": false, "pollSeconds": 30, "ci": {"workflow": "n.yml", "repo": "a/b"}, "bogus": 1, "ctxWarn": "x"}',
+    env: { CLAUDE_CONFIG_DIR: '/cfg', CCXP_ALERTS: '0' },
+  })
+  expect(some).toMatch(/version\s+false; default true; user file/)
+  expect(some).toMatch(/pollSeconds\s+30;/)
+  expect(some).toContain('n.yml in a/b')
+  expect(some).toContain('unknown keys (ignored): bogus')
+  expect(some).toContain('invalid value (ignored, default used): ctxWarn')
+  expect(some).toContain('/cfg/state/hud-ci')
+  expect(some).toContain('CCXP_ALERTS=0')
+  expect(configReport({ paths: { user: '/u/c.json' }, userText: '{nope', env: {} })).toContain('not valid JSON')
 })

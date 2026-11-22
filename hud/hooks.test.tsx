@@ -19,6 +19,7 @@ const HELPER_AP = JSON.stringify({ ...JSON.parse(HELPER), autopilot: { status: '
 type World = {
   cfg?: string
   projectCfg?: string
+  help?: string
   helper?: { exitCode: number; stdout: string } | 'throw'
   writes: { path: string; text: string }[]
   runs: string[][]
@@ -42,6 +43,7 @@ function world($: any, on: any, w: World) {
   on('fs.read', (_: any, e: any) => {
     if (e.path === '/home/u/.claude/ccxp-hud.json' && w.cfg !== undefined) return { value: w.cfg }
     if (e.path === '/proj/.claude/ccxp-hud.json' && w.projectCfg !== undefined) return { value: w.projectCfg }
+    if (e.path.endsWith('/hud/HELP.md') && w.help !== undefined) return { value: w.help }
     throw new Error('ENOENT')
   })
   on('fs.write', (_: any, e: any) => {
@@ -391,6 +393,36 @@ test('the retired /hud pane is gone: it falls through to the usage line, which d
 })
 
 // --- fill mode ---
+
+test('/hud help prints the index; /hud help <topic> prints one section; neither writes', async ($: any, on: any) => {
+  const w = fresh()
+  w.help = '## overview\nHow to read it.\n\n## alerts | alert\nalerts never checked means no record.\n'
+  world($, on, w)
+  await $.session.start(START)
+  const before = w.writes.length
+  const idx = (await $.command.run({ command: 'hud', args: 'help' })).text
+  expect(idx).toContain('How to read it.')
+  expect(idx).toContain('alerts')
+  expect((await $.command.run({ command: 'hud', args: 'help alert' })).text).toContain('never checked')
+  expect((await $.command.run({ command: 'hud', args: 'help nope' })).text).toMatch(/no topic/)
+  expect(w.writes.length).toBe(before)
+})
+
+test('bare /hud config prints the effective configuration and neither asks nor writes', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"version": false}'
+  world($, on, w)
+  await $.session.start(START)
+  const before = w.writes.length
+  for (const args of ['config', 'config show']) {
+    const out = (await $.command.run({ command: 'hud', args })).text
+    expect(out).toContain('ccxp-hud configuration')
+    expect(out).toContain('/home/u/.claude/ccxp-hud.json  found')
+    expect(out).toContain('/proj/.claude/ccxp-hud.json  missing')
+    expect(out).toMatch(/version\s+false; default true; user file/)
+  }
+  expect(w.writes.length).toBe(before)
+})
 
 test('/hud fill is retired: it is not a subcommand, writes nothing, and the usage line offers config', async ($: any, on: any) => {
   const w = fresh()
