@@ -20,7 +20,7 @@ type: feature
 
 - `/hud` is a mod command (`hud/register.tsx`), not a skill, so help and config are subcommands of it (a `hud` SKILL.md would collide with the command).
 - One source for the help text: `hud/HELP.md`, one `## <topic> | <alias>, ...` section per cell. `/hud help` prints the overview and the topic index, `/hud help <topic>` one section. `hud/README.md` points at it instead of repeating it.
-- Guard: `tests/hud_help.bats` fails when a field in `hud/config.ts` `ALL_FIELDS`, a `case` of `itemFor` in `hud/model.ts` or a cell name in the guard list has no `## ` section in `HELP.md`.
+- Guard: `tests/hud_help.bats` fails when a field in `hud/config.ts` `ALL_FIELDS`, a `case` of `itemFor` in `hud/model.ts` or a cell name in the guard list has no `##` section in `HELP.md`.
 - `/hud config` (bare) prints the effective configuration, read-only: files read (found, missing, invalid), each setting with value, default and where it came from, on/off cells, watched repos, refresh intervals, cache and state dirs, ignored keys. No secrets: only names and paths. The old dialog moves to `/hud config edit` (and `/hud config <url>` keeps working).
 - Logic in two pure modules (`hud/help.ts`, `hud/show.ts`), so tests can drive them with fakes.
 - Plain definitions: "unhandled CI" = a failed run on the default branch or a schedule, any workflow, whose run id is in no open task, no job context file and no ledger entry; "alerts never checked" = no record that the ccxp-agent persona has checked the Slack alert channel (the `last-check` epoch file written by `agent-pairing/scripts/alerts-due.sh` is missing or garbage).
