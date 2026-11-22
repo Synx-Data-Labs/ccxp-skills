@@ -68,22 +68,15 @@ The ccxp-agent persona's Slack alert check. The persona reads the Slack failure-
 - Narrow: `alerts 12m` / `alerts ?`. The cell is left out when `alerts` is false in the config, `CCXP_ALERTS=0`, or this plugin version has no `alerts-due.sh`.
 - Source: local files only, `${CCXP_ALERTS_DIR:-<profile>/ccxp-alerts}/last-check` and `hold`, read by `hud/scripts/hud-alerts.sh`. Switch: `alerts`.
 
-## ci
+## ci | red-ci, unhandled, unhandled-ci
 
-The newest run of the configured workflow (normally the Nightly Orchestrator), alone on a top row: `CI (Nightly Orchestrator) ✗ failing 10-28 (2h ago)`. Owner decision d143 (job r1356) is making the HUD show ONE CI only, with a link to the failed run when red; this section describes that CI cell.
+The one CI the HUD shows: the newest run of the configured workflow (normally the Nightly Orchestrator), alone on a top row: `CI (Nightly Orchestrator) ✗ failing 10-28 (2h ago)`. No other workflow is shown (owner decision d143: "we only need one CI"; drill down manually for more).
 
-- Green `✓ passing`, yellow `◐ running` (with `ETA 18:40` when enough history exists, or `over usual (4h)` when it runs long), grey `? unknown` (cancelled, skipped), red `✗ failing` (also timed out): the whole row turns into a solid red bar.
+- Green `✓ passing`, yellow `◐ running` (with `ETA 18:40` when enough history exists, or `over usual (4h)` when it runs long), grey `? unknown` (cancelled, skipped), red `✗ failing` (also timed out): the whole row becomes a solid red bar that ends with the address of the failed run.
+- Red means the configured workflow's newest run failed, whichever stage or job inside it broke.
 - Date = the run's day (`MM-DD`), then its age.
+- The old cell `✗ N unhandled CI (names)` is gone. It counted failed runs of any workflow on the default branch or a schedule whose run id was in no open task, no job context file and no ledger entry (so nobody was investigating it). Its list is still available by hand: `bash hud/scripts/hud-redci.sh list [owner/name ...]`.
 - Set it with `/hud config edit` (a workflow URL) or the `ci` key; no `ci`, no row and no `gh` call. Source: one cached `gh run list --workflow` (refreshed about every 2 minutes). The first result can take a couple of minutes. Switch: `ci`.
-
-## redci | unhandled, unhandled-ci, red-ci
-
-`✗ 2 unhandled CI (Nightly Orchestrator 11-20, Upstream Sync 11-20)`: failed CI that nobody is investigating. NOTE: decision d143 (job r1356) removes this cell; this section stays only while the code still draws it, and goes away with it.
-
-- "Unhandled CI" = a failed run, in the last 7 days, on the repo's default branch or from a schedule, of ANY workflow (not only the one in `ci`), whose run id appears in no open task (`dev/TODO`), no job context file (`ccxp-context/`) and no job ledger entry. Nothing mentions the run, so nobody is on it. Failures on PR branches do not count.
-- Also dropped when a later run of the same workflow on the same branch succeeded (superseded). Manual runs (`workflow_dispatch`) on the default branch count.
-- It disappears once somebody takes the failure on: the dispatcher writes the run id into the job's context file or the task. To see which runs, run `bash hud/scripts/hud-redci.sh list`: one line per run (id, workflow, event, branch, age, URL).
-- Which repos: `redci.repos` in the config, else the repo of `ci`; never the session repo. Same red row as `ci`. Source: cached `gh run list` per repo, refreshed at most every 5 minutes. Narrow: `✗ 2 unhandled CI`. Switch: `ci` (shares its row).
 
 ## version | ver
 
