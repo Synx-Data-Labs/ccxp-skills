@@ -33,7 +33,7 @@ function summary(body: string): string {
 
 /** The topic named `query` (case-insensitive, name or alias; a leading `/` or `hud ` is ignored), or undefined. */
 export function findTopic(topics: HelpTopic[], query: string): HelpTopic | undefined {
-  const q = query.trim().toLowerCase().replace(/^\/?(hud\s+)?/, '').replace(/\s+/g, '-')
+  const q = query.trim().toLowerCase().replace(/^\/?(hud\s+)?(help\s+)?/, '').replace(/\s+/g, '-')
   return topics.find(t => t.name === q || t.aliases.includes(q) || t.aliases.map(a => a.replace(/\s+/g, '-')).includes(q))
 }
 
