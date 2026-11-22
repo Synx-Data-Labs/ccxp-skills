@@ -147,6 +147,23 @@ EOT
   [ "$(wc -l < "$GH_LOG")" -eq 2 ]
 }
 
+@test "a failing run carries its github.com run url; passing, running and non-github or malformed urls carry none" {
+  local repo; repo=$(_make_repo r-url)
+  _fake_gh '[{"status":"completed","conclusion":"failure","createdAt":"2026-10-27T03:00:00Z","url":"https://github.com/acme/widgets/actions/runs/123456"}]'
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = failing ]
+  [ "$(jq -r .ci.url <<<"$output")" = "https://github.com/acme/widgets/actions/runs/123456" ]
+  rm -f "$HUD_CI_STATE_DIR"/*.json
+  _fake_gh '[{"status":"completed","conclusion":"failure","createdAt":"2026-10-27T03:00:00Z","url":"https://evil.example/actions/runs/1"}]'
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r .ci.state <<<"$output")" = failing ]
+  [ "$(jq -r '.ci | has("url")' <<<"$output")" = false ]
+  rm -f "$HUD_CI_STATE_DIR"/*.json
+  _fake_gh '[{"status":"completed","conclusion":"success","createdAt":"2026-10-27T03:00:00Z","url":"https://github.com/acme/widgets/actions/runs/9"}]'
+  run _hud_ci "$repo" '{"workflow":"w.yml"}'
+  [ "$(jq -r '.ci | has("url")' <<<"$output")" = false ]
+}
+
 @test "a dead (old) lock is cleared so the refresh runs again; a fresh lock blocks it" {
   local repo; repo=$(_make_repo r-lock)
   _fake_gh "$OK_RUN"
