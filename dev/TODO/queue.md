@@ -65,3 +65,4 @@ reprioritize.
 - [T20261120-154507](T20261120-154507-persona-autopilot-health-red-and-restart.md): Autopilot health - overdue autopilot is red and offers a restart (n362 step 4)
 - [T20261120-105513](T20261120-105513-persona-idle-wake-readonly-checks.md): Persona idle wake with read-only alert and CI checks (n362 step 5)
 - [T20261120-160823](T20261120-160823-flaky-lock-bats-tests-on-ci.md): Flaky lock bats tests on CI (ledger concurrent adds, autopilot state lock)
+- [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config

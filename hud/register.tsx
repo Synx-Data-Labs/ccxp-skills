@@ -20,6 +20,8 @@ import { fillStyleFor } from './fill'
 import { EMPTY, compactLine, countJobs, parseHelper, resetEpochSec } from './model'
 import { bandTree, noColorValue, userMessageTree } from './render'
 import { configureHud } from './configure'
+import { helpText } from './help'
+import { ENV_NAMES, configReport } from './show'
 
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
 const configAtom = atom({ plugin: 'ccxp-skills', key: 'config' } as const, DEFAULTS)
@@ -265,7 +267,7 @@ export const register: Register = on => {
       if (!mem.started) {
         mem.started = true
         try {
-          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | config' })
+          await $.command.register({ name: 'hud', description: 'ccxp-hud: on | off | status | details | config | help' })
         } catch {
           /* the command is optional */
         }
@@ -319,7 +321,13 @@ export const register: Register = on => {
     const rawArgs = String((e as any).args ?? '').trim()
     // `/hud config <url>`: the text after `config` (quotes or not) is the CI answer; everything else is matched on the first word only.
     const configRest = /^config(?:\s+([\s\S]*))?$/i.exec(rawArgs)
-    const arg = configRest ? 'config' : rawArgs.toLowerCase()
+    const helpRest = /^help(?:\s+([\s\S]*))?$/i.exec(rawArgs)
+    // `/hud config` alone, or `/hud config show`, prints the effective configuration; `edit` or a URL opens the dialog.
+    const cfgArg = (configRest?.[1] ?? '').trim()
+    const editMatch = /^edit\b\s*([\s\S]*)$/i.exec(cfgArg)
+    const isShow = cfgArg === '' || cfgArg.toLowerCase() === 'show'
+    const dialogCi = (editMatch ? editMatch[1] : cfgArg).trim() || undefined
+    const arg = helpRest ? 'help' : configRest ? (isShow ? 'configshow' : 'config') : rawArgs.toLowerCase()
     try {
       const env = await envPaths($)
       const file = configPaths(env).user
@@ -349,6 +357,33 @@ export const register: Register = on => {
             : 'ccxp-hud details off: back to the one-line band.',
         }
       }
+      if (arg === 'help') {
+        let source: string | undefined
+        try {
+          source = await $.fs.read(`${$.plugin.root}/hud/HELP.md`)
+        } catch {
+          source = undefined
+        }
+        return { text: helpText(source, (helpRest?.[1] ?? '').trim()) }
+      }
+      if (arg === 'configshow') {
+        let root: string | undefined
+        try {
+          root = await $.session.root()
+        } catch {
+          root = undefined
+        }
+        const paths = configPaths(env, root)
+        const vars: Record<string, string | undefined> = {}
+        for (const name of ENV_NAMES) {
+          try {
+            vars[name] = (await $.env.get(name)) || undefined
+          } catch {
+            vars[name] = undefined
+          }
+        }
+        return { text: configReport({ paths, userText: await readText($, paths.user), projectText: await readText($, paths.project), env: vars }) }
+      }
       if (arg === 'config') {
         let root: string | undefined
         try {
@@ -361,12 +396,12 @@ export const register: Register = on => {
           paths: configPaths(env, root),
           read: path => readText($, path),
           write: (path, body) => $.fs.write(path, body),
-        }, { ci: configRest?.[1] })
+        }, { ci: dialogCi })
         await loadConfig($)
         return { text }
       }
       const cfg = await read($, configAtom)
-      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | config` }
+      return { text: `ccxp-hud is ${cfg.enabled ? 'on' : 'off'}. Config: ${file ?? '(unknown)'}. Usage: /hud on | off | status | details | config [edit] | help [topic]` }
     } catch {
       return { text: 'ccxp-hud: something went wrong; the session is unaffected.' }
     }
