@@ -1781,7 +1781,7 @@ test('CI url: a failing run keeps only an exact github.com run address; other st
   for (const bad of ['http://github.com/o/r/actions/runs/1', 'https://evil.example/o/r/actions/runs/1', `${RUN_URL}\u001b[31m`, `${RUN_URL}/x`, 5, null]) expect(ci('failing', bad)).toEqual({ state: 'failing', at: RUN_AT })
 })
 
-test('CI row: red ends with the run address (no scheme), it is the first thing to drop when narrow; green shows none; no other workflow is drawn (d143)', async () => {
+test('CI row: red ends with the run address (no scheme), it survives the workflow-name and state-word shrinks and is gone at 60 columns; green shows none; no other workflow is drawn (d143)', async () => {
   const row = (state: string, cols: number) => text(bandRows(withHelper({ ci: { state, at: RUN_AT, ...(state === 'failing' ? { url: RUN_URL } : {}) } }) as any, { ...CI, fields: ['ci'] }, cols).slice(0, 1))
   expect(row('failing', 200)).toMatch(/^CI \(nightly\.yml\) ✗ failing 10-26 \(\d+[dh] ago\) github\.com\/Synx-Data-Labs\/synxdb-build-pipeline\/actions\/runs\/123456$/)
   expect(row('failing', 60)).not.toContain('github.com')

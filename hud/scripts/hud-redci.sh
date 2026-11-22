@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unhandled red-CI count for the ccxp-hud band (hud-data.sh sources this).
+# Unhandled failed-run list, a manual drill-down tool. The ccxp-hud band no longer uses it (owner decision d143: the band shows the configured CI only).
 #
 # hud-redci-json <repos_json_array> <poll_seconds> [todo_dir]
 #   prints {"n":N,"items":[{"wf","at","repo","id","ev","br","url"}...]} (newest first, at most 3 items) or "null".
@@ -18,8 +18,7 @@
 # Cost: per repo one `gh run list --status <s>` for each of failure, timed_out and startup_failure (gh treats them
 # as separate statuses) per refresh, plus (only when something failed) one `gh repo view` and, per distinct failing (workflow, branch) pair (at most HRC_MAX_PAIRS = 20), one `gh run list --workflow <id> --branch <b> --status success --limit 1`
 # (a repo-wide success window loses the successes of workflows that ran long ago on a busy repo, so superseded failures stayed counted). Refreshes are at most every HRC_MIN_TTL (300 s,
-# or the poll when longer), detached, 5 s timeout per call, lock dir per repo. The HUD never calls gh
-# per redraw: it prints the cache at once.
+# or the poll when longer), detached, 5 s timeout per call, lock dir per repo. It answers from the cache at once.
 #
 # gh JSON is untrusted: only numbers, an enumerated repo name and a printable, truncated workflow name
 # survive the jq mapping. Arguments go to gh as an argv array, never through a shell string. gh missing,

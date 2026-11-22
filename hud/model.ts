@@ -418,7 +418,7 @@ export const isCiRed = (ci: Ci): boolean => ci.state === 'failing'
 
 /**
  * The CI row, alone on the top line: `CI (workflow) ✗ failing 10-28 (2h ago)`, shrinking to `CI ✗ failing 10-28 (2h ago)`,
- * `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗`. A red row ends with the failed run's address (no scheme, so terminals link it): `... (2h ago) github.com/o/r/actions/runs/1`; it goes first when narrow. Red rows flag every segment `alert` (the renderer draws the row in reverse
+ * `CI ✗ 10-28 (2h ago)`, `CI ✗ 10-28`, `CI ✗`. A red row ends with the failed run's address (no scheme, so terminals link it): `... (2h ago) github.com/o/r/actions/runs/1`; the workflow name and the state word go before it, and it drops together with the ETA when nothing else can shrink. Red rows flag every segment `alert` (the renderer draws the row in reverse
  * video, bold) and the state word `marker`.
  */
 function ciRowVariants(ci: Ci, workflow: string, nowMs: number): Variants {
