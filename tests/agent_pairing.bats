@@ -627,7 +627,7 @@ install_outdated_agent() {
   grep -q 'ignore PR-branch runs' "$f"
   grep -q '`/rca <run>`' "$f"
   grep -q '`/new-task`' "$f"; grep -q '`/top`' "$f"; grep -q '`/drive`' "$f"
-  grep -q 'at most 3 such jobs per turn' "$f"
+  grep -q 'at most N such jobs per turn, N from `bash <plugin-dir>/agent-pairing/scripts/ci-job-cap.sh` (default 6)' "$f"
   grep -q 'never re-dispatch the same run id' "$f"
   grep -q 'no background watcher exists' "$f"
   grep -q 'must not publish, promote, tag or release' "$f"
