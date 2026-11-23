@@ -41,7 +41,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - [ ] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
 - [ ] 4. T20261123-292735 `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
 - [ ] 5. T20261123-244661 HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
-- [ ] 6. T20261123-212153 `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
+- [ ] 6. T20261123-212153 `watch` wake behaviour (`asyncRewake`) and the `Stop` wake entry in `hooks/hooks.json`; step 3's `SessionStart` watch entry carries the same `async`/`asyncRewake` flags
 
 ## Acceptance criteria (testing plan)
 
