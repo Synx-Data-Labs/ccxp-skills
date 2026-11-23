@@ -13,6 +13,10 @@
 #            or the session ended and never fired it) the next `plan` schedules again. `plan --wake` is for the
 #            `[idle-wake]` wake itself: the wake that just fired is the recorded one, so it ignores the pending
 #            record and schedules the next wake at once (without it the chain would stop after the first wake).
+#            `plan --wake` also runs the cross-account bus fallback (T20261123-212153): it asks `_bus/bus.sh deliver` for unread
+#            notes and prints them, wrapped and labeled as another agent's words, on STDERR (stdout stays "schedule <n>"), so a
+#            note whose asyncRewake watcher never fired still arrives within one idle-wake interval (30 minutes at worst).
+#            Silent when the bus is not configured for the profile, nothing is unread, or anything fails.
 #   status   one line: "enabled|disabled <reason>" and the recorded next wake epoch (0 = none).
 #
 # Opt-out: CCXP_IDLE_WAKE=0, or {"enabled": false} in ${CCXP_IDLE_DIR:-<profile dir>/ccxp-idle}/config.json.
@@ -64,9 +68,20 @@ function iw-next() {
   echo "$((10#$v))"
 }
 
+# The bus fallback of `plan --wake`: unread notes of this profile, wrapped, on stderr. Never fails the plan.
+function iw-bus-notes() {
+  local bus="$_IW_DIR/../../_bus/bus.sh" out
+  [ -r "$bus" ] || return 0
+  out="$(bash "$bus" deliver --event IdleWake </dev/null 2>/dev/null)" || return 0
+  [ -n "$out" ] || return 0
+  jq -r '.hookSpecificOutput.additionalContext // empty' <<<"$out" >&2 2>/dev/null || true
+  return 0
+}
+
 function iw-plan() {
   local dir now next gap why wake=0
   [ "${1:-}" != --wake ] || wake=1
+  [ "$wake" = 0 ] || iw-bus-notes
   why="$(iw-disabled)"
   [ -z "$why" ] || return 1
   iw-autopilot-on && return 1

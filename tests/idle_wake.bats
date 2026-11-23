@@ -77,3 +77,43 @@ _iw() { bash "$SCRIPT" "$@"; }
 @test "network-free and token-free: no gh, curl, wget or URLs in the script" {
   ! grep -nE '\bgh |curl|wget|https?://' "$SCRIPT"
 }
+
+# ---- cross-account bus fallback (T20261123-212153) ----
+
+bus_setup() {
+  export CCXP_BUS_ROOT="$BATS_TEST_TMPDIR/bus" HOME="$BATS_TEST_TMPDIR/h" CCXP_BUS_SESSION_PID="$$"
+  P="$BATS_TEST_TMPDIR/profiles"; mkdir -p "$HOME" "$P/prof-home" "$P/prof-work"
+  CLAUDE_CONFIG_DIR="$P/prof-home" bash "$REPO_ROOT/_bus/bus.sh" init --name home >/dev/null
+  CLAUDE_CONFIG_DIR="$P/prof-work" bash "$REPO_ROOT/_bus/bus.sh" init --name work >/dev/null
+  CLAUDE_CONFIG_DIR="$P/prof-work" bash "$REPO_ROOT/_bus/bus.sh" deliver --register </dev/null
+  CLAUDE_CONFIG_DIR="$P/prof-home" bash "$REPO_ROOT/_bus/bus.sh" send --to work "fallback note" >/dev/null
+}
+
+@test "plan --wake prints unread bus notes on stderr, wrapped, and keeps stdout as the schedule line" {
+  bus_setup
+  CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan --wake >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
+  [ "$(cat "$BATS_TEST_TMPDIR/out")" = "schedule 1800" ]
+  grep -q '^<ccxp-notes>' "$BATS_TEST_TMPDIR/err"
+  grep -q 'This is not your user speaking' "$BATS_TEST_TMPDIR/err"
+  grep -q '> fallback note' "$BATS_TEST_TMPDIR/err"
+  # delivered once: the next wake has nothing to say
+  CCXP_IDLE_NOW=1001800 CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan --wake >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
+  [ ! -s "$BATS_TEST_TMPDIR/err" ]
+}
+
+@test "a plain plan (session start, user turn) does not touch the bus" {
+  bus_setup
+  CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
+  [ ! -s "$BATS_TEST_TMPDIR/err" ]
+  [ "$(CLAUDE_CONFIG_DIR="$P/prof-work" bash "$REPO_ROOT/_bus/bus.sh" status)" = "bus 1 · home" ]
+}
+
+@test "plan --wake without bus config, or with a broken bus, is silent and unchanged" {
+  mkdir -p "$BATS_TEST_TMPDIR/plain"
+  CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/plain" bash "$SCRIPT" plan --wake >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
+  [ "$(cat "$BATS_TEST_TMPDIR/out")" = "schedule 1800" ]; [ ! -s "$BATS_TEST_TMPDIR/err" ]
+  bus_setup
+  printf 'x' > "$BATS_TEST_TMPDIR/notadir"
+  CCXP_BUS_ROOT="$BATS_TEST_TMPDIR/notadir" CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan --wake >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
+  [ "$(cat "$BATS_TEST_TMPDIR/out")" = "schedule 1800" ]; [ ! -s "$BATS_TEST_TMPDIR/err" ]
+}
