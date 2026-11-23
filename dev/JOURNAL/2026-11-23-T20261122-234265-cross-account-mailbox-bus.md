@@ -83,4 +83,3 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - Default taken where the spec was silent: both directions are allowed without a prompt; the only knobs are `name`, `label`, `retention_days` and `allow_from` in `<profile>/ccxp-bus/config.json`.
 - Left open on purpose (need two real accounts): the live wake and the live smoke above. Setup for the owner: `bus.sh init --name <name>` once per profile, then restart each session.
 - Open points carried over: the work/personal boundary rests on the label and the owner's organization policy; what Claude sees from a `Stop` hook's `reason` was not needed (the watcher uses stderr and exit 2).
-
