@@ -1,5 +1,6 @@
 ---
 status: In Progress
+scheduled: 2026-11-23
 estimation: 1
 source: Owner request 2026-11-22 (cross-message spec)
 type: feature
