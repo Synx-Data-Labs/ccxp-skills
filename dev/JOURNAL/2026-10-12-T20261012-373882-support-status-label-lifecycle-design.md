@@ -317,13 +317,13 @@ For the record, the candidates considered:
 
 | Candidate | Rationale |
 |---|---|
-| **`/customer-support` (DECIDED — the owner's suggestion, confirmed by him naming it this way)** | Clearest in plain English. Accepted risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded — outweighed by the owner's explicit, repeated use of the name. |
+| **`/customer-support` (DECIDED — the owner's suggestion, confirmed by the owner naming it this way)** | Clearest in plain English. Accepted risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded — outweighed by the owner's explicit, repeated use of the name. |
 | `/support-lifecycle` (previously recommended, not chosen) | Names the mechanism precisely — the label-driven state machine this task designs. Lowest ambiguity/collision risk. Matches this repo's existing descriptive kebab-case naming (`close-support-issue`, `new-task`, `address-pr`). |
 | `/support-ops` (not chosen) | Short; frames it as the action/operations skill (do the next lifecycle step) vs. `/to-task`'s passive intake. Less self-explanatory than `/support-lifecycle` without reading its description line. |
 
 ### Projects-board retirement — DEFERRED, pending leadership decision
 
-**Not actioned by this task.** the owner: *"we are pending for tonight's
+**Not actioned by this task.** The owner: *"we are pending for tonight's
 leadership meeting before we retire it."* This section is a complete,
 ready-to-execute recommendation — written now so no re-research is needed
 once approved — but nothing in it should be done until that decision lands.
