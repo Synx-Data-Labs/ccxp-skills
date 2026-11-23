@@ -31,7 +31,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 | Retention | 14 days; lasting context goes in repo journals |
 | Platforms | Linux and macOS only |
 | work to home prompt | None; notes go without asking |
-| Company policy | Owner decides, as cofounder |
+| Company policy | Owner decides |
 
 ## Build order
 
@@ -68,7 +68,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 ## Open points
 
 - Spike items are recorded as confirmed in the spec; re-run only if behaviour is in doubt
-- Work/personal boundary on a company laptop: personal-account notes sit on a company device; owner's company policy is the default until changed
+- Work/personal boundary: notes of one account sit on the same device as the other account; the owner's organization policy is the default until changed
 - `home -> work` direction "configurable" is unspecified (no config shape defined)
 - Not confirmed in spec: what Claude sees from a `Stop` hook's `reason`
 - Fallback if `asyncRewake` proves unreliable: `idle-wake.sh` also runs `bus.sh deliver` (30 min worst case)

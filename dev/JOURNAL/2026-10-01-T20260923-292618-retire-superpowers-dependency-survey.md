@@ -1,7 +1,7 @@
 ---
 status: Done
 estimation: 3
-source: conversation with @shine, 2026-09-23
+source: conversation with the owner, 2026-09-23
 claimed_by:
 claimed_role:
 scheduled: 2026-09-28

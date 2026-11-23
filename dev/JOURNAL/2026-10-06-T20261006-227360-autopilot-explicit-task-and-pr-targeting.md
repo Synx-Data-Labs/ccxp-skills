@@ -1,7 +1,7 @@
 ---
 status: Done
 estimation: 1
-source: conversation with Shine Zhang, 2026-10-06
+source: conversation with the owner, 2026-10-06
 related: T20260919-266165
 claimed_by:
 claimed_role:

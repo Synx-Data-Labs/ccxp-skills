@@ -3,7 +3,7 @@ status: Done
 estimation: 1
 claimed_by:
 scheduled: 2026-10-12
-source: this conversation, 2026-10-12 (Shine: formalize the synxdb-support issue lifecycle via GitHub labels; 4 follow-up decisions on top of a same-night design draft)
+source: this conversation, 2026-10-12 (the owner: formalize the synxdb-support issue lifecycle via GitHub labels; 4 follow-up decisions on top of a same-night design draft)
 related: [T20261012-333879, T20261012-109735, T20261012-383399, T20261012-278418]
 description: Design for /customer-support, a label-driven synxdb-support lifecycle skill, plus a /support -> /to-task intake rename+generalization
 claimed_role:
@@ -34,7 +34,7 @@ claimed_role:
 - **Latest iteration (this pass)**: `/support` itself is renamed and
   generalized to `/to-task` (any URL → a task, not just a synxdb-support
   issue); the lifecycle skill's name is **decided: `/customer-support`**
-  (Shine named it directly in a live follow-up — see § 6); and
+  (the owner named it directly in a live follow-up — see § 6); and
   `synxdb-build-pipeline`'s existing `close-support-issue` skill's overlap
   with this design's delivery/links/accept logic is **resolved**:
   `close-support-issue` Phase 4 will call `/customer-support` instead of
@@ -101,7 +101,7 @@ claimed_role:
   `dev/JOURNAL/`) is the hook `/customer-support` reuses to find the task file
   backing an issue — no new correlation mechanism needed.
 - **Partner download links (added after the first pass of this design, per
-  Shine's live feedback on tonight's SynxDB4 4.5.4 release):**
+  the owner's live feedback on tonight's SynxDB4 4.5.4 release):**
   - `synxdb-build-pipeline` already has the right tooling —
     `scripts/release/partner-download-url.sh` (resolves one artifact's real
     Cloudsmith `cdn_url` for a given entitlement token; `cdn_url` is **not**
@@ -210,7 +210,7 @@ claimed_role:
 | *(any pre-close state)* | `+blocked` | add + required comment | blocked on a dependency or customer info | anyone, `block` |
 | `blocked` | *(primary unchanged)* | remove | unblocked | anyone, `unblock` |
 | *(any pre-close state)* | `+needs-upstream` | add + GitLab link comment | fix depends on upstream R&D | engineer, `needs-upstream` |
-| Accepted (closed) | — | **none** | regression found later | support files a **brand-new issue**, optionally cross-referencing the old one in its body — no same-issue reopen, no time-window rule (Shine: "case by case, support always opens a new issue") |
+| Accepted (closed) | — | **none** | regression found later | support files a **brand-new issue**, optionally cross-referencing the old one in its body — no same-issue reopen, no time-window rule (the owner: "case by case, support always opens a new issue") |
 
 ### 3. `/customer-support` subcommands
 
@@ -249,7 +249,7 @@ Sibling skill to `/support` (which stays intake-only); argument shape
 
 ### 5. `/support` → `/to-task`: rename + generalize intake
 
-Shine: *"rename the existing skill `/support` to `/to-task`, and it will take
+The owner: *"rename the existing skill `/support` to `/to-task`, and it will take
 any URL [and] convert it into our task [tracking system]."* This is a scope
 change to `/support` itself, not part of the lifecycle skill above — called
 out here because `/support` is the correlation mechanism `/customer-support`
@@ -305,7 +305,7 @@ out here because `/support` is the correlation mechanism `/customer-support`
 
 ### 6. Naming the lifecycle skill — DECIDED: `/customer-support`
 
-**Resolved 2026-10-12.** In a live follow-up, Shine referred to this task as
+**Resolved 2026-10-12.** In a live follow-up, the owner referred to this task as
 "the follow-up on the `/customer-support` skill (where `/support` renamed to
 `/to-task`)" — naming it directly, which settles the open question in favor
 of his original suggestion over the recommended alternative. The skill ships
@@ -317,13 +317,13 @@ For the record, the candidates considered:
 
 | Candidate | Rationale |
 |---|---|
-| **`/customer-support` (DECIDED — Shine's suggestion, confirmed by him naming it this way)** | Clearest in plain English. Accepted risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded — outweighed by Shine's explicit, repeated use of the name. |
+| **`/customer-support` (DECIDED — the owner's suggestion, confirmed by him naming it this way)** | Clearest in plain English. Accepted risk: reads as a broad "help a customer" skill rather than specifically "drive this issue's lifecycle labels," and reintroduces "support" right after renaming `/support` away for being overloaded — outweighed by the owner's explicit, repeated use of the name. |
 | `/support-lifecycle` (previously recommended, not chosen) | Names the mechanism precisely — the label-driven state machine this task designs. Lowest ambiguity/collision risk. Matches this repo's existing descriptive kebab-case naming (`close-support-issue`, `new-task`, `address-pr`). |
 | `/support-ops` (not chosen) | Short; frames it as the action/operations skill (do the next lifecycle step) vs. `/to-task`'s passive intake. Less self-explanatory than `/support-lifecycle` without reading its description line. |
 
 ### Projects-board retirement — DEFERRED, pending leadership decision
 
-**Not actioned by this task.** Shine: *"we are pending for tonight's
+**Not actioned by this task.** the owner: *"we are pending for tonight's
 leadership meeting before we retire it."* This section is a complete,
 ready-to-execute recommendation — written now so no re-research is needed
 once approved — but nothing in it should be done until that decision lands.
@@ -398,7 +398,7 @@ once approved — but nothing in it should be done until that decision lands.
 - [x] `links`/`deliver` correctly bridge `.env`'s `ENTITLEMENT_TOKEN` to
       `SYNX_PARTNER_TOKEN` and never hand-construct a Cloudsmith URL.
 - [ ] Projects-board section stays a pure recommendation — **not executed**
-      until Shine confirms the leadership-meeting decision; that confirmation
+      until the owner confirms the leadership-meeting decision; that confirmation
       is a separate follow-up (new task or a comment here), not implied by
       this task closing. **Still open, deliberately** — left unchecked
       because the decision itself hasn't landed, not because of any gap in
@@ -420,7 +420,7 @@ once approved — but nothing in it should be done until that decision lands.
   (see § 6).
 - ~~close-support-issue reconciliation~~ — RESOLVED: see Context §
   "Cross-repo overlap found", tracked as `synxdb-build-pipeline#T20261012-612044`.
-- Q3 (blocked on Shine, not on design): whether the Projects-board
+- Q3 (blocked on the owner, not on design): whether the Projects-board
   recommendation above is approved, archived-as-is, or rejected — pending
   tonight's leadership meeting. Nothing in this task's Done criteria depends
   on the answer landing first. **Still open** — not actioned by this task.
@@ -435,7 +435,7 @@ once approved — but nothing in it should be done until that decision lands.
   `/to-task` generalization): updated 2026-10-12 to move their planned
   `report`/`status`/`stop` subcommands from `/support` to `/customer-support`.
 - Projects-board retirement: **blocked on the pending leadership decision**
-  (Q3) — do not action until Shine confirms the outcome of tonight's meeting.
+  (Q3) — do not action until the owner confirms the outcome of tonight's meeting.
 
 ## Amendment (2026-10-21, T20261021-266225)
 
@@ -464,7 +464,7 @@ Shipped across four PRs, three repos:
 
 **What's met**: every Done criterion above is checked except the
 Projects-board recommendation, which is deliberately still open pending
-Shine's confirmation of tonight's leadership-meeting outcome — not a gap in
+The owner's confirmation of tonight's leadership-meeting outcome — not a gap in
 this task's work.
 
 **What's external/unverified**: the live end-to-end backfill walk

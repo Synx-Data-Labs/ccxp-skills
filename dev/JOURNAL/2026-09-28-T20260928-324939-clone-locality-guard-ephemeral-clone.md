@@ -3,7 +3,7 @@ status: Done
 estimation: 1
 source: 2026-09-28 conversation — /drive T20260408-359583 session worked from an existing sibling clone (build-pipeline-repo) instead of a fresh ephemeral one, on the clone-locality guard's own advice
 related: T20260513-403409 (Phase 1.5 ephemeral-clone design), T20260513-422869 (removed claims machinery on the "own clone" premise), T20260626-298293 (added the clone-locality guard)
-owner: Shine
+owner: owner
 ---
 
 # T20260928-324939: Clone-locality guard tells you to `cd` into a sibling's existing clone — contradicts the 2026-05-13 "always your own clone" decision

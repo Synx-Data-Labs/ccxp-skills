@@ -31,7 +31,7 @@ The bus ships inside the ccxp-skills plugin as one script plus one skill, the wa
 
 - The hooks need a script anyway, so sending and delivering share one code path and one bats suite.
 - Every ccxp-skills capability is skill plus bash today; an MCP server would add a process per session and a second language.
-- No permission prompt on work-to-home sends (Shine's call, Nov 22). A Bash `ask` rule on `bus.sh send --to home` could add one later if he wants it.
+- No permission prompt on work-to-home sends (owner's call, Nov 22). A Bash `ask` rule on `bus.sh send --to home` could add one later if the owner wants it.
 - Revisit a tool only if typed arguments or structured results become worth running a server.
 
 | Command | Called by | Does |
@@ -40,7 +40,7 @@ The bus ships inside the ccxp-skills plugin as one script plus one skill, the wa
 | `deliver [--register]` | `SessionStart`, `UserPromptSubmit` hooks | Prints unread notes as hook JSON |
 | `watch` | async hook | Waits for a note, then wakes the idle session |
 | `status` | HUD | One line: unread count and newest sender |
-| `read [--thread <id>]` | Claude or Shine | History from inbox and archives |
+| `read [--thread <id>]` | Claude or the owner | History from inbox and archives |
 | `prune [--days 14]` | `deliver`, once a day | Rotates and deletes old archives |
 
 **Identity from the profile.** The two accounts run as two `CLAUDE_CONFIG_DIR` profiles, and `_session/profile-dir.sh` already resolves `CCXP_PROFILE_DIR`. The agent name lives in `<profile>/ccxp-bus/config.json` (`{"name":"work"}`), else the profile folder's base name. The bus root `~/.ccxp/bus/` sits outside both profiles so both reach it.
@@ -77,7 +77,7 @@ Each Claude Code profile (`CLAUDE_CONFIG_DIR`) is one named agent, `work` or `ho
 ```
 
 - **Register:** at session start the agent adds or refreshes its entry in `agents.json` (under that file's lock) and creates its inbox if missing. Each hook run updates `last_seen`.
-- **Label:** a free-text label the user picks ("work laptop session"). Never the account email.
+- **Label:** a free-text label the user picks ("work session"). Never the account email.
 - **Unknown recipient:** `send` fails and lists the registered names.
 - **One live session per name, enforced:** if the registered `pid` for a name is still alive, a second session on that profile gets the bus switched off, with a one-line warning, instead of splitting the inbox.
 
@@ -165,7 +165,7 @@ Fallback if the spike shows `asyncRewake` can't do this: ccxp-agent's existing I
 
 - `additionalContext` and `systemMessage` are each capped at 10,000 characters; past that, Claude gets only a file path and a 2,000-character preview. So one note is capped at 4,000 characters and one delivery at 8,000, with "N more waiting" for the rest.
 - The plugin's hooks run with a 5 s timeout, so `deliver` waits at most 1 s for the lock, then skips this turn and tries the next.
-- Command hooks default to a 600 s timeout. Shine's Nov 22 test showed it applies to async hooks too: a timed-out watcher is killed quietly and nothing re-arms it until the next turn ends. So the watcher entries set a long timeout (8 hours, 28800 s) and the watcher exits 0 a minute before it; past that, ccxp's 30-minute idle wake picks up any note.
+- Command hooks default to a 600 s timeout. The owner's Nov 22 test showed it applies to async hooks too: a timed-out watcher is killed quietly and nothing re-arms it until the next turn ends. So the watcher entries set a long timeout (8 hours, 28800 s) and the watcher exits 0 a minute before it; past that, ccxp's 30-minute idle wake picks up any note.
 
 **What Claude sees**
 
@@ -212,12 +212,12 @@ An incoming note is a colleague's message to weigh, never a command: the bus car
 
 The bus is a path from the work account to the personal one, so it gets guard rails by direction:
 
-- **work → home:** allowed without a prompt (Shine's call as cofounder, Nov 22). The home side's label still tells that session not to copy work notes into its memory, files or other tools.
+- **work → home:** allowed without a prompt (the owner's call, Nov 22). The home side's label still tells that session not to copy work notes into its memory, files or other tools.
 - **home → work:** allowed without a prompt by default; configurable.
 - **Storage on the home side:** the injected label tells the home session not to copy notes from `work` into its memory, files or other tools. Archives keep 14 days; lasting context belongs in the repo's journals (`dev/JOURNAL`).
-- **Device:** if this is a work laptop, the personal account's notes sit on a company device too.
+- **Device:** the notes of one account sit on the same device as the other account's files; check that this fits your organization's device policy.
 
-Policy: Shine, as Synx Data's cofounder, sets the company rule here. These guard rails are the defaults until he changes them.
+Policy: the owner sets the organization's rule here. These guard rails are the defaults until the owner changes them.
 
 ## Failure modes
 
@@ -252,7 +252,7 @@ Policy: Shine, as Synx Data's cofounder, sets the company rule here. These guard
 
 ## Decisions and open questions
 
-Shine settled these on Nov 22, 2026, and the sections above follow them.
+The owner settled these on Nov 22, 2026, and the sections above follow them.
 
 | Question | Decision |
 | --- | --- |
@@ -264,14 +264,14 @@ Shine settled these on Nov 22, 2026, and the sections above follow them.
 | Show notes in the terminal | Required |
 | Retention | 14 days; lasting context goes in repo journals |
 | Platforms | Linux and macOS only |
-| Company policy | Shine decides, as cofounder |
+| Company policy | Owner decides |
 
 **Still open**
 
-- [x] Built-in SendMessage across profiles: answered Nov 22, it doesn't cross (see Fit with ccxp-skills). Confirmed live by Shine on Nov 22: the two profiles show completely different agent lists. Closed.
-- [x] Does an async `asyncRewake` hook started at `Stop` wake an idle session? Yes, confirmed live by Shine on Nov 22: a Stop hook that slept 60 s and exited 2 started a new turn on its own, alongside ccxp-agent. Timeout: also tested live by Shine on Nov 22. A hook that would wake at 90 s with a 30 s timeout never woke the session, so the timeout does apply to async hooks and kills them quietly. Closed.
+- [x] Built-in SendMessage across profiles: answered Nov 22, it doesn't cross (see Fit with ccxp-skills). Confirmed live by the owner on Nov 22: the two profiles show completely different agent lists. Closed.
+- [x] Does an async `asyncRewake` hook started at `Stop` wake an idle session? Yes, confirmed live by the owner on Nov 22: a Stop hook that slept 60 s and exited 2 started a new turn on its own, alongside ccxp-agent. Timeout: also tested live by the owner on Nov 22. A hook that would wake at 90 s with a 30 s timeout never woke the session, so the timeout does apply to async hooks and kills them quietly. Closed.
 - [x] Keep the work-to-home `ask` prompt on every send, or allow it for some notes?
-  Decided Nov 22 by Shine: no prompt; work-to-home notes go without asking. Closed.
+  Decided Nov 22 by the owner: no prompt; work-to-home notes go without asking. Closed.
 
 ## Sources
 

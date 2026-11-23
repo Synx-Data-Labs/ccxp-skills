@@ -2,7 +2,7 @@
 status: Done
 scheduled: 2026-09-28
 estimation: 1
-source: conversation with @shine, 2026-09-23
+source: conversation with the owner, 2026-09-23
 ---
 
 # T20260923-425414: Give `/new-task` a KISS default estimation instead of always asking
