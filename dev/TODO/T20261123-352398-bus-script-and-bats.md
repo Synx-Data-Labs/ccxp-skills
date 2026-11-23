@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 source: Step of T20261122-234265 (cross-account bus build order)
 related: T20261122-234265
 description: Add _bus/bus.sh (send, deliver, watch, status, read, prune) with the bats suite
+claimed_by: cc1-50ac6891:60039f20d76dd741
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261123-352398: Bus step 2: _bus/bus.sh and bats tests
