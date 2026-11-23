@@ -39,4 +39,5 @@ so a dead job on an alert older than about 70 minutes with newer channel traffic
 
 `CCXP_ALERTS=0` turns it off. `CCXP_ALERTS_DIR`, `CCXP_CONTEXT_DIR`, `CCXP_LEDGER_FILE` relocate state;
 `CCXP_ALERTS_MIN_GAP` (300), `CCXP_ALERTS_OVERLAP` (600), `CCXP_ALERTS_CAP` (3); `CCXP_ALERTS_NOW` is a test hook.
+`CCXP_ALERTS_CAP` is separate from the CI failure response cap (`CCXP_CI_JOB_CAP`, default 6; see `hud/README.md` key `ciJobCap`).
 Tests: `bats tests/alerts_due.bats`.
