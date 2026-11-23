@@ -1896,3 +1896,18 @@ test('bus cell: drawn in the band when the helper has it, off with `bus` out of 
   expect(text(bandRows(s, { ...NOCI, fields: ['repo'] }, 200, ANOW))).not.toContain('bus 2')
   expect(text(bandRows(withHelper({ ci: null, bus: null }) as any, NOCI, 200, ANOW))).not.toContain('bus ')
 })
+
+test('bus cell: shrinks to the count in a narrow band, and is dropped before the band is cut', async () => {
+  const s = withHelper({ ci: null, bus: { unread: 2, from: 'home' } }) as any
+  const wide = text(bandRows(s, NOCI, 200, ANOW))
+  expect(wide).toContain('bus 2 · home')
+  let shrunk = false
+  let dropped = false
+  for (let w = 200; w >= 22; w--) {
+    const t = text(bandRows(s, NOCI, w, ANOW))
+    if (t.includes('bus 2') && !t.includes('bus 2 · home')) shrunk = true
+    if (shrunk && !t.includes('bus')) dropped = true
+  }
+  expect(shrunk, 'bus never narrows to `bus 2`').toBe(true)
+  expect(dropped, 'bus is never dropped as the band narrows').toBe(true)
+})
