@@ -37,11 +37,11 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 ## Build order
 
 - [x] 1. Spike: done live by the owner 2026-11-22, not re-run: built-in messaging does not cross profiles; an async `asyncRewake` Stop hook that slept 60 s and exited 2 woke an idle session; the timeout applies to async hooks (a 90 s wake with a 30 s timeout never fired), so set 28800 s and exit 0 a minute early
-- [ ] 2. [T20261123-352398](T20261123-352398-bus-script-and-bats.md) `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
-- [ ] 3. [T20261123-596451](T20261123-596451-bus-hooks-json.md) `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
-- [ ] 4. [T20261123-292735](T20261123-292735-bus-skill.md) `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
-- [ ] 5. [T20261123-244661](T20261123-244661-bus-hud-cell-and-notice.md) HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
-- [ ] 6. [T20261123-212153](T20261123-212153-bus-watch-wake-and-fallback.md) `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
+- [ ] 2. T20261123-352398 `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
+- [ ] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
+- [ ] 4. T20261123-292735 `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
+- [ ] 5. T20261123-244661 HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
+- [ ] 6. T20261123-212153 `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
 
 ## Acceptance criteria (testing plan)
 

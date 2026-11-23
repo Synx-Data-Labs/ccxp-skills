@@ -8,7 +8,7 @@ description: Add _bus/bus.sh (send, deliver, watch, status, read, prune) with th
 
 # T20261123-352398: Bus step 2: _bus/bus.sh and bats tests
 
-Parent: [T20261122-234265](../TODO/T20261122-234265-cross-account-mailbox-bus.md); spec: [cross-account-bus-spec.md](../docs/cross-account-bus-spec.md)
+Parent: T20261122-234265; spec: [cross-account-bus-spec.md](../docs/cross-account-bus-spec.md)
 
 ## Scope
 
