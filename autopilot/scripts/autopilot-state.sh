@@ -20,6 +20,9 @@
 #                               beyond the first running one (see ap-guard)
 #   hold <seconds> <reason>     wake again in <seconds> without recording a cycle (a guard hold,
 #                               a ramp wake); prints the seconds
+#   wake <seconds> [reason]     record that a wake is armed <seconds> from now (1-86400): sets next_wake_at only,
+#                               no counters, slots or last_hold; run it with EVERY ScheduleWakeup the loop arms
+#                               (a wake armed without it leaves next_wake_at stale and the HUD reports a stall)
 #   set-clone <slot> <path>     remember the slot's dispatch clone (slot 1 = dispatch_clone_path)
 #   cap                         print ok | capped:<cycles|merges>  (rolls the day)
 #   record <outcome> [merged] [task-id] [reason] [--slot N]
@@ -366,6 +369,18 @@ ap-hold() {
     reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | cut -c1-200)
     nw=$(( $(_ap_epoch "$(ap-now)") + sec ))
     _ap_update --arg w "$(_ap_iso "$nw")" --arg r "$reason" --arg now "$(ap-now)" '.next_wake_at = $w | .last_hold = {at: $now, reason: $r}'
+  fi
+  echo "$sec"
+}
+
+# wake <seconds> [reason]: record the wake the loop is arming, so next_wake_at never goes stale while it idles.
+# Touches nothing but next_wake_at (hold also sets last_hold); a no-op unless the status is on.
+ap-wake() {
+  local sec="${1:-}" nw
+  [[ "$sec" =~ ^[0-9]+$ ]] && [ "$sec" -ge 1 ] && [ "$sec" -le 86400 ] || { echo "wake <seconds 1-86400> [reason]" >&2; return 2; }
+  if [ "$(ap-status)" = on ]; then
+    nw=$(( $(_ap_epoch "$(ap-now)") + sec ))
+    _ap_update --arg w "$(_ap_iso "$nw")" '.next_wake_at = $w'
   fi
   echo "$sec"
 }
@@ -1041,7 +1056,7 @@ autopilot-state() {
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
-    slots) ap-slots ;; guard) ap-guard ;; hold) ap-hold "$@" ;; set-clone) ap-set-clone "$@" ;;
+    slots) ap-slots ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;

@@ -66,13 +66,13 @@ Run `autopilot-state.sh start`:
 
 - `started` — fresh run; go to Phase 2.
 - `dispatch` — already on, a slot is free and the wake is due (the wake fired); go to Phase 2.
-- `already-on` — a typed `on` before the next wake is due, or every slot is busy: report `already on, next cycle at <next_wake_at>` and stop. Never dispatch, never schedule.
-- `busy` — a previous run's cycle is still finishing: report it and do nothing; that cycle's Phase 4 arms the next wake.
+- `already-on` — a typed `on` before the next wake is due, or every slot is busy: report `already on, next cycle at <next_wake_at>` and stop. Never dispatch. A typed `on` arms nothing; when this turn was a fired wake (every slot busy), re-arm with `autopilot-state.sh wake <seconds> "slots busy"` and the matching `ScheduleWakeup(<seconds>, "/autopilot on")`.
+- `busy` — a previous run's cycle is still finishing: report it and do nothing; that cycle's Phase 4 arms the next wake. If this turn was a fired wake and you re-arm one anyway, record it first (`autopilot-state.sh wake <seconds> busy`).
 - `paused` — report "paused; use /autopilot resume" and stop.
 
 ### Phase 2: Cap check
 
-`autopilot-state.sh cap` prints `ok` or `capped:cycles|merges`. On `capped:*`: `autopilot-state.sh record capped`, send its notice kind if not `none` (Phase 4 Notify), then `ScheduleWakeup(<delay capped>, "/autopilot on")` and end the turn. The loop stays on; it re-checks hourly and resumes after the daily rollover.
+`autopilot-state.sh cap` prints `ok` or `capped:cycles|merges`. On `capped:*`: `autopilot-state.sh record capped` (it records the wake time), send its notice kind if not `none` (Phase 4 Notify), then `ScheduleWakeup(<delay capped>, "/autopilot on")` and end the turn. The loop stays on; it re-checks hourly and resumes after the daily rollover.
 
 ### Phase 3: Run one cycle
 
@@ -155,7 +155,9 @@ Then:
 
 **Notify** for each non-`none` kind returned: `autopilot-state.sh notify <kind> "<text>"`, one concise bullet list (kind `idle` names the tasks from `parked-list` and says retries are silent; `resumed` says work is flowing again; `stuck` names the task and reason; `waiting` names the PR; `capped` names the cap; `parked` names the task, its last reason and "autopilot visited <n> times without progress"). `notify` tries `/slack --channel dev` and, when the env vars are unset or the post fails, records the notice in the state file (shown by `status` and the HUD); it never errors, so never retry or escalate it.
 
-Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt: "/autopilot on", reason: "autopilot <outcome>")` and end the turn. Every wake carries the same prompt; the state file decides whether it dispatches (Phase 1).
+Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt: "/autopilot on", reason: "autopilot <outcome>")` and end the turn. Every wake carries the same prompt; the state file decides whether it dispatches (Phase 1). `record` has just written `next_wake_at` for that delay.
+
+**Never arm a wake without recording it.** Every `ScheduleWakeup` is preceded in the same step by the matching state write: `record` (Phases 2 and 4), `hold <s> <reason>` (guard hold, ramp) or `wake <s> [reason]` (an idle or busy re-arm that records no cycle). A wake armed without one leaves `next_wake_at` stale and the HUD reports a live loop as stalled.
 
 ### Phase 5: Final report (on `off`)
 
