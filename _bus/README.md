@@ -18,6 +18,6 @@ Same-machine mailbox so Claude Code sessions on different profiles (`CLAUDE_CONF
 - **Delivery**: at least once, deduped by `id` (the last 200 delivered ids sit in the cursor). The cursor is saved with the new ids first, then the offset after the output, so a crash in between repeats nothing.
 - **Limits**: 4000 characters per note, 10 notes and 8000 rendered characters per delivery, 500 unread notes or 5 MB before "mailbox full".
 - **One live session per name**: a second live session on the same profile gets the bus switched off with a warning. A new session id under the same process (`/clear`, `/resume`) is not a second session.
-- **Trust**: notes are sanitized (control and bidi characters stripped, `<` escaped, each line quoted with `> `) and wrapped in `<ccxp-notes>` with a label saying they are another agent's words, not the user's. Nothing in a note is executed or fetched; there are no automatic replies.
+- **Trust**: notes are sanitized (control and bidi characters stripped, `<` escaped, each line prefixed with a greater-than sign) and wrapped in `<ccxp-notes>` with a label saying they are another agent's words, not the user's. Nothing in a note is executed or fetched; there are no automatic replies.
 - **Needs**: bash 3.2 or newer, `jq`, POSIX tools. Locks come from `_session/lock.sh`, never `flock`. The bus refuses network, fuse and synced folders.
 - **Tests**: `tests/bus.bats`; `NOW=<YYYY-MM-DDTHH:MM:SSZ>` pins the clock, `BUS_STRESS_NOTES` sets the notes per writer of the concurrency test (default 250; the spec's 1000 passes too).
