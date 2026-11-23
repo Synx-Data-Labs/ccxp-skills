@@ -217,7 +217,9 @@ function bus_claim() {
 # shellcheck disable=SC2016
 BUS_JQ_DEFS='
 def clean: explode | map(select(. == 10 or . == 9 or (. >= 32 and . != 127 and (. < 128 or . > 159)
-  and (. < 8203 or . > 8207) and (. < 8232 or . > 8238) and (. < 8294 or . > 8297) and . != 65279))) | implode;
+  and (. < 8203 or . > 8207) and (. < 8232 or . > 8238) and (. < 8294 or . > 8297) and . != 65279
+  and (. < 8288 or . > 8292) and . != 173 and . != 1564 and . != 6158 and (. < 65024 or . > 65039) and (. < 65529 or . > 65531)
+  and (. < 917504 or . > 917759)))) | implode;
 def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;");
 def okname: type == "string" and test("^[a-z0-9-]{1,32}$");
 def okid: type == "string" and test("^[A-Za-z0-9_-]{1,64}$");
@@ -233,7 +235,11 @@ def isnote: type == "object" and (.id | okid) and (.from | okname) and (.text | 
 
 # bus_take <root> <name> <chunk> <recent-json> -> JSON {consumed, notes[], bad[], dup, filtered, more, ids[], context}
 function bus_take_json() {
-  local allow; allow="$(bus_cfg_get .allow_from)"; [[ -n "$allow" ]] || allow='[]'
+  local allow='[]' cfg; cfg="$(bus_cfg)"
+  if [[ -f "$cfg" ]]; then # fail closed: a corrupt config or a non-array allow_from admits nobody
+    allow="$(jq -c 'if has("allow_from") then .allow_from else [] end | if type == "array" and all(type == "string") then . else ["-"] end' "$cfg" 2>/dev/null)" || allow='["-"]'
+    [[ -n "$allow" ]] || allow='["-"]'
+  fi
   printf '%s' "$3" | jq -R -s -c --argjson now "$(bus_now)" --argjson recent "$4" --arg me "$2" \
     --argjson allow "$allow" --argjson maxn "$BUS_MAX_NOTES" --argjson maxc "$BUS_MAX_CHARS" --argjson maxbody "$BUS_MAX_BODY" --argjson keep "$BUS_RECENT" \
     "$BUS_JQ_DEFS"'
@@ -335,7 +341,7 @@ function bus_usage() { sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 function bus_cmd_init() {
   local name="" label="" cfg
   while [[ $# -gt 0 ]]; do
-    case "$1" in --name) name="${2:-}"; shift 2 ;; --label) label="${2:-}"; shift 2 ;; *) bus_usage; return 2 ;; esac
+    case "$1" in --name|--label) [[ $# -ge 2 ]] || { bus_usage; return 2; }; if [[ "$1" == --name ]]; then name="$2"; else label="$2"; fi; shift 2 ;; *) bus_usage; return 2 ;; esac
   done
   bus_valid_name "$name" || { echo "bus: --name must be 1-32 chars of a-z 0-9 -" >&2; return 2; }
   [[ -n "${CCXP_PROFILE_DIR:-}" ]] || { echo "bus: no profile directory" >&2; return 2; }
@@ -349,8 +355,8 @@ function bus_cmd_send() {
   local to="" reply="" text="" have=0 root me inbox lock seen thread id line size partial keep orig unreadb off ls rec t
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --to) to="${2:-}"; shift 2 ;;
-      --reply-to) reply="${2:-}"; shift 2 ;;
+      --to) [[ $# -ge 2 ]] || { bus_usage; return 2; }; to="$2"; shift 2 ;;
+      --reply-to) [[ $# -ge 2 ]] || { bus_usage; return 2; }; reply="$2"; shift 2 ;;
       --) shift; text="$*"; have=1; break ;;
       -) text="$(cat)"; have=1; shift ;;
       -*) bus_usage; return 2 ;;
@@ -464,7 +470,7 @@ function bus_prune_if_due() { # <root> <name>
 function bus_cmd_deliver() {
   local reg=0 ev="" root me out msg ctx
   while [[ $# -gt 0 ]]; do
-    case "$1" in --register) reg=1; shift ;; --event) ev="${2:-}"; shift 2 ;; *) shift ;; esac
+    case "$1" in --register) reg=1; shift ;; --event) [[ $# -ge 2 ]] || break; ev="$2"; shift 2 ;; *) shift ;; esac
   done
   bus_hook_start "$reg" "$ev" || { bus_emit_warn; return 0; }
   root="$BUS_ROOT"; me="$BUS_ME"
@@ -543,7 +549,7 @@ function bus_cmd_status() {
 function bus_cmd_read() {
   local thread="" root me
   while [[ $# -gt 0 ]]; do
-    case "$1" in --thread) thread="${2:-}"; shift 2 ;; *) bus_usage; return 2 ;; esac
+    case "$1" in --thread) [[ $# -ge 2 ]] || { bus_usage; return 2; }; thread="$2"; shift 2 ;; *) bus_usage; return 2 ;; esac
   done
   bus_configured || { echo "bus: not configured for this profile" >&2; return 3; }
   me="$(bus_name)" || return 3; root="$(bus_root)"
@@ -551,7 +557,7 @@ function bus_cmd_read() {
   { cat "$root"/inbox/*.jsonl "$root"/archive/*.jsonl 2>/dev/null; true; } | jq -R -s -r --argjson now "$(bus_now)" --arg me "$me" --arg th "$thread" \
     --argjson maxbody "$BUS_MAX_BODY" "$BUS_JQ_DEFS"'
     split("\n") | map(try fromjson catch null) | map(select(isnote and (.from == $me or .to == $me)))
-    | map(select($th == "" or .id == $th or .thread == $th)) | unique_by(.id) | sort_by(.time, .id)
+    | map(select($th == "" or .id == $th or .thread == $th)) | to_entries | map(.value + {_i: .key}) | unique_by(.id) | sort_by(.time, ._i)
     | if length == 0 then "(no notes)" else hdr + (map(note) | join("\n")) + "\n</ccxp-notes>" end'
 }
 
@@ -577,7 +583,7 @@ function bus_prune_files() { # <root> <days>
 function bus_cmd_prune() {
   local days="" root n
   while [[ $# -gt 0 ]]; do
-    case "$1" in --days) days="${2:-}"; shift 2 ;; *) bus_usage; return 2 ;; esac
+    case "$1" in --days) [[ $# -ge 2 ]] || { bus_usage; return 2; }; days="$2"; shift 2 ;; *) bus_usage; return 2 ;; esac
   done
   [[ -n "$days" ]] || days="$(bus_retention)"
   [[ "$days" =~ ^[0-9]+$ ]] || { echo "bus: --days needs a number" >&2; return 2; }
