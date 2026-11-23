@@ -12,6 +12,7 @@ Parent: T20261122-234265; spec: [cross-account-bus-spec.md](../docs/cross-accoun
 
 ## Scope
 
+- Adds the `Stop` async `watch` entry to `hooks/hooks.json` (step 3 owns the `SessionStart` entries)
 - `watch` wake behaviour: one watcher per name, wake via stderr and exit 2, inotifywait or fswatch when present
 - Fallback: `idle-wake.sh` also runs `bus.sh deliver`
 - Anything needing two live accounts stays an unticked acceptance item on the parent
