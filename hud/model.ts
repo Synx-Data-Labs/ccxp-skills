@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { Alerts, ApStats, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { Alerts, ApStats, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -193,6 +193,13 @@ export function parseHelper(stdout: string): HelperData | null {
     const o = al as Record<string, unknown>
     if (typeof o.checked_at === 'number' && Number.isFinite(o.checked_at) && o.checked_at >= 0) alerts = { checked_at: Math.floor(o.checked_at), held: o.held === true }
   }
+  const bs = r.bus
+  let bus: Bus | null = null
+  if (typeof bs === 'object' && bs !== null && !Array.isArray(bs)) {
+    // Untrusted: a positive whole count and a plain agent name (a-z, 0-9, dash); nothing else is ever drawn.
+    const o = bs as Record<string, unknown>
+    if (typeof o.unread === 'number' && Number.isFinite(o.unread) && o.unread >= 1) bus = { unread: Math.min(Math.floor(o.unread), 999), from: typeof o.from === 'string' && /^[a-z0-9-]{1,32}$/.test(o.from) ? o.from : '' }
+  }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
   if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
@@ -221,6 +228,7 @@ export function parseHelper(stdout: string): HelperData | null {
     nightly,
     issues,
     alerts,
+    bus,
     plugin,
     last_input_at: num(r.last_input_at),
   }
@@ -644,6 +652,10 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
       const a = h?.alerts
       return a ? one(...alertsVariants(a, nowMs)) : null
     }
+    case 'bus': {
+      const b = h?.bus
+      return b ? one(...busVariants(b)) : null
+    }
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate':
@@ -775,10 +787,20 @@ export function alertsVariants(a: Alerts, nowMs: number, full = false): Variants
   return [long, [{ text: age === 'just now' ? 'alerts now' : `alerts ${age}`, ...tone }]]
 }
 
+/**
+ * The cross-account bus cell: notes from another Claude Code session wait for this profile. `bus 2 · home` (warning colour:
+ * someone is waiting), narrowing to `bus 2`. Nothing when nothing is unread or the bus is off. `full` (details) is the long form only.
+ */
+export function busVariants(b: Bus, full = false): Variants {
+  const long: Seg[] = [{ text: b.from ? `bus ${b.unread} · ${b.from}` : `bus ${b.unread}`, color: 'warning' }]
+  if (full) return [[{ text: `bus ${b.unread} unread note${b.unread === 1 ? '' : 's'}${b.from ? ` · newest from ${b.from}` : ''}`, color: 'warning' }]]
+  return [long, [{ text: `bus ${b.unread}`, color: 'warning' }]]
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'queue', 'nightly', 'issues', 'alerts', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'bus', 'rate', 'cost', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'nightly', 'issues', 'alerts', 'bus', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
@@ -933,6 +955,7 @@ const DETAIL_STEPS = {
   nightly: [],
   issues: [],
   alerts: [],
+  bus: [],
   you: ['drop:url'],
 } as const
 
@@ -973,6 +996,9 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
 
   // 0d. the Slack alerts check staleness (on unless `alerts: false`), after the issues: long form
   if (h?.alerts) add([one('alerts', ...alertsVariants(h.alerts, nowMs, true))], DETAIL_STEPS.alerts)
+
+  // 0e. unread cross-account bus notes (full form), right after the alerts
+  if (h?.bus) add([one('bus', ...busVariants(h.bus, true))], DETAIL_STEPS.bus)
 
   // 1. where you are
   add(

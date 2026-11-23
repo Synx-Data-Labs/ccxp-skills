@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'alerts'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'alerts' | 'bus'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -186,6 +186,9 @@ export type PluginVersion = {
 /** Staleness of the persona's Slack alerts check (hud-alerts.sh): epoch seconds of the last check (0 = never) and whether alerts are held back under the cap. */
 export type Alerts = { checked_at: number; held: boolean }
 
+/** Unread notes on the cross-account bus (hud-bus.sh, from `bus.sh status --json`): how many and who sent the newest. */
+export type Bus = { unread: number; from: string }
+
 export type HelperData = {
   /** Repository name (origin's last path part, else the folder name); always present. */
   repo: string
@@ -218,6 +221,8 @@ export type HelperData = {
   issues: Issues | null
   /** Slack alerts check staleness; null when off or this plugin has no alerts check. */
   alerts: Alerts | null
+  /** Unread cross-account bus notes; null when the bus is off for this profile or nothing is unread. */
+  bus: Bus | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */
   plugin: PluginVersion | null
   /** Epoch seconds of the session's last submitted prompt, 0 when unknown. */
