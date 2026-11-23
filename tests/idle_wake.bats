@@ -117,3 +117,10 @@ bus_setup() {
   CCXP_BUS_ROOT="$BATS_TEST_TMPDIR/notadir" CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan --wake >"$BATS_TEST_TMPDIR/out" 2>"$BATS_TEST_TMPDIR/err"
   [ "$(cat "$BATS_TEST_TMPDIR/out")" = "schedule 1800" ]; [ ! -s "$BATS_TEST_TMPDIR/err" ]
 }
+
+@test "plan --wake with the opt-out leaves bus notes unread (delivered only when the chain is on)" {
+  bus_setup
+  run env CCXP_IDLE_WAKE=0 CLAUDE_CONFIG_DIR="$P/prof-work" bash "$SCRIPT" plan --wake
+  [ "$status" -eq 1 ]; [ -z "$output" ]
+  [ "$(CLAUDE_CONFIG_DIR="$P/prof-work" bash "$REPO_ROOT/_bus/bus.sh" status)" = "bus 1 · home" ]
+}

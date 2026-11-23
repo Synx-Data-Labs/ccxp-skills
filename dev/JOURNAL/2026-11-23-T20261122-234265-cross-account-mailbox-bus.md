@@ -53,8 +53,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - [x] Offline: send to a closed session, open it, delivery shows age; inbox past the cap gives "mailbox full" (500 notes or 5 MB)
 - [x] Guards: folder loosened to `0755` makes the hook refuse; a second live session on one profile has its bus off
 - [x] Injection: a note with the wrapper's closing marker, fake "user:" lines and control characters arrives escaped and labeled
-- [x] End to end: `home` sends, `work` replies with `--reply-to`, `home` sees the thread; on Linux and macOS
-
+- [x] End to end: `home` sends, `work` replies with `--reply-to`, `home` sees the thread (bats on Linux in CI; macOS is not run in CI)
 - [ ] Live smoke: two real accounts (one `CLAUDE_CONFIG_DIR` each) run `bus.sh init`, restart, and exchange a note both ways; the 28800 s watcher timeout is never run live here
 
 ## Security and trust constraints
@@ -73,9 +72,9 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - Spike items are recorded as confirmed in the spec; re-run only if behaviour is in doubt
 - Work/personal boundary: notes of one account sit on the same device as the other account; the owner's organization policy is the default until changed
 - `home -> work` direction "configurable" is unspecified (no config shape defined)
-  - Default taken: both directions allowed without a prompt; the only knob is `<profile>/ccxp-bus/config.json` (`name`, optional `ttl_days`, `allow_from` list; absent allows all registered agents)
+  - Default taken: both directions allowed without a prompt; the only knob is `<profile>/ccxp-bus/config.json` (`name`, optional `retention_days`, `allow_from` list; absent allows all registered agents)
 - Not confirmed in spec: what Claude sees from a `Stop` hook's `reason`
-- Fallback if `asyncRewake` proves unreliable: `idle-wake.sh` also runs `bus.sh deliver` (30 min worst case)
+- Fallback if `asyncRewake` proves unreliable: `idle-wake.sh plan --wake` also runs `bus.sh deliver` (built in step 6; 30 min worst case while the idle wake is on)
 
 ## Closed
 
