@@ -8,7 +8,7 @@ description: Finish the watch wake (asyncRewake) path and the idle-wake.sh deliv
 
 # T20261123-212153: Bus step 6: watch wake hook and idle-wake fallback
 
-Parent: [T20261122-234265](../TODO/T20261122-234265-cross-account-mailbox-bus.md); spec: [cross-account-bus-spec.md](../docs/cross-account-bus-spec.md)
+Parent: T20261122-234265; spec: [cross-account-bus-spec.md](../docs/cross-account-bus-spec.md)
 
 ## Scope
 
