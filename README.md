@@ -117,6 +117,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `migrate-task` | Move a task file (and its `queue.md` entry) from one repo's `dev/TODO/` to another's |
 | `top` / `bottom` | Move a task (or several) to the front/back of the priority queue |
 | `eta` | Projected finish time for the current (or an explicit) task — elapsed vs. remaining estimation |
+| `bus` | Send, read and handle notes between Claude Code sessions on different accounts (profiles) on one machine, through `_bus/bus.sh` |
 | `new-task` | File a new task to the `dev/TODO` backlog |
 | `support` | Track a customer-reported GitHub issue as a staged `support` task (intake only, posts nothing) |
 | `incept` | Adversarial frontier-round interview of a task/plan before implementation; the `/ipm` step 3 pre-IPM design pass |
