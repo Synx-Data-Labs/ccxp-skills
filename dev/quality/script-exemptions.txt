@@ -16,3 +16,4 @@ help-net	reference	Diagnostic decision tree; its probe script gets a classifier 
 land	alias	Pure alias of gcpr; has no workflow of its own.
 hud	mod	Statusline mod, not a skill (no SKILL.md); its contract lives in hud/README.md.
 hooks	nonskill	Plugin hook scripts, not a skill.
+bus	reference	Drives the shared _bus/bus.sh, which has its own bats suite (tests/bus.bats); the skill ships no scripts of its own.
