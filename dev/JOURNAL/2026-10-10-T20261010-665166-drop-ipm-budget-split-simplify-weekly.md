@@ -2,7 +2,7 @@
 status: Done
 scheduled: 2026-10-05
 estimation: 2
-source: 2026-10-10 fact-check pass for a companion ccxp-skills blog deep-dive on /ipm (sibling repo synxdata.com); maintainer (Shine) decision recorded inline below
+source: 2026-10-10 fact-check pass for a companion ccxp-skills blog deep-dive on /ipm (sibling repo synxdata.com); maintainer decision recorded inline below
 related: ipm/SKILL.md (steps 4, 5), retro/SKILL.md:213 (generic drift grading, untouched), T20260924-232855 (estimation → story points), dev/JOURNAL/2026-10-01-T20260924-232855-estimation-to-story-points.md:35-41, T20261005-554581, T20261005-639913
 claimed_by:
 claimed_role:

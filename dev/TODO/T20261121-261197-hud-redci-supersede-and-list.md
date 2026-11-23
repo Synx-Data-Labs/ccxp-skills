@@ -12,7 +12,7 @@ type: bug
 ## Problem
 
 - **Type**: bug
-- Owner (Shine, 2026-11-21): "if the CI is passing, why the hud shows red? what are the 7 unhandled CI?"
+- Owner (2026-11-21): "if the CI is passing, why the hud shows red? what are the 7 unhandled CI?"
 - Root cause: `hud/scripts/hud-redci.sh` looked up successes with one repo-wide `gh run list --status success --limit 50`; on a busy repo an older workflow's later success falls outside that window, so its failures stay counted (SynxDB2 Install Test, 2 failures with later successes on main).
 - The cell shows only a count and at most 3 names; nothing shows event, run id or URL.
 - Done: superseded failures are dropped per (workflow, branch); `hud-redci.sh list` prints id, workflow, event, branch, age, URL for every unhandled run.

@@ -20,7 +20,7 @@ scheduled: 2026-10-19
 ## Fix
 
 - PR #408: top-level `permissions: contents: read` on both workflows; `actions/checkout`, `setup-python`, `setup-go` pinned to the SHAs of their v6 tags.
-- This PR: `.github/CODEOWNERS` with `/.github/ @xinzweb`.
+- This PR: `.github/CODEOWNERS` with `/.github/ @<owner-account>`.
 
 | File | Change |
 |------|--------|

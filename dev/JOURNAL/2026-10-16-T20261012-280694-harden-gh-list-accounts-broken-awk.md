@@ -40,7 +40,7 @@ scheduled: 2026-10-12
     account has access to Synx-Data-Labs/ccxp-skills (try: gh auth login)`
     (exit 1).
   - Yet a direct, non-wrapped call for the exact same repo/account succeeded:
-    `GH_TOKEN=<xinzweb token> /opt/homebrew/bin/gh api
+    `GH_TOKEN=<owner token> /opt/homebrew/bin/gh api
     repos/Synx-Data-Labs/ccxp-skills --jq .permissions.push` → `true` (write
     access), and the same for the second account → `false` (read-only, but
     present). Both accounts are live and `gh auth status` lists both.
@@ -60,7 +60,7 @@ scheduled: 2026-10-12
 
   - The `gh auth status` half works — captured its raw output and it's
     exactly the expected two-account text (`✓ Logged in to github.com
-    account xinzweb (keyring)` / `... 75033us ...`).
+    account <owner-account> (keyring)` / `... 75033us ...`).
   - The `awk` half is what's broken: `command -v awk` resolves to
     `/opt/homebrew/opt/gawk/libexec/gnubin/awk` (a symlink to
     `/opt/homebrew/opt/gawk/libexec/bin/gawk` — a valid Mach-O arm64 binary,

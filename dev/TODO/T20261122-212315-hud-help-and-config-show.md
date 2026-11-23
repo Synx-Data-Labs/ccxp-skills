@@ -12,7 +12,7 @@ type: feature
 ## Problem
 
 - **Type**: feature
-- Owner (Shine, 2026-11-22): "also, what do you mean 'unhandled CI'? and also 'alerts never checked'? I also need a '/hud help' command to help me explain the meaning of each detailed information. '/hud config' should also show the current configuration of the hud."
+- Owner (2026-11-22): "also, what do you mean 'unhandled CI'? and also 'alerts never checked'? I also need a '/hud help' command to help me explain the meaning of each detailed information. '/hud config' should also show the current configuration of the hud."
 - The HUD band is dense and the meaning of a cell (colours, markers, data source) lives only in the long `hud/README.md`.
 - `/hud config` today opens a dialog straight away; there is no way to see which config files were read, what each setting is, and what is on or off.
 

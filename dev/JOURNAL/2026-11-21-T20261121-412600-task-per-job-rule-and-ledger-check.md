@@ -18,7 +18,7 @@ claimed_role:
 
 ## Problem
 
-- Owner's words (Shine, 2026-11-21): "when I create a new job, I want that job to create a new task in the corresponding repo, and then follow the regular /drive process to finish up the task. however, today, the ccxp-skills, just start a job, and most time didn't create a task, and that caused us missing key decisions in the git history, how to fix it?"
+- Owner's words (2026-11-21): "when I create a new job, I want that job to create a new task in the corresponding repo, and then follow the regular /drive process to finish up the task. however, today, the ccxp-skills, just start a job, and most time didn't create a task, and that caused us missing key decisions in the git history, how to fix it?"
 - Brief: `ccxp-skills-task-per-job-brief.md` in the owner's home-profile context dir (outside the repo) (a proposal from the home session, approved for this repo by the owner's message "let's take a look at [the brief] and create a task and improve the ccxp-skills job").
 - Evidence: the persona's "Writing a job prompt" never requires a task; only skill-driven jobs (`/drive`, `/land`, `/address-pr`) touch the lifecycle. Home job 520 renamed a profile with no task: its decisions live only in the job report and the ledger.
 

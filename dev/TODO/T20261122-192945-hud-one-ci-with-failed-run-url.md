@@ -11,7 +11,7 @@ type: feature
 ## Problem
 
 - **Type**: feature
-- Owner (Shine, 2026-11-22), first ask: "well, for the coloring of the ccxp-hud, let's separate the lines, for CI, one color, red or green. For other workflow on main, we can have different color?"
+- Owner (2026-11-22), first ask: "well, for the coloring of the ccxp-hud, let's separate the lines, for CI, one color, red or green. For other workflow on main, we can have different color?"
 - Owner, then replaced it: "if the config CI, which is our nightly orchastractor is red, then it is red, even it's red at the sync or tests stage. I don't mean we need to show all the break down of the CI. We only need one CI, and if we need to know more, we will drill down manually. So, remove the details of the CI pipeline showing in the hud. However, to make it more accessible, we can add a url to the failed action if the CI is red."
 - Decisions: d136 (watch only HUD-registered repos) stays; d143 (one CI only, red when the configured CI run fails, URL to the failed run) supersedes d137 ("red is red for every workflow"); d137 was the rule behind the red-CI cell of T20261120-230152 and T20261121-261197.
 - Done: the band has one CI cell for the configured `ci` workflow; red carries the failed run's address; no other-workflow cell.

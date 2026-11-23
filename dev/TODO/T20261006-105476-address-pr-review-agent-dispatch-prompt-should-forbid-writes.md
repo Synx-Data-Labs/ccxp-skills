@@ -32,7 +32,7 @@ source: Surfaced live during /drive on T20260925-244717 — the §2.d review
   3. Actually having pushed a **new commit** to the PR's remote branch
      fixing that exact issue (`3cd8300ca6ad01738921b82e3048dc224c0da081`,
      `fix(T20260925-244717): remove unquoted colon from status narration`,
-     authored as `xinzweb <xinzweb@users.noreply.github.com>` +
+     authored as `<owner-account> <owner-account@users.noreply.github.com>` +
      `Co-Authored-By: Claude Sonnet 5`) — this commit is now permanently in
      `main`'s history (post-rebase-merge SHA `eca4999`).
   - The fix itself was correct and CI passed on it, so no harm resulted

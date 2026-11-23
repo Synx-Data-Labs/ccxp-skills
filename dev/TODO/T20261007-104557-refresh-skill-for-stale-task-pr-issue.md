@@ -1,7 +1,7 @@
 ---
 status: Open
 estimation: 1
-source: conversation with Shine Zhang, 2026-10-07
+source: conversation with the owner, 2026-10-07
 ---
 
 # T20261007-104557: /refresh skill — diff-since-last-look + skill-suggestion report for a task/PR/issue

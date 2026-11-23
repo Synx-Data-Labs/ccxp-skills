@@ -184,7 +184,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 - Turn it on: add to `ccxp-hud.json` (user or project file); `issues` is in the default `fields`, an explicit `fields` list must name it:
 
 ```json
-{ "issues": { "repo": "Synx-Data-Labs/synxdb-support", "ghConfigDir": "~/.config/gh-xinzweb" } }
+{ "issues": { "repo": "Synx-Data-Labs/synxdb-support", "ghConfigDir": "~/.config/gh-<account>" } }
 ```
 
 - Source: ONE read-only `gh issue list --repo <repo> --state all --limit 3000 --json state,createdAt,closedAt,labels` in `hud/scripts/hud-issues.sh`; nothing is written to the repo. Never blocks the band: the helper answers from `${CLAUDE_CONFIG_DIR:-~/.claude}/state/hud-issues/` and starts one detached refresh when that cache is older than 15 minutes (`HUD_ISSUES_TTL`), 20 s timeout, lock dir. The first poll after turning it on shows nothing until the refresh lands. `gh` missing, signed out, offline or without access: the cell is absent (or keeps its older numbers); `gh` output is never shown and only counts survive.

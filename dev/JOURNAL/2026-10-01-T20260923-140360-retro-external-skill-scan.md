@@ -68,7 +68,7 @@ related: T20260923-986928
   vendor `grilling`'s mechanics) is the first concrete instance of "we
   learned from another skillset and vendored the useful part" — this
   task is about making that discovery repeatable instead of one-off/manual.
-- Verified enumeration mechanism (this host, `xlj`'s clone): enabled
+- Verified enumeration mechanism (this host, the owner's clone): enabled
   marketplaces live in `~/.claude/settings.json` → `enabledPlugins`
   (currently `ccxp-skills@ccxp-skills`, `superpowers@claude-plugins-official`,
   `synx-skills@synx-skills`, `warp@claude-code-warp`) and
