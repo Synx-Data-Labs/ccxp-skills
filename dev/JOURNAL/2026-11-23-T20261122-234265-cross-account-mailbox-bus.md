@@ -1,5 +1,5 @@
 ---
-status: In Progress
+status: Done
 scheduled: 2026-11-23
 estimation: 1
 source: Owner request 2026-11-22 (cross-message spec)
@@ -41,7 +41,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - [x] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
 - [x] 4. T20261123-292735 `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
 - [x] 5. T20261123-244661 HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
-- [ ] 6. T20261123-212153 `watch` wake behaviour (`asyncRewake`) and the `Stop` wake entry in `hooks/hooks.json`; step 3's `SessionStart` watch entry carries the same `async`/`asyncRewake` flags
+- [x] 6. T20261123-212153 `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
 
 ## Acceptance criteria (testing plan)
 
@@ -49,11 +49,13 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - [x] Unit (bats): encode/decode, unknown fields ignored, 4,000-char cap, cursor save/reload, `recent_ids` dedupe, rotation only at end of file; time pinned with `NOW=`
 - [x] Concurrency: 4 writers x 1,000 notes to one inbox while the reader drains; exactly 4,000 delivered, no torn lines, no duplicates
 - [x] Crash: `kill -9` a writer mid-send and the reader between inject and cursor save; no partial line, no repeat
-- [ ] Wake: idle `work` session, `home` sends; `work` wakes within 5 s, terminal shows the notice, HUD cell clears
-- [ ] Offline: send to a closed session, open it, delivery shows age; inbox past the cap gives "mailbox full" (500 notes or 5 MB)
+- [ ] Wake, live: idle `work` session, `home` sends; `work` wakes within 5 s, terminal shows the notice, HUD cell clears (the watcher, the exit-2 stderr output, the `systemMessage` and the HUD data are covered by bats; the live wake of a real idle session needs two real accounts)
+- [x] Offline: send to a closed session, open it, delivery shows age; inbox past the cap gives "mailbox full" (500 notes or 5 MB)
 - [x] Guards: folder loosened to `0755` makes the hook refuse; a second live session on one profile has its bus off
 - [x] Injection: a note with the wrapper's closing marker, fake "user:" lines and control characters arrives escaped and labeled
-- [ ] End to end: `home` sends, `work` replies with `--reply-to`, `home` sees the thread; on Linux and macOS
+- [x] End to end: `home` sends, `work` replies with `--reply-to`, `home` sees the thread; on Linux and macOS
+
+- [ ] Live smoke: two real accounts (one `CLAUDE_CONFIG_DIR` each) run `bus.sh init`, restart, and exchange a note both ways; the 28800 s watcher timeout is never run live here
 
 ## Security and trust constraints
 
@@ -74,3 +76,11 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
   - Default taken: both directions allowed without a prompt; the only knob is `<profile>/ccxp-bus/config.json` (`name`, optional `ttl_days`, `allow_from` list; absent allows all registered agents)
 - Not confirmed in spec: what Claude sees from a `Stop` hook's `reason`
 - Fallback if `asyncRewake` proves unreliable: `idle-wake.sh` also runs `bus.sh deliver` (30 min worst case)
+
+## Closed
+
+- Delivered in six steps: spike recorded (owner, live), `_bus/bus.sh` and its bats suite, hooks, the `bus` skill, the HUD cell and notice, the watch wake and the idle-wake fallback. Each step merged through `/address-pr` with its own journal entry (T20261123-352398, T20261123-596451, T20261123-292735, T20261123-244661, T20261123-212153).
+- Default taken where the spec was silent: both directions are allowed without a prompt; the only knobs are `name`, `label`, `retention_days` and `allow_from` in `<profile>/ccxp-bus/config.json`.
+- Left open on purpose (need two real accounts): the live wake and the live smoke above. Setup for the owner: `bus.sh init --name <name>` once per profile, then restart each session.
+- Open points carried over: the work/personal boundary rests on the label and the owner's organization policy; what Claude sees from a `Stop` hook's `reason` was not needed (the watcher uses stderr and exit 2).
+
