@@ -16,7 +16,7 @@ setup() {
 }
 
 as() { local a="$1"; shift; CLAUDE_CONFIG_DIR="$P/prof-$a" bash "$BUS" "$@"; }
-cell() { ( CLAUDE_CONFIG_DIR="$P/prof-work"; source "$BUSH"; hud-bus-json "${1:-$REPO_ROOT}" "${2:-1}" ); }
+cell() { ( export CLAUDE_CONFIG_DIR="$P/prof-work"; source "$BUSH"; hud-bus-json "${1:-$REPO_ROOT}" "${2:-1}" ); }
 
 @test "status --json: nothing while nothing is unread, count and newest sender after" {
   run as work status --json; [ -z "$output" ]
@@ -39,7 +39,7 @@ cell() { ( CLAUDE_CONFIG_DIR="$P/prof-work"; source "$BUSH"; hud-bus-json "${1:-
 
 @test "cell: a profile without bus config gets null and nothing is created" {
   mkdir -p "$P/prof-plain"
-  run bash -c "CLAUDE_CONFIG_DIR='$P/prof-plain'; source '$BUSH'; hud-bus-json '$REPO_ROOT' 1"
+  run bash -c "export CLAUDE_CONFIG_DIR='$P/prof-plain'; source '$BUSH'; hud-bus-json '$REPO_ROOT' 1"
   [ "$output" = null ]
 }
 
