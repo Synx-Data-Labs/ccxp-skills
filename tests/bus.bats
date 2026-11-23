@@ -11,7 +11,7 @@ setup() {
   export CCXP_BUS_ROOT="$BATS_TEST_TMPDIR/bus"
   export HOME="$BATS_TEST_TMPDIR/h"
   P="$BATS_TEST_TMPDIR/profiles"
-  mkdir -p "$HOME" "$P/home" "$P/work"
+  mkdir -p "$HOME" "$P/prof-home" "$P/prof-work"
   export NOW=2026-11-23T12:00:00Z
   unset CCXP_BUS_NAME CCXP_BUS_SESSION CLAUDE_CONFIG_DIR BUS_TEST_CRASH
   export CCXP_BUS_SESSION_PID="$$"
@@ -22,7 +22,7 @@ setup() {
 }
 
 # as <profile> <bus args...> — run bus.sh the way that profile's session would
-as() { local a="$1"; shift; CLAUDE_CONFIG_DIR="$P/$a" bash "$BUS" "$@"; }
+as() { local a="$1"; shift; CLAUDE_CONFIG_DIR="$P/prof-$a" bash "$BUS" "$@"; }
 # deliver as <profile>, no hook input
 dlv() { as "$1" deliver </dev/null; }
 ctx() { jq -r '.hookSpecificOutput.additionalContext // empty'; }
@@ -32,7 +32,7 @@ mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 # ---- identity, config, inertness --------------------------------------------------------------------
 
 @test "init writes the profile config and the 0700 tree" {
-  [ "$(jq -r .name "$P/home/ccxp-bus/config.json")" = home ]
+  [ "$(jq -r .name "$P/prof-home/ccxp-bus/config.json")" = home ]
   [ "$(mode "$CCXP_BUS_ROOT")" = 700 ]
   [ "$(mode "$CCXP_BUS_ROOT/agents.json")" = 600 ]
   [ "$(jq -r 'keys | join(",")' "$CCXP_BUS_ROOT/agents.json")" = home,work ]
@@ -87,7 +87,7 @@ mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 
 @test "the event name comes from the hook input" {
   as home send --to work hi >/dev/null
-  run bash -c "echo '{\"hook_event_name\":\"SessionStart\",\"session_id\":\"s1\"}' | CLAUDE_CONFIG_DIR='$P/work' bash '$BUS' deliver --register"
+  run bash -c "echo '{\"hook_event_name\":\"SessionStart\",\"session_id\":\"s1\"}' | CLAUDE_CONFIG_DIR='$P/prof-work' bash '$BUS' deliver --register"
   [ "$(jq -r .hookSpecificOutput.hookEventName <<<"$output")" = SessionStart ]
 }
 
@@ -201,7 +201,7 @@ mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 }
 
 @test "allow_from drops notes from agents not on the list" {
-  jq '. + {allow_from: ["other"]}' "$P/work/ccxp-bus/config.json" > "$BATS_TEST_TMPDIR/cfg" && cat "$BATS_TEST_TMPDIR/cfg" > "$P/work/ccxp-bus/config.json"
+  jq '. + {allow_from: ["other"]}' "$P/prof-work/ccxp-bus/config.json" > "$BATS_TEST_TMPDIR/cfg" && cat "$BATS_TEST_TMPDIR/cfg" > "$P/prof-work/ccxp-bus/config.json"
   as home send --to work blocked >/dev/null
   run dlv work
   [ -z "$output" ]
@@ -306,11 +306,11 @@ mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
   run bash -c '
     . "'"$BUS"'"
     export BUS_SEND_TRIES=5000
-    CCXP_PROFILE_DIR="'"$P"'/home"
+    CCXP_PROFILE_DIR="'"$P"'/prof-home"
     for w in 1 2 3 4; do
       ( for i in $(seq 1 '"$N"'); do bus_cmd_send --to work "w$w-$i" >/dev/null || echo FAIL; done ) &
     done
-    CCXP_PROFILE_DIR="'"$P"'/work"; export BUS_MAX_NOTES=500 BUS_MAX_CHARS=1000000 BUS_DELIVER_TRIES=2000
+    CCXP_PROFILE_DIR="'"$P"'/prof-work"; export BUS_MAX_NOTES=500 BUS_MAX_CHARS=1000000 BUS_DELIVER_TRIES=2000
     out="'"$BATS_TEST_TMPDIR"'/ids"; : > "$out"
     drain() { bus_cmd_deliver --event X </dev/null | jq -r ".hookSpecificOutput.additionalContext // empty" | grep -o "<ccxp-note from=\"home\" id=\"[A-Z0-9]*\"" >> "$out"; }
     while jobs -r | grep -q .; do drain; sleep 0.3; done
@@ -375,7 +375,7 @@ mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 }
 
 @test "a second live session on one profile has its bus switched off with a warning" {
-  mkdir -p "$P/third"; as third init --name third >/dev/null
+  mkdir -p "$P/prof-third"; as third init --name third >/dev/null
   sleep 60 & live=$!
   CCXP_BUS_SESSION=a CCXP_BUS_SESSION_PID=$live as third deliver --register </dev/null
   as home send --to third "for session a" >/dev/null
@@ -443,7 +443,7 @@ await() { local i; for i in $(seq 1 60); do [ -e "$1" ] && return 0; sleep 0.1; 
 @test "watch exits 2 with the wrapped note on stderr when a note arrives" {
   unset NOW
   out="$BATS_TEST_TMPDIR/w.out"; rcf="$BATS_TEST_TMPDIR/w.rc"
-  ( set +e; BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/work" bash "$BUS" watch </dev/null >"$out" 2>"$out.err" 3>&-; echo $? > "$rcf" ) &
+  ( set +e; BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/prof-work" bash "$BUS" watch </dev/null >"$out" 2>"$out.err" 3>&-; echo $? > "$rcf" ) &
   sleep 0.6
   as home send --to work "wake up" >/dev/null
   await "$rcf"
@@ -456,11 +456,11 @@ await() { local i; for i in $(seq 1 60); do [ -e "$1" ] && return 0; sleep 0.1; 
 
 @test "a second watcher exits at once while the first is alive" {
   unset NOW
-  ( BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/work" bash "$BUS" watch </dev/null >/dev/null 2>&1 3>&- ) &
+  ( BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/prof-work" bash "$BUS" watch </dev/null >/dev/null 2>&1 3>&- ) &
   w=$!
   await "$CCXP_BUS_ROOT/watch/work.pid"
   s=$SECONDS
-  run env BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/work" bash "$BUS" watch </dev/null
+  run env BUS_WATCH_POLL=0.2 CLAUDE_CONFIG_DIR="$P/prof-work" bash "$BUS" watch </dev/null
   [ "$status" -eq 0 ]; [ $((SECONDS - s)) -lt 3 ]
   kill "$w" 2>/dev/null; pkill -f "bus.sh watch" 2>/dev/null || true
 }
