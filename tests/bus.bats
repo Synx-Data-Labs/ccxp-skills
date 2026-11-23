@@ -501,3 +501,9 @@ await() { local i; for i in $(seq 1 60); do [ -e "$1" ] && return 0; sleep 0.1; 
   as home send --to work "hello" >/dev/null
   [ -z "$(dlv work | ctx)" ]
 }
+
+@test "a sender name or id with a trailing newline is not a note" {
+  printf '%s\n' '{"id":"01ABC","from":"home\n","to":"work","time":"2026-11-23T12:00:00Z","text":"x"}' >> "$(inbox work)"
+  printf '%s\n' '{"id":"01ABD\n","from":"home","to":"work","time":"2026-11-23T12:00:00Z","text":"x"}' >> "$(inbox work)"
+  [ -z "$(dlv work | ctx)" ]
+}

@@ -221,8 +221,8 @@ def clean: explode | map(select(. == 10 or . == 9 or (. >= 32 and . != 127 and (
   and (. < 8288 or . > 8292) and . != 173 and . != 1564 and . != 6158 and (. < 65024 or . > 65039) and (. < 65529 or . > 65531)
   and (. < 917504 or . > 917759)))) | implode;
 def esc: gsub("&"; "&amp;") | gsub("<"; "&lt;");
-def okname: type == "string" and test("^[a-z0-9-]{1,32}$");
-def okid: type == "string" and test("^[A-Za-z0-9_-]{1,64}$");
+def okname: type == "string" and (contains("\n") | not) and test("^[a-z0-9-]{1,32}$");
+def okid: type == "string" and (contains("\n") | not) and test("^[A-Za-z0-9_-]{1,64}$");
 def body: ((.text | clean | esc | split("\n") | map("> " + .) | join("\n")) as $b
   | if ($b | length) > $maxbody then ($b[:$maxbody] + "\n> [truncated]") else $b end);
 def ageof: ($now - ((.time // "") | try fromdateiso8601 catch $now)) as $d
