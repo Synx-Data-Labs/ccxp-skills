@@ -15,7 +15,7 @@
 #            record and schedules the next wake at once (without it the chain would stop after the first wake).
 #            `plan --wake` also runs the cross-account bus fallback (T20261123-212153): it asks `_bus/bus.sh deliver` for unread
 #            notes and prints them, wrapped and labeled as another agent's words, on STDERR (stdout stays "schedule <n>"), so a
-#            note whose asyncRewake watcher never fired still arrives within one idle-wake interval (30 minutes at worst).
+#            note whose asyncRewake watcher never fired still arrives within one idle-wake interval (30 minutes by default, only while the idle wake is on).
 #            Silent when the bus is not configured for the profile, nothing is unread, or anything fails.
 #   status   one line: "enabled|disabled <reason>" and the recorded next wake epoch (0 = none).
 #
@@ -81,10 +81,11 @@ function iw-bus-notes() {
 function iw-plan() {
   local dir now next gap why wake=0
   [ "${1:-}" != --wake ] || wake=1
-  [ "$wake" = 0 ] || iw-bus-notes
   why="$(iw-disabled)"
   [ -z "$why" ] || return 1
   iw-autopilot-on && return 1
+  # After the gates: a note is marked delivered once printed, so it is only printed when the wake chain is on.
+  [ "$wake" = 0 ] || iw-bus-notes
   dir="$(iw-dir)" || { echo "idle-wake: no profile dir; set CCXP_IDLE_DIR" >&2; return 3; }
   now="$(iw-now)"; next="$(iw-next)"
   # Pending: a wake is recorded and not yet more than 2 minutes past due.

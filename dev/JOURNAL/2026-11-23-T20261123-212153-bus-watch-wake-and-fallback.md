@@ -13,7 +13,7 @@ Parent: T20261122-234265; spec: [cross-account-bus-spec.md](../docs/cross-accoun
 
 ## Scope
 
-- `watch` wake behaviour: one watcher per name, wake via stderr and exit 2, inotifywait or fswatch when present
+- `watch` wake behaviour: one watcher per name, wake via stderr and exit 2, `inotifywait` when present, else a 2 s poll
 - Fallback: `idle-wake.sh` also runs `bus.sh deliver`
 - Anything needing two live accounts stays an unticked acceptance item on the parent
 
@@ -31,4 +31,4 @@ Parent: T20261122-234265; spec: [cross-account-bus-spec.md](../docs/cross-accoun
 
 ## Closed
 
-- Merged through `/address-pr`. The live two-account wake stays an open acceptance item on T20261122-234265.
+- Lands through `/address-pr`. The live two-account wake stays an open acceptance item on T20261122-234265.
