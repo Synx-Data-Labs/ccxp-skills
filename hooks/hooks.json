@@ -10,6 +10,23 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/_bus/bus.sh\" deliver --register",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/_bus/bus.sh\" watch",
+            "async": true,
+            "asyncRewake": true,
+            "timeout": 28800
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -23,6 +40,15 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/persona-check.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/_bus/bus.sh\" deliver",
             "timeout": 5
           }
         ]
@@ -48,6 +74,19 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/secret-guard.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/_bus/bus.sh\" watch",
+            "async": true,
+            "asyncRewake": true,
+            "timeout": 28800
           }
         ]
       }
