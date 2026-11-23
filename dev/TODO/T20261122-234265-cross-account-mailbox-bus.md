@@ -38,7 +38,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 
 - [x] 1. Spike: done live by the owner 2026-11-22, not re-run: built-in messaging does not cross profiles; an async `asyncRewake` Stop hook that slept 60 s and exited 2 woke an idle session; the timeout applies to async hooks (a 90 s wake with a 30 s timeout never fired), so set 28800 s and exit 0 a minute early
 - [x] 2. T20261123-352398 `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
-- [ ] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
+- [x] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
 - [ ] 4. T20261123-292735 `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
 - [ ] 5. T20261123-244661 HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
 - [ ] 6. T20261123-212153 `watch` wake behaviour (`asyncRewake`) and the `Stop` wake entry in `hooks/hooks.json`; step 3's `SessionStart` watch entry carries the same `async`/`asyncRewake` flags

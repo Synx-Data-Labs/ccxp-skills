@@ -597,9 +597,10 @@ function bus_main() {
   case "$cmd" in
     init) bus_cmd_init "$@" ;;
     send) bus_cmd_send "$@" ;;
-    deliver) bus_cmd_deliver "$@" ;;
-    watch) bus_cmd_watch "$@" ;;
-    status) bus_cmd_status "$@" ;;
+    # hook commands: nothing to say or any failure is a silent exit 0; only a wake from watch exits 2
+    deliver) bus_cmd_deliver "$@" 2>/dev/null; return 0 ;;
+    watch) bus_cmd_watch "$@"; [[ $? -eq 2 ]] && return 2; return 0 ;;
+    status) bus_cmd_status "$@" 2>/dev/null; return 0 ;;
     read) bus_cmd_read "$@" ;;
     prune) bus_cmd_prune "$@" ;;
     *) bus_usage ;;
