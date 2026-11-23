@@ -1516,3 +1516,35 @@ _ap_on() { _ap start >/dev/null; }
   _ap off >/dev/null
   run _ap overdue; [ "$output" = 0 ]
 }
+
+@test "wake: a stale next_wake_at reads overdue until the armed wake is recorded; touches nothing else (T20261123-418520)" {
+  _ap_on
+  _ap config-set max_dop 3 >/dev/null
+  jq '.next_wake_at = "2026-10-28T06:27:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  run _ap overdue; [ "$output" = 12780 ] # the loop idles, a ScheduleWakeup is armed but nothing recorded: reads stalled
+  _ap record progress 1 T20261028-111111 "x" >/dev/null
+  jq '.next_wake_at = "2026-10-28T06:27:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  local before; before=$(jq -S 'del(.next_wake_at)' "$AUTOPILOT_STATE_FILE")
+  run _ap wake 1800 "idle, slots busy"; [ "$status" -eq 0 ]; [ "$output" = 1800 ]
+  [ "$(_j .next_wake_at)" = "2026-10-28T10:30:00Z" ]
+  run _ap overdue; [ "$output" = 0 ]
+  [ "$(jq -S 'del(.next_wake_at)' "$AUTOPILOT_STATE_FILE")" = "$before" ] # counters, slots, last_hold untouched
+  [ "$(_j .last_hold)" = null ]
+  run _ap wake 0; [ "$status" -eq 2 ]
+  run _ap wake 86401; [ "$status" -eq 2 ]
+  run _ap wake x; [ "$status" -eq 2 ]
+}
+
+@test "wake: no state write unless the loop is on" {
+  _ap_on
+  _ap pause >/dev/null
+  jq '.next_wake_at = null' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
+  run _ap wake 600; [ "$output" = 600 ]
+  [ "$(_j .next_wake_at)" = null ]
+}
+
+@test "wake: SKILL.md and parallel.md pair every ScheduleWakeup with a state write" {
+  run grep -c 'autopilot-state.sh wake' "$REPO_ROOT/autopilot/SKILL.md"; [ "$output" -ge 2 ]
+  run grep -c 'autopilot-state.sh wake' "$REPO_ROOT/autopilot/parallel.md"; [ "$output" -ge 1 ]
+  run grep -ni 'never arm a wake without recording it' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
+}
