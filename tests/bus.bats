@@ -479,3 +479,25 @@ await() { local i; for i in $(seq 1 60); do [ -e "$1" ] && return 0; sleep 0.1; 
   BUS_WATCH_SECS=1 BUS_WATCH_POLL=0.2 run as work watch </dev/null
   [ "$status" -eq 0 ]
 }
+
+@test "option flags with a missing value fail instead of hanging" {
+  run timeout 10 bash -c "$(declare -f as); P='$P'; BUS='$BUS'; as home send --to"
+  [ "$status" -eq 2 ]
+  run timeout 10 bash -c "$(declare -f as); P='$P'; BUS='$BUS'; as home prune --days"
+  [ "$status" -eq 2 ]
+  run timeout 10 bash -c "$(declare -f as); P='$P'; BUS='$BUS'; as home deliver --event </dev/null"
+  [ "$status" -ne 124 ]
+}
+
+@test "invisible tag and format characters are stripped from note text" {
+  as home send --to work "hi$(printf '\xf3\xa0\x80\x81')there$(printf '\xe2\x81\xa0')x" >/dev/null
+  run bash -c "$(declare -f as dlv ctx); P='$P'; BUS='$BUS'; dlv work | ctx"
+  [[ "$output" == *"> hithere"* ]] || [[ "$output" == *"hithere"* ]]
+  [[ "$output" != *$'\xf3\xa0\x80\x81'* ]]
+}
+
+@test "allow_from that is corrupt or not a list of strings admits nobody" {
+  jq '. + {allow_from: "home"}' "$P/prof-work/ccxp-bus/config.json" > "$BATS_TEST_TMPDIR/cfg" && cat "$BATS_TEST_TMPDIR/cfg" > "$P/prof-work/ccxp-bus/config.json"
+  as home send --to work "hello" >/dev/null
+  [ -z "$(dlv work | ctx)" ]
+}
