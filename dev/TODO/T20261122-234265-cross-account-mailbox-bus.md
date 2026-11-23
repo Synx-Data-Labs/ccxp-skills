@@ -37,7 +37,7 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 ## Build order
 
 - [x] 1. Spike: done live by the owner 2026-11-22, not re-run: built-in messaging does not cross profiles; an async `asyncRewake` Stop hook that slept 60 s and exited 2 woke an idle session; the timeout applies to async hooks (a 90 s wake with a 30 s timeout never fired), so set 28800 s and exit 0 a minute early
-- [ ] 2. T20261123-352398 `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
+- [x] 2. T20261123-352398 `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
 - [ ] 3. T20261123-596451 `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
 - [ ] 4. T20261123-292735 `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
 - [ ] 5. T20261123-244661 HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
@@ -46,13 +46,13 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 ## Acceptance criteria (testing plan)
 
 - [x] Spike first: SendMessage between two profiles; async `Stop` hook exiting 2 after 60 s idle wakes the session, and the timeout behaviour is recorded (owner, live, 2026-11-22)
-- [ ] Unit (bats): encode/decode, unknown fields ignored, 4,000-char cap, cursor save/reload, `recent_ids` dedupe, rotation only at end of file; time pinned with `NOW=`
-- [ ] Concurrency: 4 writers x 1,000 notes to one inbox while the reader drains; exactly 4,000 delivered, no torn lines, no duplicates
-- [ ] Crash: `kill -9` a writer mid-send and the reader between inject and cursor save; no partial line, no repeat
+- [x] Unit (bats): encode/decode, unknown fields ignored, 4,000-char cap, cursor save/reload, `recent_ids` dedupe, rotation only at end of file; time pinned with `NOW=`
+- [x] Concurrency: 4 writers x 1,000 notes to one inbox while the reader drains; exactly 4,000 delivered, no torn lines, no duplicates
+- [x] Crash: `kill -9` a writer mid-send and the reader between inject and cursor save; no partial line, no repeat
 - [ ] Wake: idle `work` session, `home` sends; `work` wakes within 5 s, terminal shows the notice, HUD cell clears
 - [ ] Offline: send to a closed session, open it, delivery shows age; inbox past the cap gives "mailbox full" (500 notes or 5 MB)
-- [ ] Guards: folder loosened to `0755` makes the hook refuse; a second live session on one profile has its bus off
-- [ ] Injection: a note with the wrapper's closing marker, fake "user:" lines and control characters arrives escaped and labeled
+- [x] Guards: folder loosened to `0755` makes the hook refuse; a second live session on one profile has its bus off
+- [x] Injection: a note with the wrapper's closing marker, fake "user:" lines and control characters arrives escaped and labeled
 - [ ] End to end: `home` sends, `work` replies with `--reply-to`, `home` sees the thread; on Linux and macOS
 
 ## Security and trust constraints
