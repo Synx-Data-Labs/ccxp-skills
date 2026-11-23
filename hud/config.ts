@@ -6,7 +6,7 @@ import { FILL_DEFAULT, parseFillColor } from './fill'
 
 export type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource }
 
-export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'ci', 'rate', 'cost', 'lastat']
+export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'bus', 'ci', 'rate', 'cost', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
 export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']
@@ -17,7 +17,7 @@ export const DEFAULTS: HudConfig = {
   band: true,
   userBorder: 'quote',
   userColor: 'suggestion',
-  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'ci', 'lastat'], // `issues` draws nothing until `issues` (the repo) is configured
+  fields: ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'alerts', 'bus', 'ci', 'lastat'], // `issues` draws nothing until `issues` (the repo) is configured
   pollSeconds: 15,
   ctxWarn: 75,
   ctxCrit: 50,

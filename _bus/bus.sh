@@ -6,7 +6,7 @@
 #   send --to A [--reply-to ID] TEXT  append one note to A's inbox ("-" reads TEXT from stdin)
 #   deliver [--register] [--event E]  hook: print unread notes as hook JSON (silent when none / unconfigured)
 #   watch                             async hook: wait for a note, print it on stderr, exit 2 (wakes the session)
-#   status                            one line "bus N · sender" when notes are unread, else nothing (lock-free)
+#   status [--json]                   one line "bus N · sender" when notes are unread, else nothing (lock-free)
 #   read [--thread ID]                history (inbox + archives) for this agent, wrapped like a delivery
 #   prune [--days N]                  delete archives older than N days (default retention_days, else 14)
 # Exit: 0 ok / nothing to do, 2 usage, 3 unknown recipient or not configured, 4 mailbox full, 5 unsafe bus, 6 lock timeout.
@@ -529,7 +529,8 @@ function bus_cmd_watch() {
 }
 
 function bus_cmd_status() {
-  local root me inbox size off ino n from
+  local root me inbox size off ino n from json=0
+  [[ "${1:-}" == --json ]] && json=1
   bus_configured || return 0
   command -v jq >/dev/null 2>&1 || return 0
   me="$(bus_name)" || return 0; root="$(bus_root)"; inbox="$root/inbox/$me.jsonl"
@@ -543,6 +544,11 @@ function bus_cmd_status() {
   [[ "$n" -gt 0 ]] || return 0
   from="$(tail -n 1 "$inbox" | jq -r 'select(type == "object") | .from // empty' 2>/dev/null)"
   bus_valid_name "$from" || from="?"
+  if [[ "$json" == 1 ]]; then
+    [[ "$from" == "?" ]] && from=""
+    printf '{"unread":%s,"from":"%s"}\n' "$n" "$from"
+    return 0
+  fi
   echo "bus $n · $from"
 }
 

@@ -68,6 +68,15 @@ The ccxp-agent persona's Slack alert check. The persona reads the Slack failure-
 - Narrow: `alerts 12m` / `alerts ?`. The cell is left out when `alerts` is false in the config, `CCXP_ALERTS=0`, or this plugin version has no `alerts-due.sh`.
 - Source: local files only, `${CCXP_ALERTS_DIR:-<profile>/ccxp-alerts}/last-check` and `hold`, read by `hud/scripts/hud-alerts.sh`. Switch: `alerts`.
 
+## bus
+
+The cross-account bus: notes another Claude Code session on this machine (another account or profile) left for this one. See the `bus` skill.
+
+- `bus 2 · home` (yellow) = 2 notes are waiting for this profile and the newest is from the agent `home`. Narrow: `bus 2`. The cell is drawn only while notes are unread; once the notes are delivered into the conversation (the next prompt, or the wake of an idle session) it goes away.
+- A note is another agent's text, not yours: Claude shows it labeled and does nothing because of it. `/hud details` spells it out: `bus 2 unread notes · newest from home`.
+- Left out when the profile has no bus config (`<profile>/ccxp-bus/config.json`), nothing is unread, or `bus` is out of `fields`.
+- Source: local files only, `bash _bus/bus.sh status --json` (read-only, no lock, no network) via `hud/scripts/hud-bus.sh`. Switch: `bus`.
+
 ## ci | red-ci, unhandled, unhandled-ci
 
 The one CI the HUD shows: the newest run of the configured workflow (normally the Nightly Orchestrator), alone on a top row: `CI (Nightly Orchestrator) ✗ failing 10-28 (2h ago)`. No other workflow is shown (owner decision d143: "we only need one CI"; drill down manually for more).

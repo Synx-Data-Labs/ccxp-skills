@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, alertsVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, alertsVariants, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -1624,6 +1624,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   nightly: /^nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
   issues: /^issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
   alerts: /^alerts checked \d+h ago/,
+  bus: /^bus 2 unread notes · newest from home/,
   ci: /^CI \(/,
   rate: /5-hour limit/,
   cost: /API-equivalent cost \$/,
@@ -1644,6 +1645,7 @@ test('details is a superset of the band: every band cell has a details counterpa
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
     issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
     alerts: { checked_at: Math.floor(DETAIL_NOW / 1000) - 3 * 3600, held: false },
+    bus: { unread: 2, from: 'home' },
     plugin: PLUGIN_NEW,
     ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
   }
@@ -1661,7 +1663,7 @@ test('details is a superset of the band: every band cell has a details counterpa
   }
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
-  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'alerts checked 3h ago', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'alerts checked 3h ago', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })
 
 // ---- CI ETA --------------------------------------------------------------------------------------
@@ -1863,4 +1865,34 @@ test('configReport: missing files mean defaults; values, sources, invalid and un
   expect(some).toContain('/cfg/state/hud-ci')
   expect(some).toContain('CCXP_ALERTS=0')
   expect(configReport({ paths: { user: '/u/c.json' }, userText: '{nope', env: {} })).toContain('not valid JSON')
+})
+
+// ---- cross-account bus cell ----
+
+test('parseHelper: bus keeps a positive whole count and a plain agent name; anything else is no cell or no name', async () => {
+  const b = (x: unknown) => parseHelper(JSON.stringify({ ...BASE, bus: x }))!.bus
+  expect(b({ unread: 2, from: 'home' })).toEqual({ unread: 2, from: 'home' })
+  expect(b({ unread: 2.7, from: 'work-2' })).toEqual({ unread: 2, from: 'work-2' })
+  expect(b({ unread: 5000, from: 'home' })!.unread).toBe(999)
+  expect(b({ unread: 2, from: 'Home\u001b[31m' })).toEqual({ unread: 2, from: '' })
+  expect(b({ unread: 0, from: 'home' })).toBeNull()
+  expect(b({ unread: -1, from: 'home' })).toBeNull()
+  expect(b({ unread: 'x' })).toBeNull()
+  expect(b('home')).toBeNull()
+  expect(b(null)).toBeNull()
+  expect(parseHelper(JSON.stringify(BASE))!.bus).toBeNull()
+})
+
+test('bus cell: warning colour, narrows to the count, details spells it out', async () => {
+  expect(busVariants({ unread: 2, from: 'home' })).toEqual([[{ text: 'bus 2 · home', color: 'warning' }], [{ text: 'bus 2', color: 'warning' }]])
+  expect(busVariants({ unread: 1, from: '' })[0][0].text).toBe('bus 1')
+  expect(busVariants({ unread: 1, from: 'home' }, true)[0][0].text).toBe('bus 1 unread note · newest from home')
+  expect(busVariants({ unread: 3, from: 'home' }, true)[0][0].text).toBe('bus 3 unread notes · newest from home')
+})
+
+test('bus cell: drawn in the band when the helper has it, off with `bus` out of fields, absent without data', async () => {
+  const s = withHelper({ ci: null, bus: { unread: 2, from: 'home' } }) as any
+  expect(text(bandRows(s, NOCI, 200, ANOW))).toContain('bus 2 · home')
+  expect(text(bandRows(s, { ...NOCI, fields: ['repo'] }, 200, ANOW))).not.toContain('bus 2')
+  expect(text(bandRows(withHelper({ ci: null, bus: null }) as any, NOCI, 200, ANOW))).not.toContain('bus ')
 })
