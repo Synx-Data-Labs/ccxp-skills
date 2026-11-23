@@ -1,5 +1,5 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Owner request 2026-11-22 (cross-message spec)
 type: feature
@@ -35,16 +35,16 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 
 ## Build order
 
-- [ ] 1. Spike: re-verify built-in messaging between two profiles; `asyncRewake` Stop hook waking an idle session (spec records both as confirmed live; async hook timeout applies, so set 28800 s and exit 0 a minute early)
-- [ ] 2. `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
-- [ ] 3. `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
-- [ ] 4. `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
-- [ ] 5. HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
-- [ ] 6. `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
+- [x] 1. Spike: done live by the owner 2026-11-22, not re-run: built-in messaging does not cross profiles; an async `asyncRewake` Stop hook that slept 60 s and exited 2 woke an idle session; the timeout applies to async hooks (a 90 s wake with a 30 s timeout never fired), so set 28800 s and exit 0 a minute early
+- [ ] 2. [T20261123-352398](T20261123-352398-bus-script-and-bats.md) `_bus/bus.sh` (`send`, `deliver`, `watch`, `status`, `read`, `prune`) with bats tests in `tests/`; locks via `_session/lock.sh`; identity via `_session/profile-dir.sh`
+- [ ] 3. [T20261123-596451](T20261123-596451-bus-hooks-json.md) `hooks/hooks.json` entries: `SessionStart` (`deliver --register` plus async `watch`), `UserPromptSubmit` (`deliver`)
+- [ ] 4. [T20261123-292735](T20261123-292735-bus-skill.md) `bus` skill (when and how Claude runs `bus.sh`; follows skill-conventions)
+- [ ] 5. [T20261123-244661](T20261123-244661-bus-hud-cell-and-notice.md) HUD `bus` cell (`bus 2 · home`) and the hook `systemMessage` notice
+- [ ] 6. [T20261123-212153](T20261123-212153-bus-watch-wake-and-fallback.md) `watch` wake hook: async `asyncRewake` on `SessionStart` and `Stop`
 
 ## Acceptance criteria (testing plan)
 
-- [ ] Spike first: SendMessage between two profiles; async `Stop` hook exiting 2 after 60 s idle wakes the session, and the timeout behaviour is recorded
+- [x] Spike first: SendMessage between two profiles; async `Stop` hook exiting 2 after 60 s idle wakes the session, and the timeout behaviour is recorded (owner, live, 2026-11-22)
 - [ ] Unit (bats): encode/decode, unknown fields ignored, 4,000-char cap, cursor save/reload, `recent_ids` dedupe, rotation only at end of file; time pinned with `NOW=`
 - [ ] Concurrency: 4 writers x 1,000 notes to one inbox while the reader drains; exactly 4,000 delivered, no torn lines, no duplicates
 - [ ] Crash: `kill -9` a writer mid-send and the reader between inject and cursor save; no partial line, no repeat
@@ -70,5 +70,6 @@ Full spec (verbatim): [dev/docs/cross-account-bus-spec.md](../docs/cross-account
 - Spike items are recorded as confirmed in the spec; re-run only if behaviour is in doubt
 - Work/personal boundary: notes of one account sit on the same device as the other account; the owner's organization policy is the default until changed
 - `home -> work` direction "configurable" is unspecified (no config shape defined)
+  - Default taken: both directions allowed without a prompt; the only knob is `<profile>/ccxp-bus/config.json` (`name`, optional `ttl_days`, `allow_from` list; absent allows all registered agents)
 - Not confirmed in spec: what Claude sees from a `Stop` hook's `reason`
 - Fallback if `asyncRewake` proves unreliable: `idle-wake.sh` also runs `bus.sh deliver` (30 min worst case)
