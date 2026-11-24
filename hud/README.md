@@ -230,14 +230,14 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 
 - Opt-in: add `rate` to `fields`. It shows how much of the subscription's two rolling windows is LEFT and when each resets, so you can judge how hard to push (for example how wide to run the autopilot's `max_dop`).
 - Source: the engine's `rate_limits` (the status-line fields `rate_limits.five_hour` and `rate_limits.seven_day`, each `used_percentage` 0-100 and `resets_at` as Unix epoch seconds; the mod reads them as `rateLimits[]` `kind`, `percentUsed`, `resetsAt`). They exist only for claude.ai Pro, Max and Ultra logins and only after the first API response; each window may be absent on its own.
-- Band, widest first: `5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h`, then both without the runout, then only the window with LESS headroom (a tie keeps `5h`), then it without its time, then the cell is dropped (before anything else). `out 57m` is the 5-hour burn-rate runout (used % / elapsed projected to 100%), shown only when it lands before the reset.
+- Band, widest first: `5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h`, then both without the runout, then only the window with LESS headroom (a tie keeps `5h`), then it without its time, then the cell is dropped (after the cost and stale tags, before any other cell). `out 57m` is the 5-hour burn-rate runout (used % / elapsed projected to 100%), shown only when it lands before the reset.
 - Time left is compact and rounded down: `1h12m`, `3d4h`, `2h`, `40m`, `<1m`. Colour by the percent LEFT, strict boundaries on the rounded number: green at 25 or more, orange under 25, red under 10 (`rateTone`).
 - A window the engine does not report shows nothing; neither window means no cell; a window whose reset time has passed is dropped (the engine drops it too). Never an error.
 - `/hud details` spells both out (`5-hour limit ... runs out in ... resets in ...`, `7-day limit ... resets in ...`).
 
 ### Rate-limit cache file (for the autopilot)
 
-- Only the HUD sees the engine's rate limits, so after each refresh the mod pipes them to `hud/scripts/hud-rate-cache.sh write`, which keeps the latest snapshot in `<profile>/state/hud-cache/rate-limits.json` (`$CCXP_HUD_CACHE_DIR` overrides the folder). It is written whether or not the `rate` cell is on, but not when the engine reports no limits; an unchanged reading is rewritten once a minute to keep `written_at` fresh. The quota is shared by every session of the account, so the newest write from any session wins.
+- Only the HUD sees the engine's rate limits, so after each refresh the mod pipes them to `hud/scripts/hud-rate-cache.sh write`, which keeps the latest snapshot in `<profile>/state/hud-cache/rate-limits.json` (`$CCXP_HUD_CACHE_DIR` overrides the folder). It is written whether or not the `rate` cell is on, but not when the engine reports no limits; an unchanged reading is rewritten once a minute to keep `written_at` fresh. The quota is shared by every session of the account and the file is shared too: a write never rolls a window back (within one reset time the higher percentage stays; a later reset time is a newer window), so an idle session cannot overwrite a busy one's numbers.
 - Format (mode 600, replaced atomically through a temp file and rename, no secrets):
 
 ```json

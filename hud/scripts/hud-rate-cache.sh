@@ -38,21 +38,30 @@ hud-rate-cache-path() {
 
 # stdin: the windows object -> the file. Untrusted input: only numbers survive.
 hud-rate-cache-write() {
-  local dir file now body tmp
+  local dir file now body tmp old
   dir=$(_hrc-dir) || return 0
   file="$dir/rate-limits.json"
   now=$(_hrc-now)
-  body=$(jq -c --argjson now "$now" '
-    def win($w): ($w // {}) as $x
-      | if ($x.used_percentage | type) == "number" and $x.used_percentage >= 0 and $x.used_percentage <= 100
-        then {used_percentage: $x.used_percentage}
-             + (if ($x.resets_at | type) == "number" and $x.resets_at > 0 then {resets_at: $x.resets_at} else {} end)
-        else empty end;
+  [ -r "$file" ] && old=$(cat "$file" 2>/dev/null) || old='{}'
+  body=$(jq -c --argjson now "$now" --argjson old "$(printf '%s' "$old" | jq -c 'if type == "object" then . else {} end' 2>/dev/null || echo '{}')" '
+    def win($w): if ($w | type) == "object"
+      then ($w | if (.used_percentage | type) == "number" and .used_percentage >= 0 and .used_percentage <= 100
+        then {used_percentage: .used_percentage}
+             + (if (.resets_at | type) == "number" and .resets_at > 0 then {resets_at: .resets_at} else {} end)
+        else empty end)
+      else empty end;
+    # Several sessions share the file and an idle one may hold older numbers: within one window usage only grows and a
+    # later reset time is a newer window, so keep whichever of old and new is the newer truth.
+    def newer($o; $n):
+      if ($o | type) != "object" or ($o.used_percentage | type) != "number" then $n
+      elif ($o.resets_at // 0) > ($n.resets_at // 0) then $o
+      elif ($o.resets_at // 0) == ($n.resets_at // 0) and $o.used_percentage > $n.used_percentage then $o
+      else $n end;
     (first(win(.five_hour)) // null) as $f | (first(win(.seven_day)) // null) as $s
     | if ($f == null and $s == null) then empty
       else {version: 1, written_at: $now}
-           + (if $f != null then {five_hour: $f} else {} end)
-           + (if $s != null then {seven_day: $s} else {} end) end' 2>/dev/null) || return 0
+           + (if $f != null then {five_hour: newer($old.five_hour; $f)} else {} end)
+           + (if $s != null then {seven_day: newer($old.seven_day; $s)} else {} end) end' 2>/dev/null) || return 0
   [ -n "$body" ] || return 0
   (
     umask 077
@@ -71,7 +80,9 @@ hud-rate-cache-read() {
   local max="" file now out at
   while [ $# -gt 0 ]; do
     case "$1" in
-      --max-age) max="${2:-}"; shift 2 ;;
+      --max-age)
+        [ $# -ge 2 ] || { echo "hud-rate-cache read: --max-age needs whole seconds" >&2; return 64; }
+        max="$2"; shift 2 ;;
       *) echo "hud-rate-cache read: unknown argument: $1" >&2; return 64 ;;
     esac
   done

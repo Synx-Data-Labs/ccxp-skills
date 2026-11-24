@@ -224,7 +224,7 @@ function usagePart(u: any): Partial<Snapshot> {
     const five = u.rateLimits.find((r: any) => r?.kind === 'five_hour')
     out.rateUsed = typeof five?.percentUsed === 'number' ? five.percentUsed : null
     out.rateResetsAt = resetEpochSec(five?.resetsAt ?? five?.resets_at ?? five?.resetAt)
-    const seven = u.rateLimits.find((r: any) => r?.kind === 'seven_day')
+    const seven = u.rateLimits.find((r: any) => r?.kind === 'seven_day' || r?.kind === 'sevenDay')
     out.rate7Used = typeof seven?.percentUsed === 'number' ? seven.percentUsed : null
     out.rate7ResetsAt = resetEpochSec(seven?.resetsAt ?? seven?.resets_at ?? seven?.resetAt)
   }
