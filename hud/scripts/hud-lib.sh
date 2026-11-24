@@ -516,10 +516,10 @@ sl-queue-materialize() {
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
-#   {"total","ready","held","epic","claimed","autoparked","apholds"}
+#   {"total","ready","held","epic","claimed","apholds"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
 # lands in EXACTLY ONE of ready|held|epic|claimed, first match wins, so those four always
-# sum to total; autoparked is an extra count from the autopilot state file:
+# sum to total; apholds is an extra count from the autopilot state file:
 #   epic      the frontmatter has a `children:` key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
 #             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
@@ -533,13 +533,11 @@ sl-queue-materialize() {
 #             auto-pick skips. Nothing is derived from any marker text (T20261102-296642).
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
-#   autoparked (extra, not a bucket) = tasks the autopilot parked since this run started (`parked`
-#             entries at or after `run_started_at`, else `started_at`). The state file's `visits`
-#             map is not read any more (the revisited count was retired from the HUD).
+#             (An old state file's `visits` / `parked` keys are ignored: the park path is retired.)
 #   apholds   (extra, not a bucket) = the number of keys of the state file's `.holds` object (task id -> hold),
 #             counted whatever the autopilot status; no task text is read. Absent file/key or a non-object is 0.
 # autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, for its
-# dispatch clone path (so the clone's own claims count as this clone's) and the parked count above.
+# dispatch clone path (so the clone's own claims count as this clone's).
 # A queue line whose task file is missing has no hints and counts as ready.
 sl-queue-json() {
   local repo_root="$1" want_src="${2:-working-tree}" src_root todo q
@@ -601,9 +599,7 @@ _sl-queue-json() {
   local open_ids; open_ids=$(ls "$todo" 2>/dev/null | grep -oE '^T[0-9]+-[0-9]+' || true)
   local state='{"clone":""}' sf="$repo_root/dev/.autopilot-state.json" st
   if [ -f "$sf" ]; then
-    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | (((.run_started_at | strings) // (.started_at | strings)) // "") as $s0 | {
-        clone: ((.dispatch_clone_path // "") | strings),
-        parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""
+    st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | {clone: ((.dispatch_clone_path // "") | strings)}' "$sf" 2>/dev/null) || st=""
     [ -z "$st" ] || state="$st"
   fi
   local aph=0
@@ -627,7 +623,7 @@ _sl-queue-json() {
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
     | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
-      + {autoparked: (($st.parked // []) | unique | length), apholds: $aph} + $extra' 2>/dev/null || true
+      + {apholds: $aph} + $extra' 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt

@@ -129,7 +129,6 @@ export type Ledger = {
 /**
  * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|held|epic|claimed, so those sum to `total`.
  * `held` = a status the HUD counts as not takeable (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off); auto-pick's own gate is slightly wider.
- * `autoparked` comes from the autopilot state, not from the tasks.
  */
 export type Queue = {
   total: number
@@ -138,8 +137,6 @@ export type Queue = {
   epic: number
   /** Held by another session; shown only when above 0. */
   claimed: number
-  /** Tasks the autopilot parked since this run started; shown only when above 0. */
-  autoparked: number
   /** Autopilot holds (keys of the state file's `.holds`); shown as `2hd` only when above 0. Absent in an older helper answer = 0. */
   apholds?: number
   /** Set when the queue was read from origin/<branch> (queue.source `default-branch`): the cell then reads `queue@<branch>`. */

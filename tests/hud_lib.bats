@@ -474,7 +474,7 @@ _queue_fixture() {
   local repo; repo=$(_queue_fixture q-fm)
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = '{"total":15,"ready":7,"held":4,"epic":3,"claimed":1,"autoparked":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":15,"ready":7,"held":4,"epic":3,"claimed":1,"apholds":0}' ] || { echo "$output"; false; }
   [ "$(jq '.ready + .held + .epic + .claimed - .total' <<<"$output")" = 0 ]
 }
 
@@ -499,7 +499,7 @@ _queue_fixture() {
   done
 }
 
-@test "sl-queue-json: no marker text is read; autoparked comes from the autopilot state; visits are not read" {
+@test "sl-queue-json: no marker text is read; old visits/parked state keys are ignored" {
   local repo; repo=$(_make_repo q-state)
   printf '# Q\n' > "$repo/dev/TODO/queue.md"
   _task "$repo" 1 "Open — needs a human [external]: waits on HashData"   # the 5.9.0 text is just text: ready
@@ -507,25 +507,15 @@ _queue_fixture() {
   _task "$repo" 3 Open
   local i; for i in 1 2 3; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"autoparked":0,"apholds":0}' ] || { echo "$output"; false; }
-  # parked entries since the run start count; the visits map is ignored (the revisited count is retired)
-  printf '{"schema":2,"status":"on","started_at":"2026-10-28T14:00:00Z","run_started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2,"T20260101-000002":0,"T20260101-000099":3},"parked":[{"id":"T20260101-000050","at":"2026-10-27T09:00:00Z"},{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"},{"id":"T20260101-000052","at":"2026-10-28T11:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
+  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  # an old state file with visits/parked (the park path is retired) is read without error and adds no key
+  printf '{"schema":2,"status":"on","started_at":"2026-10-28T14:00:00Z","run_started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2},"parked":[{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.ready,.autoparked]' <<<"$output")" = '[3,2]' ] || { echo "$output"; false; }
-  # paused counts too; off, a 5.9.0 file without the fields and a malformed file show zeros
+  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  # paused, off and a malformed file leave the buckets alone
   jq '.status = "paused"' "$repo/dev/.autopilot-state.json" > "$repo/s.t" && mv "$repo/s.t" "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.autoparked]' <<<"$output")" = '[2]' ]
-  jq '.status = "off"' "$repo/dev/.autopilot-state.json" > "$repo/s.t" && mv "$repo/s.t" "$repo/dev/.autopilot-state.json"
-  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.autoparked]' <<<"$output")" = '[0]' ]
-  printf '{"schema":2,"status":"on","dispatch_clone_path":null}' > "$repo/dev/.autopilot-state.json"
-  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.total,.autoparked]' <<<"$output")" = '[3,0]' ]
-  # a non-string run_started_at falls back to started_at instead of losing the whole state read
-  printf '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","run_started_at":5,"visits":{"T20260101-000001":1},"parked":[{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
-  run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$(jq -c '[.autoparked]' <<<"$output")" = '[1]' ] || { echo "$output"; false; }
+  [ "$(jq -c '[.ready,.apholds]' <<<"$output")" = '[3,0]' ]
   printf 'not json' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$(jq -r .total <<<"$output")" = 3 ]
@@ -548,7 +538,7 @@ _queue_fixture() {
   printf '### E1 — Thing\n\n**Parent design task:** [T20260101-000008](../TODO/T20260101-000008-t.md) (supersedes T20260101-000001)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
   local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":10,"ready":5,"held":1,"epic":4,"claimed":0,"autoparked":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":10,"ready":5,"held":1,"epic":4,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
 }
 
 @test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {
@@ -562,5 +552,5 @@ _queue_fixture() {
   local i; for i in 1 2 3 4; do _qline "$i" "$repo"; done
   printf '{"schema":2,"status":"paused","dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":4,"ready":3,"held":1,"epic":0,"claimed":0,"autoparked":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":4,"ready":3,"held":1,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
 }
