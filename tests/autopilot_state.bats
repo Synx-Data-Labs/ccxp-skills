@@ -1533,6 +1533,7 @@ _ap_on() { _ap start >/dev/null; }
   run _ap wake 0; [ "$status" -eq 2 ]
   run _ap wake 86401; [ "$status" -eq 2 ]
   run _ap wake x; [ "$status" -eq 2 ]
+  run _ap wake 08; [ "$output" = 8 ]
 }
 
 @test "wake: no state write unless the loop is on" {

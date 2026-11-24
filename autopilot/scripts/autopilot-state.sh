@@ -378,6 +378,7 @@ ap-hold() {
 ap-wake() {
   local sec="${1:-}" nw
   [[ "$sec" =~ ^[0-9]+$ ]] && [ "$sec" -ge 1 ] && [ "$sec" -le 86400 ] || { echo "wake <seconds 1-86400> [reason]" >&2; return 2; }
+  sec=$((10#$sec))  # no octal reading of a leading zero
   if [ "$(ap-status)" = on ]; then
     nw=$(( $(_ap_epoch "$(ap-now)") + sec ))
     _ap_update --arg w "$(_ap_iso "$nw")" '.next_wake_at = $w'
