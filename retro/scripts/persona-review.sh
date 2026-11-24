@@ -16,7 +16,8 @@
 #              The dedupe check looks for an open task naming the ref; the retro agent files
 #              the `file` rows with /new-task (one task per row, refs and target in the body)
 #   retire-enforced [--apply]   decisions with `enforced-by` (ledger.sh decision enforce) whose
-#              target is a file on origin/main or a merged PR AND that a task names: dry-run
+#              target is a file (blob) on origin/main or a merged PR number AND that a T<id> task
+#              file names both the ref and the target (origin/main is not fetched here): dry-run
 #              by default; --apply runs `ledger.sh decision retire <ref> "folded into ..."`.
 #              The only retirement this script performs (owner rule, d155 follow-up).
 #
@@ -177,7 +178,7 @@ function pr-task-files() { # $1 repo, $2 ref, $3 "open" (TODO+PARKING) or "all" 
   local d dirs=("$1/dev/TODO" "$1/dev/PARKING")
   [[ "$3" == all ]] && dirs+=("$1/dev/JOURNAL")
   for d in "${dirs[@]}"; do
-    [[ -d "$d" ]] && grep -lE "(^|[^A-Za-z0-9])$2([^A-Za-z0-9]|$)" "$d"/*.md 2>/dev/null || true
+    [[ -d "$d" ]] && grep -lE "(^|[^A-Za-z0-9])$2([^A-Za-z0-9]|$)" "$d"/*T[0-9]*-[0-9]*.md 2>/dev/null || true
   done
 }
 
@@ -187,7 +188,7 @@ function pr-tasks() { # $1 persona, $2 scope, $3 min shared, $4 repo
   local ref b why stage repo text f
   while IFS=$'\t' read -r ref b why stage repo; do
     case "$b" in persona|skill-task|script-or-hook|profile-config) ;; *) continue ;; esac
-    text=$(pr-decisions | jq -r --arg r "$ref" '.[] | select(.ref == $r) | .text')
+    text=$(pr-decisions | jq -r --arg r "$ref" '.[] | select(.ref == $r) | .text | gsub("[\t\n]"; " ")')
     f=$(pr-task-files "$4" "$ref" open | head -1)
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ref" "$b" "$stage" "$repo" "$([[ -n "$f" ]] && echo "exists:$(pr-task-id "$f")" || echo file)" "$text"
   done < <(pr-bucket "$1" "$2" "$3")
@@ -196,39 +197,43 @@ function pr-tasks() { # $1 persona, $2 scope, $3 min shared, $4 repo
 function pr-resolved() { # $1 repo, $2 enforced-by; prints a verdict word on stdout: ok|unmerged|missing|task
   local repo="$1" t="$2" gh state
   if [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then echo task
-  elif [[ "$t" =~ ^#?[0-9]+$ || "$t" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$ ]]; then
+  elif [[ "$t" =~ ^#?[0-9]+$ ]]; then
     gh="${PR_GH:-bash $PR_ROOT/_gh/gh.sh}"
     state=$(cd "$repo" && $gh pr view "${t#\#}" --json state -q .state 2>/dev/null) || { echo missing; return 0; }
     [[ "$state" == MERGED ]] && echo ok || echo unmerged
   elif [[ "$t" == /* || "$t" == *..* ]]; then echo missing
-  elif git -C "$repo" cat-file -e "origin/main:${t#./}" 2>/dev/null; then echo ok
+  elif [[ "$(git -C "$repo" cat-file -t "origin/main:${t#./}" 2>/dev/null)" == blob ]]; then echo ok
   else echo missing; fi
 }
 
 function pr-retire-enforced() { # $1 repo, $2 apply (true|false)
-  local repo="$1" apply="$2" ledger="${LEDGER:-$PR_ROOT/hud/scripts/ledger.sh}" ref tgt v f tid reason n=0
+  local repo="$1" apply="$2" ledger="${LEDGER:-$PR_ROOT/hud/scripts/ledger.sh}" ref tgt v f cand tid reason n=0 decs
   [[ -f "$ledger" ]] || pr-die "ledger not found: $ledger" 3
+  decs=$(pr-decisions) || return 3
   while IFS=$'\x1f' read -r ref tgt; do
     n=$((n + 1))
-    v=$(pr-resolved "$repo" "$tgt")
+    v=$(pr-resolved "$repo" "$tgt" </dev/null)
     case "$v" in
       ok) ;;
       task) printf '%s\tpending\t%s is a task id; point enforced-by at a merged PR or a file on origin/main\n' "$ref" "$tgt"; continue ;;
       unmerged) printf '%s\tpending\t%s is not merged yet\n' "$ref" "$tgt"; continue ;;
       *) printf '%s\tpending\t%s is not on origin/main\n' "$ref" "$tgt"; continue ;;
     esac
-    f=$(pr-task-files "$repo" "$ref" all | head -1)
-    if [[ -z "$f" ]]; then printf '%s\tpending\tno task names %s; file the distill task first\n' "$ref" "$ref"; continue; fi
+    f=""
+    while IFS= read -r cand; do # the task must name the ref AND the enforcing target
+      [[ -n "$cand" ]] && grep -qF -- "$tgt" "$cand" && { f="$cand"; break; }
+    done < <(pr-task-files "$repo" "$ref" all)
+    if [[ -z "$f" ]]; then printf '%s\tpending\tno task names both %s and %s; file the distill task first\n' "$ref" "$ref" "$tgt"; continue; fi
     tid=$(pr-task-id "$f")
     reason="folded into $tgt (task ${tid:-$(basename "$f")})"
     reason="${reason:0:200}"
     if [[ "$apply" == true ]]; then
-      bash "$ledger" decision retire "$ref" "$reason" >/dev/null || { printf '%s\tfailed\tretire call failed\n' "$ref"; continue; }
+      bash "$ledger" decision retire "$ref" "$reason" >/dev/null </dev/null || { printf '%s\tfailed\tretire call failed\n' "$ref"; continue; }
       printf '%s\tretired\t%s\n' "$ref" "$reason"
     else
       printf '%s\twould-retire\t%s\n' "$ref" "$reason"
     fi
-  done < <(pr-decisions | jq -r '.[] | select((.enforced_by // "") != "") | [.ref, .enforced_by] | join("\u001f")')
+  done < <(jq -r '.[] | select((.enforced_by // "") != "") | [.ref, .enforced_by] | join("\u001f")' <<<"$decs")
   [[ $n -gt 0 ]] || echo "# no active decision has enforced-by"
 }
 
