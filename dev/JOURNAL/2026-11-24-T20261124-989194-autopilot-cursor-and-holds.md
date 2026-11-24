@@ -1,10 +1,12 @@
 ---
-status: Open
+status: Done
 estimation: 1
 source: owner request, this conversation, 2026-11-24 (job 1514; decisions d152, d156, d160)
 related: [T20261124-182499, T20261124-870400]
 type: feature
 description: Autopilot picks by tier and a cursor, and recorded holds replace bottoming and the visits counter
+claimed_by:
+claimed_role:
 ---
 
 # T20261124-989194: Autopilot cursor and holds replace bottom and visits
@@ -42,8 +44,8 @@ description: Autopilot picks by tier and a cursor, and recorded holds replace bo
 
 ## Done criteria
 
-- [ ] Sub-tasks filed and landed as one docs-only PR, the first one driven in the same run.
-- [ ] `claude plugin validate .` shows zero warnings.
+- [x] Sub-tasks filed and landed as one docs-only PR, the first one driven in the same run.
+- [x] `claude plugin validate .` shows zero warnings.
 
 ## Split (2026-11-24)
 
@@ -54,3 +56,25 @@ description: Autopilot picks by tier and a cursor, and recorded holds replace bo
   4. T20261124-321658: stalled cycle creates a hold, HUD held count
   5. T20261124-115593: retire visits, `max_visits`, park-after-N
 - This task closes when sub-task 5 merges.
+
+## Closed (2026-11-24)
+
+What shipped (owner request "we need to drive the task to build the cursor", cursor option A, d152, d156, d158 to d162):
+
+- `tier:` frontmatter, 1 to 4, default 3: lint and the `todo-tier` reader (PR #741; the lint and reader now agree on `02`, `+2` and `2.0`, fixed in PR #749).
+- Holds store (PR #749, claim #746, close #759): `hold-add`, `holds [--json]`, `release`, `holds-check`; kinds `waiting|needs-human|stalled`; conditions `until`, `run:`, `pr:`, `file-changed`, `task-left-todo`; carried over `off`/`start`.
+- Tier cursor selection (PR #762, claim #761, close #764): `top` and `pickable` pick in the highest tier with a free task, per-tier cursors, held tasks passed over, `top --urgent` for the reserved slots, `top --nth` intact.
+- Holds replace bottom (PR #765, claim #766, close #767): `hold-report` turns a stalled cycle into a hold; no `/bottom`, no `queue.md` edit, no housekeeping agent or PR; HUD queue cell shows the hold count (`hd`).
+- Visits retired (PR #768, claim #769, close #770): `visits`, `max_visits` and park-after-N removed.
+- Also: PR #747 fixed the `todo` skill score ratchet left red by #741; the umbrella and sub-task lines were swept into `queue.md` in chain order (PR #749).
+
+Known and accepted gaps: a `file-changed` hold also releases when a pull rewrites the task file; no hold is made while the loop is paused; a held task keeps its claim until the clone's next claim; `busy on --urgent` is not restricted by tier; `hud/pure.test.ts` could not run with the real runner locally. The changes reach the owner's running loop only after the owner updates the plugin; no release, tag or version bump was made.
+
+Follow-ups filed: none.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, tests written alongside the code
+- Verification (`superpowers:verification-before-completion`): yes, per sub-task
+- Systematic debugging (`superpowers:systematic-debugging`): no
+- Receiving code review (`superpowers:receiving-code-review`): yes, findings fixed in each sub-task PR
