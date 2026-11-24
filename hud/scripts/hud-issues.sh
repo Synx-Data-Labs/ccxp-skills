@@ -7,8 +7,9 @@
 #   open        = open issues of the repo
 #   undelivered = open issues WITHOUT the delivered status label (default `status:delivered`, taken from the
 #                 customer-support skill's label_names.sh when present; override HUD_ISSUES_DELIVERED_LABEL)
-#   hwm         = the largest `open` over the last 180 / 30 / 7 days, the same windows and rules as the queue
-#                 high watermark (sl-hwm-windows in hud-queue-hwm.sh: value at the window start counts).
+#   hwm         = the largest `open` over the last 180 / 30 / 7 days, nested windows (sl-hwm-windows in
+#                 hud-queue-hwm.sh, kept for this cell; the queue cell uses separate last month / last week / this
+#                 week windows now). The value at the window start counts.
 #
 # Two series feed hwm, stored in the queue-hwm state dir under a key of "issues:<repo>":
 #   1. history - rebuilt from every refresh: +1 at each issue's createdAt, -1 at its closedAt (one `gh issue list`

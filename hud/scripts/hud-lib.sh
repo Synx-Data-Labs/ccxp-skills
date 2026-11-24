@@ -516,10 +516,10 @@ sl-queue-materialize() {
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
-#   {"total","ready","held","epic","claimed","revisited","autoparked"}
+#   {"total","ready","held","epic","claimed","autoparked"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
 # lands in EXACTLY ONE of ready|held|epic|claimed, first match wins, so those four always
-# sum to total; revisited and autoparked are extra counts from the autopilot state file:
+# sum to total; autoparked is an extra count from the autopilot state file:
 #   epic      the frontmatter has a `children:` key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
 #             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
@@ -533,11 +533,11 @@ sl-queue-materialize() {
 #             auto-pick skips. Nothing is derived from any marker text (T20261102-296642).
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
-#   revisited tasks still queued that the autopilot visited without progress (the state file's
-#             `visits` entries above 0); autoparked = tasks the autopilot parked since this
-#             run started (`parked` entries at or after `run_started_at`, else `started_at`)
+#   autoparked (extra, not a bucket) = tasks the autopilot parked since this run started (`parked`
+#             entries at or after `run_started_at`, else `started_at`). The state file's `visits`
+#             map is not read any more (the revisited count was retired from the HUD).
 # autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, for its
-# dispatch clone path (so the clone's own claims count as this clone's) and the two counts above.
+# dispatch clone path (so the clone's own claims count as this clone's) and the parked count above.
 # A queue line whose task file is missing has no hints and counts as ready.
 sl-queue-json() {
   local repo_root="$1" want_src="${2:-working-tree}" src_root todo q
@@ -621,7 +621,7 @@ _sl-queue-json() {
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
     | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
-      + {revisited: ([($st.visits // [])[] | select(. as $v | $ids | index($v) != null)] | length), autoparked: (($st.parked // []) | unique | length)} + $extra' 2>/dev/null || true
+      + {autoparked: (($st.parked // []) | unique | length)} + $extra' 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt

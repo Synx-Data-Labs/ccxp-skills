@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Queue high watermark for the ccxp-hud mod: the largest queue length (task lines of
-# dev/TODO/queue.md) seen over three rolling windows: last 180 days, last 30 days, last 7 days.
+# dev/TODO/queue.md) seen in three adjacent, NON-overlapping rolling windows (elapsed seconds, so DST
+# and calendar edges do not matter): this week = the trailing 7 days up to now (plus the current
+# length), last week = 7 to 14 days ago, last month = the 4 weeks (28 days) before that, 14 to 42 days ago.
+# (sl-hwm-windows, the nested 180d/30d/7d maxima, is kept for the issues cell only.)
 #
 # Two series feed it, both keyed by repo root + queue path (the HUD is used in many repos):
 #   1. history  - a backfill derived from `git log -p` of the queue file on the default branch
@@ -14,8 +17,9 @@
 #                 samples older than 180 days (keeping the newest of those, the value in force at the
 #                 window start), and only if that is not enough the oldest half.
 # A window's value at its start counts too (a queue that was 40 for the whole week and changed
-# 8 days ago still has a 7d maximum of 40). There is no lifetime maximum any more; old `max-<key>`
-# files from earlier versions are ignored.
+# 8 days ago still has a 7d maximum of 40). A window with no samples inside it carries that value; a
+# window with no data at all (before the first sample) is null. There is no lifetime maximum; old
+# `max-<key>` files from earlier versions are ignored.
 #
 # State dir (shared with the queue-source stamps): $HUD_QUEUE_STATE_DIR, else
 # <profile>/state/hud-queue. Test hooks: HUD_HWM_SYNC=1 (backfill in the
@@ -169,12 +173,45 @@ sl-hwm-windows() {
       printf "{\"d180\":%d,\"d30\":%d,\"d7\":%d}\n", m180, m30, m7 }' 2>/dev/null || true
 }
 
-# $1 repo root $2 current queue length -> `{"d180":N,"d30":N,"d7":N}`, or nothing when $2 is not a number.
+# $1 key (sl-hwm-key) $2 current length -> `{"lm":N|null,"lw":N|null,"tw":N}` from the hist-<key> and
+# samples-<key> series: tw = this week (trailing 7 days, incl. the current length), lw = last week (7 to
+# 14 days ago), lm = last month (the 4 weeks before that, 14 to 42 days ago). The windows are adjacent and never
+# overlap, so a growing queue shows three different, rising numbers. A window's value at its start counts
+# (the last sample at or before the start); a sample exactly at a boundary belongs to the newer window;
+# samples dated in the future (clock set back) are ignored. null = no data that old. Local files only.
+sl-hwm-rolling() {
+  local key="$1" total="$2" dir now
+  [[ "$total" =~ ^[0-9]+$ ]] || return 0
+  dir=$(_hw-dir); now=$(_hw-now)
+  { cat "$dir/hist-$key" "$dir/samples-$key" 2>/dev/null || true; } | LC_ALL=C sort -s -n -k1,1 | awk -F'\t' -v now="$now" -v cur="$total" '
+    BEGIN {
+      s[0] = now - 7 * 86400;  e[0] = now + 1            # this week
+      s[1] = now - 14 * 86400; e[1] = now - 7 * 86400    # last week
+      s[2] = now - 42 * 86400; e[2] = now - 14 * 86400   # last month (4 weeks)
+    }
+    $1 ~ /^[0-9]+$/ && $2 ~ /^[0-9]+$/ {
+      t = $1 + 0; v = $2 + 0
+      if (t > now) next
+      for (i = 0; i < 3; i++) {
+        if (t <= s[i]) { k[i] = v; hk[i] = 1 }
+        else if (t < e[i]) { if (!hm[i] || v > m[i]) m[i] = v; hm[i] = 1 }
+      }
+    }
+    function best(i,   r, h) { h = 0
+      if (hk[i]) { r = k[i]; h = 1 }
+      if (hm[i] && (!h || m[i] > r)) { r = m[i]; h = 1 }
+      return h ? r : "null" }
+    END {
+      tw = best(0); if (tw == "null" || cur + 0 > tw + 0) tw = cur + 0
+      printf "{\"lm\":%s,\"lw\":%s,\"tw\":%d}\n", best(2), best(1), tw }' 2>/dev/null || true
+}
+
+# $1 repo root $2 current queue length -> `{"lm":N|null,"lw":N|null,"tw":N}`, or nothing when $2 is not a number.
 # Samples the length, kicks the detached backfill, then reads both series.
 sl-queue-hwm() {
   local root="$1" total="$2"
   [[ "$total" =~ ^[0-9]+$ ]] || return 0
   sl-hwm-sample "$root" "$total"
   sl-hwm-backfill "$root"
-  sl-hwm-windows "$(sl-hwm-key "$root")" "$total"
+  sl-hwm-rolling "$(sl-hwm-key "$root")" "$total"
 }

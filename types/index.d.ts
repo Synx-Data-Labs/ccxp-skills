@@ -129,7 +129,7 @@ export type Ledger = {
 /**
  * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|held|epic|claimed, so those sum to `total`.
  * `held` = a status the HUD counts as not takeable (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off); auto-pick's own gate is slightly wider.
- * `revisited` and `autoparked` come from the autopilot state, not from the tasks.
+ * `autoparked` comes from the autopilot state, not from the tasks.
  */
 export type Queue = {
   total: number
@@ -138,19 +138,23 @@ export type Queue = {
   epic: number
   /** Held by another session; shown only when above 0. */
   claimed: number
-  /** Queued tasks the autopilot visited without progress; shown only when above 0. */
-  revisited: number
   /** Tasks the autopilot parked since this run started; shown only when above 0. */
   autoparked: number
   /** Set when the queue was read from origin/<branch> (queue.source `default-branch`): the cell then reads `queue@<branch>`. */
   branch?: string
   /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
   fallback?: boolean
-  /** High watermark of the queue length (hud-queue-hwm.sh); absent when unknown. Always d180 >= d30 >= d7 >= total (last 180 / 30 / 7 days). */
-  hwm?: QueueHwm
+  /** Queue-length maxima of three adjacent, non-overlapping rolling windows (hud-queue-hwm.sh); absent when unknown. */
+  hwm?: QueueMax
 }
 
-/** The largest queue length seen over the last 180 days, the last 30 days and the last 7 days. */
+/**
+ * The largest queue length in each window: `tw` = the last 7 days (this week, includes the current length, so never below it),
+ * `lw` = 7 to 14 days ago (last week), `lm` = the 4 weeks before that, 14 to 42 days ago (last month). `null` = no history that old.
+ */
+export type QueueMax = { lm: number | null; lw: number | null; tw: number }
+
+/** The largest count seen over the last 180 days, the last 30 days and the last 7 days (nested windows; the issues cell). */
 export type QueueHwm = { d180: number; d30: number; d7: number }
 
 /** Customer-issue stats (hud-issues.sh): open issues, the open ones not yet delivered, and the max open over 180 / 30 / 7 days. */
