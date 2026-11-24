@@ -1,10 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 2
 source: owner request, this conversation, 2026-11-24 (decisions d154, d157)
 description: Autopilot max_dop minimum 3 plus a reserved_slots setting (default 2) for urgent tier 1 and 2 work
-claimed_by: cc1-50ac6891:bf6b098f35f88e3b
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -58,22 +58,34 @@ scheduled: 2026-11-23
 
 ## Test plan
 
-- [ ] `tests/autopilot_state.bats`: `max_dop` 1 and 2 refused (exit 2, file untouched, message names the reserved slots); 3 and 16 accepted; 17 refused; default 3 and range `3-16` in `config-show`.
-- [ ] `reserved_slots`: default 2, 0 and 8 accepted when `max_dop` allows, 9 refused, cap at `max_dop` minus 1 refused, `max_dop` lowered under the stored reserved count refused, `config-reset` drops it.
-- [ ] `reserved_slots` 0 accepted and `config-show` marks it `override`; urgent-marked slots do not reduce `routine-free`.
-- [ ] Clamp-on-read: file with `max_dop` 1 reads 3, notice shown in `config-show` and `report`, file unchanged.
-- [ ] Routine limit: `routine-free`, `slots --summary` (with `free`) and `report` output; `start`/`resume` use the routine limit; `config-set` cross-key refusals.
-- [ ] Doc pins: SKILL.md and `autopilot/parallel.md` mention `reserved_slots`; skill-quality stays at its baseline.
+- [x] `tests/autopilot_state.bats`: `max_dop` 1 and 2 refused (exit 2, file untouched, message names the reserved slots); 3 and 16 accepted; 17 refused; default 3 and range `3-16` in `config-show`.
+- [x] `reserved_slots`: default 2, 0 and 8 accepted when `max_dop` allows, 9 refused, cap at `max_dop` minus 1 refused, `max_dop` lowered under the stored reserved count refused, `config-reset` drops it.
+- [x] `reserved_slots` 0 accepted and `config-show` marks it `override`; urgent-marked slots do not reduce `routine-free`.
+- [x] Clamp-on-read: file with `max_dop` 1 reads 3, notice shown in `config-show` and `report`, file unchanged.
+- [x] Routine limit: `routine-free`, `slots --summary` (with `free`) and `report` output; `start`/`resume` use the routine limit; `config-set` cross-key refusals.
+- [x] Doc pins: SKILL.md and `autopilot/parallel.md` mention `reserved_slots`; skill-quality stays at its baseline.
 
 ## Done criteria
 
-- [ ] `config set max_dop` below 3 refused: test "max_dop: range 3-16" in `tests/autopilot_state.bats`.
-- [ ] `reserved_slots` key with range and cap: test "reserved_slots" in `tests/autopilot_state.bats`.
-- [ ] Clamp notice, no rewrite: test "clamp-on-read" in `tests/autopilot_state.bats`.
-- [ ] Routine limit exposed: tests "routine-free" and "report: routine line" in `tests/autopilot_state.bats`.
-- [ ] `autopilot/SKILL.md`, `autopilot/parallel.md`, `hud/README.md` (no slot display: reviewed, no change) updated: doc-pin test in `tests/autopilot_state.bats`.
-- [ ] CI `skill-quality` check stays green on the PR (external: confirmed by the PR checks).
+- [x] `config set max_dop` below 3 refused: test "max_dop: range 3-16" in `tests/autopilot_state.bats`.
+- [x] `reserved_slots` key with range and cap: test "reserved_slots" in `tests/autopilot_state.bats`.
+- [x] Clamp notice, no rewrite: test "clamp-on-read" in `tests/autopilot_state.bats`.
+- [x] Routine limit exposed: tests "routine-free" and "report: routine line" in `tests/autopilot_state.bats`.
+- [x] `autopilot/SKILL.md`, `autopilot/parallel.md`, `hud/README.md` (no slot display: reviewed, no change) updated: doc-pin test in `tests/autopilot_state.bats`.
+- [x] CI `skill-quality` check stays green on the PR (confirmed: PR 729 checks all green).
 
-## Closed
+## Closed (2026-11-24)
 
-Filled at close.
+- Shipped in PR #729 (claim #721, design #726); CI bats, skill-quality, lint-tasks, Markdown Lint green.
+- Met: `max_dop` 3-16 default 3, refused below 3, clamp-on-read notice; `reserved_slots` 0-8 default 2 capped at `max_dop` minus 1; `routine-free`, `slots --summary`, `report` routine line, `busy on --urgent`; `start`/`resume` dispatch on routine slots; SKILL.md smaller than before (skill score at baseline), `parallel.md`, `README.md` updated; `hud/README.md` reviewed, no change (HUD shows no slot count). 159 bats tests pass.
+- Not done, by design: no plugin version bump, tag or release (parked until the owner says so); persona asset untouched.
+- Accepted minors from review: `config-reset max_dop` skips the cross-key check (capped on read with a notice); re-marking an urgent slot without `--urgent` clears the flag; hand-edited zero-padded strings such as "08" would fail arithmetic; `hud-data.sh`, `hud-lib.sh` and `types/index.d.ts` comments still say "max_dop > 1".
+- Quality probe (Phase 3.8) not run for this task.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, tests written alongside the code, not red-first
+- Verification (`superpowers:verification-before-completion`): yes, local bats and skill-score runs before each PR, address-pr hard gate x4
+- Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes, three fresh reviews on the design PR and two on the implementation PR, findings fixed or accepted with a comment
+
