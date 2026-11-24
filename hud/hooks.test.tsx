@@ -32,6 +32,7 @@ type World = {
   statuses: (string | undefined)[]
   theme?: string
   noColor?: boolean
+  usage?: unknown
 }
 
 // Stands for the engine beneath the mod: every hook here answers `{ value }`.
@@ -61,7 +62,7 @@ function world($: any, on: any, w: World) {
     return { value: w.helper ?? { exitCode: 0, stdout: HELPER, stderr: '' } }
   })
   on('agent.list', () => ({ value: [{ status: 'running' }, { status: 'failed' }] }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [] } }))
+  on('session.usage', () => ({ value: w.usage ?? { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [] } }))
   on('clock.now', () => ({ value: w.now ?? 1_000_000 }))
   on('clock.every', () => ({ value: undefined }))
   on('command.register', () => ({ value: { command: 'hud' } }))
@@ -310,6 +311,38 @@ test('a partial session.measure updates context and keeps the other units', asyn
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
   expect(await band.find({ type: 'Text', text: /5h 58% left/ })).toBeDefined()
   await band.unmount()
+})
+
+test('rate limits (5h and 7d) reach the band and are handed to hud-rate-cache.sh; none means no write', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"fields": ["rate"]}'
+  w.helper = { exitCode: 0, stdout: HELPER_AP }
+  world($, on, w)
+  const reset5 = Math.floor(Date.now() / 1000) + 4320
+  const reset7 = Math.floor(Date.now() / 1000) + 3 * 86400 + 4 * 3600 + 60
+  w.usage = { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [{ kind: 'five_hour', percentUsed: 80, resetsAt: reset5 }, { kind: 'seven_day', percentUsed: 34, resetsAt: reset7 }] }
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(200))
+  expect(await band.find({ type: 'Text', text: /5h 20% left/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /7d 66% left/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /3d4h/ })).toBeDefined()
+  await band.unmount()
+  const i = w.runs.findIndex(r => r.some(a => a.endsWith('hud-rate-cache.sh')))
+  expect(i).toBeGreaterThanOrEqual(0)
+  expect(w.runs[i]!.slice(-1)).toEqual(['write'])
+  expect(JSON.parse(w.stdins[i]!)).toEqual({ five_hour: { used_percentage: 80, resets_at: reset5 }, seven_day: { used_percentage: 34, resets_at: reset7 } })
+})
+
+test('no rate limits (API-key login): no cache write, no 7d text, no error', async ($: any, on: any) => {
+  const w = fresh()
+  w.cfg = '{"fields": ["rate"]}'
+  w.helper = { exitCode: 0, stdout: HELPER_AP }
+  world($, on, w)
+  await $.session.start(START)
+  const band = await $.ui.mount(BAND(200))
+  expect(await band.find({ type: 'Text', text: /5h|7d/ })).toBeUndefined()
+  await band.unmount()
+  expect(w.runs.some(r => r.some(a => a.endsWith('hud-rate-cache.sh')))).toBe(false)
 })
 
 const LEDGER = { running: [{ job: 70, title: 'Redo HUD repo field' }], lifetime_jobs: 82, stats: { approx: false, avg_approx: false, jobs_24h: 8, avg_jobs_day: 5.2, trend: 'up' }, parked: [{ id: 'k2' }], next_job: 83, updated_at: '' }
