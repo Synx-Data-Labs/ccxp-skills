@@ -1561,3 +1561,11 @@ _ap_on() { _ap start >/dev/null; }
   AUTOPILOT_NOW="2026-10-28T09:57:50Z" run _ap start; [ "$output" = already-on ] # 5 min early
   AP_WAKE_TOLERANCE=10 AUTOPILOT_NOW="2026-10-28T10:02:30Z" run _ap start; [ "$output" = already-on ]  # override
 }
+
+@test "start: documented trade-off, a typed on within the tolerance of a short wake dispatches (T20261124-243982)" {
+  _ap start >/dev/null
+  _ap record progress 0 T1 >/dev/null                                            # next_wake_at 10:01:00Z
+  AUTOPILOT_NOW="2026-10-28T10:00:05Z" run _ap start; [ "$output" = dispatch ]   # 55 s early: indistinguishable from an early wake
+  _ap wake 300 >/dev/null
+  AUTOPILOT_NOW="2026-10-28T10:00:05Z" run _ap start; [ "$output" = already-on ] # a longer delay keeps a typed on out
+}

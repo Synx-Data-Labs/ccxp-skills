@@ -244,7 +244,8 @@ ap-overdue() {
 
 # A wake may fire early: ScheduleWakeup reports its time rounded to the minute, so a wake lands up to
 # 59 s before the second-precise next_wake_at (T20261124-243982). Within this many seconds counts as due.
-# Keep it below the shortest delay (60 s, progress): a typed "on" right after a record must stay already-on.
+# Trade-off: a typed "on" cannot be told from an early wake, so within this many seconds of next_wake_at it dispatches
+# (after a 60 s progress record that is all but the first second). Longer delays keep a typed "on" already-on.
 AP_WAKE_TOLERANCE="${AP_WAKE_TOLERANCE:-59}"
 
 # Shared by start (when on) and resume: dispatch only if due and not busy.
