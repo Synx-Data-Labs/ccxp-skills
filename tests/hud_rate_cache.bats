@@ -127,3 +127,29 @@ both='{"five_hour":{"used_percentage":23.5,"resets_at":1800004000},"seven_day":{
   run jq -c '.five_hour.used_percentage' "$F"
   [ "$output" = 5 ]
 }
+
+@test "write: a window the new snapshot lacks is carried over from the file" {
+  printf '%s' "$both" | bash "$RC" write
+  HUD_RATE_NOW=1800000100 bash -c "printf '%s' '{\"five_hour\":{\"used_percentage\":30,\"resets_at\":1800004000}}' | bash '$RC' write"
+  run jq -c '[.written_at, .five_hour.used_percentage, .seven_day.used_percentage]' "$F"
+  [ "$output" = '[1800000100,30,41.2]' ]
+}
+
+@test "write: an empty or odd existing file never blocks writes" {
+  mkdir -p "$CCXP_HUD_CACHE_DIR"
+  : > "$F"
+  printf '%s' "$both" | bash "$RC" write
+  run jq -r '.five_hour.used_percentage' "$F"
+  [ "$output" = 23.5 ]
+  echo '{} {}' > "$F"
+  printf '%s' "$both" | bash "$RC" write
+  run jq -r '.seven_day.used_percentage' "$F"
+  [ "$output" = 41.2 ]
+}
+
+@test "write: an expired old window loses to a new one even without a reset time" {
+  printf '%s' '{"five_hour":{"used_percentage":90,"resets_at":1799990000}}' | bash "$RC" write
+  printf '%s' '{"five_hour":{"used_percentage":3}}' | bash "$RC" write
+  run jq -c '.five_hour' "$F"
+  [ "$output" = '{"used_percentage":3}' ]
+}

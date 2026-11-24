@@ -241,7 +241,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 
 ### Rate-limit cache file (for the autopilot)
 
-- Only the HUD sees the engine's rate limits, so after each refresh the mod pipes them to `hud/scripts/hud-rate-cache.sh write`, which keeps the latest snapshot in `<profile>/state/hud-cache/rate-limits.json` (`$CCXP_HUD_CACHE_DIR` overrides the folder). It is written whether or not the `rate` cell is on, but not when the engine reports no limits; an unchanged reading is rewritten once a minute to keep `written_at` fresh. The quota is shared by every session of the account and the file is shared too: a write never rolls a window back (within one reset time the higher percentage stays; a later reset time is a newer window), so an idle session cannot overwrite a busy one's numbers.
+- Only the HUD sees the engine's rate limits, so after each refresh the mod pipes them to `hud/scripts/hud-rate-cache.sh write`, which keeps the latest snapshot in `<profile>/state/hud-cache/rate-limits.json` (`$CCXP_HUD_CACHE_DIR` overrides the folder). It is written whether or not the `rate` cell is on, but not when the engine reports no limits; an unchanged reading is rewritten once a minute to keep `written_at` fresh. The quota is shared by every session of the account and the file is shared too: a write never rolls a window back (within one reset time the higher percentage stays; a later reset time is a newer window), so an idle session cannot overwrite a busy one's numbers. Writes read then rename without a lock, so two sessions writing in the same instant can lose one update (the next write, at most a minute later, repairs it).
 - Format (mode 600, replaced atomically through a temp file and rename, no secrets):
 
 ```json
@@ -264,7 +264,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 Toggles the band between the one-row view and the **sectioned view** (this session only; a new session starts collapsed): one labeled row per section, details kept on the row, so a glance finds the group you want. There is no compact variant of the sectioned view; the one-row band is unchanged. **Details is a superset of the band**: every cell the one-row band can show (repo and branch, task, AP and its 24h cell and stalled state, ctx, jobs, queue, nightly, issues, CI, last input, version, rate, cost, stale) has its full-form counterpart in a section; a test (`hud/pure.test.ts`, "details is a superset of the band") pins it, so a new `fields` entry cannot ship without one, and a second test ("every cell of the old details-on output is still present") pins the cell-by-cell inventory of the view this one replaced. It is the same band, so it refreshes live with it (the 15 s poll, each finished turn, `/cd`, and context/cost measurements) and adds no extra `git` or `gh` calls. It ignores `fields` and needs `band` on (otherwise `/hud details` says so).
 
 ```
-SESSION  context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50 │ you 12:41 (5m ago)
+SESSION  context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left · resets in 2h10m  7-day limit 66% left · resets in 3d4h │ API-equivalent cost $1.50 │ you 12:41 (5m ago)
 REPO     acme/widgets @ main* │ T20261021-354035 Decouple the nightly orchestrator
 BUILD    CI (nightly.yml) ✓ passing 10-28 (2h ago) │ nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗
 SUPPORT  issues 12 open | 7 not delivered | max open 18 in 180 days / 15 in 30 days / 12 in 7 days
