@@ -12,13 +12,17 @@ export const noColorValue = (v: unknown): boolean => typeof v === 'string' && v 
 /** A RED CI row (every segment flagged `alert` by the model). */
 export const isAlertRow = (row: Seg[]): boolean => row.length > 0 && row.some(s => s.alert)
 
+/** A row where EVERY segment is `alert` (the band's CI row): the whole bar, padding included, is red. A details row that only holds a red CI cell next to a label and other cells marks just that cell. */
+const isWholeAlertRow = (row: Seg[]): boolean => row.length > 0 && row.every(s => s.alert)
+
 /**
  * The red row's look: bold, red text in reverse video, so the whole row is a red bar (the terminal's
  * own colours, so it reads on any theme and ignores the fill colour). With colour off the reverse
  * video stays (it is not a colour) and the state word is shouted: `✗ FAILING`.
  */
 export function alertSegs(row: Seg[], noColor: boolean): Seg[] {
-  return row.map(s => ({ ...s, bold: true, dim: false, color: noColor ? undefined : 'error', text: noColor && s.marker ? s.text.toUpperCase() : s.text }))
+  const whole = isWholeAlertRow(row)
+  return row.map(s => (whole || s.alert ? { ...s, bold: true, dim: false, color: noColor ? undefined : 'error', text: noColor && s.marker ? s.text.toUpperCase() : s.text } : s))
 }
 
 /** The prompt row wrapped in the configured frame; `inner` is the engine's own drawing. */
@@ -37,8 +41,8 @@ export function userMessageTree(
 }
 
 /**
- * The status band, or null when there is nothing to draw. `expanded` (`/hud details`) draws up to
- * up to eight detail lines (seven without a CI row) instead of the one row, capped at `maxRows`; with no detail data it falls back
+ * The status band, or null when there is nothing to draw. `expanded` (`/hud details`) draws the labeled sections
+ * (SESSION, REPO, BUILD, ..., one row each, wrapped rows included) instead of the one row, capped at `maxRows` (a cut says so); with no detail data it falls back
  * to the one row. With a `fill` style (always passed by the register; null only in tests) and a known width of at least FILL_MIN_COLUMNS) every row is padded
  * to `columns` and drawn on a background (or reverse video); otherwise the plain row.
  */
@@ -53,11 +57,16 @@ export function bandTree(
   noColor = false,
 ) {
   const { Box, Text } = ui
-  const detail = expanded ? detailRows(snap, cfg, columns).slice(0, Math.max(1, maxRows)) : []
+  const detailAll = expanded ? detailRows(snap, cfg, columns) : []
+  const cap = Math.max(1, maxRows)
+  // Rows past the engine's height cap are not dropped silently: the last visible row says how many are hidden.
+  const detail: Seg[][] = detailAll.length <= cap ? detailAll : [...detailAll.slice(0, Math.max(0, cap - 1)), [{ text: `… ${detailAll.length - Math.max(0, cap - 1)} more rows hidden (not enough height)`, dim: true }]]
   const rawRows = detail.length > 0 ? detail : bandRows(snap, cfg, columns)
   if (rawRows.length === 0) return null
-  const alert = rawRows.map(isAlertRow)
-  const rows = rawRows.map((row, i) => (alert[i] ? alertSegs(row, noColor) : row))
+  const whole = rawRows.map(isWholeAlertRow)
+  const mixed = rawRows.map((row, i) => isAlertRow(row) && !whole[i])
+  const rows = rawRows.map((row, i) => (whole[i] || mixed[i] ? alertSegs(row, noColor) : row))
+  const alert = whole
   const filled = fill ? rows.map(row => fillRow(row, columns)) : []
   if (fill && filled.every(r => r !== null)) {
     const style = fill.bg ? { backgroundColor: fill.bg } : { inverse: true }
@@ -78,7 +87,7 @@ export function bandTree(
           ) : (
             <Box flexDirection="row" {...boxStyle}>
               {row!.map(seg => (
-                <Text color={seg.color} dimColor={seg.dim} bold={seg.bold} {...style}>
+                <Text color={seg.color} dimColor={seg.dim} bold={seg.bold} {...(seg.alert ? { inverse: true } : style)}>
                   {seg.text}
                 </Text>
               ))}
@@ -93,7 +102,7 @@ export function bandTree(
       {rows.map((row, i) => (
         <Box flexDirection="row">
           {row.map(seg => (
-            <Text color={seg.color} dimColor={seg.dim} bold={seg.bold} inverse={alert[i] || undefined}>
+            <Text color={seg.color} dimColor={seg.dim} bold={seg.bold} inverse={alert[i] || seg.alert || undefined}>
               {seg.text}
             </Text>
           ))}

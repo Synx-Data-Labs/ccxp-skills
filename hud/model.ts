@@ -200,13 +200,12 @@ export function parseHelper(stdout: string): HelperData | null {
     const installed = str((pl as Record<string, unknown>).installed)
     const latest = str((pl as Record<string, unknown>).latest)
     const url = str((pl as Record<string, unknown>).url)
-    // Untrusted: a positive whole count, at most 3 one-line subjects with no control characters (the helper strips them, this checks again).
+    // Untrusted: a positive whole count only (the commit subjects are never read or drawn).
     const un = (pl as Record<string, unknown>).unreleased
     let unreleased: PluginVersion['unreleased']
     if (typeof un === 'object' && un !== null && !Array.isArray(un)) {
       const u = un as Record<string, unknown>
-      const subjects = Array.isArray(u.subjects) ? u.subjects.filter((x): x is string => typeof x === 'string' && x.length > 0 && !/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/.test(x)).slice(0, 3).map(x => x.slice(0, 72)) : []
-      if (typeof u.count === 'number' && Number.isFinite(u.count) && u.count >= 1) unreleased = { count: Math.min(Math.floor(u.count), 9999), subjects }
+      if (typeof u.count === 'number' && Number.isFinite(u.count) && u.count >= 1) unreleased = { count: Math.min(Math.floor(u.count), 9999) }
     }
     if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}), ...(unreleased ? { unreleased } : {}) }
   }
@@ -487,16 +486,9 @@ function versionVariants(p: PluginVersion): Variants {
   ]
 }
 
-/**
- * The commits after the installed release, shown after the plugin URL on the details line only:
- * `3 unreleased: subject; subject; subject +N more`, then (narrow) `N unreleased`.
- */
+/** The number of commits after the installed release, details only: `3 unreleased` (a count, never the commit subjects). */
 function unreleasedVariants(u: NonNullable<PluginVersion['unreleased']>): Variants {
-  const more = u.count - u.subjects.length
-  const list = u.subjects.join('; ') + (more > 0 ? ` +${more} more` : '')
-  const head = `${u.count} unreleased`
-  const full: Seg[] = [{ text: head, color: 'suggestion' }, ...(list ? [{ text: `: ${list}`, dim: true }] : [])]
-  return [full, [{ text: head, color: 'suggestion' }]]
+  return [[{ text: `${u.count} unreleased`, color: 'suggestion' }]]
 }
 
 function apVariants(ap: Autopilot): Variants {
@@ -931,70 +923,102 @@ export function stalledFor(ap: Autopilot, nowMs: number): number {
   return late > STALL_GRACE_SEC ? late : 0
 }
 
-/**
- * Details never abbreviate a label: every cell is drawn in its full form and a line that is still too wide is cut
- * at the terminal width with an ellipsis. The only step left is dropping the plugin URL whole (a half-cut link is
- * useless) before the version line is cut. The shrink and abbreviation forms belong to the one-row band.
- */
-const DETAIL_STEPS = {
-  where: ['drop:stale'],
-  usage: [],
-  jobs: [],
-  ap: [],
-  queue: [],
-  nightly: [],
-  issues: [],
-  bus: [],
-  you: ['drop:url'],
-} as const
+/** Width of the section label column in `/hud details`: the longest label (`SESSION`, `SUPPORT`, `RELEASE`) plus two spaces. */
+export const DETAIL_LABEL_WIDTH = 9
+
+/** Splits segments into words and spaces (each keeping its style) and fills lines of at most `avail` columns, breaking at spaces; a single word longer than a line is broken hard. Nothing is ever cut off. */
+function wrapSegs(segs: Seg[], avail: number): Seg[][] {
+  const lines: Seg[][] = [[]]
+  let used = 0
+  for (const s of segs) {
+    for (const tok of s.text.match(/\s+|\S+/g) ?? []) {
+      const space = /^\s/.test(tok)
+      if (space && used === 0) continue // no leading blanks on a line
+      let rest = tok
+      if (!space && used + rest.length > avail && used > 0) {
+        lines.push([])
+        used = 0
+      }
+      while (!space && rest.length > avail) {
+        lines[lines.length - 1]!.push({ ...s, text: rest.slice(0, avail) })
+        lines.push([])
+        used = 0
+        rest = rest.slice(avail)
+      }
+      if (rest === '') continue
+      lines[lines.length - 1]!.push({ ...s, text: rest })
+      used += rest.length
+    }
+  }
+  return lines.filter((l, i) => l.length > 0 || i === 0).map(l => {
+    // drop trailing blanks
+    const out = l.slice()
+    while (out.length > 0 && out[out.length - 1]!.text.trim() === '') out.pop()
+    return out
+  })
+}
 
 /**
- * `/hud details`: the band expanded to up to eight live lines, each cut to the terminal width (with an ellipsis,
- * never abbreviated). Lines with nothing to say are left out, none is reserved.
- *   0 CI (first, alone; highlighted when red)
- *   0b the nightly right after CI (first when there is no CI): 7-day strip and the last 30 days' green and red counts, labels in full
- *   1 repo, branch, dirty mark, claimed task   2 context left, 5-hour limit left, API-equivalent cost
- *   3 jobs state, parked, last 24h jobs / average per day (ledger; the running jobs are not listed, the band's WORKING (N) has the count)
- *   4 autopilot, next loop time (or overdue), 24h cell
- *   5 the queue breakdown (dev/TODO/queue.md) on its own line right after the AP line, labels in full
- *   6 last prompt (stamp and age), the ccxp version label and the plugin's GitHub URL
- * Without `ci` that is seven lines at most, with `ci` eight. Labels are spelled out in full here; the one-row band
- * keeps the short forms (ctx, 5h, $, queue 30r 6h). It ignores `fields`: the lines are the view. Details is a SUPERSET of the band:
- * every cell the band can show has its full-form counterpart here (pinned by the superset test in pure.test.ts). [] when there is no data at all.
+ * One section of the details view: the bold label, then the cells joined by ` │ `. A row that would be wider than the
+ * terminal wraps onto further lines indented under the cells (cells stay whole when they fit; a cell wider than a line
+ * wraps at its own spaces). Nothing is truncated. [] when the section has no cell.
+ */
+function sectionRows(label: string, cells: Array<Seg[] | null>, width: number): Seg[][] {
+  const live = cells.filter((c): c is Seg[] => c !== null && c.length > 0)
+  if (live.length === 0) return []
+  const avail = Math.max(10, width - DETAIL_LABEL_WIDTH)
+  const lines: Seg[][] = []
+  let cur: Seg[] = []
+  const flush = () => {
+    if (cur.length > 0) lines.push(cur)
+    cur = []
+  }
+  for (const cell of live) {
+    if (cur.length > 0 && widthOf(cur) + SEP.length + widthOf(cell) <= avail) {
+      cur.push({ text: SEP, dim: true }, ...cell)
+    } else if (cur.length === 0 && widthOf(cell) <= avail) {
+      cur = [...cell]
+    } else if (widthOf(cell) <= avail) {
+      flush()
+      cur = [...cell]
+    } else {
+      // a cell wider than a line: put it on fresh lines of its own, wrapped at its spaces; the last line may host the next cell
+      flush()
+      const wrapped = wrapSegs(cell, avail)
+      wrapped.slice(0, -1).forEach(l => lines.push(l))
+      cur = wrapped[wrapped.length - 1]!
+    }
+  }
+  flush()
+  return lines.map((l, i) => [{ text: i === 0 ? label.padEnd(DETAIL_LABEL_WIDTH) : ' '.repeat(DETAIL_LABEL_WIDTH), bold: i === 0, dim: i > 0 }, ...l])
+}
+
+/**
+ * `/hud details`: the band expanded into labeled SECTIONS, one row each (a long row wraps onto an indented line, nothing is
+ * truncated or abbreviated; the one-row band keeps the short forms). A section with nothing to say is left out. Order:
+ *   SESSION  context left, 5-hour limit left, API-equivalent cost, unread bus notes, last prompt (stamp and age)
+ *   REPO     repo, branch, dirty mark, claimed task (and `stale`)
+ *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
+ *   SUPPORT  the customer-issue stats (opt-in)
+ *   WORK     autopilot, next loop (or overdue), its 24h cell, jobs state (READY / WORKING (N)), parked, last 24h jobs
+ *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
+ *   RELEASE  the plugin's GitHub URL, the ccxp version label, the number of unreleased commits
+ * Details is a SUPERSET of the band: every cell the band can show has its full-form counterpart here (pinned by the
+ * superset test in pure.test.ts). It ignores `fields`: the rows are the view. [] when there is no data at all.
  */
 export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs: number = Date.now()): Seg[][] {
   const h = snap.helper
   const width = Math.max(20, columns - 2)
   const one = (field: string, ...v: Seg[][]): Item => ({ field, variants: v, at: 0 })
   const pick = (f: Field) => itemFor(f, snap, cfg, nowMs)
-  const lines: Seg[][] = []
-  const add = (items: Array<Item | null>, steps: readonly string[]) => {
-    const row = fitRow(items.filter((x): x is Item => x !== null), steps, width, true)
-    if (row.length > 0) lines.push(row)
+  const full = (it: Item | null): Seg[] | null => (it ? it.variants[0]! : null)
+  const rows: Seg[][] = []
+  const section = (label: string, cells: Array<Item | Seg[] | null>) => {
+    rows.push(...sectionRows(label, cells.map(c => (c === null || Array.isArray(c) ? c : full(c))), width))
   }
 
-  // 0. CI first, alone (highlighted when red); only when `ci` is set and answered
-  const top = ciRow(snap, cfg, width, nowMs)
-  if (top && top.length > 0) lines.push(top)
-
-  // 0b. the nightly right after CI, so the two build-health signals read together: the band's cell with its labels in full (7-day strip, 30-day green and red days)
-  if (h?.nightly) add([one('nightly', ...nightlyVariants(h.nightly, true))], DETAIL_STEPS.nightly)
-
-  // 0c. the customer-issue stats (opt-in), right after the nightly: open, not delivered, max open over 180 / 30 / 7 days, labels in full
-  if (h?.issues) add([one('issues', ...issuesVariants(h.issues, true))], DETAIL_STEPS.issues)
-
-
-  // 0e. unread cross-account bus notes (full form), right after the issues
-  if (h?.bus) add([one('bus', ...busVariants(h.bus, true))], DETAIL_STEPS.bus)
-
-  // 1. where you are
-  add(
-    [pick('repo'), pick('task'), snap.stale ? one('stale', [{ text: 'stale', dim: true }]) : null],
-    DETAIL_STEPS.where,
-  )
-
-  // 2. context, rate limit and cost, spelled out. context is what is LEFT (the band's ctx), 5-hour limit is the
-  // share of the subscription's rolling 5-hour window LEFT (plus a runout estimate when it would run dry), cost is the engine's API-price estimate for this session.
+  // SESSION: context is what is LEFT (the band's ctx), 5-hour limit is the share of the subscription's rolling 5-hour window LEFT
+  // (plus a runout estimate when it would run dry), cost is the engine's API-price estimate for this session.
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
@@ -1002,30 +1026,29 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   }
   if (snap.rateUsed !== null) usage.push(one('rate', rateSegs(snap.rateUsed, snap.rateResetsAt, nowMs, '5-hour limit ', 'runs out in ')))
   if (snap.costUsd !== null) usage.push(one('cost', [{ text: `API-equivalent cost $${snap.costUsd.toFixed(2)}` }]))
-  add(usage, DETAIL_STEPS.usage)
+  const at = h?.last_input_at
+  section('SESSION', [
+    ...usage,
+    h?.bus ? full(one('bus', ...busVariants(h.bus, true))) : null,
+    at ? [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)] : null,
+  ])
 
-  // 3. jobs, from the ledger (no ledger: no line)
-  const led = h?.ledger
-  if (led) {
-    const state = jobState(led.running.length)
-    const parked = led.parked.length
-    const js = jobStatsSegs(led.stats)
-    add(
-      [
-        one('state', [{ text: state.text, color: state.color }]),
-        one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]),
-        js ? one('jobs24', js) : null,
-      ],
-      DETAIL_STEPS.jobs,
-    )
-  }
+  // REPO: where you are
+  section('REPO', [pick('repo'), pick('task'), snap.stale ? one('stale', [{ text: 'stale', dim: true }]) : null])
 
-  // 4. autopilot, the next loop, 24h (full forms only)
+  // BUILD: CI first (highlighted when red; only when `ci` is set and answered), the nightly right after it
+  const ci = h?.ci
+  section('BUILD', [cfg.ci && ci ? ciRowVariants(ci, cfg.ci.workflow, nowMs)[0]! : null, h?.nightly ? full(one('nightly', ...nightlyVariants(h.nightly, true))) : null])
+
+  // SUPPORT: the customer-issue stats (opt-in): open, not delivered, max open over 180 / 30 / 7 days
+  section('SUPPORT', [h?.issues ? full(one('issues', ...issuesVariants(h.issues, true))) : null])
+
+  // WORK: autopilot, the next loop, its 24h cell, then the jobs from the ledger (no ledger: no jobs cells)
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
-    const full = apVariants(ap)
-    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0]! : [full[0]![0]!, { text: `${truncate(ap.status, 14)} ` }, ...full[0]!.slice(1)]
+    const f = apVariants(ap)
+    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? f[0]! : [f[0]![0]!, { text: `${truncate(ap.status, 14)} ` }, ...f[0]!.slice(1)]
     apItem = one('ap', withStatus)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
@@ -1038,8 +1061,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   } else if (ap?.busy) {
     // A cycle is running: name its job (the running ledger row flagged autopilot, highest number) rather than a due time that is stale until the cycle ends.
     // With parallel cycles (busy_slots > 1) name that many rows, the highest-numbered ones, ascending: `running r596,r597`.
-    const rows = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).map(j => j.job).sort((a, b) => b - a)
-    const shown = rows.slice(0, Math.max(1, ap.busy_slots || 0)).sort((a, b) => a - b)
+    const run = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).map(j => j.job).sort((a, b) => b - a)
+    const shown = run.slice(0, Math.max(1, ap.busy_slots || 0)).sort((a, b) => a - b)
     wakeItem = one('wake', [{ text: shown.length > 0 ? `running ${shown.map(n => `r${n}`).join(',')}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
     const late = stalledFor(ap, nowMs)
@@ -1052,25 +1075,26 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     }
   }
   const apStats = ap ? apStatsVariants(ap) : null
-  add([apItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null], DETAIL_STEPS.ap)
+  const led = h?.ledger
+  const jobCells: Array<Item | null> = []
+  if (led) {
+    const state = jobState(led.running.length)
+    const parked = led.parked.length
+    const js = jobStatsSegs(led.stats)
+    jobCells.push(one('state', [{ text: state.text, color: state.color }]), one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]), js ? one('jobs24', js) : null)
+  }
+  section('WORK', [apItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null, ...jobCells])
 
-  // 5. the queue breakdown on its own line right after the AP line (labels in full)
-  if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)
+  // QUEUE: the breakdown (labels in full)
+  section('QUEUE', [h?.queue ? full(one('queue', ...queueVariants(h.queue, true))) : null])
 
-  // 6. you: the last prompt, stamp and age
-  const at = h?.last_input_at
+  // RELEASE: the plugin's GitHub location as a bare URL (terminals make it cmd-clickable; no OSC 8) from the manifest via the helper
+  // (the public URL otherwise), the version label, then how many commits came after the installed release (a count only). Shown with the version label, so only when that is.
   const verItem = pick('ver')
-  // The plugin's GitHub location, as a bare URL (terminals make it cmd-clickable; no OSC 8, the renderer draws plain text).
-  // From the manifest via the helper, the public URL otherwise. Shown with the version label, so only when that is.
   const urlItem = verItem && h?.plugin ? one('url', [{ text: h.plugin.url ?? PLUGIN_URL_DEFAULT, dim: true }]) : null
   const unreleasedItem = urlItem && h?.plugin?.unreleased ? one('unreleased', ...unreleasedVariants(h.plugin.unreleased)) : null
-  if (at || verItem) {
-    add(
-      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)]) : null, verItem, urlItem, unreleasedItem],
-      DETAIL_STEPS.you,
-    )
-  }
-  return lines
+  section('RELEASE', [urlItem, verItem, unreleasedItem])
+  return rows
 }
 
 /** One plain line for surfaces with no band (VS Code `$.ui.status`), 2,000 chars at most. */

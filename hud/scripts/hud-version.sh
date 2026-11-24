@@ -14,13 +14,12 @@
 #             "(latest)", "(X available)" and plain); null while unknown (no lookup yet, offline, no tag).
 #
 # unreleased = the commits on the default branch (main) after the installed version's release tag
-#             `ccxp-skills--v<installed>`: {"count":N,"subjects":[newest first, at most 3, one line each]}; the key is
+#             `ccxp-skills--v<installed>`: {"count":N} (only the number, never the commit subjects); the key is
 #             absent when there are none, the tag is unknown, or the lookup never succeeded (offline). Source: the
 #             public GitHub compare API via `curl` (no credentials, no gh, no git checkout, so it works from the
 #             installed plugin cache), cached in <state>/unreleased.json for 1 h (HVU_TTL), one detached refresh at a
-#             time (8 s timeout, lock dir); a change of installed version or repo drops the old answer. Subjects are
-#             untrusted: control, bidi and zero-width characters stripped, 72 chars at most; when the API
-#             lists fewer commits than ahead_by (it caps at 250) no subjects are kept, only the count. Override the request URL with HUD_UNRELEASED_URL (tests).
+#             time (8 s timeout, lock dir); a change of installed version or repo drops the old answer. Commit messages are
+#             never read or kept. Override the request URL with HUD_UNRELEASED_URL (tests).
 #
 # Never blocks the caller: it answers from an on-disk cache and, when the cache is older than
 # 6 h OR the running plugin.json changed since the cache was written (its mtime is stored in the
@@ -140,14 +139,14 @@ hvu-api-url() {
   printf '%s/repos/%s/compare/ccxp-skills--v%s...main' "${HVU_API:-$HVU_API_DEFAULT}" "$slug" "$2"
 }
 
-# stdin: compare API JSON -> {"count":N,"subjects":[...]} (newest first, 3 at most), exit 1 when it is not a compare answer.
+# stdin: compare API JSON -> {"count":N}, exit 1 when it is not a compare answer.
 hvu-parse() {
-  jq -c -e 'if (.ahead_by | type) == "number" then {count: (.ahead_by | floor), subjects: (if ((.commits // []) | length) < .ahead_by then [] else [.commits[]? | .commit.message | tostring | split("\n")[0] | explode | map(select(. >= 32 and . != 127 and (. < 128 or . > 159) and (. < 8203 or . > 8207) and (. < 8232 or . > 8238) and (. < 8294 or . > 8297))) | implode | .[0:72]] | reverse | .[0:3] end)} else empty end' 2>/dev/null
+  jq -c -e 'if (.ahead_by | type) == "number" then {count: (.ahead_by | floor)} else empty end' 2>/dev/null
 }
 
 # $1 cache file $2 key ("<installed> <repo>") $3 api url
 hvu-refresh() {
-  local file="$1" key="$2" api="$3" tmp now body="" prev="" empty='{"count":0,"subjects":[]}'
+  local file="$1" key="$2" api="$3" tmp now body="" prev="" empty='{"count":0}'
   now=$(date +%s)
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   if command -v curl >/dev/null 2>&1; then
@@ -157,7 +156,7 @@ hvu-refresh() {
     jq -n -c --arg k "$key" --argjson f "$now" --argjson d "$body" '{key: $k, fetched: $f} + $d' >"$tmp"
   else
     # Failed: keep the old answer for the same key and retry in ~15 min.
-    prev=$(jq -c --arg k "$key" 'select(.key == $k) | {count, subjects}' "$file" 2>/dev/null) || prev=""
+    prev=$(jq -c --arg k "$key" 'select(.key == $k) | {count}' "$file" 2>/dev/null) || prev=""
     jq -n -c --arg k "$key" --argjson f "$((now - HVU_TTL + HVR_RETRY))" --argjson d "${prev:-$empty}" '{key: $k, fetched: $f} + $d' >"$tmp"
   fi
   mv -f "$tmp" "$file"
@@ -165,7 +164,7 @@ hvu-refresh() {
   return 0
 }
 
-# $1 installed $2 repo url ("" = the public default) -> {"count":N,"subjects":[...]} on stdout, nothing when unknown or zero.
+# $1 installed $2 repo url ("" = the public default) -> {"count":N} on stdout, nothing when unknown or zero.
 # Answers from the cache; starts ONE detached refresh when it is older than HVU_TTL or was written for another version/repo.
 hvu-json() {
   # A relocated tag remote (HUD_VERSION_REMOTE, a test hook) without its own HUD_UNRELEASED_URL: no lookup, never a stray request.
@@ -195,7 +194,7 @@ hvu-json() {
     fi
   fi
   [ "$ckey" = "$key" ] || return 0
-  jq -c 'select((.count | type) == "number" and .count > 0) | {count: (.count | floor), subjects: ((.subjects // []) | map(select(type == "string")) | .[0:3])}' <<<"${cached:-null}" 2>/dev/null || true
+  jq -c 'select((.count | type) == "number" and .count > 0) | {count: (.count | floor)}' <<<"${cached:-null}" 2>/dev/null || true
 }
 
 hud-version-json() {

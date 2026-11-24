@@ -579,6 +579,22 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
 
 const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
 const detail = (s: object, cols = 140, cfg: typeof CI | typeof NOCI = NOCI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
+/** The sections of a details render: label -> its lines (label column stripped, continuation lines included). */
+const DETAIL_LABELS = ['SESSION', 'REPO', 'BUILD', 'SUPPORT', 'WORK', 'QUEUE', 'RELEASE']
+const sections = (lines: string[]): Record<string, string[]> => {
+  const out: Record<string, string[]> = {}
+  let cur = ''
+  for (const l of lines) {
+    const lab = DETAIL_LABELS.find(x => l.startsWith(x + ' '))
+    if (lab) { cur = lab; out[cur] = [l.slice(9)] } else if (cur && l.startsWith(' '.repeat(9))) out[cur]!.push(l.slice(9))
+    else throw new Error(`line outside any section: ${JSON.stringify(l)}`)
+  }
+  return out
+}
+/** One section as a single string (wide terminals: no wrapping). */
+const sect = (lines: string[], label: string): string => (sections(lines)[label] ?? []).join(' ')
+/** The autopilot part of the WORK section: its cells up to the jobs state. */
+const apPart = (lines: string[]): string => sect(lines, 'WORK').replace(/[\s│]*(?:READY|WORKING)\b.*$/, '')
 const fullSnap = (over = {}) => ({
   ...withHelper({
     repo_slug: 'acme/widgets',
@@ -608,29 +624,37 @@ test('AP ON (no duration): elapsed shows without a requested window; idle names 
   expect(paused).toContain('AP ⏸ paused 2h')
 })
 
-test('details: lines in order: where, usage, jobs, autopilot, last prompt (no queue data, no `ci`: no queue or CI line)', async () => {
+test('details: sections in order: SESSION, REPO, WORK, RELEASE (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
   const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
-  expect(lines.length).toBe(5)
-  expect(lines[0]).toBe('acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
-  expect(lines[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50')
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
-  expect(lines[3]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
-  expect(lines[4]).toMatch(/^you \d\d:\d\d \(5m ago\)$/)
+  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'WORK'])
+  expect(lines[0]).toMatch(/^SESSION {2}context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost \$1\.50 │ you \d\d:\d\d \(5m ago\)$/)
+  expect(lines[1]).toBe('REPO     acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
+  expect(lines[2]).toMatch(/^WORK {5}AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ WORKING \(2\) │ parked 2 │ last 24h: jobs 8 ▲ \/ average 5\.2\/day$/)
+})
+
+test('details: the section order is SESSION, REPO, BUILD, SUPPORT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
+  const snap = fullSnap({ rateUsed: 42, costUsd: 1.5 }) as any
+  snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
+  const lines = detail(snap, 400, CI)
+  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(DETAIL_LABELS)
+  expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing .* │ nightly \+-\+\+\.-\+ \(last 7 days\)/)
+  expect(sect(lines, 'SUPPORT')).toBe('issues 12 open | 7 not delivered')
+  expect(sect(lines, 'QUEUE')).toBe('queue 44 = 30 ready | 6 held | 3 epics')
 })
 
 test('details: colours match the band (ctx tone, READY/WORKING) and the dirty mark is yellow', async () => {
   const rows = detailRows(fullSnap({ ctxLeft: 40 }) as any, NOCI, 140, DETAIL_NOW)
-  expect(rows[1].find(s => s.text.startsWith('context '))?.color).toBe('error')
-  expect(rows[2][0]).toEqual({ text: 'WORKING (2)', color: 'warning' })
-  expect(rows[0].find(s => s.text === '*')?.color).toBe('warning')
+  expect(rows[0].find(s => s.text.startsWith('context '))?.color).toBe('error')
+  expect(rows.flat().find(s => s.text.startsWith('WORKING'))).toEqual({ text: 'WORKING (2)', color: 'warning' })
+  expect(rows[1].find(s => s.text === '*')?.color).toBe('warning')
   const idle = detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 82, parked: [], next_job: 83, updated_at: '' } }) as any, NOCI, 140, DETAIL_NOW)
-  expect(idle[2][0]).toEqual({ text: 'READY', color: 'success' })
+  expect(idle.flat().find(s => s.text === 'READY')).toEqual({ text: 'READY', color: 'success' })
 })
 
-test('details: lines with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
+test('details: sections with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
   const lines = detail({ ...withHelper({ ledger: null, last_input_at: 0 }), ctxLeft: null }, 140, DEFAULTS)
-  expect(lines.length).toBe(2) // where, autopilot (off)
-  expect(lines[1]).toBe('AP off')
+  expect(lines.length).toBe(2) // REPO, WORK
+  expect(lines[1]).toBe('WORK     AP off')
   expect(lines.join('\n')).not.toMatch(/READY|WORKING|you |CI/)
 })
 
@@ -638,14 +662,15 @@ test('details: parked shows the count only, never the parked ids', async () => {
   const ids = ['k5', 'k6', 'k7', 'k8', 'k9', 'k10', 'k11', 'k12', 'k13']
   const ledger = { running: [], lifetime_jobs: 82, parked: ids.map(id => ({ id })), next_job: 83, updated_at: '' }
   const lines = detail(withHelper({ ledger }) as any, 140)
-  expect(lines[2]).toBe('READY │ parked 9')
+  expect(sect(lines, 'WORK')).toMatch(/READY │ parked 9$/)
   expect(lines.join('\n')).not.toMatch(/k\d/)
 })
 
-const jobsLine = (stats: unknown) => detail(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, 140)[2]
+const jobsLine = (stats: unknown) => jobsPart(detail(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, 400))
+const jobsPart = (lines: string[]): string => sect(lines, 'WORK').replace(/^.*?(?=READY|WORKING)/, '')
 const JS = { approx: false, avg_approx: false, jobs_24h: 8, avg_jobs_day: 5.2, trend: 'up' }
 
-test('details: the jobs line ends with `last 24h: jobs n / average m/day` and never shows a total-jobs figure', async () => {
+test('details: the jobs cells end with `last 24h: jobs n / average m/day` and never show a total-jobs figure', async () => {
   expect(jobsLine(JS)).toBe('READY │ parked 0 │ last 24h: jobs 8 ▲ / average 5.2/day')
   expect(jobsLine({ ...JS, jobs_24h: 3, trend: 'down' })).toBe('READY │ parked 0 │ last 24h: jobs 3 ▼ / average 5.2/day')
   expect(jobsLine({ ...JS, jobs_24h: 5, avg_jobs_day: 5.04, trend: 'flat' })).toBe('READY │ parked 0 │ last 24h: jobs 5 / average 5.0/day') // equal at one decimal: no arrow
@@ -680,25 +705,28 @@ test('details: every line fits the terminal at every width and the band row is u
   expect(bandRows(fullSnap() as any, NOCI, 140).length).toBe(1)
 })
 
-test('details: a narrow terminal cuts a line with an ellipsis and never abbreviates a label', async () => {
+const squash = (t: string) => t.replace(/[\s│]+/g, '')
+
+test('details: a narrow terminal wraps a section onto an indented line, never cuts or abbreviates anything', async () => {
   const snap = () => fullSnap({ rateUsed: 42, costUsd: 1.5 })
-  const full = detail(snap(), 140)
-  expect(full[1]).toBe('context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost $1.50')
-  // 56 columns (width 54): the line is cut at the width, the labels stay in full
-  const cut = detail(snap(), 56)[1]
-  expect(cut.length).toBe(54)
-  expect(cut.endsWith('…')).toBe(true)
-  expect(full[1].startsWith(cut.slice(0, -1))).toBe(true)
-  // the jobs line: the 24h cell is cut with an ellipsis, never abbreviated
-  expect(detail(fullSnap(), 30)[2]).toBe('WORKING (2) │ parked 2 │ la…')
-  // no shortened forms at any width (the band's ctx / 5h / bare `total` forms never appear in details)
+  const wide = sections(detail(snap(), 400))
+  expect(wide.SESSION).toEqual([expect.stringMatching(/^context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost \$1\.50 │ you /)])
+  // 56 columns: the SESSION row no longer fits on one line, so it wraps under the cells (indented by the label width)
+  const lines = detail(snap(), 56)
+  const sess = lines.filter((l, i) => i < 3 && (l.startsWith('SESSION') || l.startsWith(' '.repeat(9))))
+  expect(sess.length).toBeGreaterThan(1)
+  expect(sess[1]!.startsWith(' '.repeat(9))).toBe(true)
+  expect(sess.join('\n')).not.toContain('…')
+  // at every width every section keeps ALL of its text (modulo the blanks the wrapping eats) and every line fits
   for (let cols = 140; cols >= 22; cols--) {
-    const all = detail(snap(), cols).join('\n')
-    expect(all).not.toMatch(/\bctx\b|5h limit|│ cost \$|total \d|\bnext in\b/)
+    const narrow = sections(detail(snap(), cols))
+    for (const label of Object.keys(wide)) expect(squash(narrow[label]!.join('')), `${label} at ${cols} columns`).toBe(squash(wide[label]!.join('')))
+    expect(detail(snap(), cols).join('\n')).not.toContain('…')
+    // no shortened forms at any width (the band's ctx / 5h / bare `total` forms never appear in details)
+    expect(detail(snap(), cols).join('\n')).not.toMatch(/\bctx\b|5h limit|│ cost \$|total \d|\bnext in\b/)
   }
   const old = Math.floor(DETAIL_NOW / 1000) - 3 * 86400
-  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 140)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
-  expect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 22)[4]).toMatch(/^you \w{3} \d+ \d\d:\d\d \(3d?…$/)
+  expect(sect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 400), 'SESSION')).toMatch(/you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
 })
 
 const RATE_NOW = 1_800_000_000_000
@@ -736,17 +764,17 @@ test('rate cell: N% left in its tone, runout only when it would run dry before t
   expect(text(rate({ rateUsed: 35 }))).not.toMatch(/out /)
   expect(text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))).toContain('5h 50% left · out 1h')
   expect(text(rate({ rateUsed: 10, rateResetsAt: rateReset(7200) }))).not.toMatch(/out /)
-  const d = (over: object) => detailRows(fullSnap(over) as any, NOCI, 200, RATE_NOW).map(r => r.map(g => g.text).join(''))[1]
+  const d = (over: object) => detailRows(fullSnap(over) as any, NOCI, 200, RATE_NOW).map(r => r.map(g => g.text).join(''))[0]
   expect(d({ rateUsed: 80, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 20% left · runs out in 30m')
   expect(d({ rateUsed: 10, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 90% left')
 })
 
-test('details: the jobs line never lists the running jobs (the band already shows them); labels are spelled out', async () => {
-  const lines = detail(fullSnap({ rateUsed: 4, costUsd: 693.75, ctxLeft: 88 }))
-  expect(lines[1]).toBe('context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 96% left │ API-equivalent cost $693.75')
+test('details: the jobs cells never list the running jobs (the band already shows them); labels are spelled out', async () => {
+  const lines = detail(fullSnap({ rateUsed: 4, costUsd: 693.75, ctxLeft: 88 }), 400)
+  expect(sect(lines, 'SESSION')).toMatch(/^context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 96% left │ API-equivalent cost \$693\.75/)
   const all = lines.join('\n')
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
-  expect(lines[2]).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
+  expect(jobsPart(lines)).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
   // ...but the one-row band keeps its short forms
   expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...NOCI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
 })
@@ -762,7 +790,7 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   // Local-time construction: the same clock reading in every timezone, never "yesterday".
   const now = new Date(2026, 9, 28, 12, 0, 0).getTime()
   const wake = Math.floor(now / 1000) + 12 * 60
-  const apLine = (over: object, cols = 140) => detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP'))!
+  const apLine = (over: object, cols = 400) => apPart(detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join('')))
   expect(apLine({ next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
   expect(apLine({ next_wake_at: wake })).toContain('next loop 12:12')
   // a different day carries the date, like the last-prompt stamp
@@ -773,7 +801,7 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
   // a running cycle names its ledger job (flag autopilot, highest number); no flagged row: plain `running`
   const led = (rows: object[]) => ({ ledger: { running: rows, lifetime_jobs: 600, parked: [], next_job: 700, updated_at: '' } })
-  const apWith = (rows: object[], over: object) => detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null, ...led(rows) }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP'))!
+  const apWith = (rows: object[], over: object) => apPart(detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null, ...led(rows) }) as any, DEFAULTS, 400, now).map(r => r.map(x => x.text).join('')))
   const busy = { next_wake_at: wake, busy: true, current_task: 'T20261028-151063' }
   const rows = [{ job: 590, title: 'other', flags: '' }, { job: 596, title: 'autopilot cycle', flags: 'autopilot' }, { job: 599, title: 'x', flags: 'detached' }]
   expect(apWith(rows, busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running r596')
@@ -796,8 +824,8 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063', status: 'paused', prefix: '[p]' })).toMatch(/next loop paused$/)
   // AP off or no record: no schedule
   expect(detailRows(withHelper({ autopilot: null }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('next')
-  // narrow: the line is cut with an ellipsis, `next loop` is never shortened to `next` and the clock never dropped
-  expect(apLine({ next_wake_at: wake }, 52)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (i…')
+  // narrow: the row wraps, `next loop` is never shortened to `next` and the clock never dropped
+  expect(squash(apLine({ next_wake_at: wake }, 52))).toBe(squash('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)'))
 })
 
 test('parseHelper: autopilot busy is a boolean and current_task a string, false and empty when missing', async () => {
@@ -813,7 +841,7 @@ test('parseHelper: autopilot next_wake_at is a number, 0 when missing or not a n
 
 test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {
   expect(detailRows(EMPTY, DEFAULTS, 140, DETAIL_NOW)).toEqual([])
-  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['stale'])
+  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['REPO     stale'])
 })
 
 const fillWidth = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
@@ -1025,45 +1053,42 @@ test('version: in AP mode it shows too; narrow rows shrink it, the update outliv
   expect(upd).toMatch(/↑|available/)
 })
 
-test('version: /hud details shows it on the last line, with `you` when present', async () => {
-  // 160 columns: at 120 the URL is already dropped for this snapshot (see the squeeze-order test below)
+test('version: /hud details shows it in the RELEASE section (and `you` in SESSION)', async () => {
   const lines = detailRows(verSnap(PLUGIN_NEW), DEFAULTS, 160).map(r => r.map(s => s.text).join(''))
-  expect(lines[lines.length - 1]).toContain('ccxp 5.0.0 (5.1.0 available)')
-  expect(lines[lines.length - 1]).toContain('you ')
+  expect(sect(lines, 'RELEASE')).toContain('ccxp 5.0.0 (5.1.0 available)')
+  expect(sect(lines, 'SESSION')).toContain('you ')
+  expect(lines[lines.length - 1]).toMatch(/^RELEASE /)
   const off = detailRows(verSnap(PLUGIN_NEW), { ...DEFAULTS, version: false }, 120).map(r => r.map(s => s.text).join(''))
   expect(off.join('\n')).not.toContain('ccxp')
 })
 
 const PLUGIN_LATEST = { installed: '5.2.0', latest: '5.2.0' }
-const lastLine = (snap: object, cfg = DEFAULTS, cols = 160) => text(detailRows(snap as any, cfg, cols, DETAIL_NOW).slice(-1))
+const lastLine = (snap: object, cfg = DEFAULTS, cols = 160) => sect(detailRows(snap as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join('')), 'RELEASE')
 
-test('version: details show (latest) or (X available) and the GitHub URL, the manifest URL winning over the fallback', async () => {
-  expect(lastLine(verSnap(PLUGIN_LATEST))).toMatch(/ccxp 5\.2\.0 \(latest\) │ https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills$/)
-  expect(lastLine(verSnap({ installed: '5.2.0', latest: '5.2.1' }))).toContain('ccxp 5.2.0 (5.2.1 available) │ https://github.com/Synx-Data-Labs/ccxp-skills')
-  expect(lastLine(verSnap({ ...PLUGIN_LATEST, url: 'https://github.com/Acme/fork' }))).toMatch(/\(latest\) │ https:\/\/github\.com\/Acme\/fork$/)
-  // latest unknown: still the installed version and the link
-  expect(lastLine(verSnap({ installed: '5.2.0', latest: null }))).toContain('ccxp 5.2.0 │ https://github.com/Synx-Data-Labs/ccxp-skills')
+test('version: details show the GitHub URL first, then (latest) or (X available); the manifest URL wins over the fallback', async () => {
+  expect(lastLine(verSnap(PLUGIN_LATEST))).toBe('https://github.com/Synx-Data-Labs/ccxp-skills │ ccxp 5.2.0 (latest)')
+  expect(lastLine(verSnap({ installed: '5.2.0', latest: '5.2.1' }))).toBe('https://github.com/Synx-Data-Labs/ccxp-skills │ ccxp 5.2.0 (5.2.1 available)')
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, url: 'https://github.com/Acme/fork' }))).toMatch(/^https:\/\/github\.com\/Acme\/fork │ ccxp 5\.2\.0 \(latest\)$/)
+  // latest unknown: still the link and the installed version
+  expect(lastLine(verSnap({ installed: '5.2.0', latest: null }))).toBe('https://github.com/Synx-Data-Labs/ccxp-skills │ ccxp 5.2.0')
 })
 
-test('version: details show the unreleased commits right after the URL, capped at 3 with +N more; the band never does', async () => {
-  const u = { count: 5, subjects: ['feat(hud): one', 'fix: two', 'docs: three'] }
-  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: u }), DEFAULTS, 220)).toMatch(/ccxp-skills │ 5 unreleased: feat\(hud\): one; fix: two; docs: three \+2 more$/)
-  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: { count: 1, subjects: ['fix: only'] } }), DEFAULTS, 220)).toMatch(/ccxp-skills │ 1 unreleased: fix: only$/)
-  // narrow: the count alone, before the line is cut
-  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: u }), DEFAULTS, 90)).not.toContain('docs: three')
+test('version: details show only the NUMBER of commits after the installed release (never subjects); the band never does', async () => {
+  const u = { count: 5 }
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: u }), DEFAULTS, 220)).toMatch(/ccxp-skills │ ccxp 5\.2\.0 \(latest\) │ 5 unreleased$/)
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: { count: 1 } }), DEFAULTS, 220)).toMatch(/ │ 1 unreleased$/)
   // silent without data
   expect(lastLine(verSnap(PLUGIN_LATEST))).not.toContain('unreleased')
   expect(text(bandRows(verSnap({ ...PLUGIN_LATEST, unreleased: u }) as any, DEFAULTS, 220))).not.toContain('unreleased')
 })
 
-test('version: parseHelper keeps only a positive count and clean one-line subjects of the unreleased commits', async () => {
+test('version: parseHelper keeps only a positive count of the unreleased commits and drops any subjects', async () => {
   const h = (unreleased: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin: { ...PLUGIN_LATEST, unreleased } }))?.plugin?.unreleased
-  expect(h({ count: 2, subjects: ['a', 'b'] })).toEqual({ count: 2, subjects: ['a', 'b'] })
-  expect(h({ count: 0, subjects: [] })).toBeUndefined()
-  expect(h({ count: 'x', subjects: ['a'] })).toBeUndefined()
+  expect(h({ count: 2, subjects: ['a', 'b'] })).toEqual({ count: 2 })
+  expect(h({ count: 0 })).toBeUndefined()
+  expect(h({ count: 'x' })).toBeUndefined()
   expect(h(['a'])).toBeUndefined()
   expect(h(null)).toBeUndefined()
-  expect(h({ count: 5, subjects: ['ok', 'bad\u001b[31m', 7, '', 'c', 'd', 'e'] })).toEqual({ count: 5, subjects: ['ok', 'c', 'd'] })
 })
 
 test('version: the link is plain text (no escape bytes) and the band stays compact (no URL)', async () => {
@@ -1073,40 +1098,16 @@ test('version: the link is plain text (no escape bytes) and the band stays compa
   expect(text(bandRows(verSnap(PLUGIN_LATEST), DEFAULTS, 160))).toContain('ccxp 5.2.0 (latest)')
 })
 
-test('version: narrow details drop the link first and keep the version label; narrower still the line is cut', async () => {
-  for (const cols of [90, 70, 50]) {
-    const last = lastLine(verSnap(PLUGIN_LATEST), DEFAULTS, cols)
-    expect(last).not.toContain('github.com')
-    expect(last).toContain('ccxp 5.2.0')
+test('version: narrow details wrap the RELEASE row (the link is never dropped and nothing is cut)', async () => {
+  const wide = squash(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: { count: 3 } }), DEFAULTS, 400))
+  for (const cols of [160, 90, 70, 50, 40, 30, 22]) {
+    const rows = detailRows(verSnap({ ...PLUGIN_LATEST, unreleased: { count: 3 } }) as any, DEFAULTS, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
+    expect(squash(sect(rows, 'RELEASE')), `at ${cols} columns`).toBe(wide)
+    expect(rows.join('\n')).not.toContain('…')
+    for (const l of rows) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
   }
-  for (const cols of [40, 30]) {
-    const last = lastLine(verSnap(PLUGIN_LATEST), DEFAULTS, cols)
-    expect(last).not.toContain('github.com')
-    expect(last.endsWith('…')).toBe(true)
-    expect(last.length).toBe(cols - 2)
-  }
-  // with every line present the version line is still the last line
-  const full = detailRows(fullSnap({ helper: { ...fullSnap().helper, plugin: PLUGIN_LATEST } }) as any, NOCI, 120, DETAIL_NOW)
-  expect(full.length).toBe(5) // no queue data in this snapshot
-  expect(text(full.slice(-1))).toContain('(latest)')
-})
-
-test('version: squeeze order is the URL (whole), then the line is cut at the width with an ellipsis; the line always fits', async () => {
-  const at = Math.floor(DETAIL_NOW / 1000) - 300
-  const snapAt = verSnap(PLUGIN_LATEST, { helper: { ...verSnap(PLUGIN_LATEST).helper, last_input_at: at } })
-  const row = (cols: number) => lastLine(snapAt, DEFAULTS, cols)
-  const full = row(200)
-  expect(full).toMatch(/^you .*\(5m ago\) │ ccxp 5\.2\.0 \(latest\) │ https:/)
-  const noUrl = row(full.length - 2) // too narrow for the URL by a little
-  expect(noUrl).not.toContain('github.com')
-  expect(noUrl).toContain('(5m ago)')
-  expect(noUrl).toContain('(latest)')
-  const short = row(36) // nothing is abbreviated: the end of the line is cut
-  expect(short.startsWith('you ')).toBe(true)
-  expect(short).toContain('(5m ago)')
-  expect(short.endsWith('…')).toBe(true)
-  expect(short).not.toContain('(latest)')
-  for (const cols of [200, 120, 80, 60, 40, 30, 22]) expect(row(cols).length).toBeLessThanOrEqual(Math.max(20, cols - 2))
+  expect(wide).toContain('github.com/Synx-Data-Labs/ccxp-skills')
+  expect(wide).toContain('3unreleased')
 })
 
 test('version: details with `version: false` or no plugin data show neither label nor link', async () => {
@@ -1343,36 +1344,32 @@ test('AP stats: narrow rows shrink the stats late and keep `avg` only in the nar
 
 test('AP stats: `ap` switched off hides the stats too; details show them on the AP line', async () => {
   expect(text(bandRows(apStats(), { ...NOCI, fields: ['ci'] }, 200))).not.toContain('24h')
-  const line = detailRows(apStats() as any, DEFAULTS, 200).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))
+  const line = apPart(detailRows(apStats() as any, DEFAULTS, 400).map(r => r.map(x => x.text).join('')))
   expect(line).toContain('last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
 })
 
-test('AP stats: the details AP line keeps the 24h cell in full and, when narrow, is cut with an ellipsis (never abbreviated)', async () => {
+test('AP stats: the details WORK row keeps the 24h cell in full and, when narrow, wraps it (never abbreviated, never cut)', async () => {
   const full = { ...AP, next_wake_at: NOW + 720, stats: STATS }
-  const line = (cols: number) => detailRows(withHelper({ autopilot: full }) as any, DEFAULTS, cols, NOW * 1000).map(r => r.map(x => x.text).join('')).find(l => l.startsWith('AP '))!
-  for (const cols of [200, 140, 125]) {
-    expect(line(cols)).toContain('last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
-    expect(line(cols).length).toBeLessThanOrEqual(cols - 2)
-  }
-  for (const cols of [100, 80, 60]) {
-    expect(line(cols).endsWith('…')).toBe(true)
-    expect(line(cols).length).toBe(cols - 2)
-    expect(line(cols)).not.toMatch(/24h: ✓|avg|\bnext in\b/)
+  const rows = (cols: number) => detailRows(withHelper({ autopilot: full }) as any, DEFAULTS, cols, NOW * 1000).map(r => r.map(x => x.text).join(''))
+  const wide = squash(apPart(rows(400)))
+  expect(wide).toContain(squash('last 24h: 8 merged ▲ / 26 loops · average 5.2/day'))
+  for (const cols of [200, 140, 100, 80, 60, 40]) {
+    expect(squash(apPart(rows(cols))), `at ${cols}`).toBe(wide)
+    for (const l of rows(cols)) expect(l.length).toBeLessThanOrEqual(cols - 2)
+    expect(rows(cols).join('\n')).not.toMatch(/…|24h: ✓|avg|\bnext in\b/)
   }
 })
 
 // --- CI top row: detail view, highlight, NO_COLOR ---
 
-test('details: CI first and alone, then where/usage/jobs, AP, queue on its own next line, last prompt (seven lines)', async () => {
+test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
   const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
-  const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 200, CI)
-  expect(lines.length).toBe(7)
-  expect(lines[0]).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
-  expect(lines[1]).toContain('acme/widgets')
-  const at = lines.findIndex(l => l.startsWith('AP '))
-  expect(lines[at]).not.toContain('queue')
-  expect(lines[at + 1]).toBe('queue 44 = 30 ready | 6 held | 3 epics')
-  expect(lines[at + 2]).toMatch(/^you /)
+  const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 400, CI)
+  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'WORK', 'QUEUE'])
+  expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
+  expect(sect(lines, 'REPO')).toContain('acme/widgets')
+  expect(sect(lines, 'WORK')).not.toContain('queue')
+  expect(sect(lines, 'QUEUE')).toBe('queue 44 = 30 ready | 6 held | 3 epics')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   expect(lines.filter(l => l.includes('CI')).length).toBe(1)
   for (let cols = 200; cols >= 22; cols--) for (const l of detail(withHelper({ ...fullSnap().helper, queue: q }), cols, CI)) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
@@ -1383,56 +1380,54 @@ test('details: CI first and alone, then where/usage/jobs, AP, queue on its own n
 const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
 const QLINE = 'queue 44 = 30 ready | 6 held | 3 epics'
 const linesOf = (helper: object, cols = 240, now = DETAIL_NOW) => detailRows(withHelper({ ci: null, ...helper }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join(''))
-const apLineOf = (helper: object, cols = 240) => linesOf(helper, cols).find(l => /^AP /.test(l))
+const apLineOf = (helper: object, cols = 400) => apPart(linesOf(helper, cols))
 const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
 
-test('details: AP on + queue data: AP and queue are two separate consecutive lines, no `||`', async () => {
-  const lines = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q })
-  const at = lines.findIndex(l => /^AP /.test(l))
-  expect(lines[at]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
-  expect(lines[at + 1]).toBe(QLINE)
+test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate consecutive rows, no `||`', async () => {
+  const lines = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }, 400)
+  expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
+  const at = lines.findIndex(l => l.startsWith('WORK '))
+  expect(lines[at + 1]).toBe('QUEUE    ' + QLINE)
   expect(lines.join('\n')).not.toContain('||')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
-  // the queue line keeps its colours: ready is green, the other counts plain, zero counts dim
-  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE }, queue: { ...AP_Q, epic: 0 } }) as any, DEFAULTS, 240, DETAIL_NOW)
-  const q = rows.find(r => r[0].text.startsWith('queue '))!
+  // the queue row keeps its colours: ready is green, the other counts plain, zero counts dim
+  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE }, queue: { ...AP_Q, epic: 0 } }) as any, DEFAULTS, 400, DETAIL_NOW)
+  const q = rows.find(r => r[0].text.startsWith('QUEUE'))!
   expect(q.find(x => x.text === '30 ready')?.color).toBe('success')
   expect(q.find(x => x.text === '0 epics')?.dim).toBe(true)
   expect(q.find(x => x.text === '6 held')?.dim).toBe(false)
 })
 
-test('details: the queue line follows the AP line in every AP state (due, paused, running, no stats, AP off) and is omitted without queue data', async () => {
-  const due = linesOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q })
-  const di = due.findIndex(l => /^AP /.test(l))
-  expect(due[di]).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
-  expect(due[di + 1]).toBe(QLINE)
-  const at = (helper: object) => { const l = linesOf(helper); const i = l.findIndex(x => /^AP /.test(x)); return [l[i], l[i + 1]] }
-  expect(at({ autopilot: AP, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged', QLINE])
-  expect(at({ autopilot: { ...AP, status: 'paused', prefix: '[p]', next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused', QLINE])
-  expect(at({ autopilot: { ...AP, busy: true, next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged │ running', QLINE])
-  expect(at({ autopilot: null, queue: AP_Q })).toEqual(['AP off', QLINE])
-  // no queue data: no queue line and no empty line
-  const none = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS } })
+test('details: the QUEUE row follows the WORK row in every AP state (due, paused, running, no stats, AP off) and is omitted without queue data', async () => {
+  const due = linesOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q }, 400)
+  expect(apPart(due)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
+  expect(sect(due, 'QUEUE')).toBe(QLINE)
+  const at = (helper: object) => { const l = linesOf(helper, 400); return [apPart(l), sect(l, 'QUEUE'), l.findIndex(x => x.startsWith('QUEUE')) - l.findIndex(x => x.startsWith('WORK '))] }
+  expect(at({ autopilot: AP, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged', QLINE, 1])
+  expect(at({ autopilot: { ...AP, status: 'paused', prefix: '[p]', next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused', QLINE, 1])
+  expect(at({ autopilot: { ...AP, busy: true, next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged │ running', QLINE, 1])
+  expect(at({ autopilot: null, queue: AP_Q })).toEqual(['AP off', QLINE, 1])
+  // no queue data: no queue row and no empty row
+  const none = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS } }, 400)
   expect(none.join('\n')).not.toContain('queue')
   expect(none.every(l => l.trim() !== '')).toBe(true)
   expect(apLineOf({ autopilot: null })).toBe('AP off')
   expect(detailRows(EMPTY as any, DEFAULTS, 240, DETAIL_NOW).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('queue')
 })
 
-test('details: the queue line never abbreviates: narrow widths cut it with an ellipsis; the band keeps r/h/x', async () => {
+test('details: the queue row never abbreviates: narrow widths wrap it; the band keeps r/h/x', async () => {
   const helper = { autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }
   for (let cols = 240; cols >= 22; cols--) {
     const lines = linesOf(helper, cols)
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
-    const q = lines.find(l => l.startsWith('queue'))
+    const q = sections(lines).QUEUE
     expect(q).toBeDefined()
-    // always a prefix of the full line (+ the ellipsis when cut), so no r/h/x or `30/44` form ever appears
-    const width = Math.max(20, cols - 2)
-    expect(q).toBe(QLINE.length <= width ? QLINE : QLINE.slice(0, width - 1) + '…')
+    // wrapped at its spaces, never cut: the same words in full, so no r/h/x or `30/44` form ever appears
+    expect(squash(q!.join(''))).toBe(squash(QLINE))
+    expect(lines.join('\n')).not.toContain('…')
   }
-  expect(linesOf(helper, 40).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready | 6 held | 3 epics')
-  expect(linesOf(helper, 36).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready | 6 held | 3 …')
-  expect(linesOf(helper, 24).find(l => l.startsWith('queue'))).toBe('queue 44 = 30 ready |…')
+  expect(sections(linesOf(helper, 60)).QUEUE).toEqual(['queue 44 = 30 ready | 6 held | 3 epics'])
+  expect(sections(linesOf(helper, 40)).QUEUE).toEqual(['queue 44 = 30 ready | 6 held', '| 3 epics'])
   // the single-line band is where the short forms live
   expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 240))).toContain('queue 44 = 30r 6h 3x')
   expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 90))).not.toContain('30 ready')
@@ -1442,16 +1437,16 @@ test('details: the queue line never abbreviates: narrow widths cut it with an el
 
 const STALL_NOW = new Date(2026, 10, 2, 12, 0, 0).getTime()
 const secs = (n: number) => Math.floor(STALL_NOW / 1000) + n
-const stallLines = (ap: object, cols = 200) => linesOf({ autopilot: { ...AP, ...ap }, queue: AP_Q }, cols, STALL_NOW)
+const stallLines = (ap: object, cols = 400) => apPart(linesOf({ autopilot: { ...AP, ...ap }, queue: AP_Q }, cols, STALL_NOW))
 
 test('next loop: not yet due shows the clock and wait; due within the 10-minute grace stays `due`', async () => {
-  expect(stallLines({ next_wake_at: secs(300) })[3]).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:05 (in 5m)')
-  expect(stallLines({ next_wake_at: secs(-1) })[3]).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
-  expect(stallLines({ next_wake_at: secs(-STALL_GRACE_SEC) })[3]).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due') // exactly the grace: still due
+  expect(stallLines({ next_wake_at: secs(300) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:05 (in 5m)')
+  expect(stallLines({ next_wake_at: secs(-1) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
+  expect(stallLines({ next_wake_at: secs(-STALL_GRACE_SEC) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due') // exactly the grace: still due
 })
 
 test('next loop: beyond the grace it is overdue, red, with how late (minutes, hours, days) and no upcoming wake time', async () => {
-  const at = (late: number) => stallLines({ next_wake_at: secs(-late) })[3]
+  const at = (late: number) => stallLines({ next_wake_at: secs(-late) })
   expect(at(STALL_GRACE_SEC + 1)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 10m')
   expect(at(25 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 25m')
   expect(at(3 * 3600 + 5 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 3h 5m')
@@ -1460,22 +1455,22 @@ test('next loop: beyond the grace it is overdue, red, with how late (minutes, ho
   expect(at(2 * 86400)).not.toMatch(/due$|\d\d:\d\d|\(in /)
   const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: secs(-86400) } }) as any, DEFAULTS, 200, STALL_NOW)
   expect(rows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('error')
-  // the queue line still follows
-  expect(stallLines({ next_wake_at: secs(-86400) })[4]).toBe(QLINE)
+  // the queue row still follows
+  expect(sect(linesOf({ autopilot: { ...AP, next_wake_at: secs(-86400) }, queue: AP_Q }, 400, STALL_NOW), 'QUEUE')).toBe(QLINE)
 })
 
 test('next loop: paused and a running cycle are unaffected by how old the stored wake time is', async () => {
   const old = secs(-3 * 86400)
-  expect(stallLines({ next_wake_at: old, status: 'paused', prefix: '[p]' })[3]).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
-  expect(stallLines({ next_wake_at: old, busy: true })[3]).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
-  expect(stallLines({ next_wake_at: 0 })[3]).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(stallLines({ next_wake_at: old, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
+  expect(stallLines({ next_wake_at: old, busy: true })).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
+  expect(stallLines({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, status: 'paused', prefix: '[p]' } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, busy: true } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
 })
 
 test('next loop: a wake less than a second away reads as due, not `(now)`; the band drops the stalled cell after the version', async () => {
   const wake = secs(0) // wake at the whole second, `nowMs` half a second before it
-  const line = linesOf({ autopilot: { ...AP, next_wake_at: wake }, queue: AP_Q }, 200, STALL_NOW - 500).find(l => /^AP /.test(l))!
+  const line = apPart(linesOf({ autopilot: { ...AP, next_wake_at: wake }, queue: AP_Q }, 400, STALL_NOW - 500))
   expect(line).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
   // drop order on the band: ver goes before stalled, so whenever the version shows the stalled cell shows too
   const snap = withHelper({ autopilot: { ...AP, next_wake_at: secs(-2 * 86400) }, plugin: { installed: '5.2.0', latest: '5.2.0' } })
@@ -1501,11 +1496,18 @@ test('next loop: formatSpan and stalledFor; the single-line band shows a short r
   for (const cols of [200, 140, 100, 80, 60, 40, 30]) for (const r of band({ next_wake_at: secs(-86400) }, cols)) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
 })
 
-test('details: a red CI line is flagged for highlight; a green one is not; no `ci` means no CI line', async () => {
-  const red = detailRows(withHelper({ ...fullSnap().helper, ci: { state: 'failing', at: RUN_AT } }) as any, CI, 140, DETAIL_NOW)
-  expect(red[0].every(x => x.alert)).toBe(true)
-  expect(red.slice(1).some(r => r.some(x => x.alert))).toBe(false)
-  expect(detailRows(fullSnap() as any, CI, 140, DETAIL_NOW)[0].some(x => x.alert)).toBe(false)
+test('details: a red CI cell is flagged for highlight (only the cell, not its label or the nightly beside it); a green one is not; no `ci` means no CI cell', async () => {
+  const helper = { ...fullSnap().helper, nightly: { red: 1, green: 2, strip: '+-++.-+' } }
+  const red = detailRows(withHelper({ ...helper, ci: { state: 'failing', at: RUN_AT } }) as any, CI, 140, DETAIL_NOW)
+  const build = red.find(r => r[0].text.startsWith('BUILD'))!
+  expect(build[0].alert).toBeFalsy() // the label
+  const ciSegs = build.slice(1, build.findIndex(x => x.text.startsWith('nightly')))
+  expect(ciSegs.length).toBeGreaterThan(1)
+  expect(ciSegs.filter(x => x.text.trim() !== '' && x.text !== ' │ ').every(x => x.alert)).toBe(true)
+  expect(build.filter(x => x.text.startsWith('nightly') || x.text.includes('green')).some(x => x.alert)).toBe(false)
+  expect(red.filter(r => r !== build).some(r => r.some(x => x.alert))).toBe(false)
+  expect(isAlertRow(build)).toBe(true)
+  expect(detailRows(withHelper({ ...helper, ci: { state: 'passing', at: RUN_AT } }) as any, CI, 140, DETAIL_NOW).some(r => r.some(x => x.alert))).toBe(false)
   expect(detail(fullSnap(), 140, NOCI).join('\n')).not.toContain('CI')
 })
 
@@ -1607,27 +1609,25 @@ test('nightly cell: shrinks strip+counts, then strip alone, and is dropped only 
   expect(rows.some(t => !t.includes('nightly ++') && !t.includes('queue'))).toBe(true)
 })
 
-test('details: the nightly line spells out the 7-day strip and the 30-day green and red days', async () => {
-  const lines = (n: object | null) => linesOf({ nightly: n })
-  expect(lines({ red: 14, green: 16, strip: '+-++.-+' })).toContain('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
-  expect(lines({ red: 14, strip: '+-++.-+' })).toContain('nightly +-++.-+ (last 7 days) · last 30 days: 14 red ✗')
-  expect(lines(null).some(l => l.startsWith('nightly '))).toBe(false)
+test('details: the nightly cell spells out the 7-day strip and the 30-day green and red days', async () => {
+  const lines = (n: object | null) => linesOf({ nightly: n }, 400)
+  expect(sect(lines({ red: 14, green: 16, strip: '+-++.-+' }), 'BUILD')).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
+  expect(sect(lines({ red: 14, strip: '+-++.-+' }), 'BUILD')).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 14 red ✗')
+  expect(lines(null).join('\n')).not.toMatch(/nightly [-+.]{7}/)
   const segs = detailRows(withHelper({ ci: null, nightly: { red: 14, green: 16, strip: '+-++.-+' } }) as any, DEFAULTS, 240, DETAIL_NOW).flat()
   expect(segs.find(x => x.text === '16 green ✓')!.color).toBe('success')
   expect(segs.find(x => x.text === '14 red ✗')!.color).toBe('error')
 })
 
-test('details: the nightly line sits directly after the CI line (first when there is no CI), never after queue', async () => {
+test('details: the nightly cell sits right after the CI cell in the BUILD row (first when there is no CI), never in the queue row', async () => {
   const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
   const helper = { ...fullSnap().helper, queue: q, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
-  const ciOn = detail(withHelper(helper), 200, CI)
-  expect(ciOn[0]).toMatch(/^CI \(nightly\.yml\)/)
-  expect(ciOn[1]).toBe('nightly +-++.-+ (last 7 days) · last 30 days: 16 green ✓ / 14 red ✗')
-  expect(ciOn[2]).toContain('acme/widgets')
-  expect(ciOn.filter(l => l.startsWith('nightly ')).length).toBe(1)
-  const noCi = detail(withHelper({ ...helper, ci: null }), 200, NOCI)
-  expect(noCi[0]).toMatch(/^nightly /)
-  expect(noCi[1]).toContain('acme/widgets')
+  const ciOn = detail(withHelper(helper), 400, CI)
+  expect(sect(ciOn, 'BUILD')).toMatch(/^CI \(nightly\.yml\).* │ nightly \+-\+\+\.-\+ \(last 7 days\) · last 30 days: 16 green ✓ \/ 14 red ✗$/)
+  expect(ciOn.filter(l => /nightly [-+.]{7}/.test(l)).length).toBe(1)
+  expect(sect(ciOn, 'QUEUE')).not.toMatch(/nightly [-+.]{7}/)
+  const noCi = detail(withHelper({ ...helper, ci: null }), 400, NOCI)
+  expect(sect(noCi, 'BUILD')).toMatch(/^nightly /)
 })
 
 // --- /hud details is a SUPERSET of /hud: every cell the band can show has a counterpart in details ---
@@ -1636,19 +1636,19 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   repo: /acme\/widgets @ /,
   branch: /t20261021-354035-decouple/, // the branch rides on the repo line
   task: /T20261021-354035 /,
-  ap: /^AP /,
+  ap: /AP on /,
   apstats: /last 24h: \d+ merged/,
   stall: /next loop overdue/,
   ctx: /context \d+% left/,
   jobs: /READY|WORKING/,
-  queue: /^queue /,
-  nightly: /^nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
-  issues: /^issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
-  bus: /^bus 2 unread notes · newest from home/,
-  ci: /^CI \(/,
+  queue: /queue \d+ = /,
+  nightly: /nightly [-+.]{7}.*last 30 days: \d+ green ✓ \/ \d+ red ✗/,
+  issues: /issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
+  bus: /bus 2 unread notes · newest from home/,
+  ci: /CI \(/,
   rate: /5-hour limit/,
   cost: /API-equivalent cost \$/,
-  lastat: /^you \d/,
+  lastat: /you \d/,
   ver: /ccxp \d/,
   stale: /stale/,
 }
@@ -1683,6 +1683,69 @@ test('details is a superset of the band: every band cell has a details counterpa
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
   for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+})
+
+// --- the old details-on output, cell by cell (#1508): every one must still be in the sectioned layout ---
+// INVENTORY (old line -> cell -> new section). Marker texts are what the OLD details view drew, verbatim.
+//   0 CI                CI (workflow) state, run date, age, ETA, red run URL      -> BUILD
+//   0b nightly          7-day strip, last 30 days green/red                       -> BUILD
+//   0c issues           open, not delivered, max open 180/30/7 days               -> SUPPORT
+//   0e bus              unread notes, newest from                                 -> SESSION
+//   1 where             repo @ branch*, worktree, account, root, task, stale      -> REPO
+//   2 usage             context left, 5-hour limit (+ runs out in), API cost      -> SESSION
+//   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
+//   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> WORK
+//   5 queue             queue (branch) N = ready | held | epics | claimed | revisited | auto-parked | max windows -> QUEUE
+//   6 you               you HH:MM (age)                                           -> SESSION
+//   6 version           ccxp X (latest | Y available)                             -> RELEASE
+//   6 url               plugin GitHub URL                                         -> RELEASE
+//   6 unreleased        N unreleased (subjects removed by owner decision, count kept) -> RELEASE
+const OLD_CELLS: Array<[string, string, RegExp]> = [
+  ['CI', 'BUILD', /CI \(nightly\.yml\) ✓ passing/],
+  ['nightly', 'BUILD', /nightly \+-\+\+\.-\+ \(last 7 days\) · last 30 days: 16 green ✓ \/ 14 red ✗/],
+  ['issues', 'SUPPORT', /issues 12 open \| 7 not delivered \| max open 18 in 180 days \/ 15 in 30 days \/ 12 in 7 days/],
+  ['bus', 'SESSION', /bus 2 unread notes · newest from home/],
+  ['repo', 'REPO', /acme\/widgets @ t20261021-354035-decouple\*/],
+  ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
+  ['stale', 'REPO', /stale$/],
+  ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
+  ['5-hour limit', 'SESSION', /5-hour limit 10% left · runs out in 27m/],
+  ['cost', 'SESSION', /API-equivalent cost \$1\.23/],
+  ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
+  ['jobs state', 'WORK', /WORKING \(2\)/],
+  ['parked', 'WORK', /parked 2/],
+  ['jobs 24h', 'WORK', /last 24h: jobs 8 ▲ \/ average 5\.2\/day/],
+  ['AP', 'WORK', /AP on 2\/6h 3 loops ✓2 merged/],
+  ['next loop', 'WORK', /next loop due|next loop overdue|next loop \d/],
+  ['AP 24h', 'WORK', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
+  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| 4 auto-parked \| max 90 180d \/ 61 30d \/ 52 7d/],
+  ['version', 'RELEASE', /ccxp 5\.0\.0 \(5\.1\.0 available\)/],
+  ['plugin URL', 'RELEASE', /https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills/],
+  ['unreleased', 'RELEASE', /4 unreleased/],
+]
+
+test('details sections: every cell of the old details-on output is still present, in its section, at a wide and at a narrow terminal', async () => {
+  const s = fullSnap({ rateUsed: 90, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, costUsd: 1.23, stale: true }) as any
+  s.helper = {
+    ...s.helper,
+    autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 60, stats: STATS },
+    queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 2, revisited: 0, autoparked: 4, branch: 'main', hwm: { d180: 90, d30: 61, d7: 52 } },
+    nightly: { red: 14, green: 16, strip: '+-++.-+' },
+    issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
+    bus: { unread: 2, from: 'home' },
+    plugin: { ...PLUGIN_NEW, unreleased: { count: 4 } },
+    ci: { state: 'passing', at: Math.floor(DETAIL_NOW / 1000) - 7200 },
+  }
+  for (const cols of [400, 120, 60, 30]) {
+    const secs_ = sections(detail(s, cols, CI))
+    expect(Object.keys(secs_)).toEqual(DETAIL_LABELS)
+    for (const [name, label, re] of OLD_CELLS) {
+      // a cell may wrap across lines of its section (and the wrap eats blanks and separators): compare without them
+      const flat = squash(secs_[label]!.join(''))
+      const want = new RegExp(re.source.replace(/\\?[ │]/g, ''))
+      expect(want.test(flat), `old cell "${name}" missing from ${label} at ${cols} columns`).toBe(true)
+    }
+  }
 })
 
 // ---- CI ETA --------------------------------------------------------------------------------------

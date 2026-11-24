@@ -250,12 +250,13 @@ _compare() {
   export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/compare.json"
 }
 
-@test "unreleased: count and the newest 3 subjects, newest first, first line of each message only" {
+@test "unreleased: the count only, never any commit subject" {
   _remote ccxp-skills--v5.0.0
   _compare 4 "chore: one" "fix: two"$'\n\n'"body text" "feat(hud): three" "docs: four"
   run _ver "$(_plugin 5.0.0)"
   [ "$status" -eq 0 ]
-  [ "$(jq -c .unreleased <<<"$output")" = '{"count":4,"subjects":["docs: four","feat(hud): three","fix: two"]}' ]
+  [ "$(jq -c .unreleased <<<"$output")" = '{"count":4}' ]
+  [[ "$output" != *"docs: four"* ]]
 }
 
 @test "unreleased: the key is absent for zero commits, an unreadable answer and an unreachable API" {
@@ -301,15 +302,6 @@ _compare() {
   [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
 }
 
-@test "unreleased: subjects lose control characters and are cut at 72 chars" {
-  _remote ccxp-skills--v5.0.0
-  local long; long="$(printf 'x%.0s' $(seq 1 100))"
-  _compare 2 "esc"$'\x1b'"[31m red" "$long"
-  run _ver "$(_plugin 5.0.0)"
-  [ "$(jq -r '.unreleased.subjects[1]' <<<"$output")" = "esc[31m red" ]
-  [ "$(jq -r '.unreleased.subjects[0] | length' <<<"$output")" = 72 ]
-}
-
 @test "unreleased: the compare URL names the installed tag and the repo from plugin.json" {
   source "$VER"
   [ "$(hvu-api-url https://github.com/Acme/fork 5.2.0)" = "https://api.github.com/repos/Acme/fork/compare/ccxp-skills--v5.2.0...main" ]
@@ -325,13 +317,9 @@ _compare() {
   [ "$(_ver "$(_plugin 5.0.0)" 0)" = null ]
 }
 
-@test "unreleased: a capped answer (fewer commits listed than ahead_by) keeps the count and no subjects; bidi characters are stripped" {
+@test "unreleased: a capped answer (fewer commits listed than ahead_by) still gives the count" {
   _remote ccxp-skills--v5.0.0
   _compare 300 "a" "b"
   run _ver "$(_plugin 5.0.0)"
-  [ "$(jq -c .unreleased <<<"$output")" = '{"count":300,"subjects":[]}' ]
-  rm -rf "$HUD_VERSION_STATE_DIR"
-  _compare 1 "fix: ev"$'\xe2\x80\xaeil'
-  run _ver "$(_plugin 5.0.0)"
-  [ "$(jq -r '.unreleased.subjects[0]' <<<"$output")" = "fix: evil" ]
+  [ "$(jq -c .unreleased <<<"$output")" = '{"count":300}' ]
 }
