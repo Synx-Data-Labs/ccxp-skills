@@ -28,4 +28,3 @@ description: Add the `tier:` task frontmatter field (integer 1..4, default 3 whe
 
 - Shipped in the PR that adds `tier` to `repo-conventions/scripts/lint_tasks.py` (`check_tier`, tests `test_tier_1_to_4_passes`, `test_tier_out_of_range_fails`), `todo-tier` in `todo/scripts/_lib.sh` (bats `todo-tier`), the template line in `repo-conventions/templates/task.md` and the "Task metadata" entry in `todo/SKILL.md`.
 - No selection change: sub-task T20261124-670976 consumes the tier.
-- Quality probe: docs and scripts only, no regression recorded.
