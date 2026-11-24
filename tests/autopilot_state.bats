@@ -1915,3 +1915,15 @@ _tier_repo() { _nh_repo; echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/qu
   run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 5; [ "$status" -eq 2 ]
   run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 2 --check; [ "$status" -eq 0 ]
 }
+
+@test "cursor: keeps its place while the cursor task is in flight or held" {
+  _tier_repo
+  _tier_task T20260101-000001 3 a; _tier_task T20260101-000002 3 b; _tier_task T20260101-000003 3 c
+  _ap_on
+  _ap busy on T20260101-000002 --slot 1            # cursor = b, and b stays in flight
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]   # c next, not a again
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 2; [ "$output" = T20260101-000001 ]
+  _ap busy off
+  _ap hold-add T20260101-000002 stalled "pr:9" "r"  # b held: the cursor passes over it to c
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]
+}

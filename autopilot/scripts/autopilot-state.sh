@@ -916,7 +916,7 @@ _ap_rotate() {
 # skipping gated tasks, tasks in flight in a busy slot (and tasks Blocked by one) and held tasks. Nothing
 # when none. With no cursor and no tiers set it is the id bare /drive picks.
 ap-top() {
-  local root="" nth=1 urgent=0 tiers="1 2 3 4" t excl order="" ids
+  local root="" nth=1 urgent=0 tiers="1 2 3 4" t excl order="" ids all
   while [ $# -gt 0 ]; do
     case "$1" in
       --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "top [repo-root] [--nth N] [--urgent]" >&2; return 2; }; nth="$2"; shift 2 ;;
@@ -928,9 +928,15 @@ ap-top() {
   excl=$(_ap_exclude)
   for t in $tiers; do
     local -a args=(--skip-gated --ids --tier "$t")
-    [ -z "$excl" ] || args+=(--exclude "$excl")
-    ids=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || continue
-    order="$order$(printf '%s\n' "$ids" | _ap_rotate "$t")"$'\n'
+    # rotate the tier's whole list (so the cursor keeps its place even while its task is in flight or held),
+    # then keep only the tasks that are free to pick
+    all=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || continue
+    if [ -n "$excl" ]; then
+      ids=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" --exclude "$excl" 2>/dev/null) || continue
+    else
+      ids="$all"
+    fi
+    order="$order$(printf '%s\n' "$all" | _ap_rotate "$t" | grep -Fxf <(printf '%s\n' "$ids") || true)"$'\n'
   done
   local id
   id=$(printf '%s' "$order" | grep -E "$AP_TASK_ID_RE" | sed -n "${nth}p") || true
