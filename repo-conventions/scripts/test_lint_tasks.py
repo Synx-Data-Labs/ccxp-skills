@@ -73,6 +73,17 @@ class LintTasksTest(unittest.TestCase):
             "scheduled: 2026-06-09"))
         self.assertEqual(lint_tasks.lint_file(f), [])
 
+    def test_tier_1_to_4_passes(self):
+        for t in ("1", "2", "3", "4"):
+            f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")
+            self.assertEqual(lint_tasks.lint_file(f), [], t)
+
+    def test_tier_out_of_range_fails(self):
+        for t in ("0", "5", "high", "2.5", ""):
+            f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")
+            out = lint_tasks.lint_file(f)
+            self.assertTrue(any("tier" in m and "1..4" in m for m in out), (t, out))
+
     def test_bad_estimation_fails(self):
         f = write_task(self.root, frontmatter="status: Open\nestimation: soon")
         out = lint_tasks.lint_file(f)

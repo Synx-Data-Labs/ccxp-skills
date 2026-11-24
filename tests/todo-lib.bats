@@ -102,3 +102,13 @@ EOF
   [ "$status" -eq 0 ]
   [ "$output" = "unclaimed" ]
 }
+
+# --- todo-tier ----------------------------------------------------------------
+
+@test "todo-tier: reads 1..4, defaults to 3 when absent or invalid" {
+  d="$BATS_TEST_TMPDIR"
+  for t in 1 2 3 4; do printf -- '---\nstatus: Open\ntier: %s\n---\n' "$t" > "$d/t$t.md"; [ "$(todo-tier "$d/t$t.md")" = "$t" ]; done
+  printf -- '---\nstatus: Open\n---\n' > "$d/none.md"; [ "$(todo-tier "$d/none.md")" = 3 ]
+  printf -- '---\nstatus: Open\ntier: 9\n---\n' > "$d/bad.md"; [ "$(todo-tier "$d/bad.md")" = 3 ]
+  printf -- '---\nstatus: Open\ntier: 2  # urgent\n---\n' > "$d/c.md"; [ "$(todo-tier "$d/c.md")" = 2 ]
+}

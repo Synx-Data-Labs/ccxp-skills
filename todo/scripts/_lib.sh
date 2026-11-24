@@ -102,3 +102,12 @@ TODO_LIB_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 function todo-task-type() {
   todo-fm-get "$1" type | tr -d '\r"'"'" | sed -E 's/^[[:space:]]+//; s/[[:space:]]*#.*$//; s/[[:space:]]+$//' | tr '[:upper:]' '[:lower:]'
 }
+
+# Effective autopilot tier of a task file: the frontmatter `tier:` (1..4), or 3
+# when absent or invalid (lint_tasks.py rejects an invalid value; reading stays
+# lenient so one bad file never stops selection).
+function todo-tier() {
+  local v
+  v="$(todo-fm-get "$1" tier | tr -d '\r"'"'" | sed -E 's/[[:space:]]*#.*$//; s/^[[:space:]]+//; s/[[:space:]]+$//')"
+  case "$v" in 1|2|3|4) printf '%s\n' "$v" ;; *) printf '3\n' ;; esac
+}

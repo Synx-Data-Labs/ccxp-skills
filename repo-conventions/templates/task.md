@@ -22,6 +22,7 @@ estimation: 1
 # person: [person-a]           # aliases involved (call, review, handoff) — never emails or real names
 # type: feature                # chore|feature|bug|event|research|spike|rca|support|other; `event` needs `when`
 #   (waiting on someone: `status: Blocked by person:<alias>` or `ext:<text>`, no new field)
+# tier: 3                     # autopilot tier 1..4 (1 urgent: red nightly and the like; 2 support issues; 3 default when absent; 4 low) — omit unless the owner states one
 # support-report: on                   # opt in to outward status reports (default off; later phase)
 #
 # Runtime fields written by tooling — do NOT hand-author:
