@@ -194,6 +194,16 @@ function pr-tasks() { # $1 persona, $2 scope, $3 min shared, $4 repo
   done < <(pr-bucket "$1" "$2" "$3")
 }
 
+function pr-names-target() { # $1 task file, $2 enforced-by: does the file name the target on token boundaries?
+  local f="$1" t="$2" esc
+  if [[ "$t" =~ ^#?([0-9]+)$ ]]; then
+    grep -qE "(#|pull/)${BASH_REMATCH[1]}([^0-9]|$)" "$f"
+  else
+    esc=$(printf '%s' "${t#./}" | sed 's/[][\.*^$(){}?+|/]/\\&/g')
+    grep -qE "(^|[^A-Za-z0-9_./-])${esc}([^A-Za-z0-9_./-]|\.([^A-Za-z0-9_-]|$)|$)" "$f"
+  fi
+}
+
 function pr-resolved() { # $1 repo, $2 enforced-by; prints a verdict word on stdout: ok|unmerged|missing|task
   local repo="$1" t="$2" gh state
   if [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then echo task
@@ -221,7 +231,7 @@ function pr-retire-enforced() { # $1 repo, $2 apply (true|false)
     esac
     f=""
     while IFS= read -r cand; do # the task must name the ref AND the enforcing target
-      [[ -n "$cand" ]] && grep -qF -- "$tgt" "$cand" && { f="$cand"; break; }
+      [[ -n "$cand" ]] && pr-names-target "$cand" "$tgt" && { f="$cand"; break; }
     done < <(pr-task-files "$repo" "$ref" all)
     if [[ -z "$f" ]]; then printf '%s\tpending\tno task names both %s and %s; file the distill task first\n' "$ref" "$ref" "$tgt"; continue; fi
     tid=$(pr-task-id "$f")

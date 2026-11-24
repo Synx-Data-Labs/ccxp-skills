@@ -803,6 +803,7 @@ ledger-decision() {
       tgt=$(ledger-bounded "${POS[1]:-${ENF}}" 200 "enforced-by") || return 2
       st=$(decisions-status "$r")
       [[ -n "$st" ]] || { decisions-missing "$r"; return 1; }
+      [[ "$st" == active ]] || { echo "ledger: $r is already $st" >&2; return 1; }
       decisions-update '.decisions |= map(if .ref == $r then .enforced_by = $e else . end)' --arg r "$r" --arg e "$tgt" || return 1
       printf '%s\n' "$r" ;;
     review)

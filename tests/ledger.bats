@@ -640,6 +640,12 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   [ "$status" -eq 0 ]; [ "$(jq -r '.[0].enforced_by' <<<"$output")" = "" ]
 }
 
+@test "decision enforce: a retired decision is refused" {
+  bash "$LEDGER" decision add "x" >/dev/null; bash "$LEDGER" decision retire d1 >/dev/null
+  run bash "$LEDGER" decision enforce d1 foo
+  [ "$status" -ne 0 ]
+}
+
 @test "decision enforce: unknown ref fails, credential-looking target is rejected" {
   run bash "$LEDGER" decision enforce d9 foo
   [ "$status" -ne 0 ]
