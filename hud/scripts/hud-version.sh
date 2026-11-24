@@ -19,7 +19,8 @@
 #             public GitHub compare API via `curl` (no credentials, no gh, no git checkout, so it works from the
 #             installed plugin cache), cached in <state>/unreleased.json for 1 h (HVU_TTL), one detached refresh at a
 #             time (8 s timeout, lock dir); a change of installed version or repo drops the old answer. Subjects are
-#             untrusted: control characters stripped, 72 chars at most. Override the request URL with HUD_UNRELEASED_URL (tests).
+#             untrusted: control, bidi and zero-width characters stripped, 72 chars at most; when the API
+#             lists fewer commits than ahead_by (it caps at 250) no subjects are kept, only the count. Override the request URL with HUD_UNRELEASED_URL (tests).
 #
 # Never blocks the caller: it answers from an on-disk cache and, when the cache is older than
 # 6 h OR the running plugin.json changed since the cache was written (its mtime is stored in the
@@ -141,7 +142,7 @@ hvu-api-url() {
 
 # stdin: compare API JSON -> {"count":N,"subjects":[...]} (newest first, 3 at most), exit 1 when it is not a compare answer.
 hvu-parse() {
-  jq -c -e 'if (.ahead_by | type) == "number" then {count: (.ahead_by | floor), subjects: ([.commits[]? | .commit.message | tostring | split("\n")[0] | explode | map(select(. >= 32 and . != 127 and (. < 128 or . > 159))) | implode | .[0:72]] | reverse | .[0:3])} else empty end' 2>/dev/null
+  jq -c -e 'if (.ahead_by | type) == "number" then {count: (.ahead_by | floor), subjects: (if ((.commits // []) | length) < .ahead_by then [] else [.commits[]? | .commit.message | tostring | split("\n")[0] | explode | map(select(. >= 32 and . != 127 and (. < 128 or . > 159) and (. < 8203 or . > 8207) and (. < 8232 or . > 8238) and (. < 8294 or . > 8297))) | implode | .[0:72]] | reverse | .[0:3] end)} else empty end' 2>/dev/null
 }
 
 # $1 cache file $2 key ("<installed> <repo>") $3 api url

@@ -324,3 +324,14 @@ _compare() {
   [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
   [ "$(_ver "$(_plugin 5.0.0)" 0)" = null ]
 }
+
+@test "unreleased: a capped answer (fewer commits listed than ahead_by) keeps the count and no subjects; bidi characters are stripped" {
+  _remote ccxp-skills--v5.0.0
+  _compare 300 "a" "b"
+  run _ver "$(_plugin 5.0.0)"
+  [ "$(jq -c .unreleased <<<"$output")" = '{"count":300,"subjects":[]}' ]
+  rm -rf "$HUD_VERSION_STATE_DIR"
+  _compare 1 "fix: ev"$'\xe2\x80\xaeil'
+  run _ver "$(_plugin 5.0.0)"
+  [ "$(jq -r '.unreleased.subjects[0]' <<<"$output")" = "fix: evil" ]
+}
