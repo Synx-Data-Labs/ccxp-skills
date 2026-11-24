@@ -347,22 +347,44 @@ sl-autopilot-stats() {
 }
 
 # $1 repo_root -> compact JSON of the autopilot's EFFECTIVE parallelism settings
-# {max_dop, reserved_slots (a number or null), file (the config file exists)}, or nothing when the
+# {max_dop, reserved_slots (a number or null), source, file (the config file exists)}, or nothing when the
 # autopilot is not on/paused (`$2` empty) and there is no config file, or anything fails. The effective
-# values (default and range; a value above the reported range maximum is clamped to it, as the loop does) come from `autopilot-state.sh config-show --json` (read-only, no network):
-# nothing is re-derived here. `reserved_slots` is null until that script knows the key (an older
-# autopilot), so the HUD shows max_dop alone then. Never fails the prompt.
+# values (default, range, clamp) come from `autopilot-state.sh config-show --json` (read-only, no network):
+# nothing is re-derived here. `reserved_slots` is null when that script does not report the key (an older
+# plugin copy), so the HUD shows max_dop alone then. config-show costs ~150 ms (a dozen jq calls), so the
+# answer is cached per repo (CCXP_HUD_CACHE_DIR, as sl-gh-account) and reused while the config file's mtime
+# is unchanged and the entry is younger than CCXP_HUD_CACHE_TTL x 10 seconds (default 600; 0 disables).
+# Never fails the prompt.
 sl-autopilot-config() {
   local repo_root="$1" rec="${2:-}" script="$_SL_DIR/../../autopilot/scripts/autopilot-state.sh" cf out
+  local ttl="${CCXP_HUD_CACHE_TTL:-60}" cdir="${CCXP_HUD_CACHE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-cache}"
+  local key f now stamp cmt line mt="none"
   cf="$repo_root/dev/.autopilot-config.json"
   [ -n "$rec" ] || [ -f "$cf" ] || return 0
   [ -f "$script" ] || return 0
+  [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=60
+  ttl=$(( ttl * 10 ))
+  if [ -f "$cf" ]; then mt=$(stat -c %Y "$cf" 2>/dev/null || stat -f %m "$cf" 2>/dev/null || echo none); fi
+  now=$(date +%s)
+  key=$(printf '%s' "$repo_root" | cksum | awk '{print $1}')
+  f="$cdir/ap-config-$key"
+  if [ "$ttl" -gt 0 ] && [ -r "$f" ]; then
+    IFS=$'\t' read -r stamp cmt line < "$f" || true
+    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$cmt" = "$mt" ] && [ -n "$line" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ]; then
+      printf '%s' "$line"
+      return 0
+    fi
+  fi
   out=$(AUTOPILOT_CONFIG_FILE="$cf" AUTOPILOT_REPO_ROOT="$repo_root" bash "$script" config-show --json 2>/dev/null) || return 0
-  printf '%s' "$out" | jq -c --argjson f "$([ -f "$cf" ] && echo true || echo false)" \
+  out=$(printf '%s' "$out" | jq -c --argjson f "$([ -f "$cf" ] && echo true || echo false)" \
     'select(type == "object") | .settings as $s | select(($s.max_dop.value | type) == "number")
-     | ((($s.max_dop.range // "") | capture("-(?<m>[0-9]+)$").m | tonumber?) // null) as $hi
-     | {max_dop: (if $hi != null and $s.max_dop.value > $hi then $hi else $s.max_dop.value end), reserved_slots: (if ($s.reserved_slots.value | type) == "number" then $s.reserved_slots.value else null end),
-        source: ($s.max_dop.source // "default"), file: $f}' 2>/dev/null || true
+     | {max_dop: $s.max_dop.value, reserved_slots: (if ($s.reserved_slots.value | type) == "number" then $s.reserved_slots.value else null end),
+        source: ($s.max_dop.source // "default"), file: $f}' 2>/dev/null) || return 0
+  [ -n "$out" ] || return 0
+  if [ "$ttl" -gt 0 ]; then
+    { mkdir -p "$cdir" && printf '%s\t%s\t%s\n' "$now" "$mt" "$out" > "$f.$$" && mv "$f.$$" "$f"; } 2>/dev/null || rm -f "$f.$$" 2>/dev/null || true
+  fi
+  printf '%s' "$out"
 }
 
 # Job ledger (written by ledger.sh). Same default path convention as the other

@@ -33,7 +33,8 @@ scheduled: 2026-11-23
 ## Solution
 
 - `sl-autopilot-config` (`hud/scripts/hud-lib.sh`) calls `config-show --json` with `AUTOPILOT_CONFIG_FILE` pointed at the repo, only when the autopilot is on/paused or the config file exists; `hud-data.sh` adds it as `ap_config`.
-- `reserved_slots` is null until the autopilot script reports the key (T20261124-182499), so `max_dop` shows alone until then; no assumed default of 2.
+- `reserved_slots` is null when the autopilot script does not report the key (an older plugin copy; T20261124-182499 added it), so `max_dop` then shows alone; no assumed default of 2.
+- `config-show` costs about 150 ms, so the answer is cached per repo, keyed on the config file's mtime.
 - `hud/model.ts`: `dopUse` (running = `busy_slots`, routine = max_dop less reserved, capped when running >= routine and running > 0), band cell `dop`, details cell, `drop:dop` step before `drop:ctx`.
 - Alternatives rejected: reading `dev/.autopilot-config.json` directly (would copy the default, range and clamp that another job is changing); a new `fields` entry (the cell rides with `ap`).
 

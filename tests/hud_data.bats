@@ -653,7 +653,7 @@ _cfg() { printf '%s' "$2" > "$1/dev/.autopilot-config.json"; }
   [ "$(jq -r '.ap_config.max_dop | type' <<<"$output")" = "number" ]
 }
 
-@test "--json: a config override is the effective value, clamped by the autopilot script (500 -> 16)" {
+@test "--json: a config override is the effective value, as the autopilot script reports it (500 -> its clamp)" {
   local repo; repo=$(_make_repo r-cfg-over)
   _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":1}"
   _cfg "$repo" '{"max_dop":8}'
@@ -680,11 +680,12 @@ _cfg() { printf '%s' "$2" > "$1/dev/.autopilot-config.json"; }
 
 @test "sl-autopilot-config: reserved_slots is read from the autopilot script; null while an older script lacks the key" {
   local repo; repo=$(_make_repo r-cfg-res)
+  export CCXP_HUD_CACHE_TTL=0 # the fake scripts below answer for the same repo and config mtime: no cache
   _cfg "$repo" '{"max_dop":8}'
-  # The real script: reports the key once the autopilot-config change is in (a number), else the field is null.
+  # The real script reports the key (the effective reserved slots), so it is a number.
   run bash -c "source '$SCRIPT'; sl-autopilot-config '$repo' ''"
   [ "$(jq -r .max_dop <<<"$output")" = "8" ]
-  [[ "$(jq -r '.reserved_slots | type' <<<"$output")" =~ ^(number|null)$ ]]
+  [ "$(jq -r '.reserved_slots | type' <<<"$output")" = "number" ]
   local fake="$BATS_TEST_TMPDIR/plugin"
   mkdir -p "$fake/hud/scripts" "$fake/autopilot/scripts"
   cp "$REPO_ROOT"/hud/scripts/*.sh "$fake/hud/scripts/"
@@ -707,6 +708,7 @@ STUB
 
 @test "sl-autopilot-config: a failing or garbage autopilot script prints nothing and never fails" {
   local repo; repo=$(_make_repo r-cfg-bad)
+  export CCXP_HUD_CACHE_TTL=0
   _cfg "$repo" '{"max_dop":8}'
   local fake="$BATS_TEST_TMPDIR/plugin2"
   mkdir -p "$fake/hud/scripts" "$fake/autopilot/scripts"
@@ -719,4 +721,26 @@ STUB
   run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
   [ "$status" -eq 0 ]
   [ -z "$output" ]
+}
+
+@test "sl-autopilot-config: the answer is cached while the config file is unchanged and refreshed when it changes" {
+  local repo; repo=$(_make_repo r-cfg-cache)
+  _cfg "$repo" '{"max_dop":8}'
+  export CCXP_HUD_CACHE_DIR="$BATS_TEST_TMPDIR/cfg-cache"
+  local fake="$BATS_TEST_TMPDIR/plugin3"
+  mkdir -p "$fake/hud/scripts" "$fake/autopilot/scripts"
+  cp "$REPO_ROOT"/hud/scripts/*.sh "$fake/hud/scripts/"
+  cat > "$fake/autopilot/scripts/autopilot-state.sh" <<'STUB'
+#!/usr/bin/env bash
+echo x >> "$HUD_TEST_CALLS"
+echo '{"settings":{"max_dop":{"value":8,"source":"override"}}}'
+STUB
+  export HUD_TEST_CALLS="$BATS_TEST_TMPDIR/calls"
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''; sl-autopilot-config '$repo' ''"
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 1 ]
+  touch -t 203001010000 "$repo/dev/.autopilot-config.json"   # the config changed: recomputed
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 2 ]
+  CCXP_HUD_CACHE_TTL=0 run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''; sl-autopilot-config '$repo' ''"
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 4 ]
 }
