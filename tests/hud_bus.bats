@@ -7,6 +7,7 @@ BUSH="$REPO_ROOT/hud/scripts/hud-bus.sh"
 BUS="$REPO_ROOT/_bus/bus.sh"
 
 setup() {
+  export HUD_BEHIND_STATE_DIR="$BATS_TEST_TMPDIR/hud-behind" # the behind fetch never touches ~/.claude
   umask 077
   export CCXP_BUS_ROOT="$BATS_TEST_TMPDIR/bus" HOME="$BATS_TEST_TMPDIR/h" CCXP_BUS_SESSION_PID="$$"
   P="$BATS_TEST_TMPDIR/profiles"; mkdir -p "$HOME" "$P/prof-home" "$P/prof-work"

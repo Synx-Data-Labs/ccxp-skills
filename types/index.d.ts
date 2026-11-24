@@ -186,6 +186,9 @@ export type PluginVersion = {
 /** Unread notes on the cross-account bus (hud-bus.sh, from `bus.sh status --json`): how many and who sent the newest. */
 export type Bus = { unread: number; from: string }
 
+/** How far the branch is from its remote (hud-behind.sh); absent data (0 behind and 0 ahead, detached, no reference) is null on the helper. */
+export type Behind = { behind: number; ahead: number; base: 'upstream' | 'origin' }
+
 export type HelperData = {
   /** Repository name (origin's last path part, else the folder name); always present. */
   repo: string
@@ -205,6 +208,8 @@ export type HelperData = {
   dirty: number | null
   /** gh account of the directory (direnv GH_CONFIG_DIR + hosts.yml, never the token); null when unknown. */
   gh_account: string | null
+  /** Commits behind and ahead of the upstream (or origin's default branch); null when level, detached or unknown. */
+  behind: Behind | null
   autopilot: Autopilot | null
   /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null

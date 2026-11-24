@@ -32,6 +32,7 @@
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached refresh (hud-issues.sh)
 #    "bus": null | {"unread","from"},   # unread cross-account bus notes (count, newest sender); local files only (hud-bus.sh, _bus/bus.sh status --json); null when off or nothing unread
+#    "behind": null | {"behind","ahead","base"},   # commits the branch is behind / ahead of its upstream ("base":"upstream") or origin's default branch ("origin"); null when 0/0, detached, or no reference (hud-behind.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
@@ -50,6 +51,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-bus.sh"
 # shellcheck source=hud-version.sh
 . "$_HD_DIR/hud-version.sh"
+# shellcheck source=hud-behind.sh
+. "$_HD_DIR/hud-behind.sh"
 # shellcheck source=hud-queue-hwm.sh
 . "$_HD_DIR/hud-queue-hwm.sh"
 # shellcheck source=hud-nightly.sh
@@ -92,13 +95,15 @@ hud-data() {
 
   # Repo identity: only when cwd is really inside a git work tree. Outside one
   # these stay empty and become JSON null (`repo` still names the folder).
-  local slug="" top="" head="" dirty="" gh_account=""
+  local slug="" top="" head="" dirty="" gh_account="" behind="null"
   top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || top=""
   if [ -n "$top" ]; then
     slug=$(sl-repo-slug "$top")
     head=$(sl-detached-head "$top")
     dirty=$(sl-dirty-count "$top")
     gh_account=$(sl-gh-account "$top")
+    behind=$(hud-behind-json "$top" 2>/dev/null) || behind="null"
+    [ -n "$behind" ] || behind="null"
   fi
 
   local ledger; ledger=$(sl-ledger-json)
@@ -145,7 +150,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --argjson behind "$behind" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -160,7 +165,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), stats: $apstats} end),
-       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, bus: $bus, plugin: $plugin,
+       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, bus: $bus, plugin: $plugin, behind: $behind,
        last_input_at: $last_input_at}'
 }
 

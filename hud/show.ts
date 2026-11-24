@@ -9,7 +9,7 @@ import { ALL_FIELDS, DEFAULTS, mergeConfig, parseConfigText } from './config'
 export const ENV_NAMES = [
   'CLAUDE_CONFIG_DIR', 'HOME', 'NO_COLOR',
   'HUD_CACHE_DIR', 'HUD_CACHE_TTL', 'HUD_CI_STATE_DIR', 'HUD_NIGHTLY_STATE_DIR', 'HUD_NIGHTLY_OFF', 'HUD_NIGHTLY_REPO',
-  'HUD_NIGHTLY_WORKFLOW', 'HUD_NIGHTLY_TTL', 'HUD_ISSUES_STATE_DIR', 'HUD_ISSUES_TTL', 'HUD_QUEUE_STATE_DIR', 'HUD_QUEUE_FETCH_TTL',
+  'HUD_NIGHTLY_WORKFLOW', 'HUD_NIGHTLY_TTL', 'HUD_ISSUES_STATE_DIR', 'HUD_ISSUES_TTL', 'HUD_QUEUE_STATE_DIR', 'HUD_QUEUE_FETCH_TTL', 'HUD_BEHIND_STATE_DIR', 'HUD_BEHIND_TTL',
 ] as const
 
 export type ShowInput = {
@@ -97,7 +97,7 @@ export function configReport(input: ShowInput): string {
 
   const ttl = (name: string, def: string): string => (env[name as keyof typeof env] ? `${env[name as keyof typeof env]}s (${name})` : def)
   L.push('Refresh intervals (fixed in the helper scripts; some can be overridden by the variable shown):')
-  L.push(`  ci ${Math.max(120, cfg.pollSeconds)}s | nightly ${ttl('HUD_NIGHTLY_TTL', '1800s')} | issues ${ttl('HUD_ISSUES_TTL', '900s')} | version 6h | repo and gh account ${ttl('HUD_CACHE_TTL', '60s')} | queue fetch ${ttl('HUD_QUEUE_FETCH_TTL', 'default')}`)
+  L.push(`  ci ${Math.max(120, cfg.pollSeconds)}s | nightly ${ttl('HUD_NIGHTLY_TTL', '1800s')} | issues ${ttl('HUD_ISSUES_TTL', '900s')} | version 6h | repo and gh account ${ttl('HUD_CACHE_TTL', '60s')} | queue fetch ${ttl('HUD_QUEUE_FETCH_TTL', 'default')} | behind fetch ${ttl('HUD_BEHIND_TTL', '300s')}`)
   L.push('')
 
   L.push('Cache and state folders (the helper scripts write only here):')
@@ -107,6 +107,7 @@ export function configReport(input: ShowInput): string {
   L.push(`  issues        ${dir('hud-issues', env.HUD_ISSUES_STATE_DIR)}`)
   L.push(`  version       ${dir('hud-version')}`)
   L.push(`  queue         ${dir('hud-queue', env.HUD_QUEUE_STATE_DIR)}`)
+  L.push(`  behind        ${dir('hud-behind', env.HUD_BEHIND_STATE_DIR)}`)
   L.push(`  repo/account  ${dir('hud-cache', env.HUD_CACHE_DIR)}`)
   L.push(`  heartbeat     ${dir('hud-active')}`)
   L.push('')
