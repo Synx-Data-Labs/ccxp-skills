@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 blocks: [T20261124-419462]
 source: owner request 2026-11-24 (decision d158), epic E3
 description: Define the depends_on and needs frontmatter fields, update lint, add a compat reader for legacy Blocked by
+claimed_by: cc1-50ac6891:86d2310edcae5b32
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-320024: Spec, depends_on schema, lint and compat reader
