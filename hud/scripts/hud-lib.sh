@@ -272,12 +272,13 @@ sl-autopilot-fields() {
   # One jq call for all fields (not several separate ones) — avoids a TOCTOU
   # gap where /autopilot could rewrite the file between separate reads.
   line=$(jq -r 'select(.schema == 2) | [.status, .started_at, .stuck_count, .cycle_count, .last_outcome, .paused_at, (.last_task | if type == "object" then .id else . end), .last_stuck_reason, .merged_count, .next_wake_at, .busy_since, .current_task,
-      (if (.slots | type) == "object" then ([.slots | to_entries[] | select((.value | type) == "object" and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and $e <= now and (now - $e) < 10800))] | length) else "" end)] | map(. // "" | tostring) | join("\u001f")' \
+      (if (.slots | type) == "object" then ([.slots | to_entries[] | select((.value | type) == "object" and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and $e <= now and (now - $e) < 10800))] | length) else "" end),
+      (if (.slots | type) == "object" then ([.slots | to_entries[] | select((.value | type) == "object" and .value.urgent != true and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and $e <= now and (now - $e) < 10800))] | length) else "" end)] | map(. // "" | tostring) | join("\u001f")' \
     "$state_file" 2>/dev/null) || return 0
   [ -n "$line" ] || return 0
 
-  local ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task slots_n
-  IFS=$'\x1f' read -r ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task slots_n <<<"$line"
+  local ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task slots_n routine_n
+  IFS=$'\x1f' read -r ap_status started_at stuck_count cycle_count last_outcome paused_at last_task stuck_reason merged_count next_wake_at busy_since current_task slots_n routine_n <<<"$line"
   case "$ap_status" in on|paused) ;; *) return 0 ;; esac
 
   # stuck_count/cycle_count must be non-negative integers — a missing,
@@ -328,8 +329,11 @@ sl-autopilot-fields() {
     busy=""; [ "$slots_n" -gt 0 ] && { busy=1; busy_slots="$slots_n"; }
   elif [ -n "$busy" ]; then busy_slots=1; fi
   [[ "$current_task" =~ ^T[0-9]{8}-[0-9]{6}$ ]] && [ -n "$busy" ] || current_task=""
+  # Cycles in routine slots (not marked --urgent): the ones that count against the routine limit. No `slots` object: all of them.
+  local busy_routine="$busy_slots"
+  if [[ "$routine_n" =~ ^[0-9]+$ ]] && [[ "$slots_n" =~ ^[0-9]+$ ]]; then busy_routine="$routine_n"; fi
 
-  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}${sep}${next_wake_epoch}${sep}${busy}${sep}${current_task}${sep}${busy_slots}"
+  printf '%s' "${ap_status}${sep}${prefix}${sep}${elapsed_hr}${sep}0${sep}${stuck_count}${sep}${cycle_count}${sep}${last_outcome}${sep}${last_task}${sep}${stuck_reason}${sep}${sep}${merged_count}${sep}${next_wake_epoch}${sep}${busy}${sep}${current_task}${sep}${busy_slots}${sep}${busy_routine:-0}"
 }
 
 # $1 repo_root -> compact JSON of the autopilot's rolling-24h and lifetime progress

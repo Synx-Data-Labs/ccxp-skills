@@ -42,7 +42,7 @@ The autopilot's last 24 hours (a rolling window, not a calendar day) against its
 
 The autopilot's parallelism, so you can see the current config: `dop 8/16` = 8 cycles running out of `max_dop` 16.
 
-- Neutral colour normally; yellow when the running cycles are at the routine limit (`max_dop` less the reserved slots, all of `max_dop` while there is no reserved key). `dop 8/6` after lowering `max_dop` under live cycles stays yellow until they finish.
+- Neutral colour normally; yellow when the running routine cycles are at the routine limit (`max_dop` less the reserved slots, all of `max_dop` while there is no reserved key; urgent cycles run in the reserved slots and are not counted against it, though they are in the number shown). `dop 8/6` after lowering `max_dop` under live cycles stays yellow until they finish.
 - `/hud details` spells it out on the AP line: `max_dop 16 (14 routine + 2 reserved) · 8 running`, and `(limit lowered)` when more cycles run than `max_dop` allows. With the autopilot off but a config file present it shows the dim configured value: `max_dop 16`.
 - The reserved part comes from the autopilot's `reserved_slots` setting (default 2); with an older autopilot script that does not report it, `max_dop` is shown alone, e.g. `max_dop 16`.
 - A narrow terminal drops it whole (after the AP cell is at its shortest form, before the ctx cell). Silent with the autopilot off and no config file.

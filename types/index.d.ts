@@ -98,6 +98,8 @@ export type Autopilot = {
   current_task: string
   /** Parallel cycles running (`max_dop` > 1); 0 when none, 1 for a single cycle. */
   busy_slots: number
+  /** Of busy_slots, the cycles in routine slots (not marked urgent); they alone count against the routine limit. */
+  busy_routine: number
   stats: ApStats | null
 }
 
