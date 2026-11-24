@@ -1545,7 +1545,7 @@ _ap_on() { _ap start >/dev/null; }
 }
 
 @test "wake: SKILL.md and parallel.md pair every ScheduleWakeup with a state write" {
-  run grep -c 'autopilot-state.sh wake' "$REPO_ROOT/autopilot/SKILL.md"; [ "$output" -ge 2 ]
+  run grep -c 'wake <s' "$REPO_ROOT/autopilot/SKILL.md"; [ "$output" -ge 2 ]
   run grep -c 'autopilot-state.sh wake' "$REPO_ROOT/autopilot/parallel.md"; [ "$output" -ge 1 ]
   run grep -ni 'never arm a wake without recording it' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
 }
