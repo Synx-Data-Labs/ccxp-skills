@@ -148,3 +148,34 @@ _run() { run bash "$BEHIND" "$WORK"; }
   run jq -c .behind < <(bash "$REPO_ROOT/hud/scripts/hud-data.sh" <<<"{\"cwd\":\"$WORK\"}")
   [ "$output" = '{"behind":5,"ahead":1,"base":"upstream"}' ]
 }
+
+@test "a dangling origin/HEAD falls back to origin/main" {
+  _origin_adds 2
+  git -C "$WORK" checkout -q -b feature
+  git -C "$WORK" fetch -q origin
+  git -C "$WORK" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/gone
+  _run
+  [ "$output" = '{"behind":2,"ahead":0,"base":"origin"}' ]
+}
+
+@test "a tag named like the upstream does not make the count ambiguous" {
+  _origin_adds 1
+  git -C "$WORK" tag origin/main
+  _run
+  [ "$output" = '{"behind":1,"ahead":0,"base":"upstream"}' ]
+}
+
+@test "the user's own GIT_SSH_COMMAND is kept (only BatchMode is added)" {
+  _origin_adds 1
+  printf '#!/usr/bin/env bash\necho "$*" > "%s/ssh-args"; exit 1\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/myssh"; chmod +x "$BATS_TEST_TMPDIR/myssh"
+  git -C "$WORK" remote set-url origin "ssh://git@example.invalid/x.git"
+  GIT_SSH_COMMAND="$BATS_TEST_TMPDIR/myssh -i /k" run bash "$BEHIND" "$WORK"
+  grep -q -- "-i /k" "$BATS_TEST_TMPDIR/ssh-args"
+  grep -q -- "BatchMode=yes" "$BATS_TEST_TMPDIR/ssh-args"
+}
+
+@test "detached HEAD does not fetch" {
+  git -C "$WORK" checkout -q --detach
+  _run
+  [ ! -e "$HUD_BEHIND_STATE_DIR" ]
+}
