@@ -349,8 +349,8 @@ implement stage ran as a subagent, so confirm the working-tree changes match the
 3. Write the code — follow `dev/guidelines.md` conventions (the target repo's guidelines take precedence when they differ)
 4. Write tests if the test plan calls for them (scripts in `scripts/` must have BATS tests)
 5. Run tests locally: `bats tests/` — fix any failures before proceeding
-6. Commit on the feature branch
-7. **Workflow verification** — if the change touches workflow files (`.github/workflows/*.yml`), build scripts, or manifests: **trigger the affected workflow on the feature branch and verify it passes before creating the PR**. Use `--ref <branch>` and `dry_run=true` / `skip_upload=true`. Wait for completion and confirm success.
+6. Commit on the feature branch. **Fresh base (d129):** before every push run `bash <skills-root>/_gh/fresh-base.sh check --rebase` (exit 0 `fresh`/`rebased`; any other exit = stop and fix, never push stale; re-run tests after a rebase, and push a rebased branch that was already pushed with `--force-with-lease`).
+7. **Workflow verification** — before any `gh workflow run --ref <branch>` run `bash <skills-root>/_gh/fresh-base.sh remote <branch>` (exit 0 required: the pushed branch must contain the latest `origin/main`). If the change touches workflow files (`.github/workflows/*.yml`), build scripts, or manifests: **trigger the affected workflow on the feature branch and verify it passes before creating the PR**. Use `--ref <branch>` and `dry_run=true` / `skip_upload=true`. Wait for completion and confirm success.
 
    **Exception 1**: brand-new workflows that don't exist on `main` yet can't be triggered from a branch — note this in the PR and test immediately after merge.
 
