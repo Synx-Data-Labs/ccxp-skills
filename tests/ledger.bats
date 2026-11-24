@@ -622,6 +622,32 @@ dmd() { echo "$(dirname "$CCXP_LEDGER_FILE")/ccxp-decisions.md"; }
   [ "$(ls "$(dirname "$(dj)")" | grep -c '^ccxp-decisions.json\.')" = "0" ]
 }
 
+@test "decision enforce: optional enforced_by shows in list, show and the md; clear with no target; old files still read" {
+  bash "$LEDGER" decision add "Rebase before merge" >/dev/null
+  [ "$(jq -r '.decisions[0].enforced_by' "$(dj)")" = "" ]
+  [ "$(bash "$LEDGER" decision enforce d1 hud/scripts/ledger.sh)" = "d1" ]
+  [ "$(jq -r '.decisions[0].enforced_by' "$(dj)")" = "hud/scripts/ledger.sh" ]
+  run bash "$LEDGER" decision list
+  [[ "$output" == *"enforced-by: hud/scripts/ledger.sh"* ]]
+  grep -q "enforced-by: hud/scripts/ledger.sh" "$(dmd)"
+  bash "$LEDGER" decision show d1 | grep -q "enforced-by: hud/scripts/ledger.sh"
+  [ "$(bash "$LEDGER" decision add "Second" --enforced-by T20261124-607534)" = "d2" ]
+  [ "$(jq -r '.decisions[1].enforced_by' "$(dj)")" = "T20261124-607534" ]
+  bash "$LEDGER" decision enforce d1 >/dev/null
+  [ "$(jq -r '.decisions[0].enforced_by' "$(dj)")" = "" ]
+  jq 'del(.decisions[].enforced_by)' "$(dj)" > "$BATS_TEST_TMPDIR/o.json" && cp "$BATS_TEST_TMPDIR/o.json" "$(dj)"
+  run bash "$LEDGER" decision list --json
+  [ "$status" -eq 0 ]; [ "$(jq -r '.[0].enforced_by' <<<"$output")" = "" ]
+}
+
+@test "decision enforce: unknown ref fails, credential-looking target is rejected" {
+  run bash "$LEDGER" decision enforce d9 foo
+  [ "$status" -ne 0 ]
+  bash "$LEDGER" decision add "x" >/dev/null
+  run bash "$LEDGER" decision enforce d1 "$(printf 'gh%s_%s' p abcdefghijklmnopqrstuvwxyz0123456789)"
+  [ "$status" -ne 0 ]
+}
+
 @test "decision: CCXP_DECISIONS_FILE overrides the location" {
   export CCXP_DECISIONS_FILE="$BATS_TEST_TMPDIR/elsewhere/dec.json"
   bash "$LEDGER" decision add "x"

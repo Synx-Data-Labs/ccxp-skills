@@ -15,6 +15,7 @@ The ccxp-agent keeps the owner's standing decisions, so a compaction or restart 
 ```bash
 ledger.sh decision add "<text>" [--quote "<owner words>"] [--scope global|repo:<name>] [--context <abs path>] [--source <job/ref>]
 ledger.sh decision supersede <ref> "<new text>" [same options]
+ledger.sh decision enforce <ref> [<path or PR>]
 ledger.sh decision retire <ref> ["<reason>"]
 ledger.sh decision list [--all] [--scope <s>] [--json]
 ledger.sh decision show <ref>
@@ -25,6 +26,7 @@ ledger.sh decision review [--scope <s>] [--json]
 - `text` is a one-line title (max 400 chars); `--quote` is the owner's own words (max 600). Longer values and anything that looks like a credential are rejected (same check as saved job prompts). Control characters are stripped.
 - `--scope` defaults to `global`; `supersede` keeps the old entry's scope unless one is given. `--context` must be an absolute path.
 - `supersede` creates the new entry and marks the old one `superseded` with `superseded_by`; history stays. `retire` marks it `retired` with the optional reason. Both fail on an unknown or already closed ref.
+- `enforce <ref> [<target>]` sets the optional `enforced_by` field (a repo path, a merged PR number or URL, or a task id; max 200 chars; no target clears it); `add` and `supersede` take `--enforced-by` too. `list`, `show` and the `.md` render show `enforced-by: ...`. Files without the field read as empty.
 - `list` prints active entries newest first (ref, date, scope, text, quote, context); `--all` adds closed ones; `--scope` matches exactly.
 
 ## Review (stale, overlapping, contradicting)
@@ -35,13 +37,19 @@ ledger.sh decision review [--scope <s>] [--json]
 - `decision review [--scope S] [--json]` runs the same checks over all active decisions (overlap groups, stale, contradictions) without adding one. It changes nothing.
 - The agent relays the findings in one short list and retires or consolidates only with the owner's approval.
 
+## Retro: distill and retire (`retro/scripts/persona-review.sh`)
+
+- `/retro` Phase 4f moves decisions down the chain decisions, persona, skill, script. `bucket` adds a target stage and repo to each hint; `script-or-hook` marks what a script, gate, lint or hook can enforce.
+- `tasks` lists one conversion per decision and dedupes against open tasks naming the ref; retro files the rest with `/new-task`. The task carries the mapping (decision refs, target path or PR, retire reason), so it lives in git.
+- `retire-enforced` (dry-run; `--apply` in retro) retires a decision itself, without owner approval (owner rule, d155 follow-up), only when all hold: `enforced_by` is a merged PR or a file on origin/main (an open PR, a missing file or a bare task id stays pending), and some task file names the ref. The reason is `folded into <target> (task T...)`; retro logs each retirement. Other buckets, contradictions and persona edits stay proposals.
+
 ## Schema (version 1)
 
 ```json
 {"schema": 1, "updated_at": "2026-11-03T10:00:00Z", "counter": 3,
  "decisions": [
    {"ref": "d3", "text": "Squash-merge is off limits in ccxp-skills", "quote": "never squash in this repo",
-    "scope": "repo:ccxp-skills", "context": "~/.claude/ccxp-context/r12.md", "source": "r12",
+    "scope": "repo:ccxp-skills", "context": "~/.claude/ccxp-context/r12.md", "source": "r12", "enforced_by": "",
     "added_at": "2026-11-03T10:00:00Z", "status": "active", "superseded_by": "", "reason": "", "closed_at": ""}]}
 ```
 

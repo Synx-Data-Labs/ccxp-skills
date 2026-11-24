@@ -11,12 +11,22 @@
 #   bucket     one hint per decision (TSV: ref, bucket, reason). A HINT: the retro
 #              agent and the owner decide
 #   commands   the `decision retire` lines for decisions bucketed retire, as text
+#   tasks      one row per proposed conversion (bucket persona|skill-task|script-or-hook|
+#              profile-config): ref, bucket, stage, repo, file|exists:<task file>, text.
+#              The dedupe check looks for an open task naming the ref; the retro agent files
+#              the `file` rows with /new-task (one task per row, refs and target in the body)
+#   retire-enforced [--apply]   decisions with `enforced-by` (ledger.sh decision enforce) whose
+#              target is a file on origin/main or a merged PR AND that a task names: dry-run
+#              by default; --apply runs `ledger.sh decision retire <ref> "folded into ..."`.
+#              The only retirement this script performs (owner rule, d155 follow-up).
 #
 # Options: --persona FILE (default <plugin>/agent-pairing/assets/ccxp-agent.md)
 #          --cap-file FILE (default <plugin>/tests/agent_pairing.bats; first `-lt N`)
-#          --scope S (list/bucket filter)  --today YYYY-MM-DD  --min-shared N (default 3)
-# Env:     LEDGER (default <plugin>/hud/scripts/ledger.sh); CCXP_DECISIONS_FILE picks the log.
-# Buckets: persona | skill-task | profile-config | keep-in-log | already-covered | retire | contradiction
+#          --repo DIR (default <plugin>; origin/main and dev/ tasks are read there)
+#          --apply (retire-enforced only)  --scope S (list/bucket filter)  --today YYYY-MM-DD  --min-shared N (default 3)
+# Env:     LEDGER (default <plugin>/hud/scripts/ledger.sh); CCXP_DECISIONS_FILE picks the log;
+#          PR_GH (default `bash <plugin>/_gh/gh.sh`) runs gh for the merged-PR check.
+# Buckets: persona | skill-task | script-or-hook | profile-config | keep-in-log | already-covered | retire | contradiction
 # Exit:    0 ok, 2 usage, 3 missing input or ledger/jq failure.
 set -euo pipefail
 
@@ -106,6 +116,20 @@ function pr-list() { # $1 scope ("" = all), $2 today
       done
 }
 
+function pr-stage() { # $1 bucket -> target stage of the distill chain (decision > persona > skill > script)
+  case "$1" in
+    persona) echo persona ;; skill-task) echo skill ;; script-or-hook) echo script ;;
+    profile-config) echo profile-config ;; retire|contradiction) echo owner-review ;; *) echo - ;;
+  esac
+}
+
+function pr-target-repo() { # $1 bucket, $2 scope -> repo the change lands in
+  case "$1" in
+    persona|skill-task|script-or-hook) [[ "$2" == repo:* ]] && echo "${2#repo:}" || echo ccxp-skills ;;
+    profile-config) echo local-profile ;; *) echo - ;;
+  esac
+}
+
 function pr-bucket() { # $1 persona, $2 scope, $3 min shared
   local persona="$1" scope="$2" min="$3" decs rev ovl ref sc text b why
   decs=$(pr-decisions) || return 3
@@ -121,9 +145,11 @@ function pr-bucket() { # $1 persona, $2 scope, $3 min shared
       b=retire why="decision review marks it stale: $(jq -r --arg r "$ref" '[.stale[] | select(.ref == $r) | .reasons[]] | join("; ")' <<<"$rev")"
     elif grep -qE "^${ref}	" <<<"$ovl"; then
       b=already-covered why="persona line $(grep -E "^${ref}	" <<<"$ovl" | head -1 | awk -F'\t' '{print $2 " (" $3 ")"}')"
+    elif [[ "$low" =~ (^|[^a-z])(gate|lint|linter|hooks?|whitelist|allowlist|rebase|pre-commit|validator)([^a-z]|$) ]]; then
+      b=script-or-hook why="mechanically enforceable (mentions ${BASH_REMATCH[2]})"
     elif [[ "$low" =~ (^|[^a-z])(autopilot|/drive|/retro|/ccxp|skills?|scripts?|hud|ledger\.sh|workflows?|parallel)([^a-z]|$) ]]; then
       b=skill-task why="mentions ${BASH_REMATCH[2]}"
-    elif [[ "$low" =~ (^|[^a-z])(authz|whitelist|channels?|profiles?|config|taste|agenda)([^a-z]|$) ]]; then
+    elif [[ "$low" =~ (^|[^a-z])(authz|channels?|profiles?|config|taste|agenda)([^a-z]|$) ]]; then
       b=profile-config why="mentions ${BASH_REMATCH[2]}"
     elif [[ "$sc" == repo:* ]]; then
       b=keep-in-log why="repo-scoped ($sc)"
@@ -132,14 +158,14 @@ function pr-bucket() { # $1 persona, $2 scope, $3 min shared
     else
       b=keep-in-log why="no persona, skill or config signal"
     fi
-    printf '%s\t%s\t%s\n' "$ref" "$b" "$why"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$ref" "$b" "$why" "$(pr-stage "$b")" "$(pr-target-repo "$b" "$sc")"
   done < <(jq -r '.[] | [.ref, .scope, .text] | join("\u001f")' <<<"$decs")
 }
 
 function pr-commands() { # $1 persona, $2 scope, $3 min shared
   local ref b why n=0 rows
   rows=$(pr-bucket "$1" "$2" "$3") || exit 3
-  while IFS=$'\t' read -r ref b why; do
+  while IFS=$'\t' read -r ref b why _; do
     [[ "$b" == retire ]] || continue
     n=$((n + 1))
     printf '# propose to the owner, do not run unprompted (L = hud/scripts/ledger.sh)\nbash "$L" decision retire %s %q\n' "$ref" "$why"
@@ -147,17 +173,77 @@ function pr-commands() { # $1 persona, $2 scope, $3 min shared
   [[ $n -gt 0 ]] || echo "# no decision is bucketed retire"
 }
 
+function pr-task-files() { # $1 repo, $2 ref, $3 "open" (TODO+PARKING) or "all" (+JOURNAL): task files naming the ref
+  local d dirs=("$1/dev/TODO" "$1/dev/PARKING")
+  [[ "$3" == all ]] && dirs+=("$1/dev/JOURNAL")
+  for d in "${dirs[@]}"; do
+    [[ -d "$d" ]] && grep -lE "(^|[^A-Za-z0-9])$2([^A-Za-z0-9]|$)" "$d"/*.md 2>/dev/null || true
+  done
+}
+
+function pr-task-id() { basename "$1" | grep -oE 'T[0-9]{8}-[0-9]{6}' | head -1; }
+
+function pr-tasks() { # $1 persona, $2 scope, $3 min shared, $4 repo
+  local ref b why stage repo text f
+  while IFS=$'\t' read -r ref b why stage repo; do
+    case "$b" in persona|skill-task|script-or-hook|profile-config) ;; *) continue ;; esac
+    text=$(pr-decisions | jq -r --arg r "$ref" '.[] | select(.ref == $r) | .text')
+    f=$(pr-task-files "$4" "$ref" open | head -1)
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$ref" "$b" "$stage" "$repo" "$([[ -n "$f" ]] && echo "exists:$(pr-task-id "$f")" || echo file)" "$text"
+  done < <(pr-bucket "$1" "$2" "$3")
+}
+
+function pr-resolved() { # $1 repo, $2 enforced-by; prints a verdict word on stdout: ok|unmerged|missing|task
+  local repo="$1" t="$2" gh state
+  if [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then echo task
+  elif [[ "$t" =~ ^#?[0-9]+$ || "$t" =~ ^https://github\.com/[^/]+/[^/]+/pull/[0-9]+$ ]]; then
+    gh="${PR_GH:-bash $PR_ROOT/_gh/gh.sh}"
+    state=$(cd "$repo" && $gh pr view "${t#\#}" --json state -q .state 2>/dev/null) || { echo missing; return 0; }
+    [[ "$state" == MERGED ]] && echo ok || echo unmerged
+  elif [[ "$t" == /* || "$t" == *..* ]]; then echo missing
+  elif git -C "$repo" cat-file -e "origin/main:${t#./}" 2>/dev/null; then echo ok
+  else echo missing; fi
+}
+
+function pr-retire-enforced() { # $1 repo, $2 apply (true|false)
+  local repo="$1" apply="$2" ledger="${LEDGER:-$PR_ROOT/hud/scripts/ledger.sh}" ref tgt v f tid reason n=0
+  [[ -f "$ledger" ]] || pr-die "ledger not found: $ledger" 3
+  while IFS=$'\x1f' read -r ref tgt; do
+    n=$((n + 1))
+    v=$(pr-resolved "$repo" "$tgt")
+    case "$v" in
+      ok) ;;
+      task) printf '%s\tpending\t%s is a task id; point enforced-by at a merged PR or a file on origin/main\n' "$ref" "$tgt"; continue ;;
+      unmerged) printf '%s\tpending\t%s is not merged yet\n' "$ref" "$tgt"; continue ;;
+      *) printf '%s\tpending\t%s is not on origin/main\n' "$ref" "$tgt"; continue ;;
+    esac
+    f=$(pr-task-files "$repo" "$ref" all | head -1)
+    if [[ -z "$f" ]]; then printf '%s\tpending\tno task names %s; file the distill task first\n' "$ref" "$ref"; continue; fi
+    tid=$(pr-task-id "$f")
+    reason="folded into $tgt (task ${tid:-$(basename "$f")})"
+    reason="${reason:0:200}"
+    if [[ "$apply" == true ]]; then
+      bash "$ledger" decision retire "$ref" "$reason" >/dev/null || { printf '%s\tfailed\tretire call failed\n' "$ref"; continue; }
+      printf '%s\tretired\t%s\n' "$ref" "$reason"
+    else
+      printf '%s\twould-retire\t%s\n' "$ref" "$reason"
+    fi
+  done < <(pr-decisions | jq -r '.[] | select((.enforced_by // "") != "") | [.ref, .enforced_by] | join("\u001f")')
+  [[ $n -gt 0 ]] || echo "# no active decision has enforced-by"
+}
+
 function persona-review() {
   local sub="${1:-}"; [[ $# -gt 0 ]] && shift
-  local persona="$PR_ROOT/agent-pairing/assets/ccxp-agent.md" capf="$PR_ROOT/tests/agent_pairing.bats" scope="" today min=3
+  local persona="$PR_ROOT/agent-pairing/assets/ccxp-agent.md" capf="$PR_ROOT/tests/agent_pairing.bats" scope="" today min=3 repo="$PR_ROOT" apply=false
   today=$(date -u +%F)
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --persona|--cap-file|--scope|--today|--min-shared)
+      --apply) apply=true; shift ;;
+      --persona|--cap-file|--scope|--today|--min-shared|--repo)
         [[ $# -ge 2 ]] || pr-die "$1 needs a value"
         case "$1" in
           --persona) persona="$2" ;; --cap-file) capf="$2" ;; --scope) scope="$2" ;;
-          --today) today="$2" ;; --min-shared) min="$2" ;;
+          --today) today="$2" ;; --min-shared) min="$2" ;; --repo) repo="$2" ;;
         esac
         shift 2 ;;
       *) pr-die "unknown option: $1" ;;
@@ -167,6 +253,12 @@ function persona-review() {
   command -v jq >/dev/null 2>&1 || pr-die "jq is required" 3
   case "$sub" in
     list)     pr-list "$scope" "$today" ;;
+    retire-enforced)
+      [[ -d "$repo" ]] || pr-die "repo not a directory: $repo" 3
+      pr-retire-enforced "$repo" "$apply" ;;
+    tasks)
+      [[ -r "$persona" ]] || pr-die "persona not readable: $persona" 3
+      pr-tasks "$persona" "$scope" "$min" "$repo" ;;
     overlap|bucket|commands|size)
       [[ -r "$persona" ]] || pr-die "persona not readable: $persona" 3
       case "$sub" in
@@ -175,7 +267,7 @@ function persona-review() {
         bucket)   pr-bucket "$persona" "$scope" "$min" ;;
         commands) pr-commands "$persona" "$scope" "$min" ;;
       esac ;;
-    *) pr-die "usage: persona-review.sh list|overlap|size|bucket|commands [--persona F] [--cap-file F] [--scope S] [--today D] [--min-shared N]" ;;
+    *) pr-die "usage: persona-review.sh list|overlap|size|bucket|commands|tasks|retire-enforced [--apply] [--repo D] [--persona F] [--cap-file F] [--scope S] [--today D] [--min-shared N]" ;;
   esac
 }
 

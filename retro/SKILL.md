@@ -472,15 +472,17 @@ Idempotent — skip if an open chore for that same `<metric> on <repo>` regressi
 
 **Report**: add a `## External skillset scan` section to the retro report (Phase 5), directly after `## Skill quality`, and an `External scan:` line to the Slack summary (Phase 6), directly after `Skill quality:`.
 
-### Phase 4f: Persona review (decisions to persona and skills)
+### Phase 4f: Persona review (decisions to persona, skill, script)
 
-- Applies when the ccxp-agent persona (`agent-pairing/assets/ccxp-agent.md`) and a decisions log exist; otherwise report "no persona review" and skip. Proposes only: never edit the persona, never run `decision add/retire/supersede`.
-- Run in order (`P=<skills-root>/retro/scripts/persona-review.sh`; deterministic, read-only): `bash $P size`, `bash $P bucket`, `bash $P overlap`, `bash $P commands`; read `ledger.sh decision review` too.
-- Treat each bucket as a hint and confirm it against the decision text: persona, skill-task, profile-config, keep-in-log, already-covered, retire, contradiction.
-- Propose persona and skill edits with the bytes that pay for them (`size` shows the headroom under the bats cap; every addition needs an equal trim), and list the `commands` lines for the owner to run.
-- Offer one docs PR with the proposed edits; report contradictions as questions for the owner.
+- Applies when the ccxp-agent persona (`agent-pairing/assets/ccxp-agent.md`) and a decisions log exist; otherwise report "no persona review" and skip. Never edit the persona and never run `decision add/supersede`; the one retirement allowed is step 3.
+- The chain is decisions, then persona, then skill, then script: each decision moves to the lowest stage that can hold it (`P=<skills-root>/retro/scripts/persona-review.sh`, deterministic; add `--repo <dir>` for a repo other than this one).
+- Steps:
+  1. `bash $P size`, `bucket`, `overlap`, and `ledger.sh decision review`. `bucket` rows are hints (confirm against the text): ref, bucket, reason, target stage, target repo. Buckets: persona, skill-task, script-or-hook (a script, gate, lint or hook can enforce it), profile-config, keep-in-log, already-covered, retire, contradiction.
+  2. `bash $P tasks`: one row per proposed conversion. File each `file` row with `/new-task` (default tier, staged) in its target repo: one task per decision, goal in the owner's words, body naming the decision refs, the persona/skill/script target path or PR, and the retire reason. Skip `exists:` rows (an open task already names the ref).
+  3. `bash $P retire-enforced --apply`: retires a decision whose `enforced-by` (set with `ledger.sh decision enforce <ref> <path or PR>`) is a merged PR or a file on origin/main and which a task names. Pending rows stay; log each `retired` row in the report. `commands` lines (non-enforced retire hints) still go to the owner.
+- Persona edits cost bytes (`size` headroom under the bats cap, every addition needs an equal trim); offer one docs PR and report contradictions as questions.
 
-**Report**: add a `## Persona review` section to the retro report (Phase 5), directly after `## External skillset scan`: size line, bucket counts, proposed edits, retire commands, contradictions.
+**Report**: add a `## Persona review` section after `## External skillset scan`: size line, bucket counts, filed tasks (ref to task), retirements applied, pending enforcements, retire commands, contradictions.
 
 ### Phase 5: Write the retro report
 
