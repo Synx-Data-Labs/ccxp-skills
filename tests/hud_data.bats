@@ -633,3 +633,90 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   grep -q "do it" "$(dirname "$CCXP_LEDGER_FILE")/ledger.md"
   grep -q "k5 later" <<<"$(bash "$L" reply)"
 }
+
+# ---- ap_config: the autopilot's effective max_dop (T20261124-239428) ----
+
+_cfg() { printf '%s' "$2" > "$1/dev/.autopilot-config.json"; }
+
+@test "--json: ap_config is null with the autopilot off and no config file" {
+  local repo; repo=$(_make_repo r-cfg-none)
+  run _hud "$repo" --json
+  [ "$(jq -r .ap_config <<<"$output")" = "null" ]
+}
+
+@test "--json: autopilot on without a config file shows the default max_dop (source default, file false)" {
+  local repo; repo=$(_make_repo r-cfg-default)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":1}"
+  run _hud "$repo" --json
+  [ "$(jq -r .ap_config.source <<<"$output")" = "default" ]
+  [ "$(jq -r .ap_config.file <<<"$output")" = "false" ]
+  [ "$(jq -r '.ap_config.max_dop | type' <<<"$output")" = "number" ]
+}
+
+@test "--json: a config override is the effective value, clamped by the autopilot script (500 -> 16)" {
+  local repo; repo=$(_make_repo r-cfg-over)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 30)\",\"stuck_count\":0,\"cycle_count\":1}"
+  _cfg "$repo" '{"max_dop":8}'
+  run _hud "$repo" --json
+  [ "$(jq -r .ap_config.max_dop <<<"$output")" = "8" ]
+  [ "$(jq -r .ap_config.source <<<"$output")" = "override" ]
+  [ "$(jq -r .ap_config.file <<<"$output")" = "true" ]
+  _cfg "$repo" '{"max_dop":500}'
+  run _hud "$repo" --json
+  [ "$(jq -r .ap_config.max_dop <<<"$output")" = "16" ]
+}
+
+@test "--json: autopilot off but a config file exists still reports it; a broken file falls back to the default" {
+  local repo; repo=$(_make_repo r-cfg-off)
+  _cfg "$repo" '{"max_dop":8}'
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot <<<"$output")" = "null" ]
+  [ "$(jq -r .ap_config.max_dop <<<"$output")" = "8" ]
+  _cfg "$repo" 'not json'
+  run _hud "$repo" --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -r .ap_config.source <<<"$output")" = "default" ]
+}
+
+@test "sl-autopilot-config: reserved_slots is read from the autopilot script; null while an older script lacks the key" {
+  local repo; repo=$(_make_repo r-cfg-res)
+  _cfg "$repo" '{"max_dop":8}'
+  # The real script: reports the key once the autopilot-config change is in (a number), else the field is null.
+  run bash -c "source '$SCRIPT'; sl-autopilot-config '$repo' ''"
+  [ "$(jq -r .max_dop <<<"$output")" = "8" ]
+  [[ "$(jq -r '.reserved_slots | type' <<<"$output")" =~ ^(number|null)$ ]]
+  local fake="$BATS_TEST_TMPDIR/plugin"
+  mkdir -p "$fake/hud/scripts" "$fake/autopilot/scripts"
+  cp "$REPO_ROOT"/hud/scripts/*.sh "$fake/hud/scripts/"
+  # An older autopilot script without the key.
+  cat > "$fake/autopilot/scripts/autopilot-state.sh" <<'STUB'
+#!/usr/bin/env bash
+echo '{"file":"x","settings":{"max_dop":{"value":8,"source":"override","default":1,"range":"1-16"}}}'
+STUB
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$(jq -r .reserved_slots <<<"$output")" = "null" ]
+  # A script that reports the key.
+  cat > "$fake/autopilot/scripts/autopilot-state.sh" <<'STUB'
+#!/usr/bin/env bash
+echo '{"file":"x","settings":{"max_dop":{"value":16,"source":"override","default":3,"range":"3-16"},"reserved_slots":{"value":2,"source":"default","default":2,"range":"0-8"}}}'
+STUB
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$(jq -r .max_dop <<<"$output")" = "16" ]
+  [ "$(jq -r .reserved_slots <<<"$output")" = "2" ]
+}
+
+@test "sl-autopilot-config: a failing or garbage autopilot script prints nothing and never fails" {
+  local repo; repo=$(_make_repo r-cfg-bad)
+  _cfg "$repo" '{"max_dop":8}'
+  local fake="$BATS_TEST_TMPDIR/plugin2"
+  mkdir -p "$fake/hud/scripts" "$fake/autopilot/scripts"
+  cp "$REPO_ROOT"/hud/scripts/*.sh "$fake/hud/scripts/"
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$fake/autopilot/scripts/autopilot-state.sh"
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  printf '#!/usr/bin/env bash\necho garbage\n' > "$fake/autopilot/scripts/autopilot-state.sh"
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}

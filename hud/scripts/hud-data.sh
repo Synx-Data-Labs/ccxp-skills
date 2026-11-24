@@ -92,6 +92,8 @@ hud-data() {
   local ap_stats=""
   [ -z "$rec" ] || ap_stats=$(sl-autopilot-stats "$repo_root" 2>/dev/null) || ap_stats=""
   [ -n "$ap_stats" ] || ap_stats="null"
+  local ap_config; ap_config=$(sl-autopilot-config "$repo_root" "$rec" 2>/dev/null) || ap_config=""
+  [ -n "$ap_config" ] || ap_config="null"
 
   # Repo identity: only when cwd is really inside a git work tree. Outside one
   # these stay empty and become JSON null (`repo` still names the folder).
@@ -150,7 +152,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --argjson behind "$behind" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson apconfig "$ap_config" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --argjson behind "$behind" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -165,7 +167,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), stats: $apstats} end),
-       ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, bus: $bus, plugin: $plugin, behind: $behind,
+       ap_config: $apconfig, ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, bus: $bus, plugin: $plugin, behind: $behind,
        last_input_at: $last_input_at}'
 }
 

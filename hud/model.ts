@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -97,6 +97,14 @@ export function parseHelper(stdout: string): HelperData | null {
       busy_slots: num(a.busy_slots),
       stats: parseStats(a.stats),
     }
+  }
+  const apc = r.ap_config
+  let ap_config: ApConfig | null = null
+  if (typeof apc === 'object' && apc !== null && !Array.isArray(apc)) {
+    const c = apc as Record<string, unknown>
+    const whole = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? Math.floor(x) : null)
+    const dop = whole(c.max_dop)
+    if (dop !== null && dop > 0) ap_config = { max_dop: dop, reserved_slots: whole(c.reserved_slots), source: c.source === 'override' ? 'override' : 'default', file: c.file === true }
   }
   const led = r.ledger
   let ledger: Ledger | null = null
@@ -233,6 +241,7 @@ export function parseHelper(stdout: string): HelperData | null {
     gh_account: strOrNull(r.gh_account),
     behind,
     autopilot,
+    ap_config,
     ledger,
     queue,
     ci,
@@ -573,6 +582,41 @@ function apVariants(ap: Autopilot): Variants {
 }
 
 /**
+ * How the autopilot's parallelism is used: running cycles (the state's fresh `slots`, helper field `busy_slots`) against
+ * the effective `max_dop`. `routine` = the cycles routine picks may fill (max_dop less the reserved slots; all of max_dop
+ * while `reserved_slots` is unknown); `capped` = running cycles are at or above it. Null without a config answer.
+ */
+function dopUse(h: HelperData | null): { max: number; reserved: number | null; routine: number; running: number; capped: boolean } | null {
+  const c = h?.ap_config
+  if (!c) return null
+  const reserved = c.reserved_slots === null ? null : Math.min(c.reserved_slots, c.max_dop)
+  const routine = c.max_dop - (reserved ?? 0)
+  const running = h?.autopilot?.busy_slots ?? 0
+  return { max: c.max_dop, reserved, routine, running, capped: running > 0 && running >= routine }
+}
+
+/** Band cell `dop 8/16` (running cycles / max_dop); warning-coloured at the routine limit. One form: it drops whole when the row is tight. */
+function dopBandSegs(h: HelperData | null): Seg[] | null {
+  const u = dopUse(h)
+  return u ? [{ text: `dop ${u.running}/${u.max}`, color: u.capped ? 'warning' : undefined }] : null
+}
+
+/**
+ * Details cell: `max_dop 16 (14 routine + 2 reserved) · 8 running`; without the reserved key `max_dop 16 · 8 running`.
+ * Running above the limit (max_dop lowered under live cycles) says so: `6 running (limit lowered)`. With the autopilot
+ * off the cell is just the dim configured value: `max_dop 16`.
+ */
+function dopDetailSegs(h: HelperData | null): Seg[] | null {
+  const u = dopUse(h)
+  if (!u) return null
+  const on = !!h?.autopilot
+  const base = u.reserved === null ? `max_dop ${u.max}` : `max_dop ${u.max} (${u.routine} routine + ${u.reserved} reserved)`
+  const segs: Seg[] = [{ text: base, dim: !on }]
+  if (on) segs.push({ text: ` · ${u.running} running${u.running > u.max ? ' (limit lowered)' : ''}`, color: u.capped ? 'warning' : undefined })
+  return segs
+}
+
+/**
  * The autopilot's progress cell, most to least detail:
  * `last 24h: 8 merged ▲ / 26 loops · average 5.2/day`, `24h: 8 merged ▲/26 loops · average 5.2/day`,
  * `24h: ✓8▲/26L average 5.2/d`, then (narrowest only) `24h ✓8▲/26L avg 5.2/d`, `24h ✓8▲`.
@@ -865,7 +909,7 @@ const ORDER = {
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
   off: ['drop:stale', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  on: ['drop:stale', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:dop', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -898,6 +942,8 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
     if (it) items.push({ ...it, at: f === 'ap' || f === 'ctx' ? Math.min(start, it.variants.length - 1) : 0 })
     // The 24h progress cell rides with the AP cell (same switch); it shrinks after the ctx bar, CI and jobs cells, so the 24h merged count and the average survive common widths.
     if (f === 'ap' && it) {
+      const dop = dopBandSegs(snap.helper)
+      if (dop) items.push({ field: 'dop', variants: [dop], at: 0 })
       const sv = apStatsVariants(snap.helper!.autopilot!)
       if (sv) items.push({ field: 'apstats', variants: sv, at: Math.min(tier === 'wide' ? 0 : tier === 'compact' ? 1 : 3, sv.length - 1) })
       // A loop days late is dead, not "due": the band says so (red) right after the AP cells. Not shown while paused or busy.
@@ -1108,7 +1154,7 @@ function sectionRows(label: string, cells: Array<Seg[] | null>, width: number): 
  *   REPO     repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
- *   WORK     autopilot, next loop (or overdue), its 24h cell, jobs state (READY / WORKING (N)), parked, last 24h jobs
+ *   WORK     autopilot, max_dop and how it is used, next loop (or overdue), its 24h cell, jobs state (READY / WORKING (N)), parked, last 24h jobs
  *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
  *   RELEASE  the plugin's GitHub URL, the ccxp version label, the number of unreleased commits
  * Details is a SUPERSET of the band: every cell the band can show has its full-form counterpart here (pinned by the
@@ -1191,7 +1237,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     const js = jobStatsSegs(led.stats)
     jobCells.push(one('state', [{ text: state.text, color: state.color }]), one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]), js ? one('jobs24', js) : null)
   }
-  section('WORK', [apItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null, ...jobCells])
+  const dopSegs = dopDetailSegs(h)
+  section('WORK', [apItem, dopSegs ? one('dop', dopSegs) : null, wakeItem, apStats ? one('apstats', apStats[0]!) : null, ...jobCells])
 
   // QUEUE: the breakdown (labels in full)
   section('QUEUE', [h?.queue ? full(one('queue', ...queueVariants(h.queue, true))) : null])
