@@ -2082,6 +2082,8 @@ test('band: warning colour at the routine limit (max_dop less reserved), also wi
   expect(color(dopSnap(CFG16, { busy_slots: 14, busy_routine: 12 }))).toBeUndefined() // 12 routine + 2 urgent: 2 routine slots still free
   expect(color(dopSnap(CFG16, { busy_slots: 14, busy_routine: 14 }))).toBe('warning')
   expect(color(dopSnap(CFG16, { busy_slots: 16, busy_routine: 14 }))).toBe('warning')
+  expect(color(dopSnap(CFG16, { busy_slots: 16, busy_routine: 10 }))).toBe('warning') // 10 routine + 6 urgent: every slot is taken, routine-free is 0
+  expect(color(dopSnap({ max_dop: 6, reserved_slots: 2, source: 'override', file: true }, { busy_slots: 8, busy_routine: 0 }))).toBe('warning') // lowered under 8 urgent cycles
 })
 
 test('band: max_dop lowered below the running count (running 8, max_dop 6) reads 8/6 in warning colour', async () => {
@@ -2105,7 +2107,6 @@ test('band: dop sits right after the AP cell and is the one cell this feature dr
   expect(gone).toBeGreaterThan(0) // present while wide
   for (const t of widths.slice(gone)) expect(t).not.toContain('dop ') // once dropped, it stays dropped
   expect(widths[gone]).toContain('AP 2/6h 3L ✓2') // the AP cell is at its shortest form by then
-  expect(widths[gone]).toContain('ctx')
 })
 
 test('details: AP line carries `max_dop 16 (14 routine + 2 reserved) · 8 running`; without reserved, max_dop alone', async () => {

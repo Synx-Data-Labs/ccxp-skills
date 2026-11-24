@@ -586,7 +586,7 @@ function apVariants(ap: Autopilot): Variants {
  * How the autopilot's parallelism is used: running cycles (the state's fresh `slots`, helper field `busy_slots`) against
  * the effective `max_dop`. `routine` = the cycles routine picks may fill (max_dop less the reserved slots; all of max_dop
  * while `reserved_slots` is unknown); `capped` = the running ROUTINE cycles (urgent ones run in the reserved slots and are
- * left out, as `autopilot-state.sh routine-free` does) are at or above it. Null without a config answer.
+ * left out) are at or above it, or no slot is physically free (running >= max_dop): the cases where `routine-free` is 0. Null without a config answer.
  */
 function dopUse(h: HelperData | null): { max: number; reserved: number | null; routine: number; running: number; capped: boolean } | null {
   const c = h?.ap_config
@@ -596,7 +596,7 @@ function dopUse(h: HelperData | null): { max: number; reserved: number | null; r
   const running = h?.autopilot?.busy_slots ?? 0
   // Urgent cycles run in the reserved slots: only the others count against the routine limit.
   const routineBusy = Math.min(running, h?.autopilot?.busy_routine ?? running)
-  return { max: c.max_dop, reserved, routine, running, capped: routineBusy > 0 && routineBusy >= routine }
+  return { max: c.max_dop, reserved, routine, running, capped: running > 0 && (routineBusy >= routine || running >= c.max_dop) }
 }
 
 /** Band cell `dop 8/16` (running cycles / max_dop); warning-coloured at the routine limit. One form: it drops whole when the row is tight. */
