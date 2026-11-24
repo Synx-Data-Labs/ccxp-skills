@@ -25,3 +25,12 @@ undefined_helpers() {
   grep -v 'function busVariants' "$MODEL" > "$tmp"
   [ "$(undefined_helpers "$tmp")" = "busVariants" ]
 }
+
+# T20261124-273213: the details view splits AUTOPILOT from WORK; the behavioural cases live in hud/pure.test.ts
+# (they need the claude-code runner), so this pins the structure statically.
+@test "details builds an AUTOPILOT section before WORK, and WORK filters out the autopilot-flagged ledger rows" {
+  grep -qE "section\('AUTOPILOT'," "$MODEL"
+  grep -qE "section\('WORK', jobCells\)" "$MODEL"
+  [ "$(grep -n "section('AUTOPILOT'" "$MODEL" | cut -d: -f1)" -lt "$(grep -n "section('WORK'" "$MODEL" | cut -d: -f1)" ]
+  grep -qE "led\.running\.filter\(j => !isApJob\(j\)\)" "$MODEL"
+}

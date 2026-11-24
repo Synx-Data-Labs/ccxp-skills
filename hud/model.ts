@@ -1093,7 +1093,7 @@ export function stalledFor(ap: Autopilot, nowMs: number): number {
 }
 
 /** Width of the section label column in `/hud details`: the longest label (`SESSION`, `SUPPORT`, `RELEASE`) plus two spaces. */
-export const DETAIL_LABEL_WIDTH = 9
+export const DETAIL_LABEL_WIDTH = 10
 
 /** Splits segments into words and spaces (each keeping its style) and fills lines of at most `avail` columns, breaking at spaces; a single word longer than a line is broken hard. Nothing is ever cut off. */
 function wrapSegs(segs: Seg[], avail: number): Seg[][] {
@@ -1192,6 +1192,11 @@ function sectionRows(label: string, cells: Array<Seg[] | null>, width: number): 
   return lines.map((l, i) => [{ text: i === 0 ? label.padEnd(DETAIL_LABEL_WIDTH) : ' '.repeat(DETAIL_LABEL_WIDTH), bold: i === 0, dim: i > 0 }, ...l])
 }
 
+/** A ledger row started by an autopilot cycle (ledger `--flags autopilot`); everything else is WORK. */
+function isApJob(j: { flags?: string }): boolean {
+  return (j.flags ?? '').split(',').includes('autopilot')
+}
+
 /**
  * `/hud details`: the band expanded into labeled SECTIONS, one row each (a long row wraps onto an indented line, nothing is
  * truncated or abbreviated; the one-row band keeps the short forms). A section with nothing to say is left out. Order:
@@ -1199,7 +1204,8 @@ function sectionRows(label: string, cells: Array<Seg[] | null>, width: number): 
  *   REPO     repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
- *   WORK     autopilot, max_dop and how it is used, next loop (or overdue), its 24h cell, jobs state (READY / WORKING (N)), parked, last 24h jobs
+ *   AUTOPILOT autopilot on/paused/off, max_dop and how it is used, holds, next loop (or overdue / running cycles), its 24h cell
+ *   WORK     the ledger rows WITHOUT the autopilot flag: jobs state (READY / WORKING (N)), parked, last 24h jobs
  *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
  *   RELEASE  the plugin's GitHub URL, the ccxp version label, the number of unreleased commits
  * Details is a SUPERSET of the band: every cell the band can show has its full-form counterpart here (pinned by the
@@ -1260,7 +1266,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   } else if (ap?.busy) {
     // A cycle is running: name its job (the running ledger row flagged autopilot, highest number) rather than a due time that is stale until the cycle ends.
     // With parallel cycles (busy_slots > 1) name that many rows, the highest-numbered ones, ascending: `running r596,r597`.
-    const run = (h?.ledger?.running ?? []).filter(j => j.job > 0 && (j.flags ?? '').split(',').includes('autopilot')).map(j => j.job).sort((a, b) => b - a)
+    const run = (h?.ledger?.running ?? []).filter(j => j.job > 0 && isApJob(j)).map(j => j.job).sort((a, b) => b - a)
     const shown = run.slice(0, Math.max(1, ap.busy_slots || 0)).sort((a, b) => a - b)
     wakeItem = one('wake', [{ text: shown.length > 0 ? `running ${shown.map(n => `r${n}`).join(',')}` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
@@ -1277,13 +1283,18 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const led = h?.ledger
   const jobCells: Array<Item | null> = []
   if (led) {
-    const state = jobState(led.running.length)
+    // WORK counts only the rows without the `autopilot` flag: the autopilot's cycles are summarised in AUTOPILOT.
+    const state = jobState(led.running.filter(j => !isApJob(j)).length)
     const parked = led.parked.length
     const js = jobStatsSegs(led.stats)
     jobCells.push(one('state', [{ text: state.text, color: state.color }]), one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]), js ? one('jobs24', js) : null)
   }
   const dopSegs = dopDetailSegs(h)
-  section('WORK', [apItem, dopSegs ? one('dop', dopSegs) : null, wakeItem, apStats ? one('apstats', apStats[0]!) : null, ...jobCells])
+  // Holds (the state file's `.holds`, via the queue breakdown): only while the autopilot is on or paused, and only above 0.
+  const holds = ap ? h?.queue?.apholds ?? 0 : 0
+  const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held`, color: 'warning' }]) : null
+  section('AUTOPILOT', [apItem, dopSegs ? one('dop', dopSegs) : null, holdsItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null])
+  section('WORK', jobCells)
 
   // QUEUE: the breakdown (labels in full)
   section('QUEUE', [h?.queue ? full(one('queue', ...queueVariants(h.queue, true))) : null])

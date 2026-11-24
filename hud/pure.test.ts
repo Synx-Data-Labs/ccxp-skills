@@ -609,21 +609,21 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
 const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
 const detail = (s: object, cols = 140, cfg: typeof CI | typeof NOCI = NOCI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
 /** The sections of a details render: label -> its lines (label column stripped, continuation lines included). */
-const DETAIL_LABELS = ['SESSION', 'REPO', 'BUILD', 'SUPPORT', 'WORK', 'QUEUE', 'RELEASE']
+const DETAIL_LABELS = ['SESSION', 'REPO', 'BUILD', 'SUPPORT', 'AUTOPILOT', 'WORK', 'QUEUE', 'RELEASE']
 const sections = (lines: string[]): Record<string, string[]> => {
   const out: Record<string, string[]> = {}
   let cur = ''
   for (const l of lines) {
     const lab = DETAIL_LABELS.find(x => l.startsWith(x + ' '))
-    if (lab) { cur = lab; out[cur] = [l.slice(9)] } else if (cur && l.startsWith(' '.repeat(9))) out[cur]!.push(l.slice(9))
+    if (lab) { cur = lab; out[cur] = [l.slice(10)] } else if (cur && l.startsWith(' '.repeat(10))) out[cur]!.push(l.slice(10))
     else throw new Error(`line outside any section: ${JSON.stringify(l)}`)
   }
   return out
 }
 /** One section as a single string (wide terminals: no wrapping). */
 const sect = (lines: string[], label: string): string => (sections(lines)[label] ?? []).join(' ')
-/** The autopilot part of the WORK section: its cells up to the jobs state. */
-const apPart = (lines: string[]): string => sect(lines, 'WORK').replace(/[\s│]*(?:READY|WORKING)\b.*$/, '')
+/** The AUTOPILOT section: the autopilot's cells only. */
+const apPart = (lines: string[]): string => sect(lines, 'AUTOPILOT')
 const fullSnap = (over = {}) => ({
   ...withHelper({
     repo_slug: 'acme/widgets',
@@ -653,19 +653,20 @@ test('AP ON (no duration): elapsed shows without a requested window; idle names 
   expect(paused).toContain('AP ⏸ paused 2h')
 })
 
-test('details: sections in order: SESSION, REPO, WORK, RELEASE (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
+test('details: sections in order: SESSION, REPO, AUTOPILOT, WORK (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
   const lines = detail(fullSnap({ rateUsed: 42 }))
-  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'WORK'])
-  expect(lines[0]).toMatch(/^SESSION {2}context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you \d\d:\d\d \(5m ago\)$/)
-  expect(lines[1]).toBe('REPO     acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
-  expect(lines[2]).toMatch(/^WORK {5}AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ WORKING \(2\) │ parked 2 │ last 24h: jobs 8 ▲ \/ average 5\.2\/day$/)
+  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'REPO', 'AUTOPILOT', 'WORK'])
+  expect(lines[0]).toMatch(/^SESSION {3}context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you \d\d:\d\d \(5m ago\)$/)
+  expect(lines[1]).toBe('REPO      acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
+  expect(lines[2]).toMatch(/^AUTOPILOT AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
+  expect(lines[3]).toBe('WORK      WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
 })
 
-test('details: the section order is SESSION, REPO, BUILD, SUPPORT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
+test('details: the section order is SESSION, REPO, BUILD, SUPPORT, AUTOPILOT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
   const snap = fullSnap({ rateUsed: 42 }) as any
   snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
   const lines = detail(snap, 400, CI)
-  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(DETAIL_LABELS)
+  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(DETAIL_LABELS)
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing .* │ nightly \+-\+\+\.-\+ \(last 7 days\)/)
   expect(sect(lines, 'SUPPORT')).toBe('issues 12 open | 7 not delivered')
   expect(sect(lines, 'QUEUE')).toBe('queue 44 = 30 ready | 6 held | 3 epics')
@@ -691,9 +692,42 @@ test('details: the nightly strip (seven one-character pieces) is never split acr
 
 test('details: sections with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
   const lines = detail({ ...withHelper({ ledger: null, last_input_at: 0 }), ctxLeft: null }, 140, DEFAULTS)
-  expect(lines.length).toBe(2) // REPO, WORK
-  expect(lines[1]).toBe('WORK     AP off')
+  expect(lines.length).toBe(2) // REPO, AUTOPILOT (no ledger: no WORK section)
+  expect(lines[1]).toBe('AUTOPILOT AP off')
   expect(lines.join('\n')).not.toMatch(/READY|WORKING|you |CI/)
+})
+
+// --- AUTOPILOT / WORK split: AUTOPILOT carries only the autopilot, WORK every ledger row without the autopilot flag ---
+const apRun = (job: number, flags: string) => ({ job, title: 't' + job, flags })
+const splitLines = (helper: object) => detail(withHelper({ ci: null, ...helper }) as any, 400)
+
+test('details split: autopilot cycles (flag autopilot) do not count as WORK; housekeeping jobs without the flag do', async () => {
+  const led = (running: object[]) => ({ ledger: { running, lifetime_jobs: 9, parked: [], next_job: 10, updated_at: '' } })
+  // only autopilot cycles running: WORK is READY, the cycles are named in AUTOPILOT
+  const onlyAp = splitLines({ autopilot: { ...AP, busy: true, busy_slots: 2 }, ...led([apRun(5, 'autopilot'), apRun(6, 'autopilot,x')]) })
+  expect(sect(onlyAp, 'WORK')).toMatch(/^READY/)
+  expect(sect(onlyAp, 'AUTOPILOT')).toContain('running r5,r6')
+  // a non-cycle job the autopilot started (no flag) is WORK
+  const mixed = splitLines({ autopilot: { ...AP, busy: true, busy_slots: 1 }, ...led([apRun(5, 'autopilot'), apRun(7, '')]) })
+  expect(sect(mixed, 'WORK')).toMatch(/^WORKING \(1\)/)
+  expect(sect(mixed, 'AUTOPILOT')).not.toMatch(/WORKING|READY|parked/)
+  expect(sect(mixed, 'AUTOPILOT')).toContain('running r5')
+  expect(sect(mixed, 'AUTOPILOT')).not.toContain('r7')
+})
+
+test('details split: AUTOPILOT carries status, max_dop use, holds count, 24h merged and next wake; WORK none of them', async () => {
+  const lines = splitLines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: { max_dop: 6, reserved_slots: null, source: 'override', file: true }, queue: { ...AP_Q, apholds: 2 } })
+  expect(sect(lines, 'AUTOPILOT')).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ 2 held │ next loop .*\(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops/)
+  expect(sect(lines, 'WORK')).toMatch(/^WORKING \(1\) │ parked 3/)
+  expect(sect(lines, 'WORK')).not.toMatch(/AP |held|max_dop|merged|next loop/)
+  // no holds: no holds cell
+  expect(sect(splitLines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: AP_Q }), 'AUTOPILOT')).not.toContain('held')
+})
+
+test('details split: autopilot off leaves AUTOPILOT as `AP off` only (no running, holds, wake or 24h cells) and WORK keeps every job', async () => {
+  const lines = splitLines({ autopilot: null, queue: { ...AP_Q, apholds: 3 } })
+  expect(sect(lines, 'AUTOPILOT')).toBe('AP off')
+  expect(sect(lines, 'WORK')).toMatch(/^WORKING \(1\) │ parked 3/)
 })
 
 test('details: parked shows the count only, never the parked ids', async () => {
@@ -720,7 +754,7 @@ test('details: the jobs cells end with `last 24h: jobs n / average m/day` and ne
 })
 
 test('details: the jobs 24h arrow is green above, red below, and absent for equal or an estimate', async () => {
-  const arrow = (stats: object) => detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, NOCI, 140, DETAIL_NOW)[2].find(g => /[▲▼]/.test(g.text))
+  const arrow = (stats: object) => detailRows(withHelper({ ledger: { running: [], lifetime_jobs: 782, stats, parked: [], next_job: 783, updated_at: '' } }) as any, NOCI, 140, DETAIL_NOW)[3].find(g => /[▲▼]/.test(g.text))
   expect(arrow(JS)?.color).toBe('success')
   expect(arrow({ ...JS, trend: 'down' })?.color).toBe('error')
   expect(arrow({ ...JS, trend: 'flat' })).toBeUndefined()
@@ -751,9 +785,9 @@ test('details: a narrow terminal wraps a section onto an indented line, never cu
   expect(wide.SESSION).toEqual([expect.stringMatching(/^context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you /)])
   // 56 columns: the SESSION row no longer fits on one line, so it wraps under the cells (indented by the label width)
   const lines = detail(snap(), 56)
-  const sess = lines.filter((l, i) => i < 3 && (l.startsWith('SESSION') || l.startsWith(' '.repeat(9))))
+  const sess = lines.filter((l, i) => i < 3 && (l.startsWith('SESSION') || l.startsWith(' '.repeat(10))))
   expect(sess.length).toBeGreaterThan(1)
-  expect(sess[1]!.startsWith(' '.repeat(9))).toBe(true)
+  expect(sess[1]!.startsWith(' '.repeat(10))).toBe(true)
   expect(sess.join('\n')).not.toContain('…')
   // at every width every section keeps ALL of its text (modulo the blanks the wrapping eats) and every line fits
   for (let cols = 140; cols >= 22; cols--) {
@@ -1037,7 +1071,7 @@ test('parseHelper: autopilot next_wake_at is a number, 0 when missing or not a n
 
 test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {
   expect(detailRows(EMPTY, DEFAULTS, 140, DETAIL_NOW)).toEqual([])
-  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['REPO     stale'])
+  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['REPO      stale'])
 })
 
 const fillWidth = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
@@ -1599,10 +1633,10 @@ test('AP stats: the details WORK row keeps the 24h cell in full and, when narrow
 test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
   const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
   const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 400, CI)
-  expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'WORK', 'QUEUE'])
+  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'AUTOPILOT', 'WORK', 'QUEUE'])
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
   expect(sect(lines, 'REPO')).toContain('acme/widgets')
-  expect(sect(lines, 'WORK')).not.toContain('queue')
+  expect(sect(lines, 'AUTOPILOT') + sect(lines, 'WORK')).not.toContain('queue')
   expect(sect(lines, 'QUEUE')).toBe('queue 44 = 30 ready | 6 held | 3 epics')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   expect(lines.filter(l => l.includes('CI')).length).toBe(1)
@@ -1621,7 +1655,7 @@ test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate 
   const lines = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }, 400)
   expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
   const at = lines.findIndex(l => l.startsWith('WORK '))
-  expect(lines[at + 1]).toBe('QUEUE    ' + QLINE)
+  expect(lines[at + 1]).toBe('QUEUE     ' + QLINE)
   expect(lines.join('\n')).not.toContain('||')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
   // the queue row keeps its colours: ready is green, the other counts plain, zero counts dim
@@ -1927,7 +1961,7 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   1 where             repo @ branch*, worktree, account, root, task, stale      -> REPO
 //   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
-//   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> WORK
+//   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> AUTOPILOT
 //   5 queue             queue (branch) N = ready | held | epics | claimed | max last month/last week/this week -> QUEUE
 //   6 you               you HH:MM (age)                                           -> SESSION
 //   6 version           ccxp X (latest | Y available)                             -> RELEASE
@@ -1947,9 +1981,9 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['jobs state', 'WORK', /WORKING \(2\)/],
   ['parked', 'WORK', /parked 2/],
   ['jobs 24h', 'WORK', /last 24h: jobs 8 ▲ \/ average 5\.2\/day/],
-  ['AP', 'WORK', /AP on 2\/6h 3 loops ✓2 merged/],
-  ['next loop', 'WORK', /next loop due|next loop overdue|next loop \d/],
-  ['AP 24h', 'WORK', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
+  ['AP', 'AUTOPILOT', /AP on 2\/6h 3 loops ✓2 merged/],
+  ['next loop', 'AUTOPILOT', /next loop due|next loop overdue|next loop \d/],
+  ['AP 24h', 'AUTOPILOT', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
   ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| max 61 last month \/ 74 last week \/ 83 this week ▲/],
   ['version', 'RELEASE', /ccxp 5\.0\.0 \(5\.1\.0 available\)/],
   ['plugin URL', 'RELEASE', /https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills/],
@@ -2193,7 +2227,7 @@ test('bus cell: shrinks to the count in a narrow band, and is dropped before the
 // ---- AP max_dop cell (T20261124-239428) ----
 const dopSnap = (apc: object | null, ap: object | null = {}) => withHelper({ autopilot: ap === null ? null : { ...AP, ...ap }, ap_config: apc }) as any
 const CFG16 = { max_dop: 16, reserved_slots: 2, source: 'override', file: true }
-const dopLine = (s: object) => (detail(s).find(l => l.startsWith('WORK ')) ?? '').replace(/^WORK\s+/, '')
+const dopLine = (s: object) => (detail(s).find(l => l.startsWith('AUTOPILOT ')) ?? '').replace(/^AUTOPILOT\s+/, '')
 const dopBand = (s: object, cols = 160) => text(bandRows(s as any, NOCI, cols))
 
 test('parseHelper: ap_config is kept when well formed, null when absent or malformed', async () => {
