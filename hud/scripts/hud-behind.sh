@@ -19,7 +19,8 @@
 #
 # Test hooks: CCXP_HUD_BEHIND_SYNC=1 fetches in the foreground; HUD_BEHIND_STATE_DIR relocates the cache
 # (default <profile>/state/hud-behind; with no profile dir and no override nothing is fetched or cached);
-# HUD_BEHIND_TTL overrides the 300 s rate limit.
+# HUD_BEHIND_TTL overrides the 300 s rate limit; HUD_BEHIND_FETCH=0 turns the background fetch off (the count then
+# only moves when you fetch yourself).
 
 # shellcheck source=/dev/null
 [ -r "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh" ] && . "$(dirname "${BASH_SOURCE[0]}")/../../_session/profile-dir.sh"
@@ -62,16 +63,20 @@ hb-key() {
 
 # $1 repo top $2 cache file
 hb-fetch() {
-  local top="$1" file="$2" tmp now ok=0
-  local -a extra=(--recurse-submodules=no) ssh="${GIT_SSH_COMMAND:-}"
+  local top="$1" file="$2" tmp now ok=0 sshcmd="${GIT_SSH_COMMAND:-}"
+  local -a extra=(--recurse-submodules=no)
   # Keep the user's own ssh command (env, else core.sshCommand) and only add BatchMode, so a custom key still works.
-  [ -n "$ssh" ] || ssh=$(git -C "$top" config core.sshCommand 2>/dev/null) || ssh=""
-  [ -n "$ssh" ] || ssh=ssh
+  [ -n "$sshcmd" ] || sshcmd=$(git -C "$top" config core.sshCommand 2>/dev/null) || sshcmd=""
+  # A user's own GIT_SSH wrapper (no GIT_SSH_COMMAND, no core.sshCommand) is left alone: GIT_SSH_COMMAND would override it.
+  [ -n "$sshcmd" ] || [ -n "${GIT_SSH:-}" ] || sshcmd=ssh
   # FETCH_HEAD belongs to the user's own `git pull`/`git fetch`: never overwrite it (git 2.29+; older git just skips the flag).
   if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then extra+=(--no-write-fetch-head); fi
   now=$(date +%s)
-  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND="$ssh -o BatchMode=yes" hci-run-timeout "$HB_TIMEOUT" \
-    git -C "$top" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-prune "${extra[@]}" origin >/dev/null 2>&1 && ok=1
+  (
+    export GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true
+    [ -z "$sshcmd" ] || export GIT_SSH_COMMAND="$sshcmd -o BatchMode=yes"
+    hci-run-timeout "$HB_TIMEOUT" git -C "$top" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-prune "${extra[@]}" origin
+  ) >/dev/null 2>&1 && ok=1
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   jq -n -c --argjson t "$now" --argjson ok "$ok" '{tried: $t, ok: ($ok == 1)}' >"$tmp"
   mv -f "$tmp" "$file"
@@ -83,6 +88,7 @@ hb-fetch() {
 hb-maybe-fetch() {
   local top="$1" dir file lock now tried=0 ttl="${HUD_BEHIND_TTL:-$HB_TTL_DEFAULT}"
   [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=$HB_TTL_DEFAULT
+  [ "${HUD_BEHIND_FETCH:-1}" != 0 ] || return 0 # opt-out: count from the refs on disk only, never fetch
   dir=$(hb-state-dir); [ -n "$dir" ] || return 0
   git -C "$top" remote get-url origin >/dev/null 2>&1 || return 0
   file="$dir/$(hb-key "$top").json"; lock="$file.lock"; now=$(date +%s)
