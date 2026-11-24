@@ -105,7 +105,7 @@ Opt-in: the session cost in dollars. Switch: `cost` in `fields` (not on by defau
 
 `/hud details` toggles an expanded view: one labeled row per section, spelling the cells out in full (never abbreviated). Run it again to collapse. It updates live like the band.
 
-- `SESSION` context left, 5-hour limit left, API-equivalent cost, unread bus notes, your last prompt time
+- `SESSION` context left, 5-hour and 7-day limits left with time to reset, API-equivalent cost, unread bus notes, your last prompt time
 - `REPO` repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)

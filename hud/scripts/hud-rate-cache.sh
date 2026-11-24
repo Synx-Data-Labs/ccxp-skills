@@ -42,26 +42,32 @@ hud-rate-cache-write() {
   dir=$(_hrc-dir) || return 0
   file="$dir/rate-limits.json"
   now=$(_hrc-now)
-  [ -r "$file" ] && old=$(cat "$file" 2>/dev/null) || old='{}'
-  body=$(jq -c --argjson now "$now" --argjson old "$(printf '%s' "$old" | jq -c 'if type == "object" then . else {} end' 2>/dev/null || echo '{}')" '
+  old='{}'
+  [ -r "$file" ] && old=$(jq -c -s 'if (.[0] | type) == "object" then .[0] else {} end' "$file" 2>/dev/null) || true
+  [ -n "$old" ] || old='{}'
+  body=$(jq -c --argjson now "$now" --argjson old "$old" '
     def win($w): if ($w | type) == "object"
       then ($w | if (.used_percentage | type) == "number" and .used_percentage >= 0 and .used_percentage <= 100
         then {used_percentage: .used_percentage}
              + (if (.resets_at | type) == "number" and .resets_at > 0 then {resets_at: .resets_at} else {} end)
         else empty end)
       else empty end;
+    def valid($o): ($o | type) == "object" and ($o.used_percentage | type) == "number";
     # Several sessions share the file and an idle one may hold older numbers: within one window usage only grows and a
-    # later reset time is a newer window, so keep whichever of old and new is the newer truth.
+    # later reset time is a newer window, so keep whichever of old and new is the newer truth. An expired old window
+    # always loses; a window the new snapshot lacks is carried over from the old file (readers drop it once it expires).
     def newer($o; $n):
-      if ($o | type) != "object" or ($o.used_percentage | type) != "number" then $n
+      if (valid($o) | not) or (($o.resets_at // ($now + 1)) <= $now) then $n
       elif ($o.resets_at // 0) > ($n.resets_at // 0) then $o
       elif ($o.resets_at // 0) == ($n.resets_at // 0) and $o.used_percentage > $n.used_percentage then $o
       else $n end;
+    def pick($o; $n): if $n != null then newer($o; $n) elif valid($o) then $o else null end;
     (first(win(.five_hour)) // null) as $f | (first(win(.seven_day)) // null) as $s
     | if ($f == null and $s == null) then empty
-      else {version: 1, written_at: $now}
-           + (if $f != null then {five_hour: newer($old.five_hour; $f)} else {} end)
-           + (if $s != null then {seven_day: newer($old.seven_day; $s)} else {} end) end' 2>/dev/null) || return 0
+      else pick($old.five_hour; $f) as $pf | pick($old.seven_day; $s) as $ps
+           | {version: 1, written_at: $now}
+             + (if $pf != null then {five_hour: $pf} else {} end)
+             + (if $ps != null then {seven_day: $ps} else {} end) end' 2>/dev/null) || return 0
   [ -n "$body" ] || return 0
   (
     umask 077
