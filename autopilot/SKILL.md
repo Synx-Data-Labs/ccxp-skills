@@ -90,7 +90,7 @@ CLONE_PATH="$(bash <skills-root>/autopilot/scripts/autopilot-state.sh clone-path
 
 A dirty or mid-rebase leftover: remove the directory and re-run the block. Full clone, never a worktree or shallow; the same path every cycle keeps the same `claimant_id` (`_session/claimant-id.sh`).
 
-**No pick in the dispatcher.** The dispatcher does not walk the queue or keep a skip list; `autopilot-state.sh top` names the task (tier, cursor, holds) and `/drive` is given its id. `git -C "$CLONE_PATH" checkout main -q && git -C "$CLONE_PATH" pull -q`, then `autopilot-state.sh holds-check "$CLONE_PATH"` (releases the holds whose condition is met), `autopilot-state.sh prune "$CLONE_PATH"` (drops counters and holds of tasks that left `dev/TODO`) and `autopilot-state.sh pickable "$CLONE_PATH"` (a cheap read, no agent) prints:
+**No pick in the dispatcher.** The dispatcher does not walk the queue or keep a skip list; `autopilot-state.sh top` names the task (tier, cursor, holds) and `/drive` is given its id. `git -C "$CLONE_PATH" checkout main -q && git -C "$CLONE_PATH" pull -q`, then `autopilot-state.sh holds-check "$CLONE_PATH"` (releases the holds whose condition is met), `autopilot-state.sh prune "$CLONE_PATH"` (drops the holds of tasks that left `dev/TODO`) and `autopilot-state.sh pickable "$CLONE_PATH"` (a cheap read, no agent) prints:
 
 - `pick`: `todo-next.sh --skip-gated` finds a task `/drive` may take. Dispatch.
 - `drift`: nothing pickable, but `todo-sweep.sh plan` has mechanical findings (untracked task file, stale queue entry, closed-but-queued task); `/drive`'s own Phase 1 sweep fixes them. Dispatch. A drift dispatch that merges nothing ends `idle`/`stuck` and waits out its back-off, so permanent drift costs at most one agent per interval.
