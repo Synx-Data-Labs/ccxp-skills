@@ -1113,20 +1113,19 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   [ "$(grep -v 'autopilot_state.bats\|todo-next.bats' <<<"$output" | grep -c .)" = 0 ]
 }
 
-@test "SKILL.md: bottom-and-park cycle, visit counter and no marker or skip list" {
+@test "SKILL.md: a stalled cycle creates a hold (no bottom PR, no housekeeping agent), no marker or skip list" {
   local s="$REPO_ROOT/autopilot/SKILL.md"
   run grep -n 'Big tasks' "$s"; [ "$status" -eq 0 ]
   run grep -n -- 'blocks: T<original-id>' "$s"; [ "$status" -eq 0 ]
   run grep -n -i 'umbrella task)' "$s"; [ "$status" -ne 0 ]
   run grep -n -- '/drive --auto-selected' "$s"; [ "$status" -eq 0 ]
   run grep -n 'autopilot-state.sh pickable' "$s"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh plan' "$s"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh visit' "$s"; [ "$status" -eq 0 ]
-  run grep -n 'autopilot-state.sh parked' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh hold-report' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'autopilot-state.sh holds-check' "$s"; [ "$status" -eq 0 ]
   run grep -n 'autopilot-state.sh prune' "$s"; [ "$status" -eq 0 ]
-  run grep -n 'park refused' "$s"; [ "$status" -eq 0 ]
-  run grep -n '/bottom' "$s"; [ "$status" -eq 0 ]
-  run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]
+  run grep -n 'No `/bottom`, no `queue.md` edit, no housekeeping agent' "$s"; [ "$status" -eq 0 ]
+  run grep -n -E 'autopilot-state.sh visit|park refused|BOTTOMED:|HOUSEKEEPING-FAILED' "$s"; [ "$status" -ne 0 ]
+  run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]   # the config key and park path go in T20261124-115593
   run grep -n -E 'needs-human\.sh|autopilot-state\.sh (marked|attention-list|skip|unskip)|skip_ids|--skip-needs-human' "$s"; [ "$status" -ne 0 ]
 }
 
