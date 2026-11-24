@@ -50,7 +50,7 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 
 - Consumer repo task files (for example synxdb-build-pipeline) are migrated by their owners with the (c) script after the release; this epic never edits them.
 
-- [T20261124-320024](../TODO/T20261124-320024-depends-on-schema-lint-and-compat-reader.md) — (a) spec, `depends_on` schema, lint, compat reader
+- [T20261124-320024](../JOURNAL/2026-11-24-T20261124-320024-depends-on-schema-lint-and-compat-reader.md) — (a) spec, `depends_on` schema, lint, compat reader
 - [T20261124-419462](../TODO/T20261124-419462-todo-deps-chain-and-tree.md) — (b) `todo-deps.sh chain` and `tree`
 - [T20261124-177980](../TODO/T20261124-177980-blocked-by-migration-script-and-dry-run-report.md) — (c) migration script with dry run, plus dry-run report on synxdb-build-pipeline
 - [T20261124-112157](../TODO/T20261124-112157-drive-and-autopilot-work-first-open-leaf.md) — (d) `/drive` Phase 6 and autopilot pick: work the first open leaf

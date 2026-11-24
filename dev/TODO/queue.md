@@ -78,7 +78,6 @@ reprioritize.
 - [T20261124-140678](T20261124-140678-autopilot-effective-max-dop-from-subscription-quota.md): Autopilot steers max_dop from subscription quota headroom
 - [T20261124-776095](T20261124-776095-hud-queue-max-rolling-windows.md): HUD queue max: non-overlapping rolling windows
 - [T20261124-239428](T20261124-239428-hud-show-autopilot-max-dop.md): HUD shows the autopilot's effective max_dop
-- [T20261124-320024](T20261124-320024-depends-on-schema-lint-and-compat-reader.md): Spec, depends_on schema, lint and compat reader
 - [T20261124-419462](T20261124-419462-todo-deps-chain-and-tree.md): todo-deps.sh chain and tree
 - [T20261124-177980](T20261124-177980-blocked-by-migration-script-and-dry-run-report.md): Blocked by migration script and dry-run report
 - [T20261124-112157](T20261124-112157-drive-and-autopilot-work-first-open-leaf.md): Drive and autopilot work the first open leaf

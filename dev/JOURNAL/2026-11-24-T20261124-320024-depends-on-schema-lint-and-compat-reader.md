@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 2
 blocks: [T20261124-419462]
 source: owner request 2026-11-24 (decision d158), epic E3
 description: Define the depends_on and needs frontmatter fields, update lint, add a compat reader for legacy Blocked by
-claimed_by: cc1-50ac6891:86d2310edcae5b32
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -66,3 +66,23 @@ scheduled: 2026-11-23
 - [x] a `depends_on`-only task is not gated: `tests/todo-next.bats` "--skip-gated keeps a task that only records depends_on"
 - [x] docs updated: `lifecycle.md` (Optional metadata fields), `todo/SKILL.md` (`blocks` bullet), templates
 - [x] no version bump, no `hud/` edit, persona untouched: `git diff --stat` of the PR
+
+## Closed (2026-11-24)
+
+- Shipped in PR #742 (implementation, rebase-merged) after claim PR #740; CI green (bats, lint-tasks, sync-tasks, skill-quality, Markdown Lint); three independent reviews, the last clean at head `0d5f106`.
+- Met: `depends_on` and `needs` accepted and validated by `lint_tasks.py`; `todo-deps` compat reader in `todo/scripts/_lib.sh`; `Blocked by` deprecated with a lint warning, still valid; docs in `lifecycle.md`, `todo/SKILL.md`, task and guidelines templates; no version bump, no `hud/` edit, persona untouched.
+- Open question answers (proposals for the owner, recorded in the epic's open-question list):
+  - Q1: field name `depends_on` (the legacy `blocked-by:` key stays free text and is not read).
+  - Q2: `needs:` is a slug list (`human`, `vpn`, `owner-decision`) plus typed `person:<alias>` and `ext:<text>`; the free-text `SUPERVISED`, `needs manual` and `sign-off` substrings keep working alongside it (the consumer pre-flight gate still greps them); vocabulary is not enforced beyond shape.
+  - Q3: cross-repo dependencies are recorded as `needs: [ext:<text>]` until the multi-repo cursor work (T20261124-989194) lands.
+- Found along the way: main's `skill-quality` baseline for `todo` was already 73 below 74 after a concurrent tier change; PR #742 trimmed `todo/SKILL.md` (net smaller than main) so the baseline holds.
+- Quality regression (max_fn_lines): `lint_depends_on` holds the board-wide cycle detection in one 40-line function (iterative DFS kept inline for linear time); splitting it is not worth a helper for a single caller.
+- Not verified here: `claude plugin validate .` (no `claude` CLI in this sandbox); run before the next release.
+- Follow-ups: none new; the next members are T20261124-419462 (`todo-deps.sh chain` and `tree`), T20261124-177980, T20261124-112157, T20261124-158321. Reviewer nits not fixed: a legacy `Blocked by <own id>` self-loop is not flagged (as before) and a task id duplicated across TODO and PARKING overwrites its edges.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no — tests written alongside; each new rule has a unit or bats case
+- Verification (`superpowers:verification-before-completion`): yes — local suites and CI before each push, /address-pr gate per push
+- Systematic debugging (`superpowers:systematic-debugging`): no — the skill-quality failure was traced from the CI log directly
+- Receiving code review (`superpowers:receiving-code-review`): yes — first review's findings (null depends_on, unindented list, exponential cycle walk, CRLF, comments) all fixed
