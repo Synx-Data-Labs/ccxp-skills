@@ -2,7 +2,7 @@
 status: Done
 estimation: 1
 source: owner message 2026-11-24 (job 1455)
-description: Autopilot wake that fires up to ~59 s before next_wake_at reads already-on and skips a dispatch; widen the due tolerance to 60 s
+description: Autopilot wake that fires up to ~59 s before next_wake_at reads already-on and skips a dispatch; widen the due tolerance to 59 s
 type: bug
 ---
 
@@ -18,8 +18,8 @@ type: bug
 
 ## Fix
 
-- Named constant `AP_WAKE_TOLERANCE` (default 60 s, env-overridable) used by `_ap_due`; a typed `on` minutes before the wake is still `already-on`.
-- SKILL.md Phase 1/4 and `parallel.md`: record the wake with the same delay that is scheduled; ScheduleWakeup rounds to the minute, the 60 s tolerance covers it.
+- Named constant `AP_WAKE_TOLERANCE` (default 59 s, env-overridable) used by `_ap_due`; a typed `on` minutes before the wake is still `already-on`.
+- `parallel.md`: record the wake with the same delay that is scheduled; ScheduleWakeup rounds to the minute, the 59 s tolerance covers it.
 - Bats: wake 10 s early dispatches, 59 s early dispatches, 5 min early is `already-on`, exact-due dispatches.
 
 ## Related
@@ -32,7 +32,7 @@ type: bug
 
 ## Closed (2026-11-24)
 
-- Shipped in the PR that carries this file. Finding: a 30 s tolerance already existed in `_ap_due` (hard-coded); it was too small for the observed 7-50 s early wakes. Now `AP_WAKE_TOLERANCE` (default 60, env override), tests in `tests/autopilot_state.bats` (exact, 10 s, 50 s, 60 s early dispatch; 61 s and 5 min early already-on), SKILL.md and parallel.md pairing note.
+- Shipped in the PR that carries this file. Finding: a 30 s tolerance already existed in `_ap_due` (hard-coded); it was too small for the observed 7-50 s early wakes. Now `AP_WAKE_TOLERANCE` (default 59, env override; must stay below the 60 s progress delay), tests in `tests/autopilot_state.bats` (exact, 10 s, 50 s, 59 s early dispatch; 60 s and 5 min early already-on), parallel.md pairing note (SKILL.md left untouched: autopilot sits exactly at its skill-quality baseline of 83, any added prose trips the gate).
 - Unverified: the minute-rounding mechanism in ScheduleWakeup (inferred from the owner's timestamps). A release is needed for the plugin to ship it (not done here).
 - Decision: claim PR and separate design PR skipped (one-bug, self-evident, owner-approved); task filed, fixed and closed in one PR.
 

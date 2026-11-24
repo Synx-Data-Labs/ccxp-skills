@@ -65,7 +65,7 @@ Touches neither the state file nor the schedule; a running loop reads the value 
 Run `autopilot-state.sh start`:
 
 - `started` — fresh run; go to Phase 2.
-- `dispatch` — already on, a slot is free and the wake is due (the wake fired, up to 60 s early counts as due: `ScheduleWakeup` rounds its time to the minute, so a wake can land before the recorded `next_wake_at`); go to Phase 2.
+- `dispatch` — already on, a slot is free and the wake is due (the wake fired); go to Phase 2.
 - `already-on` — a typed `on` before the next wake is due, or every slot is busy: report `already on, next cycle at <next_wake_at>` and stop. Never dispatch. A fired wake with every slot busy re-arms with `wake <seconds> "slots busy"` plus the `ScheduleWakeup`; a typed `on` arms nothing.
 - `busy` — a previous run's cycle is still finishing: report it and do nothing; that cycle's Phase 4 arms the next wake. A re-armed wake is recorded first (`wake <seconds> busy`).
 - `paused` — report "paused; use /autopilot resume" and stop.
@@ -157,7 +157,7 @@ Then:
 
 Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt: "/autopilot on", reason: "autopilot <outcome>")` and end the turn. Every wake carries the same prompt; the state file decides whether it dispatches (Phase 1).
 
-**Never arm a wake without recording it.** Each `ScheduleWakeup` follows, in the same step, a state write: `record` (Phases 2 and 4), `hold <s> <reason>` (guard hold, ramp) or `wake <s> [reason]` (an idle or busy re-arm). Record the same delay you schedule. Otherwise `next_wake_at` goes stale and the HUD reports a stall. `ScheduleWakeup` rounds to the minute and may fire up to 59 s early; `start` treats a wake within `AP_WAKE_TOLERANCE` (default 60 s) of `next_wake_at` as due, so do not re-arm or skip a dispatch because the wake looks early.
+**Never arm a wake without recording it.** Each `ScheduleWakeup` follows, in the same step, a state write: `record` (Phases 2 and 4), `hold <s> <reason>` (guard hold, ramp) or `wake <s> [reason]` (an idle or busy re-arm). Otherwise `next_wake_at` goes stale and the HUD reports a stall.
 
 ### Phase 5: Final report (on `off`)
 

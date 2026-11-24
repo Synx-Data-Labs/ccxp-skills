@@ -53,7 +53,7 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap start; [ "$output" = dispatch ]
   _ap record progress 0 T1 >/dev/null        # arms next_wake_at 60 s ahead
   run _ap start; [ "$output" = already-on ]  # a typed "on" before the wake is due
-  AUTOPILOT_NOW="2026-10-28T10:00:40Z" run _ap start; [ "$output" = dispatch ]   # within the 60 s tolerance
+  AUTOPILOT_NOW="2026-10-28T10:00:40Z" run _ap start; [ "$output" = dispatch ]   # within the 59 s tolerance
   AUTOPILOT_NOW="2026-10-28T10:05:00Z" run _ap start; [ "$output" = dispatch ]
   _ap busy on
   AUTOPILOT_NOW="2026-10-28T10:05:00Z" run _ap start; [ "$output" = already-on ]
@@ -1550,14 +1550,14 @@ _ap_on() { _ap start >/dev/null; }
   run grep -ni 'never arm a wake without recording it' "$REPO_ROOT/autopilot/SKILL.md"; [ "$status" -eq 0 ]
 }
 
-@test "start: a wake fired early (minute rounding) dispatches within the 60 s tolerance, a typed on long before does not (T20261124-243982)" {
+@test "start: a wake fired early (minute rounding) dispatches within the 59 s tolerance, a typed on long before does not (T20261124-243982)" {
   _ap start >/dev/null
   AUTOPILOT_NOW="2026-10-28T10:00:00Z" _ap wake 170 >/dev/null     # next_wake_at 10:02:50Z
   AUTOPILOT_NOW="2026-10-28T10:02:50Z" run _ap start; [ "$output" = dispatch ]   # exactly due
   AUTOPILOT_NOW="2026-10-28T10:02:40Z" run _ap start; [ "$output" = dispatch ]   # 10 s early
   AUTOPILOT_NOW="2026-10-28T10:02:00Z" run _ap start; [ "$output" = dispatch ]   # 50 s early (observed)
-  AUTOPILOT_NOW="2026-10-28T10:01:50Z" run _ap start; [ "$output" = dispatch ]   # 60 s early, boundary
-  AUTOPILOT_NOW="2026-10-28T10:01:49Z" run _ap start; [ "$output" = already-on ] # 61 s early
+  AUTOPILOT_NOW="2026-10-28T10:01:51Z" run _ap start; [ "$output" = dispatch ]   # 59 s early, boundary
+  AUTOPILOT_NOW="2026-10-28T10:01:50Z" run _ap start; [ "$output" = already-on ] # 60 s early
   AUTOPILOT_NOW="2026-10-28T09:57:50Z" run _ap start; [ "$output" = already-on ] # 5 min early
   AP_WAKE_TOLERANCE=10 AUTOPILOT_NOW="2026-10-28T10:02:30Z" run _ap start; [ "$output" = already-on ]  # override
 }
