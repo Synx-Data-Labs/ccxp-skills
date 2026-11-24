@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request 2026-11-24 (job 1524), epic E4
 related: [T20261121-412600]
 description: Script that checks a branch or clone is based on the latest origin/main (rebase or fail loudly) before any workflow dispatch or push; wired into /drive and /land
 type: feature
+claimed_by: cc1-50ac6891:2a82d411376c36a9
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-392722: Pre-dispatch fresh-base gate script (d129)
