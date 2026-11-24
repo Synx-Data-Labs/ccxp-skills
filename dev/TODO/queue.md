@@ -85,7 +85,6 @@ reprioritize.
 - [T20261122-192945](T20261122-192945-hud-one-ci-with-failed-run-url.md): HUD shows one CI, with the failed run URL when red
 - [T20261123-135901](T20261123-135901-scrub-pii-from-public-repo.md): Scrub PII from the public repo
 - [T20261123-136500](T20261123-136500-configurable-ci-job-cap.md): Configurable CI job cap
-- [T20261124-340374](T20261124-340374-autopilot-holds-store.md): Autopilot holds: store, `hold`, `release`, `holds`
 - [T20261124-153489](T20261124-153489-hud-details-sectioned-layout.md): HUD details: one labeled row per section
 - [T20261124-670976](T20261124-670976-autopilot-tier-cursor-selection.md): Autopilot picks by tier and a cursor
 - [T20261124-321658](T20261124-321658-autopilot-holds-replace-bottom.md): A stalled cycle creates a hold, not a bottom PR; HUD held count
