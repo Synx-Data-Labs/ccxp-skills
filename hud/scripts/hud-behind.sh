@@ -12,7 +12,8 @@
 # Keeping the ref fresh: at most once per HB_TTL (300 s) per repo, ONE detached
 #   git fetch --quiet --no-tags --no-prune origin
 # (15 s timeout, GIT_TERMINAL_PROMPT=0, lock dir so refreshes never overlap). It writes remote-tracking refs inside .git
-# only: never a pull, checkout, merge, rebase or stash. The attempt time is cached in <state>/<repo key>.json (like
+# only (FETCH_HEAD is left alone too): never a pull, checkout, merge, rebase or stash. Only `origin` is fetched, so a branch
+# whose upstream lives on another remote is counted from that remote's refs as they are on disk (refreshed by your own fetches). The attempt time is cached in <state>/<repo key>.json (like
 # hud-version.sh); a failed fetch leaves the refs, and so the last answer, as they were and is retried after the TTL.
 # No origin remote: no fetch.
 #
@@ -60,9 +61,12 @@ hb-key() {
 # $1 repo top $2 cache file
 hb-fetch() {
   local top="$1" file="$2" tmp now ok=0
+  local -a extra=(--recurse-submodules=no)
+  # FETCH_HEAD belongs to the user's own `git pull`/`git fetch`: never overwrite it (git 2.29+; older git just skips the flag).
+  if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then extra+=(--no-write-fetch-head); fi
   now=$(date +%s)
   GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND='ssh -o BatchMode=yes' hci-run-timeout "$HB_TIMEOUT" \
-    git -C "$top" fetch --quiet --no-tags --no-prune origin >/dev/null 2>&1 && ok=1
+    git -C "$top" fetch --quiet --no-tags --no-prune "${extra[@]}" origin >/dev/null 2>&1 && ok=1
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   jq -n -c --argjson t "$now" --argjson ok "$ok" '{tried: $t, ok: ($ok == 1)}' >"$tmp"
   mv -f "$tmp" "$file"
