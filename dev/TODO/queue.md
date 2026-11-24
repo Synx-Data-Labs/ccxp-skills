@@ -66,3 +66,4 @@ reprioritize.
 - [T20261120-105513](T20261120-105513-persona-idle-wake-readonly-checks.md): Persona idle wake with read-only alert and CI checks (n362 step 5)
 - [T20261120-160823](T20261120-160823-flaky-lock-bats-tests-on-ci.md): Flaky lock bats tests on CI (ledger concurrent adds, autopilot state lock)
 - [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config
+- [T20261123-137260](T20261123-137260-hud-env-get-literal-name-validate-error.md): Fix `claude plugin validate` error: $.env.get needs a literal name (hud/register.tsx:380)
