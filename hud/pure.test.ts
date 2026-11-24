@@ -2059,6 +2059,11 @@ test('parseHelper: ap_config is kept when well formed, null when absent or malfo
   expect(parseHelper(HELPER)?.ap_config).toBeNull()
 })
 
+test('parseHelper: busy_routine is kept, and falls back to busy_slots for a helper without the split', async () => {
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, busy_slots: 3, busy_routine: 2 } }))?.autopilot?.busy_routine).toBe(2)
+  expect(parseHelper(JSON.stringify({ ...BASE, autopilot: { ...AP, busy_slots: 3 } }))?.autopilot?.busy_routine).toBe(3)
+})
+
 test('band: AP on shows `dop running/max_dop` (config present), neutral colour below the routine limit', async () => {
   const s = dopSnap(CFG16, { busy_slots: 8 })
   expect(dopBand(s)).toContain('dop 8/16')
@@ -2073,6 +2078,10 @@ test('band: warning colour at the routine limit (max_dop less reserved), also wi
   expect(color(dopSnap({ ...CFG16, reserved_slots: null }, { busy_slots: 16 }))).toBe('warning')
   expect(color(dopSnap({ ...CFG16, reserved_slots: null }, { busy_slots: 15 }))).toBeUndefined()
   expect(color(dopSnap({ ...CFG16, max_dop: 1, reserved_slots: null }, { busy_slots: 0 }))).toBeUndefined() // nothing running is never capped
+  // urgent cycles run in the reserved slots and do not use up the routine limit (as `autopilot-state.sh routine-free`)
+  expect(color(dopSnap(CFG16, { busy_slots: 14, busy_routine: 12 }))).toBeUndefined() // 12 routine + 2 urgent: 2 routine slots still free
+  expect(color(dopSnap(CFG16, { busy_slots: 14, busy_routine: 14 }))).toBe('warning')
+  expect(color(dopSnap(CFG16, { busy_slots: 16, busy_routine: 14 }))).toBe('warning')
 })
 
 test('band: max_dop lowered below the running count (running 8, max_dop 6) reads 8/6 in warning colour', async () => {

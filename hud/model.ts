@@ -95,6 +95,7 @@ export function parseHelper(stdout: string): HelperData | null {
       busy: a.busy === true,
       current_task: str(a.current_task),
       busy_slots: num(a.busy_slots),
+      busy_routine: typeof a.busy_routine === 'number' ? num(a.busy_routine) : num(a.busy_slots), // an older helper has no split: all busy cycles are routine
       stats: parseStats(a.stats),
     }
   }
@@ -584,15 +585,18 @@ function apVariants(ap: Autopilot): Variants {
 /**
  * How the autopilot's parallelism is used: running cycles (the state's fresh `slots`, helper field `busy_slots`) against
  * the effective `max_dop`. `routine` = the cycles routine picks may fill (max_dop less the reserved slots; all of max_dop
- * while `reserved_slots` is unknown); `capped` = running cycles are at or above it. Null without a config answer.
+ * while `reserved_slots` is unknown); `capped` = the running ROUTINE cycles (urgent ones run in the reserved slots and are
+ * left out, as `autopilot-state.sh routine-free` does) are at or above it. Null without a config answer.
  */
 function dopUse(h: HelperData | null): { max: number; reserved: number | null; routine: number; running: number; capped: boolean } | null {
   const c = h?.ap_config
   if (!c) return null
-  const reserved = c.reserved_slots === null ? null : Math.min(c.reserved_slots, c.max_dop)
+  const reserved = c.reserved_slots === null ? null : Math.min(c.reserved_slots, Math.max(0, c.max_dop - 1)) // the autopilot keeps at least one routine slot
   const routine = c.max_dop - (reserved ?? 0)
   const running = h?.autopilot?.busy_slots ?? 0
-  return { max: c.max_dop, reserved, routine, running, capped: running > 0 && running >= routine }
+  // Urgent cycles run in the reserved slots: only the others count against the routine limit.
+  const routineBusy = Math.min(running, h?.autopilot?.busy_routine ?? running)
+  return { max: c.max_dop, reserved, routine, running, capped: routineBusy > 0 && routineBusy >= routine }
 }
 
 /** Band cell `dop 8/16` (running cycles / max_dop); warning-coloured at the routine limit. One form: it drops whole when the row is tight. */

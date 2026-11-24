@@ -680,7 +680,7 @@ _cfg() { printf '%s' "$2" > "$1/dev/.autopilot-config.json"; }
 
 @test "sl-autopilot-config: reserved_slots is read from the autopilot script; null while an older script lacks the key" {
   local repo; repo=$(_make_repo r-cfg-res)
-  export CCXP_HUD_CACHE_TTL=0 # the fake scripts below answer for the same repo and config mtime: no cache
+  export CCXP_HUD_CACHE_TTL=0 # the fake scripts below answer for the same repo and config: no cache
   _cfg "$repo" '{"max_dop":8}'
   # The real script reports the key (the effective reserved slots), so it is a number.
   run bash -c "source '$SCRIPT'; sl-autopilot-config '$repo' ''"
@@ -746,4 +746,18 @@ STUB
   [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 3 ]
   CCXP_HUD_CACHE_TTL=0 run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''; sl-autopilot-config '$repo' ''"
   [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 5 ]
+}
+
+@test "--json: autopilot.busy_routine leaves out cycles marked urgent (they run in the reserved slots); legacy marks count as routine" {
+  local repo; repo=$(_make_repo r-routine)
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"slots\":{\"1\":{\"task\":null,\"since\":\"$(_iso_ago 5)\"},\"2\":{\"task\":null,\"since\":\"$(_iso_ago 6)\"},\"3\":{\"task\":null,\"since\":\"$(_iso_ago 7)\",\"urgent\":true}}}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_slots <<<"$output")" = "3" ]
+  [ "$(jq -r .autopilot.busy_routine <<<"$output")" = "2" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1,\"busy_since\":\"$(_iso_ago 5)\"}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_routine <<<"$output")" = "1" ]
+  _state "$repo" "{\"schema\":2,\"status\":\"on\",\"started_at\":\"$(_iso_ago 300)\",\"stuck_count\":0,\"cycle_count\":1}"
+  run _hud "$repo" --json
+  [ "$(jq -r .autopilot.busy_routine <<<"$output")" = "0" ]
 }
