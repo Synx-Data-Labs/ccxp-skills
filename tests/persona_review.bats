@@ -157,8 +157,8 @@ mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open ta
   git -C "$R" init -q . && echo ok > "$R/scripts/gate.sh"
   git -C "$R" add . && git -C "$R" -c user.email=a@b -c user.name=n commit -qm x
   git -C "$R" update-ref refs/remotes/origin/main HEAD
-  printf -- '---\nstatus: Open\n---\n# T20261124-111111: gate\n\n- folds d3 into a script\n' > "$R/dev/TODO/T20261124-111111-gate.md"
-  printf -- '# T20261124-222222: done\n\n- d1, d4, d6 and d9 fold\n' > "$R/dev/JOURNAL/2026-11-24-T20261124-222222-done.md"
+  printf -- '---\nstatus: Open\n---\n# T20261124-111111: gate\n\n- folds d3 into scripts/gate.sh\n' > "$R/dev/TODO/T20261124-111111-gate.md"
+  printf -- '# T20261124-222222: done\n\n- d1 to scripts/gate.sh, d4 to #7, d6 to #8, d9 to scripts/nope.sh fold\n' > "$R/dev/JOURNAL/2026-11-24-T20261124-222222-done.md"
   FAKE="$BATS_TEST_TMPDIR/fakegh"
   printf '#!/usr/bin/env bash\n[[ "$3" == 7 ]] && echo MERGED || echo OPEN\n' > "$FAKE"; chmod +x "$FAKE"
   export PR_GH="bash $FAKE"
@@ -203,7 +203,7 @@ mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open ta
   jq '.decisions |= map(if .ref == "d2" then .enforced_by = "scripts/gate.sh" else . end)' "$CCXP_DECISIONS_FILE" > "$BATS_TEST_TMPDIR/n.json"
   cp "$BATS_TEST_TMPDIR/n.json" "$CCXP_DECISIONS_FILE"
   run_s retire-enforced --repo "$R" --apply
-  [[ "$output" == *$'d2\tpending\tno task names d2'* ]]
+  [[ "$output" == *$'d2\tpending\tno task names both d2'* ]]
   [ "$(jq -r '.decisions[] | select(.ref == "d2") | .status' "$CCXP_DECISIONS_FILE")" = "active" ]
 }
 
