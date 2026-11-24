@@ -23,7 +23,7 @@ Constraints:
 - The installed persona refreshes itself after a plugin update (`agent-pairing/persona-refresh.md`: hook compares the bundled asset, backs up, replaces). A smaller persona needs no change there; a rule moved into a doc reaches a running session only after that refresh plus a restart, and the pointer must name the doc and the command so the agent finds it.
 - Persona behaviour stays identical: every move adds or extends a bats test that the asset stays under the cap and that the key rules still appear.
 - Persona edits and decision changes (`decision add/retire/supersede`) only with the owner's agreement; the retro step proposes, never applies.
-- Input from the prior read-only review, job #1456 (32 decisions: 3 persona additions d147/d129/d96, 7 retire/fold, 5 profile/config, 11 keep-in-log, 5 already covered, 1 contradiction d101/d112): report kept at `/Users/xlj/.claude-work/ccxp-context/r1456-decisions-review-report.md` (owner's machine, not in the repo).
+- Input from the prior read-only review, job #1456 (32 decisions: 3 persona additions d147/d129/d96, 7 retire/fold, 5 profile/config, 11 keep-in-log, 5 already covered, 1 contradiction d101/d112): report `r1456-decisions-review-report.md` kept in the owner's local ccxp-context directory (not in the repo).
 - Pending follow-ups from that review: n384 (d101 kept, d112 retired by the owner on 2026-11-24); d147, d129, d96 persona additions wait for trims from the persona moves below.
 - Later clusters to file after the second persona move, from the section sizes above: CI failure response and Repo freshness, HUD job ledger, Consent, Writing a job prompt; further skills (ccxp, retro, ipm, todo) by the same ranking.
 
