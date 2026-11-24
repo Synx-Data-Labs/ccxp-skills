@@ -6,6 +6,7 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261124-502781](T20261124-502781-hud-restore-busvariants.md): Restore busVariants in hud/model.ts (regression)
 - [T20261121-261197](T20261121-261197-hud-redci-supersede-and-list.md): HUD red-CI counts superseded failures; add hud-redci.sh list
 - [T20261121-359191](T20261121-359191-context-file-naming-n-r-t-slug.md): Context file naming convention n<k>-r<job>-t<taskid>-slug
 - [T20261121-412600](T20261121-412600-task-per-job-rule-and-ledger-check.md): Task-per-job rule and ledger check

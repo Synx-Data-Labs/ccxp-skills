@@ -776,6 +776,16 @@ export function issuesVariants(i: Issues, full = false): Variants {
   return out
 }
 
+/**
+ * The cross-account bus cell: notes from another Claude Code session wait for this profile. `bus 2 · home` (warning colour:
+ * someone is waiting), narrowing to `bus 2`. Nothing when nothing is unread or the bus is off. `full` (details) is the long form only.
+ */
+export function busVariants(b: Bus, full = false): Variants {
+  const long: Seg[] = [{ text: b.from ? `bus ${b.unread} · ${b.from}` : `bus ${b.unread}`, color: 'warning' }]
+  if (full) return [[{ text: `bus ${b.unread} unread note${b.unread === 1 ? '' : 's'}${b.from ? ` · newest from ${b.from}` : ''}`, color: 'warning' }]]
+  return [long, [{ text: `bus ${b.unread}`, color: 'warning' }]]
+}
+
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
   off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'bus', 'rate', 'cost', 'lastat', 'ver'],
