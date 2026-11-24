@@ -550,10 +550,10 @@ _commit() { git_identity "$1"; git -C "$1" commit -q --allow-empty -m init; }
   printf -- '---\nstatus: Open — sign-off pending\n---\n# T20260101-000001: a\n' > "$repo/dev/TODO/T20260101-000001-a.md"
   # the default is the default branch; this repo has no origin, so it falls back to the working tree and says so
   run _hud "$repo" --json
-  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"autoparked":0,"source":"working-tree","fallback":true}' ] || { echo "$output"; false; }
+  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"autoparked":0,"apholds":0,"source":"working-tree","fallback":true}' ] || { echo "$output"; false; }
   # the explicit working-tree opt-in reads this clone with no extra keys
   HUD_STDIN_EXTRA=',"queue_source":"working-tree"' run _hud "$repo" --json
-  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"autoparked":0}' ] || { echo "$output"; false; }
+  [ "$(jq -c '.queue | del(.hwm)' <<<"$output")" = '{"total":2,"ready":1,"held":1,"epic":0,"claimed":0,"autoparked":0,"apholds":0}' ] || { echo "$output"; false; }
   # the high watermark rides along (no git history in this fixture: the current length is all there is)
   [ "$(jq -c .queue.hwm <<<"$output")" = '{"lm":null,"lw":null,"tw":2}' ]
 }

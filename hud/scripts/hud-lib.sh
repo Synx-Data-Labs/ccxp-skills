@@ -516,7 +516,7 @@ sl-queue-materialize() {
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
-#   {"total","ready","held","epic","claimed","autoparked"}
+#   {"total","ready","held","epic","claimed","autoparked","apholds"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
 # lands in EXACTLY ONE of ready|held|epic|claimed, first match wins, so those four always
 # sum to total; autoparked is an extra count from the autopilot state file:
@@ -536,6 +536,8 @@ sl-queue-materialize() {
 #   autoparked (extra, not a bucket) = tasks the autopilot parked since this run started (`parked`
 #             entries at or after `run_started_at`, else `started_at`). The state file's `visits`
 #             map is not read any more (the revisited count was retired from the HUD).
+#   apholds   (extra, not a bucket) = the number of keys of the state file's `.holds` object (task id -> hold),
+#             counted whatever the autopilot status; no task text is read. Absent file/key or a non-object is 0.
 # autopilot state (dev/.autopilot-state.json) is read only while status is on|paused, for its
 # dispatch clone path (so the clone's own claims count as this clone's) and the parked count above.
 # A queue line whose task file is missing has no hints and counts as ready.
@@ -604,11 +606,16 @@ _sl-queue-json() {
         parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""
     [ -z "$st" ] || state="$st"
   fi
+  local aph=0
+  if [ -f "$sf" ]; then
+    aph=$(jq -r '((.holds | objects) // {}) | length' "$sf" 2>/dev/null) || aph=0
+    case "$aph" in ''|*[!0-9]*) aph=0 ;; esac
+  fi
   local me1 me2="" ap_clone
   me1=$(sl-clone-id "$repo_root")
   ap_clone=$(printf '%s' "$state" | jq -r '.clone' 2>/dev/null) || ap_clone=""
   [ -z "$ap_clone" ] || [ ! -d "$ap_clone" ] || me2=$(sl-clone-id "$ap_clone")
-  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --arg parents "$parents" --argjson st "$state" --arg me1 "$me1" --arg me2 "$me2" --argjson extra "$extra" '
+  jq -n -c --arg rows "$rows" --arg info "$info" --arg open "$open_ids" --arg parents "$parents" --argjson st "$state" --argjson aph "$aph" --arg me1 "$me1" --arg me2 "$me2" --argjson extra "$extra" '
     ($info | split("\n") | map(select(. != "") | split("\t") | {key: .[0], value: {status: (.[1] // ""), claimed: (.[2] // ""), title: (.[3] // ""), kids: ((.[4] // "0") == "1")}}) | from_entries) as $meta
     | ($open | split("\n") | map(select(. != ""))) as $openIds
     | ($parents | split("\n") | map(select(. != ""))) as $epicParents
@@ -620,7 +627,7 @@ _sl-queue-json() {
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
     | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
-      + {autoparked: (($st.parked // []) | unique | length)} + $extra' 2>/dev/null || true
+      + {autoparked: (($st.parked // []) | unique | length), apholds: $aph} + $extra' 2>/dev/null || true
 }
 
 # $1 last-input state dir, $2 session_id -> epoch seconds of the last prompt

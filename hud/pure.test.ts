@@ -1367,14 +1367,14 @@ test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
 
 // --- queue breakdown (dev/TODO/queue.md) ---
 
-const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
+const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0, apholds: 0 }
 // Short names: the queue cell is dropped early on a tight row (before repo/task shrink), so the long BASE names would crowd it out.
 const SHORT = { repo: 'r', branch: 'b', task_id: 'T1', task_title: 't' }
 
 test('queue: parseHelper clamps the counts and a missing or malformed queue is null', async () => {
   expect(parseHelper(HELPER)!.queue).toBeNull()
   expect(parseHelper(JSON.stringify({ ...BASE, queue: 'x' }))!.queue).toBeNull()
-  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 7, decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, autoparked: 0 })
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 7, decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, autoparked: 0, apholds: 0 })
 })
 
 test('queue: the band shows the compact form, details spell the labels out, claimed/auto-parked only when above 0, no revisited count', async () => {
@@ -1393,6 +1393,26 @@ test('queue: the band shows the compact form, details spell the labels out, clai
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('revisited')
   // the old marker-derived buckets are gone
   expect(detail(s as any, 140).join('\n')).not.toMatch(/decision|external|blocked/)
+})
+
+test('queue: autopilot holds show as `<n>hd` (band) and `on autopilot hold` (details) only above 0, distinct from status-held `h`', async () => {
+  const hd = { ...QUEUE, apholds: 2 }
+  expect(text(bandRows(withHelper({ ...SHORT, queue: hd }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 2hd')
+  expect(detail(withHelper({ queue: hd }) as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 2 on autopilot hold')
+  // appended after the 2c/2a tokens
+  const all = { ...QUEUE, claimed: 1, autoparked: 2, apholds: 3 }
+  expect(text(bandRows(withHelper({ ...SHORT, queue: all }) as any, NOCI, 160))).toContain('3x 1c 2a 3hd')
+  // zero (and an older helper answer without the key) shows nothing
+  for (const q of [{ ...QUEUE, apholds: 0 }, QUEUE]) {
+    expect(text(bandRows(withHelper({ ...SHORT, queue: q }) as any, NOCI, 140))).not.toContain('hd')
+    expect(detail(withHelper({ queue: q }) as any, 200).join('\n')).not.toContain('autopilot hold')
+  }
+  // the helper's count is clamped; a missing or non-numeric one is 0
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, apholds: 4.7 } }))!.queue!.apholds).toBe(4)
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, apholds: 'x' } }))!.queue!.apholds).toBe(0)
+  // it survives the same squeeze as the other tokens: the max block drops first, the whole cell shrinks to ready/total last
+  const wide = text(bandRows(withHelper({ ...SHORT, queue: { ...hd, hwm: { lm: 61, lw: 74, tw: 83 } } }) as any, NOCI, 200))
+  expect(wide).toContain('2hd')
 })
 
 test('queue: no queue, no cell and no line; a tight band shrinks it to ready/total before dropping it', async () => {

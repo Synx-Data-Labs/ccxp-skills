@@ -140,6 +140,8 @@ export type Queue = {
   claimed: number
   /** Tasks the autopilot parked since this run started; shown only when above 0. */
   autoparked: number
+  /** Autopilot holds (keys of the state file's `.holds`); shown as `2hd` only when above 0. Absent in an older helper answer = 0. */
+  apholds?: number
   /** Set when the queue was read from origin/<branch> (queue.source `default-branch`): the cell then reads `queue@<branch>`. */
   branch?: string
   /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
