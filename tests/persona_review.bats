@@ -160,7 +160,7 @@ mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open ta
   printf -- '---\nstatus: Open\n---\n# T20261124-111111: gate\n\n- folds d3 into scripts/gate.sh\n' > "$R/dev/TODO/T20261124-111111-gate.md"
   printf -- '# T20261124-222222: done\n\n- d1 to scripts/gate.sh, d4 to #7, d6 to #8, d9 to scripts/nope.sh fold\n' > "$R/dev/JOURNAL/2026-11-24-T20261124-222222-done.md"
   FAKE="$BATS_TEST_TMPDIR/fakegh"
-  printf '#!/usr/bin/env bash\n[[ "$3" == 7 ]] && echo MERGED || echo OPEN\n' > "$FAKE"; chmod +x "$FAKE"
+  printf '#!/usr/bin/env bash\ncase "$3" in 7) echo "MERGED main" ;; 9) echo "MERGED feature" ;; *) echo "OPEN main" ;; esac\n' > "$FAKE"; chmod +x "$FAKE"
   export PR_GH="bash $FAKE"
 }
 
@@ -186,6 +186,7 @@ mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open ta
   [[ "$output" == *$'d1\twould-retire\tfolded into scripts/gate.sh (task T20261124-222222)'* ]]
   [[ "$output" == *$'d4\twould-retire\tfolded into #7'* ]]
   [[ "$output" == *$'d6\tpending\t#8 is not merged yet'* ]]
+  [ "$(PR_GH="bash $FAKE" bash -c '. "$1"; pr-resolved "$2" 9' _ "$SCRIPT" "$R")" = "unmerged" ]   # merged into a non-main base
   [[ "$output" == *$'d9\tpending\tscripts/nope.sh is not on origin/main'* ]]
   [[ "$output" == *$'d12\tpending\t'*"task id"* ]]
   [[ "$output" == *$'d3\twould-retire\tfolded into scripts/gate.sh (task T20261124-111111)'* ]]
