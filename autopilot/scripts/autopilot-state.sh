@@ -926,21 +926,25 @@ ap-top() {
   done
   [ -n "$root" ] || root=$(ap-work-root)
   excl=$(_ap_exclude)
+  # one scan of the queue (it is the slow part): "<id><TAB><tier>" in queue order, gated tasks left out
+  local -a args=(--skip-gated --ids)
+  [ "$urgent" = 0 ] || args+=(--tier 1,2)
+  all=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || all=""
   for t in $tiers; do
-    local -a args=(--skip-gated --ids --tier "$t")
     # rotate the tier's whole list (so the cursor keeps its place even while its task is in flight or held),
     # then keep only the tasks that are free to pick
-    all=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || continue
-    if [ -n "$excl" ]; then
-      ids=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" --exclude "$excl" 2>/dev/null) || continue
-    else
-      ids="$all"
-    fi
-    order="$order$(printf '%s\n' "$all" | _ap_rotate "$t" | grep -Fxf <(printf '%s\n' "$ids") || true)"$'\n'
+    ids=$(printf '%s\n' "$all" | awk -F'\t' -v t="$t" '$2 == t {print $1}')
+    order="$order$(printf '%s\n' "$ids" | _ap_rotate "$t" | grep -vxF -f <(printf '%s\n' "${excl//,/$'\n'}") || true)"$'\n'
   done
-  local id
-  id=$(printf '%s' "$order" | grep -E "$AP_TASK_ID_RE" | sed -n "${nth}p") || true
-  [[ "$id" =~ $AP_TASK_ID_RE ]] && printf '%s\n' "$id"
+  # the claim check is the slow part of a scan: make it only for the candidates in order, until the Nth is free
+  local id n=0 picked=""
+  while IFS= read -r id; do
+    [[ "$id" =~ $AP_TASK_ID_RE ]] || continue
+    case "$(cd "$root" && . "$(_ap_dir)/../../todo/scripts/_lib.sh" && todo-claim-state "$id" "$TODO_LIB_REPO_ROOT")" in peer:*) continue ;; esac
+    n=$((n + 1))
+    if [ "$n" -ge "$nth" ]; then picked="$id"; break; fi
+  done <<< "$order"
+  [ -z "$picked" ] || printf '%s\n' "$picked"
   return 0
 }
 
