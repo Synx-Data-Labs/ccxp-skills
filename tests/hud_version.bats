@@ -16,6 +16,7 @@ setup() {
   export HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hud-version"
   export HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/remote"
   export CCXP_HUD_VERSION_SYNC=1
+  export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/no-compare.json" # the unreleased lookup never reaches api.github.com (a missing file = unreachable)
   export GIT_TERMINAL_PROMPT=0
 }
 
@@ -221,10 +222,11 @@ _plugin_urls() {
   [ "$(jq -r .plugin <<<"$output")" = "null" ]
 }
 
-@test "the lookup is git ls-remote only: no credential prompt, no token, no gh" {
+@test "the lookups use no credentials: git ls-remote for tags, anonymous curl for the compare, no token, no gh" {
   grep -q 'git ls-remote --tags' "$VER"
   grep -q 'GIT_TERMINAL_PROMPT=0' "$VER"
-  ! grep -nE 'curl|wget|\bgh |token|TOKEN' "$VER"
+  grep -q 'curl -fsS --max-time' "$VER"
+  ! grep -nE 'wget|\bgh |token|TOKEN|[Aa]uthorization|curl .*(-u |--user|-n )' "$VER"
 }
 
 @test "two plugin roots sharing one cache do not ping-pong: a pm mismatch re-checks at most once a minute" {
@@ -237,4 +239,88 @@ _plugin_urls() {
   git -C "$HUD_VERSION_REMOTE" tag ccxp-skills--v5.2.0
   run _ver "$b"
   [ "$(jq -r .latest <<<"$output")" = "5.1.0" ]
+}
+
+# --- unreleased commits (commits on main after the installed version's tag) ---
+
+# $1 = ahead_by, then the commit messages oldest first -> a GitHub compare answer in $BATS_TEST_TMPDIR/compare.json
+_compare() {
+  local n="$1"; shift
+  jq -n -c --argjson n "$n" '{ahead_by: $n, commits: ($ARGS.positional | map({commit: {message: .}}))}' --args "$@" > "$BATS_TEST_TMPDIR/compare.json"
+  export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/compare.json"
+}
+
+@test "unreleased: count and the newest 3 subjects, newest first, first line of each message only" {
+  _remote ccxp-skills--v5.0.0
+  _compare 4 "chore: one" "fix: two"$'\n\n'"body text" "feat(hud): three" "docs: four"
+  run _ver "$(_plugin 5.0.0)"
+  [ "$status" -eq 0 ]
+  [ "$(jq -c .unreleased <<<"$output")" = '{"count":4,"subjects":["docs: four","feat(hud): three","fix: two"]}' ]
+}
+
+@test "unreleased: the key is absent for zero commits, an unreadable answer and an unreachable API" {
+  _remote ccxp-skills--v5.0.0
+  _compare 0
+  run _ver "$(_plugin 5.0.0)"
+  [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
+  rm -rf "$HUD_VERSION_STATE_DIR"
+  echo 'not json' > "$BATS_TEST_TMPDIR/compare.json"
+  run _ver "$(_plugin 5.0.0)"
+  [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
+  rm -rf "$HUD_VERSION_STATE_DIR"
+  export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/missing.json"
+  run _ver "$(_plugin 5.0.0)"
+  [ "$status" -eq 0 ]
+  [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
+  [ "$(jq -r .installed <<<"$output")" = 5.0.0 ]
+}
+
+@test "unreleased: cached for an hour (no second request), refreshed after, old answer kept when the refresh fails" {
+  _remote ccxp-skills--v5.0.0
+  local p; p="$(_plugin 5.0.0)"
+  _compare 2 "a" "b"
+  run _ver "$p"; [ "$(jq .unreleased.count <<<"$output")" = 2 ]
+  _compare 9 "x"
+  run _ver "$p"; [ "$(jq .unreleased.count <<<"$output")" = 2 ]   # still the cached answer
+  local f="$HUD_VERSION_STATE_DIR/unreleased.json"
+  jq -c '.fetched -= 4000' "$f" > "$f.t" && mv "$f.t" "$f"
+  run _ver "$p"; [ "$(jq .unreleased.count <<<"$output")" = 9 ]   # TTL passed: refreshed
+  export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/missing.json"
+  jq -c '.fetched -= 4000' "$f" > "$f.t" && mv "$f.t" "$f"
+  run _ver "$p"; [ "$(jq .unreleased.count <<<"$output")" = 9 ]   # offline: last answer kept
+}
+
+@test "unreleased: another installed version or repo never shows the old answer" {
+  _remote ccxp-skills--v5.0.0 ccxp-skills--v5.1.0
+  _compare 3 "a" "b" "c"
+  run _ver "$(_plugin 5.0.0)"; [ "$(jq .unreleased.count <<<"$output")" = 3 ]
+  export HUD_UNRELEASED_URL="file://$BATS_TEST_TMPDIR/missing.json"
+  local f="$HUD_VERSION_STATE_DIR/unreleased.json"
+  jq -c '.fetched -= 100' "$f" > "$f.t" && mv "$f.t" "$f"
+  run _ver "$(_plugin 5.1.0)"   # the cache was written for 5.0.0
+  [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
+}
+
+@test "unreleased: subjects lose control characters and are cut at 72 chars" {
+  _remote ccxp-skills--v5.0.0
+  local long; long="$(printf 'x%.0s' $(seq 1 100))"
+  _compare 2 "esc"$'\x1b'"[31m red" "$long"
+  run _ver "$(_plugin 5.0.0)"
+  [ "$(jq -r '.unreleased.subjects[1]' <<<"$output")" = "esc[31m red" ]
+  [ "$(jq -r '.unreleased.subjects[0] | length' <<<"$output")" = 72 ]
+}
+
+@test "unreleased: the compare URL names the installed tag and the repo from plugin.json" {
+  source "$VER"
+  [ "$(hvu-api-url https://github.com/Acme/fork 5.2.0)" = "https://api.github.com/repos/Acme/fork/compare/ccxp-skills--v5.2.0...main" ]
+}
+
+@test "unreleased: never blocks (no sync): first call answers at once without the key, version off prints null" {
+  _remote ccxp-skills--v5.0.0
+  _compare 2 "a" "b"
+  unset CCXP_HUD_VERSION_SYNC
+  run _ver "$(_plugin 5.0.0)"
+  [ "$status" -eq 0 ]
+  [ "$(jq 'has("unreleased")' <<<"$output")" = false ]
+  [ "$(_ver "$(_plugin 5.0.0)" 0)" = null ]
 }

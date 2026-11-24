@@ -200,7 +200,15 @@ export function parseHelper(stdout: string): HelperData | null {
     const installed = str((pl as Record<string, unknown>).installed)
     const latest = str((pl as Record<string, unknown>).latest)
     const url = str((pl as Record<string, unknown>).url)
-    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}) }
+    // Untrusted: a positive whole count, at most 3 one-line subjects with no control characters (the helper strips them, this checks again).
+    const un = (pl as Record<string, unknown>).unreleased
+    let unreleased: PluginVersion['unreleased']
+    if (typeof un === 'object' && un !== null && !Array.isArray(un)) {
+      const u = un as Record<string, unknown>
+      const subjects = Array.isArray(u.subjects) ? u.subjects.filter((x): x is string => typeof x === 'string' && x.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(x)).slice(0, 3).map(x => x.slice(0, 72)) : []
+      if (typeof u.count === 'number' && Number.isFinite(u.count) && u.count >= 1) unreleased = { count: Math.min(Math.floor(u.count), 9999), subjects }
+    }
+    if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}), ...(unreleased ? { unreleased } : {}) }
   }
   return {
     repo: str(r.repo),
@@ -477,6 +485,18 @@ function versionVariants(p: PluginVersion): Variants {
     [{ text: 'ccxp ↑', dim: true }, up],
     [{ text: '↑', dim: true }, up],
   ]
+}
+
+/**
+ * The commits after the installed release, shown after the plugin URL on the details line only:
+ * `3 unreleased: subject; subject; subject +N more`, then (narrow) `N unreleased`.
+ */
+function unreleasedVariants(u: NonNullable<PluginVersion['unreleased']>): Variants {
+  const more = u.count - u.subjects.length
+  const list = u.subjects.join('; ') + (more > 0 ? ` +${more} more` : '')
+  const head = `${u.count} unreleased`
+  const full: Seg[] = [{ text: head, color: 'suggestion' }, ...(list ? [{ text: `: ${list}`, dim: true }] : [])]
+  return [full, [{ text: head, color: 'suggestion' }]]
 }
 
 function apVariants(ap: Autopilot): Variants {
@@ -1033,9 +1053,10 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // The plugin's GitHub location, as a bare URL (terminals make it cmd-clickable; no OSC 8, the renderer draws plain text).
   // From the manifest via the helper, the public URL otherwise. Shown with the version label, so only when that is.
   const urlItem = verItem && h?.plugin ? one('url', [{ text: h.plugin.url ?? PLUGIN_URL_DEFAULT, dim: true }]) : null
+  const unreleasedItem = urlItem && h?.plugin?.unreleased ? one('unreleased', ...unreleasedVariants(h.plugin.unreleased)) : null
   if (at || verItem) {
     add(
-      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)]) : null, verItem, urlItem],
+      [at ? one('lastat', [{ text: `you ${formatStamp(at, nowMs)}`, dim: true }, ...ageSegs(at, nowMs)]) : null, verItem, urlItem, unreleasedItem],
       DETAIL_STEPS.you,
     )
   }

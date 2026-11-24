@@ -1045,6 +1045,27 @@ test('version: details show (latest) or (X available) and the GitHub URL, the ma
   expect(lastLine(verSnap({ installed: '5.2.0', latest: null }))).toContain('ccxp 5.2.0 │ https://github.com/Synx-Data-Labs/ccxp-skills')
 })
 
+test('version: details show the unreleased commits right after the URL, capped at 3 with +N more; the band never does', async () => {
+  const u = { count: 5, subjects: ['feat(hud): one', 'fix: two', 'docs: three'] }
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: u }), DEFAULTS, 220)).toMatch(/ccxp-skills │ 5 unreleased: feat\(hud\): one; fix: two; docs: three \+2 more$/)
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: { count: 1, subjects: ['fix: only'] } }), DEFAULTS, 220)).toMatch(/ccxp-skills │ 1 unreleased: fix: only$/)
+  // narrow: the count alone, before the line is cut
+  expect(lastLine(verSnap({ ...PLUGIN_LATEST, unreleased: u }), DEFAULTS, 90)).not.toContain('docs: three')
+  // silent without data
+  expect(lastLine(verSnap(PLUGIN_LATEST))).not.toContain('unreleased')
+  expect(text(bandRows(verSnap({ ...PLUGIN_LATEST, unreleased: u }) as any, DEFAULTS, 220))).not.toContain('unreleased')
+})
+
+test('version: parseHelper keeps only a positive count and clean one-line subjects of the unreleased commits', async () => {
+  const h = (unreleased: unknown) => parseHelper(JSON.stringify({ ...BASE, plugin: { ...PLUGIN_LATEST, unreleased } }))?.plugin?.unreleased
+  expect(h({ count: 2, subjects: ['a', 'b'] })).toEqual({ count: 2, subjects: ['a', 'b'] })
+  expect(h({ count: 0, subjects: [] })).toBeUndefined()
+  expect(h({ count: 'x', subjects: ['a'] })).toBeUndefined()
+  expect(h(['a'])).toBeUndefined()
+  expect(h(null)).toBeUndefined()
+  expect(h({ count: 5, subjects: ['ok', 'bad\u001b[31m', 7, '', 'c', 'd', 'e'] })).toEqual({ count: 5, subjects: ['ok', 'c', 'd'] })
+})
+
 test('version: the link is plain text (no escape bytes) and the band stays compact (no URL)', async () => {
   const lines = text(detailRows(verSnap(PLUGIN_LATEST) as any, DEFAULTS, 160, DETAIL_NOW))
   expect(lines).not.toContain('\u001b')

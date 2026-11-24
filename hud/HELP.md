@@ -76,6 +76,8 @@ Unread notes from another Claude Code session (another account or profile) on th
 
 The installed ccxp-skills version against the latest public release. `ccxp 6.4.0 (latest)` = up to date (green). `ccxp 6.4.0 (6.5.0 available)` = a newer release exists; update with `/plugin`. Plain `ccxp 6.4.0` (dim) = latest unknown (offline, not looked up yet). The cell never claims "latest" without a successful comparison. Source: the plugin's `plugin.json` and `git ls-remote --tags` of the public repo (no credentials), cached 6 hours. Hide with `"version": false`.
 
+In `/hud details` the line also shows the plugin's GitHub address and, right after it, the unreleased commits: `5 unreleased: fix: a; feat: b; docs: c +2 more` = the commits on `main` since the release you run (count, newest three subjects, `+N more`). Nothing shows when there are none, the release tag is unknown, or you are offline. Source: one anonymous GitHub request, cached 1 hour.
+
 ## lastat
 
 `you 09:05`: when you last submitted a prompt in this session (the date is added when not today). Needs the small UserPromptSubmit hook `hud/scripts/last-input-hook.sh`; without it the cell stays hidden. Switch: `lastat`.
