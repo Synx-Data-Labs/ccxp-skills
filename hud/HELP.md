@@ -115,7 +115,8 @@ Opt-in: how much of your Claude subscription's usage window is left, when it wou
 - `REPO` repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)
-- `WORK` autopilot with its `max_dop` use, next loop and 24h numbers, then jobs (READY / WORKING, parked, jobs per day)
+- `AUTOPILOT` on / paused / off, `max_dop` use, holds, next loop and 24h numbers
+- `WORK` everything the autopilot does not run: jobs without the `autopilot` flag (READY / WORKING, parked, jobs per day)
 - `QUEUE` the task queue breakdown
 - `RELEASE` the plugin's GitHub address, the version, and the count of unreleased commits
 
