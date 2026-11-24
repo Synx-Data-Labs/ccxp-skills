@@ -373,23 +373,39 @@ export function rateWindows(snap: Pick<Snapshot, 'rateUsed' | 'rateResetsAt' | '
 
 const leftOf = (w: RateWindow): number => Math.max(0, 100 - Math.round(w.used))
 
-/** Less headroom first (the window that will bind); a tie keeps the 5-hour window. */
-function tighter(ws: RateWindow[]): RateWindow {
-  return ws.reduce((a, b) => (leftOf(b) < leftOf(a) ? b : a))
+/** Seconds until a window is spent: 0 when nothing is left, null when it will not run out before its own reset. */
+function gapOf(w: RateWindow, nowMs: number): number | null {
+  return leftOf(w) <= 0 ? 0 : rateRunoutSec(w.used, w.resetsAt, nowMs, w.sec)
 }
 
 /**
- * The limit cell (owner decisions d166, d167): the percent LEFT of the window with less headroom, `runs out in 28m` when
+ * The window that binds first (owner decision d167, amended): the earliest projected runout that falls before the window's
+ * own reset; a window with no runout before its reset ranks last. When none runs out, or on a tie, the one with less % left
+ * (the old rule); a full tie keeps the 5-hour window.
+ */
+export function firstToRunOut(ws: RateWindow[], nowMs: number): { w: RateWindow; gap: number | null } {
+  const ranked = ws.map(w => ({ w, gap: gapOf(w, nowMs) }))
+  return ranked.reduce((a, b) => {
+    const ga = a.gap ?? Infinity
+    const gb = b.gap ?? Infinity
+    if (gb !== ga) return gb < ga ? b : a
+    return leftOf(b.w) < leftOf(a.w) ? b : a
+  })
+}
+
+/**
+ * The limit cell (owner decisions d166, d167): the percent LEFT of the window that runs out first, `runs out in 28m` when
  * the burn rate would run it dry before it resets, and `reset 13:55 CST`, no window label. All of it is coloured by the gap
- * to runout (`gapTone`): no runout before the reset is green, and a spent limit (0 left) is red. `parts` picks the pieces
+ * to runout (`gapTone`): no runout before the reset is green, and a spent limit (0 left) is red. The gap is taken in whole
+ * minutes, rounded down, so the colour and the text agree (10m20s reads `10m` and is red). `parts` picks the pieces
  * so the narrow forms can drop the reset time first, then the runout. No window: null.
  */
 function rateSegs(snap: Snapshot, nowMs: number, parts: { runout: boolean; reset: boolean }): Seg[] | null {
   const ws = rateWindows(snap, nowMs)
   if (ws.length === 0) return null
-  const w = tighter(ws)
+  const { w, gap: exact } = firstToRunOut(ws, nowMs)
   const left = leftOf(w)
-  const gap = left <= 0 ? 0 : rateRunoutSec(w.used, w.resetsAt, nowMs, w.sec)
+  const gap = exact === null ? null : Math.floor(exact / 60) * 60
   const color = gapTone(gap)
   const segs: Seg[] = [{ text: `${left}% left`, color }]
   if (parts.runout && gap !== null && left > 0) segs.push({ text: ` · runs out in ${formatRunout(gap / 3600)}`, color })
@@ -1196,8 +1212,8 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     rows.push(...sectionRows(label, cells.map(c => (c === null || Array.isArray(c) ? c : full(c))), width))
   }
 
-  // SESSION: context is what is LEFT (the band's ctx); the rate cell is the share LEFT of the subscription window with less
-  // headroom, when it runs out and when it resets, coloured by the gap to runout (owner decisions d166, d167). The API-equivalent cost cell was retired.
+  // SESSION: context is what is LEFT (the band's ctx); the rate cell is the share LEFT of the subscription window that runs out first,
+  // when it runs out and when it resets, coloured by the gap to runout (owner decisions d166, d167). The API-equivalent cost cell was retired.
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
