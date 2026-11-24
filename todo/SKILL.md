@@ -56,15 +56,15 @@ source: Retro 2026-04-25
 
 **Field semantics:**
 
-- `estimation`: a Fibonacci-style story point, one of `1`, `2`, `3`, `5`, `8` (T20260924-232855 — duration buckets retired). Always `1` at file time; `/incept` is the only place it's revised upward. Required for `/eta` projections (`points * hours_per_point`, from `dev/velocity.json`).
-- `status`: one of `Open`, `Design`, `In Progress`, `Review`, `Blocked by T{id}`, `Parked`, `Done`. Required. The field is free-text after its leading token, so a `BLOCKED` or `SUPERVISED` substring can be appended to narrate why (e.g. `status: In Progress — SUPERVISED (needs VPN to GitLab)`). Consumer repos' `/ccxp` pre-flight gate (`dev/daily-ccxp.sh`) greps for these substrings to avoid waking an hourly cron session for work that's blocked or needs a human (VPN, a supervised force-push, an interactive decision) to progress.
-- `scheduled`: `YYYY-MM-DD` (always a Monday). Written **only at IPM commit time** (`/ipm` step 5) for whichever tasks the IPM actually picks off the top of `queue.md` — it records which iteration a task landed in; it does not drive priority (the queue does that). **Update-forward-only — never removed.** There is no GitHub Project board (T20261005-554581, T20261005-639913) — `scheduled:` plus the local `dev/TODO/`/`dev/JOURNAL/*.md` files are the entire source of truth for "what iteration is this?", not anything computed client-side.
+- `estimation`: a Fibonacci-style story point, one of `1`, `2`, `3`, `5`, `8` (duration buckets retired). Always `1` at file time; `/incept` is the only place it's revised upward. Required for `/eta` projections (`points * hours_per_point`, from `dev/velocity.json`).
+- `status`: one of `Open`, `Design`, `In Progress`, `Review`, `Parked`, `Done` (`Blocked by T{id}` is deprecated: see `depends_on`). Required. Free text may follow the leading token (e.g. `In Progress — SUPERVISED (needs VPN)`); consumer repos' `/ccxp` pre-flight gate (`dev/daily-ccxp.sh`) greps for `BLOCKED` / `SUPERVISED` so cron does not wake a session for work that needs a human.
+- `scheduled`: `YYYY-MM-DD` (always a Monday). Written **only at IPM commit time** (`/ipm` step 5) for the tasks the IPM picks off the top of `queue.md`; it records which iteration a task landed in and does not drive priority. **Update-forward-only — never removed.** There is no GitHub Project board: `scheduled:` plus the local `dev/TODO/` and `dev/JOURNAL/` files are the whole source of truth for the iteration.
 - `deadline`: `YYYY-MM-DD`. Hard date the task must be delivered by — usually customer-, release-, or compliance-driven. Informational — display it, but it does not reorder the queue; if a deadline makes something urgent, reflect that by `/top`-ing it.
-- `when` / `when-end` / `place` / `person`: optional time (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), window end, context slugs, and involved-person aliases (never emails). Time fields never reorder the queue; position in `queue.md` stays the priority. Lint warns on a past `when`. Waiting on someone is `status: Blocked by person:<alias>` (or `ext:<text>`); the sweep ignores typed tokens.
+- `when` / `when-end` / `place` / `person`: optional time (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), window end, context slugs, and involved-person aliases (never emails). Time fields never reorder the queue; position in `queue.md` stays the priority. Lint warns on a past `when`. Waiting on someone: `needs: [person:<alias>]` or `ext:<text>` (legacy `Blocked by person:` still read).
 - `type`: `chore|feature|bug|event|research|spike|rca|support|other`. `event` needs `when`, is never auto-picked, and closes once its date passes. `todo-list.sh --type event` lists events.
 - `source-url` / `support-issue` / `support-report`: `source-url` is set by `/to-task` for any tracked URL (dedup key); `support-issue` is a recognized legacy alias (pre-dates the `/support` -> `/to-task` rename). `support-report: on|off` opts in to outward status reports (absent = off). See `_support/README.md` and `/customer-support`.
 - `tier`: `1`-`4` (default `3`); autopilot takes the lowest eligible tier, then `queue.md` order. Reader: `todo-tier`.
-- `blocks`: YAML list of `T{id}`s that depend on this task. Drives the `Unblocks:` annotation in `next`'s output.
+- `blocks`: `T{id}`s that depend on this task (drives `Unblocks:` in `next`). `depends_on`: its inverse, `T{id}`s this task waits on; it keeps its real status. `needs`: human-only conditions (`human`, `vpn`, `owner-decision`, `person:<alias>`, `ext:<text>`). Details: `lifecycle.md`.
 - `source`: one-line origin (e.g. `Retro 2026-04-25`, `RCA run 12345`, `Customer ticket SUPPORT-123`).
 
 There is no `priority:` field — position in `queue.md` **is** the priority. A prior version of this schema had a free-form `Critical/High/.../Low` field that duplicated what the queue now expresses directly; it's retired.
@@ -87,7 +87,7 @@ If `$ARGUMENTS` is empty, default to `list`.
 
 Run `bash <skills-root>/todo/scripts/todo-list.sh` and print its output verbatim — this
 is a fully deterministic read of `queue.md` + task frontmatter (no
-judgment involved), so it costs no model call (T20260914-359646). The
+judgment involved), so it costs no model call. The
 algorithm below is what the script implements; it stays documented here
 for `sweep`'s own reuse (Phase 2/3 share the same drift/stale-blocker
 checks) and for a human reading this skill — don't re-derive it by hand.
@@ -136,7 +136,7 @@ tries to work around itself.
 
 Run `bash <skills-root>/todo/scripts/todo-next.sh` and print its output verbatim — the
 skip logic and claim-state check are fully deterministic (no judgment
-involved), so this costs no model call (T20260914-359646). One line is
+involved), so this costs no model call. One line is
 explicitly **not** ported to the script and stays a judgment call for
 whoever reads the top pick's file: step 4's "the next concrete action to
 move it forward, if evident from the file" — that requires interpreting

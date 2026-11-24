@@ -295,3 +295,15 @@ append_queue_line() {
   run bash "$SCRIPT" --skip-gated
   [[ "$output" != *"T20000101-000001"* ]]
 }
+
+@test "--skip-gated keeps a task that only records depends_on (real status, not gated) (T20261124-320024)" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T1 "has a dependency" "In Progress" "depends_on: [T9]"
+  write_task T2 "legacy block" "Blocked by T9"
+  append_queue_line T1 "has a dependency"
+  append_queue_line T2 "legacy block"
+  run bash "$SCRIPT" --skip-gated
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"T1"* ]]
+  [[ "$output" != *"T2 —"* ]]
+}

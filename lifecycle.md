@@ -46,6 +46,7 @@ description: {One-line summary of what's wrong and what "done" looks like}
 Optional metadata fields:
 
 - `blocks: [T{id1}, T{id2}]` — YAML list, records what this task is holding up (bidirectional)
+- `depends_on: [T{id1}]` — YAML list, the inverse of `blocks:`: tasks this one depends on. The task keeps its real status (`In Progress`, `Design`, `Open`); nothing is ever shown as blocked. `needs: [human, vpn, owner-decision, person:<alias>, ext:<text>]` — human-only or outside conditions, which are not task dependencies. Replace `Blocked by` (epic E3, `dev/EPICS/E3-dependency-chain.md`)
 - `deadline: YYYY-MM-DD` — release or hard deadline
 - `when:` / `when-end:` / `place:` / `person:` / `type:` — optional task dimensions (time, place, person, type; T20261114-352324). `when` is `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`; `place` and `person` are slug lists (aliases, never emails or names); `type: event` requires `when` and is never auto-picked. Time fields never reorder the queue; position in `queue.md` stays the priority. Waiting on someone: `status: Blocked by person:<alias>` / `ext:<text>`. Full semantics in `todo/SKILL.md` "Task metadata".
 - `scheduled: YYYY-MM-DD` — a Monday; set by `/ipm` step 5 at IPM commit, for whichever tasks land in that iteration. Update-forward-only — never removed (see the Iteration assignment section below)
@@ -85,7 +86,7 @@ Open → Design → In Progress → Review → Done
 | **Design** | Research, planning, writing the design journal entry |
 | **In Progress** | Implementation is underway — code, a design doc, a filing, whatever "doing the work" means for this task |
 | **Review** | PR open or awaiting verification/sign-off |
-| Blocked by T{id} | Cannot proceed until dependency is resolved (list all blockers) |
+| Blocked by T{id} | **Deprecated** (epic E3): keep the real status and record `depends_on: [T{id}]`. Still read, lint warns |
 | Parked | Moved to `dev/PARKING/` — valid but not actionable now. Use `/todo sweep` to park tasks. |
 | Done | Move to `dev/JOURNAL/` — the journal entry is the permanent record |
 
@@ -96,6 +97,8 @@ The active states `Design`, `In Progress`, `Review`, `Blocked` live in the task 
 **PR ref in title**: when a PR opens for a tracked task, `/gcpr` and `/address-pr` append `(<repo>#<num>)` to the task's issue title (e.g. `T20260510-285938: … (ccxp-skills#37)`), so the board shows the task→PR mapping at a glance. Idempotent and best-effort; the `T{id}:` prefix is preserved. See `_session/set-pr-ref.sh`.
 
 ## Blocking: Bidirectional Links
+
+**New dependencies use `depends_on:`** (on the dependant) plus `blocks:` (on the dependency), both kept; the status stays real. `todo/scripts/_lib.sh` `todo-deps <file>` is the compat reader: it returns `depends_on` plus any legacy `Blocked by` ids, so old and new files mix during the rollout. Lint (`lint_tasks.py`): `depends_on` ids must exist and not cycle (an id already Done only warns), and `Blocked by` warns as deprecated. The rest of this section describes the legacy `Blocked by` form.
 
 Blocking relationships are recorded in **both** directions:
 

@@ -228,6 +228,129 @@ class LintTasksTest(unittest.TestCase):
                          frontmatter="status: Open")  # missing estimation
         self.assertEqual(lint_tasks.main(["--changed", str(bad)]), 1)
 
+    # --- depends_on / needs (epic E3, T20261124-320024) -----------------------
+
+    def test_depends_on_and_needs_are_allowed_keys(self):
+        f = write_task(self.root, frontmatter=(
+            "status: In Progress\nestimation: 2\nscheduled: 2026-11-23\n"
+            "depends_on: [T20260611-000010]\nneeds: [human, vpn]"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+
+    def test_depends_on_block_list_form_is_read(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Open\nestimation: 2\ndepends_on:\n  - T20260611-000010\n"
+            "  - T20260611-000020"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+        ctx = lint_tasks.Ctx(f)
+        self.assertEqual(lint_tasks.dependency_ids(ctx),
+                         ["T20260611-000010", "T20260611-000020"])
+
+    def test_depends_on_bad_entry_and_self_fail(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Open\nestimation: 2\n"
+            "depends_on: [T20260611-000001, nope]"))
+        out = lint_tasks.lint_file(f)
+        self.assertTrue(any("names the task itself" in m for m in out), out)
+        self.assertTrue(any("'nope' is not a task id" in m for m in out), out)
+
+    def test_needs_validation(self):
+        ok = write_task(self.root, name="T20260611-000002-ok.md", frontmatter=(
+            "status: Open\nestimation: 1\n"
+            "needs: [human, person:alice, ext:vendor reply]"))
+        self.assertEqual(lint_tasks.lint_file(ok), [])
+        bad = write_task(self.root, name="T20260611-000003-bad.md", frontmatter=(
+            "status: Open\nestimation: 1\n"
+            "needs: [Not A Slug, person:a@b.com, 'ext:']"))
+        out = lint_tasks.lint_file(bad)
+        self.assertEqual(len(out), 3, out)
+
+    def test_legacy_blocked_by_is_read_as_dependency(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Blocked by T20260611-000010 and T20260611-000020\n"
+            "estimation: 2\ndepends_on: [T20260611-000020, T20260611-000030]"))
+        ctx = lint_tasks.Ctx(f)
+        self.assertEqual(lint_tasks.dependency_ids(ctx), [
+            "T20260611-000020", "T20260611-000030", "T20260611-000010"])
+
+    def test_blocked_by_warns_deprecated_but_passes(self):
+        write_task(self.root, name="T20260611-000010-blocker.md")
+        dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
+            "status: Blocked by T20260611-000010\nestimation: 2\n"
+            "scheduled: 2026-11-23"))
+        self.assertEqual(lint_tasks.lint_file(dep), [])
+        msgs = lint_tasks.warnings_for(dep)
+        self.assertTrue(any("deprecated" in m for m in msgs), msgs)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 0)
+
+    def test_depends_on_live_passes_done_warns_missing_fails(self):
+        write_task(self.root, name="T20260611-000010-live.md")
+        write_journal(self.root, "2026-06-17-T20260611-000020-done.md")
+        dep = write_task(self.root, name="T20260611-000011-dep.md", frontmatter=(
+            "status: Open\nestimation: 2\n"
+            "depends_on: [T20260611-000010, T20260611-000020]"))
+        bad, warn = lint_tasks.lint_depends_on(self.root)
+        self.assertEqual(bad, {})
+        self.assertTrue(any("already Done" in m for m in warn[dep]), warn)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 0)
+        dep.write_text(dep.read_text().replace("T20260611-000020", "T20260611-000099"))
+        bad, _ = lint_tasks.lint_depends_on(self.root)
+        self.assertTrue(any("not found" in m for m in bad[dep]), bad)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 1)
+
+    def test_depends_on_cycle_fails(self):
+        a = write_task(self.root, name="T20260611-000010-a.md", frontmatter=(
+            "status: Open\nestimation: 1\ndepends_on: [T20260611-000011]"))
+        b = write_task(self.root, name="T20260611-000011-b.md", frontmatter=(
+            "status: Open\nestimation: 1\ndepends_on: [T20260611-000010]"))
+        bad, _ = lint_tasks.lint_depends_on(self.root)
+        self.assertTrue(any("cycle" in m for m in bad[a]), bad)
+        self.assertTrue(any("cycle" in m for m in bad[b]), bad)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 1)
+
+    def test_depends_on_chain_without_cycle_passes(self):
+        write_task(self.root, name="T20260611-000010-a.md", frontmatter=(
+            "status: Open\nestimation: 1\ndepends_on: [T20260611-000011]"))
+        write_task(self.root, name="T20260611-000011-b.md", frontmatter=(
+            "status: Open\nestimation: 1\ndepends_on: [T20260611-000012]"))
+        write_task(self.root, name="T20260611-000012-c.md")
+        self.assertEqual(lint_tasks.lint_depends_on(self.root), ({}, {}))
+
+    def test_bare_depends_on_and_needs_mean_none(self):
+        for val in ("", "null", "~"):
+            f = write_task(self.root, frontmatter=(
+                f"status: Open\nestimation: 1\ndepends_on: {val}\nneeds: {val}"))
+            self.assertEqual(lint_tasks.lint_file(f), [], val)
+
+    def test_depends_on_comments_do_not_leak_ids(self):
+        f = write_task(self.root, frontmatter=(
+            "status: Open\nestimation: 1\n"
+            "depends_on: [T20260611-000010]  # was T20260611-000099"))
+        self.assertEqual(lint_tasks.dependency_ids(lint_tasks.Ctx(f)),
+                         ["T20260611-000010"])
+
+    def test_cycle_through_legacy_blocked_by_is_detected(self):
+        write_task(self.root, name="T20260611-000010-a.md", frontmatter=(
+            "status: Blocked by T20260611-000011\nestimation: 1\n"
+            "scheduled: 2026-11-23"))
+        write_task(self.root, name="T20260611-000011-b.md", frontmatter=(
+            "status: Open\nestimation: 1\ndepends_on: [T20260611-000010]"))
+        bad, _ = lint_tasks.lint_depends_on(self.root)
+        self.assertEqual(len(bad), 2, bad)
+
+    def test_deep_dag_is_linear_not_exponential(self):
+        # a 30-level diamond ladder has 2**30 paths; DFS with colors is instant
+        n = 30
+        for lvl in range(n):
+            a, b, nxt = f"T20260611-{lvl:03d}1{0:02d}", f"T20260611-{lvl:03d}2{0:02d}", lvl + 1
+            deps = (f"T20260611-{nxt:03d}100, T20260611-{nxt:03d}200" if lvl < n - 1 else "")
+            for nm in (a, b):
+                write_task(self.root, name=f"{nm}-x.md", frontmatter=(
+                    f"status: Open\nestimation: 1\ndepends_on: [{deps}]"))
+        write_task(self.root, name=f"T20260611-{n:03d}100-top.md")
+        write_task(self.root, name=f"T20260611-{n:03d}200-top.md")
+        bad, _ = lint_tasks.lint_depends_on(self.root)
+        self.assertEqual(bad, {})
+
     # --- blocked-by cross-reference (stale-blocker / cascade-unblock gate) ----
 
     def test_blocked_by_live_blocker_passes(self):

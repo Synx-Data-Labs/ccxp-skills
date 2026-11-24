@@ -20,6 +20,9 @@ REQUIRED = {"status", "estimation"}
 ALLOWED = REQUIRED | {
     # authored-optional
     "priority", "deadline", "blocks", "blocked-by", "source",
+    # dependency chain (epic E3, T20261124-320024): inverse of blocks, and
+    # human-only conditions that are NOT task dependencies
+    "depends_on", "needs",
     "target-repo", "target-path", "related", "owner", "description",
     "source-url", "support-issue", "support-report",
     # task dimensions (T20261114-352324): time / place / person / type
@@ -327,6 +330,89 @@ def check_typed_blockers(ctx):
     return out
 
 
+def id_list(value):
+    """Task ids named by a frontmatter value: a yaml list, or a string
+    (flow list text, comma or space separated). Order kept, duplicates dropped."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        text = " ".join(str(v) for v in value if v is not None)
+    else:
+        text = re.sub(r"#.*$", "", str(value), flags=re.M)  # drop yaml comments
+    return list(dict.fromkeys(TASK_ID_RE.findall(text)))
+
+
+def legacy_blocker_ids(ctx):
+    """Ids named by a legacy `status: Blocked by T<id>` (compat reader)."""
+    status = ctx.keys.get("status")
+    if status is None or status_head(status) != "blocked":
+        return []
+    return id_list(status)
+
+
+def dependency_ids(ctx):
+    """A task's dependencies: `depends_on:` plus any legacy `Blocked by` ids,
+    so mixed old and new files read the same during the rollout."""
+    return list(dict.fromkeys(id_list(ctx.keys.get("depends_on"))
+                              + legacy_blocker_ids(ctx)))
+
+
+def check_depends_on(ctx):
+    """depends_on must be a list of well-formed T<id>s, never the task itself."""
+    if "depends_on" not in ctx.keys:
+        return []
+    v = ctx.keys["depends_on"]
+    if v is None or str(v).strip() in ("", "~", "null"):
+        return []  # a bare `depends_on:` means none
+    items = v if isinstance(v, (list, tuple)) else re.split(r"[\s,\[\]]+", str(v))
+    items = [str(i).strip() for i in items if str(i).strip()]
+    out = []
+    for i in items:
+        if not re.fullmatch(r"T\d{8}-\d{6}", i):
+            out.append(f"depends_on entry '{i}' is not a task id (T<YYYYMMDD>-<NNNNNN>)")
+        elif i == ctx.file_id:
+            out.append("depends_on names the task itself")
+    return out
+
+
+def check_needs(ctx):
+    """needs: a list of short tokens (human, vpn, owner-decision, ...); the
+    typed forms person:<alias> and ext:<text> follow the Blocked by rules."""
+    if "needs" not in ctx.keys:
+        return []
+    v = ctx.keys["needs"]
+    if v is None or str(v).strip() in ("", "~", "null"):
+        return []
+    items = v if isinstance(v, (list, tuple)) else re.split(r"\s*,\s*", str(v).strip("[] "))
+    out = []
+    for raw in items:
+        i = str(raw).strip()
+        if not i:
+            continue
+        if "\n" in i:
+            out.append("needs entries must be single-line")
+        elif i.startswith("person:"):
+            alias = i[len("person:"):]
+            if not alias or "@" in alias or not SLUG_RE.match(alias):
+                out.append(f"needs '{i}': person needs a slug alias (no email)")
+        elif i.startswith("ext:"):
+            if not i[len("ext:"):].strip():
+                out.append("needs 'ext:' needs text")
+        elif not SLUG_RE.match(i):
+            out.append(f"needs '{i}' must be a slug (human, vpn, owner-decision) "
+                       f"or person:<alias> / ext:<text>")
+    return out
+
+
+def warn_blocked_by(ctx):
+    """Soft nudge: `Blocked by T<id>` is deprecated for depends_on (epic E3)."""
+    ids = legacy_blocker_ids(ctx)
+    if ids:
+        return [f"status 'Blocked by {', '.join(ids)}' is deprecated: keep the real "
+                f"status and record depends_on: [{', '.join(ids)}] (epic E3)"]
+    return []
+
+
 def warn_dimensions(ctx, today=None):
     """Soft nudges: printed, never change the exit code."""
     today = today or datetime.date.today().isoformat()
@@ -346,12 +432,13 @@ def warnings_for(path, today=None):
     ctx = Ctx(path)
     if ctx.error:
         return []
-    return warn_dimensions(ctx, today)
+    return warn_dimensions(ctx, today) + warn_blocked_by(ctx)
 
 
 CHECKS = (check_required, check_status, check_estimation,
           check_allowlist, check_tier, check_h1_id, check_scheduled_when_advanced,
-          check_not_done_in_todo, check_dimensions, check_typed_blockers)
+          check_not_done_in_todo, check_dimensions, check_typed_blockers,
+          check_depends_on, check_needs)
 
 
 def lint_file(path):
@@ -460,6 +547,72 @@ def lint_blocked_by(repo_path):
     return out
 
 
+def lint_depends_on(repo_path):
+    """Board-wide pass over `depends_on:` (legacy `Blocked by` is covered by
+    lint_blocked_by). Returns ({path: [violations]}, {path: [warnings]}).
+
+    - violation: an id that exists nowhere (dev/TODO, PARKING, JOURNAL), or a
+      cycle among live tasks (named once, on each member).
+    - warning: an id already Done (in dev/JOURNAL/): stale, sweep drops it.
+      Not a violation, so closing a dependency never fails an unrelated PR."""
+    live_ids, done_ids = build_task_index(repo_path)
+    graph, paths = {}, {}
+    bad, warn = {}, {}
+    for f in iter_task_files(repo_path):
+        ctx = Ctx(f)
+        if ctx.error or not ctx.file_id:
+            continue
+        ids = id_list(ctx.keys.get("depends_on"))
+        graph[ctx.file_id] = [i for i in ids if i != ctx.file_id]
+        paths[ctx.file_id] = f
+        for i in graph[ctx.file_id]:
+            if i in live_ids:
+                continue
+            if i in done_ids:
+                warn.setdefault(f, []).append(
+                    f"depends_on {i} is already Done (in dev/JOURNAL/): drop it")
+            else:
+                bad.setdefault(f, []).append(
+                    f"depends_on {i} not found in dev/TODO, dev/PARKING, or "
+                    f"dev/JOURNAL: stale or mistyped reference")
+    # Cycle detection: iterative DFS with colors (linear, no path explosion on
+    # DAGs). Legacy `Blocked by` edges count, so mixed boards are checked too.
+    edges = {}
+    for f in iter_task_files(repo_path):
+        ctx = Ctx(f)
+        if ctx.error or not ctx.file_id:
+            continue
+        edges[ctx.file_id] = [i for i in dependency_ids(ctx) if i != ctx.file_id]
+    color = {}  # absent = white, 1 = on the stack, 2 = done
+    cyc = set()
+    for root in edges:
+        if root in color:
+            continue
+        stack = [(root, iter(edges[root]))]
+        trail = [root]
+        color[root] = 1
+        while stack:
+            node, it = stack[-1]
+            nxt = next(it, None)
+            if nxt is None:
+                color[node] = 2
+                stack.pop()
+                trail.pop()
+            elif nxt in edges:
+                if color.get(nxt) == 1:
+                    loop = trail[trail.index(nxt):] + [nxt]
+                    for member in loop[:-1]:
+                        cyc.add((member, " -> ".join(loop)))
+                elif nxt not in color:
+                    color[nxt] = 1
+                    trail.append(nxt)
+                    stack.append((nxt, iter(edges[nxt])))
+    for member, text in sorted(cyc):
+        if member in paths:
+            bad.setdefault(paths[member], []).append("depends_on cycle: " + text)
+    return bad, warn
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Lint dev/ task-file frontmatter.")
     g = ap.add_mutually_exclusive_group()
@@ -489,8 +642,17 @@ def main(argv=None):
     for path, violations in lint_blocked_by(args.repo_path).items():
         results.setdefault(str(path), []).extend(violations)
 
+    # Board-wide depends_on pass (unknown ids and cycles fail; Done ids warn).
+    dep_bad, dep_warn = lint_depends_on(args.repo_path)
+    for path, violations in dep_bad.items():
+        results.setdefault(str(path), []).extend(violations)
+
     # Warning channel: printed, exit code unaffected.
     warned = 0
+    for path, msgs in dep_warn.items():
+        for msg in msgs:
+            warned += 1
+            print(f"⚠️  {path}: {msg}")
     for f in files:
         for msg in warnings_for(f):
             warned += 1

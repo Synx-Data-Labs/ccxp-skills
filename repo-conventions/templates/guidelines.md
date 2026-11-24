@@ -53,7 +53,7 @@ Task metadata uses **YAML frontmatter** (`---` … `---` at the top of the file)
 ```markdown
 ---
 estimation: {1|2|3|5|8}
-status: {Open|Design|In Progress|Review|Blocked by T{id}}
+status: {Open|Design|In Progress|Review}   # `Blocked by T{id}` is deprecated: use depends_on: [T{id}] (epic E3)
 source: {GitHub issue, upstream link, or process note}
 description: {One-line summary}
 ---
