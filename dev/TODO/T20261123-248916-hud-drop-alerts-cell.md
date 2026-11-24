@@ -5,6 +5,8 @@ scheduled: 2026-11-23
 source: owner message 2026-11-23 (job 1357)
 description: Remove the Slack alerts-check cell and its config, helper and docs from the HUD
 type: chore
+claimed_by: cc1-50ac6891:beaec3e8bffbdc37
+claimed_role: interactive
 ---
 
 # T20261123-248916: drop the "alerts" cell from the HUD
