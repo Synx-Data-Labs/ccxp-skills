@@ -25,6 +25,7 @@ scheduled: 2026-11-23
 
 ## Context
 
+- Doc comments to refresh in `autopilot-state.sh`: the header lines naming "all five settings" and `max_dop` "1-16, default 1".
 - Dispatch verdicts compare busy slots with `ap-max-dop`: `start` (`:255`), `resume` (`:289`), `report` slots line (`:737`), overdue hint (`:743`).
 - `/autopilot` Phase 3 (SKILL.md) and `autopilot/parallel.md` fill every free slot with routine picks; nothing keeps slots back.
 - `config-show` marks a value `override` only when the raw file value equals the effective one (`:1004`), so a clamped value reads `default`.
@@ -44,7 +45,8 @@ scheduled: 2026-11-23
 - Default 1 to 3, side effects handled:
   - default stays one routine cycle (3 minus 2), so nothing new runs by default; an existing `max_dop` 2 user drops to 1 routine slot (clamped to 3, notice shown)
   - the parallel path (clone per slot, `parallel.md`) applies when the routine limit is above 1; the merge cap can be exceeded by at most `max_dop` minus 1 merges (up to 2 at the default)
-- Urgent dispatch: deciding that work is urgent (a new or `/top`'d task, CI-failure response) stays the dispatcher's judgment per d154; the script supplies counts only. An urgent cycle takes the lowest free slot number up to `max_dop` with `busy on <id> --slot <N>`; `slots --summary` also prints `free <n>` (slots free overall) so the dispatcher can see room for it.
+- Urgent dispatch: deciding that work is urgent (a new or `/top`'d task, CI-failure response) stays the dispatcher's judgment per d154. An urgent cycle takes the lowest free slot number up to `max_dop` with `busy on <id> --slot <N> --urgent`; the flag is stored on the slot (`urgent: true`), so an urgent cycle never uses up `routine-free` (routine busy = running cycles not marked urgent). `slots --summary` also prints `free <n>` (slots free overall) so the dispatcher can see room for it. `start`/`resume` answer `dispatch` only when a routine slot and an overall slot are both free.
+- Existing parallel users (`max_dop` 3 or more today): the routine limit becomes `max_dop` minus 2 (3 gives 1, 4 gives 2): accepted, it is d154 itself; the owner can set `reserved_slots 0` to restore the old fill.
 - Alternatives rejected:
   - Default `max_dop` 2 or leaving 1-16: contradicts d157.
   - Rewrite a low value in the file on read: silent mutation of owner config.
@@ -55,6 +57,7 @@ scheduled: 2026-11-23
 
 - [ ] `tests/autopilot_state.bats`: `max_dop` 1 and 2 refused (exit 2, file untouched, message names the reserved slots); 3 and 16 accepted; 17 refused; default 3 and range `3-16` in `config-show`.
 - [ ] `reserved_slots`: default 2, 0 and 8 accepted when `max_dop` allows, 9 refused, cap at `max_dop` minus 1 refused, `max_dop` lowered under the stored reserved count refused, `config-reset` drops it.
+- [ ] `reserved_slots` 0 accepted and `config-show` marks it `override`; urgent-marked slots do not reduce `routine-free`.
 - [ ] Clamp-on-read: file with `max_dop` 1 reads 3, notice shown in `config-show` and `report`, file unchanged.
 - [ ] Routine limit: `routine-free`, `slots --summary` (with `free`) and `report` output; `start`/`resume` use the routine limit; `config-set` cross-key refusals.
 - [ ] Doc pins: SKILL.md and `autopilot/parallel.md` mention `reserved_slots`; skill-quality stays at its baseline.
