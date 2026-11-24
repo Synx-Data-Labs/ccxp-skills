@@ -22,12 +22,13 @@ Anything else (including a leftover pre-redesign wake such as `/autopilot until 
 
 ## Helper and files
 
-All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.sh` (unit-tested in `tests/autopilot_state.bats`); call it instead of editing JSON by hand. Run it with `bash`, one command per call.
+All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.sh` (unit-tested in `tests/autopilot_state.bats`); call it instead of editing JSON by hand. One command per call.
 
 - `dev/.autopilot-state.json` (gitignored, schema 2) — the loop's source of truth. Fields: `status` on|paused|off, `started_at`, `paused_at`, counters (`cycle_count`, `merged_count`, `stuck_count`, `waiting_count`, `*_today`), `last_outcome`/`last_task`/`last_stuck_reason`, `next_wake_at`, `busy_since`, `current_task` (the busy cycle's task id, informational; with parallel cycles both mirror the oldest running slot), `slots`, `dispatch_clone_paths`, `last_hold`, notify-once flags, `notices`. Also `visits` (task id to its count of no-progress visits) and `parked` (the last 50 tasks the loop parked: `{id, at, reason, visits}`); both are local to this machine and carry over `off`/`start`. There is **no skip list and nothing in any task file** that says why a task could not be finished: the queue order is the record of priority (Phase 3).
 - Holds (state `holds`, kept over `off`/`start`): `hold-add <T-id> waiting|needs-human|stalled <condition> "<reason>"`, `holds`, `release <T-id>`, `holds-check`. Condition: `until <time>`, `run:<id>`, `pr:<n>`, `file-changed <path>`, `task-left-todo <T-id>`; no hold without both (d152).
+- Tier cursors (state `cursors`): `top` picks in the highest tier (`tier:` 1-4, default 3) with a free, not-held task, the last-dispatched task of a tier last; `top --urgent`: tiers 1-2.
 - `dev/.autopilot-history.jsonl` (gitignored, append-only) — one `{ts, outcome, merged, task}` line per `record` call (`task` is a task id or `""`; no free text, no secrets). Written by `record` itself (so nothing else logs a merge), plus one `{ts, outcome: visit|advance|park, merged: 0, task, visits}` line per visit, reset and park (`stats` ignores those); a write failure is swallowed and never breaks `record`. It survives `off`/`start`. The state file also keeps `lifetime_started_at`, `lifetime_cycles` and `lifetime_merged`, which `start` carries over (a state from before they existed is seeded from its run counters), so `off` then `start` never resets the lifetime baseline.
-- `autopilot-state.sh stats [--json]` — progress over the rolling last 24 h (merged, cycles, stuck, waiting, idle; `capped` ticks are not cycles) and the lifetime average per 24 h (`lifetime_merged / max(1, days since lifetime_started_at)`), with a trend (`up`/`down`/`flat`). The 24 h figures are exact when the log reaches back over the whole window, or when no cycle ran inside it; otherwise (`approx: true`) they are the larger of the log and the state's calendar-day counters, an estimate that can be off either way (the HUD marks it `~` and draws no arrow). The HUD's AP band shows it (`hud/README.md`).
+- `autopilot-state.sh stats [--json]` — progress over the rolling last 24 h (merged, cycles, stuck, waiting, idle; `capped` ticks are not cycles) and the lifetime average per 24 h (`lifetime_merged / max(1, days since lifetime_started_at)`), with a trend (`up`/`down`/`flat`). The 24 h figures are exact when the log reaches back over the whole window, or when no cycle ran inside it; otherwise (`approx: true`) an estimate: the larger of the log and the state's calendar-day counters (HUD: `~`). The HUD's AP band shows it (`hud/README.md`).
 - `dev/.autopilot-config.json` (gitignored, optional) — `{"daily_cycle_cap": 64, "daily_merge_cap": 64, "idle_retry_minutes": 32, "max_visits": 4, "max_dop": 3, "reserved_slots": 2}`. Missing keys use these defaults. `max_visits` is how many no-progress visits park a task. `max_dop` (3-16, default **3**): `/drive` cycles at once, `reserved_slots` (0-8, default 2) kept for urgent work.
 - This skill must run in the main session: only it can `ScheduleWakeup` and receive `pause`/`off`.
 
@@ -97,7 +98,7 @@ A dirty or mid-rebase leftover: remove the directory and re-run the block. Full 
 
 **Priority is the queue; task files stay clean.**
 
-- Nothing is written to a task file to say why a cycle could not finish it.
+- Nothing is written to a task file to say why a cycle stalled.
 - A cycle that ends `NEEDS-ATTENTION` or `STUCK` without advancing the task is a **no-progress visit**: Phase 4 has the task `/bottom`ed (the next cycle takes the next task) and bumps its counter.
 - After `max_visits` (default 4) such visits the task is **parked** (`dev/PARKING/`, a `## Parked` section with the last reason); the owner revives it by hand. An advancing visit (merged, split, design PR merged, a claim that led to work) resets the counter.
 - `Blocked by T<id>`, `SUPERVISED`, `BLOCKED`, `needs manual` and `sign-off` statuses are still skipped by auto-pick. Task size is never a reason to stall (see **Big tasks**).
@@ -132,7 +133,7 @@ Write the sub-agent's final message to a temp file and run `autopilot-state.sh c
 - **waiting**: nothing merged, `WAITING:` reported. Back-off ladder 5, 10, 20, 30 min (capped), using `waiting_count`.
 - **stuck**: `/drive` errored, merged and advanced nothing, hit its own Escalation Rules, or its `/address-pr` stopped without merging. Same ladder, using `stuck_count`.
 - **bottomed**: the only lines are `NEEDS-ATTENTION`. The stalled task is about to leave the top of the queue, so wake in 60 s; it touches neither `stuck_count`, `waiting_count` nor a notice flag.
-- **idle**: no eligible task (Phase 3 `pickable` found none, or `/drive` reported none). Retry every `idle_retry_minutes` (default 32, valid range 30-60).
+- **idle**: no eligible task (Phase 3 `pickable` found none, or `/drive` reported none). Retry every `idle_retry_minutes` (30-60).
 
 **Visits (before `record`).** Run these from the owner's repo, not `$CLONE_PATH` (the state file is found from the working directory).
 
@@ -184,11 +185,10 @@ Every `T<id>`/`PR #<n>` carries a short slug (bare id if it cannot be recovered)
 - **Never loop inside one turn.** One cycle (per slot) is exactly one `ScheduleWakeup` boundary.
 - **One run per repo, best-effort.** No lock beyond the state file's write lock, the busy marks and `next_wake_at`.
 - **Idle is not a stop.** Going idle notifies once; retries are silent; new work (`/stage`, `/todo sweep`) is picked up on the next retry.
-- **Not `/ccxp`.** This is a plain on/off `/drive` loop.
 
 ## Cross-references
 
 - `/drive` — does the selection/implementation/merge work, one cycle per dispatch (`/drive --auto-selected`)
-- `/slack` — `notify` posts to `--channel dev` when configured
+- `/slack` — `notify` posts to `--channel dev`
 - `/todo` — `next --skip-gated` and `sweep` plan feed `pickable`; `todo-sweep.sh park` is the park; `/bottom` moves a stalled task to the back of the queue; `/address-pr` — drains and merges PRs
 - `hud/` — `AP on/off` band reads `dev/.autopilot-state.json` (`hud/scripts/hud-lib.sh`)

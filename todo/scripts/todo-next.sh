@@ -9,6 +9,7 @@
 # call this token-free script can't make.
 #
 #   todo-next.sh [--skip-gated] [--check] [--exclude T<id>[,T<id>...]] [--nth N] [--here] [--when W]
+#                [--tier N[,N...]] [--ids]
 #     --skip-gated  also skip gated tasks (the SUPERVISED/BLOCKED/needs manual/sign-off
 #                   words, or a `Blocked by` status; see todo-gated in _lib.sh). Used by
 #                   /drive's auto-pick; the default listing still shows them.
@@ -18,6 +19,9 @@
 #                   status is `Blocked by` one of them
 #     --nth N       list only the Nth survivor (1-based) instead of the first 3; with --check,
 #                   exit 0 only when at least N survive
+#     --tier        only tasks whose effective tier (todo-tier: frontmatter `tier:`, default 3) is listed
+#     --ids         print only the id of every survivor, one per line, in queue order (no limit; for the
+#                   autopilot's tier cursor); wins over --nth and --check
 #     --here        only tasks with no `place:` or a place in the profile file's `here:` list
 #     --when W      only tasks whose `when` matches W (today|tomorrow|week|overdue|<date>)
 #                   Both are filters only (T20261114-380745): the pick is still the first
@@ -33,16 +37,18 @@ TODO_QUEUE_DIR="${TODO_QUEUE_DIR:-.}"
 QUEUE_FILE="$TODO_QUEUE_DIR/dev/TODO/queue.md"
 
 function todo-next-main() {
-  local skip_gated=0 check=0 exclude="" nth=0 here=0 when=""
+  local skip_gated=0 check=0 exclude="" nth=0 here=0 when="" tiers="" ids=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --skip-gated) skip_gated=1 ;;
       --check) check=1 ;;
       --exclude) [ $# -ge 2 ] || { printf 'usage: --exclude needs a comma list of task ids\n' >&2; return 2; }; exclude=",$2,"; shift ;;
       --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { printf 'usage: --nth needs a positive integer\n' >&2; return 2; }; nth="$2"; shift ;;
+      --tier) [[ "${2:-}" =~ ^[1-4](,[1-4])*$ ]] || { printf 'usage: --tier needs tiers 1-4, comma separated\n' >&2; return 2; }; tiers="$2"; shift ;;
+      --ids) ids=1 ;;
       --here) here=1 ;;
       --when) [ -n "${2:-}" ] || { printf 'usage: --when needs a value\n' >&2; return 2; }; when="$2"; shift ;;
-      *) printf 'usage: todo-next.sh [--skip-gated] [--check] [--exclude T<id>,...] [--nth N] [--here] [--when W]\n' >&2; return 2 ;;
+      *) printf 'usage: todo-next.sh [--skip-gated] [--check] [--exclude T<id>,...] [--nth N] [--here] [--when W] [--tier N,...] [--ids]\n' >&2; return 2 ;;
     esac
     shift
   done
@@ -60,7 +66,7 @@ function todo-next-main() {
     [ -n "$when" ] && qargs+=(--when "$when")
     dim_ids="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" "${qargs[@]}")" || return 2
     dim_ids="$(grep -oE '^T[0-9]+-[0-9]+' <<<"$dim_ids" || true)"
-  elif [ "$check" = 0 ] && [ "$nth" -eq 0 ]; then
+  elif [ "$check" = 0 ] && [ "$nth" -eq 0 ] && [ "$ids" = 0 ]; then
     local due
     due="$(TODO_QUEUE_DIR="$TODO_QUEUE_DIR" bash "$query" --when today 2>/dev/null | grep -E '^T[0-9]+-[0-9]+' || true)"
     if [ -n "$due" ]; then
@@ -107,10 +113,16 @@ function todo-next-main() {
       fi
     fi
 
+    if [ -n "$tiers" ]; then
+      case ",$tiers," in *",$(todo-tier "$task_file"),"*) : ;; *) continue ;; esac
+    fi
+
     claim="$(todo-claim-state "$id" "$TODO_LIB_REPO_ROOT")"
     case "$claim" in
       peer:*) continue ;;
     esac
+
+    if [ "$ids" = 1 ]; then picked=$((picked+1)); printf '%s\n' "$id"; continue; fi
 
     picked=$((picked+1))
     if [ "$nth" -gt 0 ]; then
@@ -149,6 +161,7 @@ function todo-next-main() {
     [ "$picked" -ge 3 ] && break
   done
 
+  if [ "$ids" = 1 ]; then return 0; fi
   if [ "$picked" -eq 0 ] || { [ "$nth" -gt 0 ] && [ "$picked" -lt "$nth" ]; }; then
     [ "$check" = 1 ] && return 1
     printf 'No actionable tasks in the queue (all skipped: Done/Revisit/Parked/peer-claimed).\n'
