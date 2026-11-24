@@ -1349,6 +1349,15 @@ _ap_on() { _ap start >/dev/null; }
   [ "$(_j '.slots["3"].task')" = T20261106-000003 ]
 }
 
+@test "routine-free is capped by the slots physically free (all slots urgent)" {
+  _ap_on
+  _ap busy on T20261106-000001 --urgent --slot 1
+  _ap busy on T20261106-000002 --urgent --slot 2
+  _ap busy on T20261106-000003 --urgent --slot 3
+  run _ap routine-free; [ "$output" = 0 ]
+  run _ap slots --summary; [ "$output" = "routine 1 of 3, reserved 2, busy 3, routine-free 0, free 0" ]
+}
+
 @test "slots: busy on/off per slot; bare off clears all; the legacy mirror follows the oldest slot" {
   _ap_on
   _ap busy on T20261106-000001 --slot 1

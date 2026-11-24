@@ -147,7 +147,8 @@ ap-reserved-slots() {
 ap-routine-limit() { printf '%s' $(( $(ap-max-dop) - $(ap-reserved-slots) )); }
 
 ap-routine-free() {
-  local n; n=$(( $(ap-routine-limit) - $(_ap_routine_busy) ))
+  local n room; n=$(( $(ap-routine-limit) - $(_ap_routine_busy) )); room=$(( $(ap-max-dop) - $(_ap_busy_count) ))
+  if [ "$room" -lt "$n" ]; then n=$room; fi   # never more than the slots physically free
   if [ "$n" -lt 0 ]; then n=0; fi
   printf '%s\n' "$n"
 }
