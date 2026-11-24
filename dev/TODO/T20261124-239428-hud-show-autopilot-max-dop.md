@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Owner request in session, 2026-11-24 (job 1500)
 related: T20261124-182499
 description: HUD AP band shows the autopilot's effective max_dop and how it is used
+claimed_by: cc1-50ac6891:3d2eab04334e1034
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-239428: HUD shows the autopilot's effective max_dop
