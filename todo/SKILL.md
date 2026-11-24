@@ -63,7 +63,7 @@ source: Retro 2026-04-25
 - `when` / `when-end` / `place` / `person`: optional time (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), window end, context slugs, and involved-person aliases (never emails). Time fields never reorder the queue; position in `queue.md` stays the priority. Lint warns on a past `when`. Waiting on someone is `status: Blocked by person:<alias>` (or `ext:<text>`); the sweep ignores typed tokens.
 - `type`: `chore|feature|bug|event|research|spike|rca|support|other`. `event` needs `when`, is never auto-picked, and closes once its date passes. `todo-list.sh --type event` lists events.
 - `source-url` / `support-issue` / `support-report`: `source-url` is set by `/to-task` for any tracked URL (dedup key); `support-issue` is a recognized legacy alias (pre-dates the `/support` -> `/to-task` rename). `support-report: on|off` opts in to outward status reports (absent = off). See `_support/README.md` and `/customer-support`.
-- `tier`: optional integer `1`-`4` (default `3` when absent): the autopilot works the lowest-numbered tier that has an eligible task and keeps `queue.md` order inside a tier. `1` urgent (red-nightly related work), `2` new support issues, `3` default, `4` low. Validated by `lint_tasks.py`; `todo-tier <file>` in `todo/scripts/_lib.sh` prints the effective tier. The tier is a frontmatter field, never a `queue.md` header.
+- `tier`: `1`-`4` (default `3`); autopilot takes the lowest eligible tier, then `queue.md` order. Reader: `todo-tier`.
 - `blocks`: YAML list of `T{id}`s that depend on this task. Drives the `Unblocks:` annotation in `next`'s output.
 - `source`: one-line origin (e.g. `Retro 2026-04-25`, `RCA run 12345`, `Customer ticket SUPPORT-123`).
 
