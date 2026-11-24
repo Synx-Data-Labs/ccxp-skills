@@ -13,6 +13,14 @@
 # `latest` is the highest known release whatever its relation to installed (the HUD decides between
 #             "(latest)", "(X available)" and plain); null while unknown (no lookup yet, offline, no tag).
 #
+# unreleased = the commits on the default branch (main) after the installed version's release tag
+#             `ccxp-skills--v<installed>`: {"count":N,"subjects":[newest first, at most 3, one line each]}; the key is
+#             absent when there are none, the tag is unknown, or the lookup never succeeded (offline). Source: the
+#             public GitHub compare API via `curl` (no credentials, no gh, no git checkout, so it works from the
+#             installed plugin cache), cached in <state>/unreleased.json for 1 h (HVU_TTL), one detached refresh at a
+#             time (8 s timeout, lock dir); a change of installed version or repo drops the old answer. Subjects are
+#             untrusted: control characters stripped, 72 chars at most. Override the request URL with HUD_UNRELEASED_URL (tests).
+#
 # Never blocks the caller: it answers from an on-disk cache and, when the cache is older than
 # 6 h OR the running plugin.json changed since the cache was written (its mtime is stored in the
 # cache as "pm"; an update or reinstall of the plugin re-checks once, not after the TTL), starts ONE detached refresh (8 s timeout, lock dir, no credential prompt). Offline or
@@ -21,7 +29,8 @@
 #
 # Test hooks: CCXP_HUD_VERSION_SYNC=1 refreshes in the foreground; HUD_VERSION_STATE_DIR
 # relocates the cache (default <profile>/state/hud-version);
-# HUD_VERSION_REMOTE overrides the remote (a local path works).
+# HUD_VERSION_REMOTE overrides the remote (a local path works); with it set, the unreleased lookup runs only when
+# HUD_UNRELEASED_URL is set too.
 
 
 # Active profile dir (CCXP_PROFILE_DIR), see _session/profile-dir.sh.
@@ -36,6 +45,8 @@ HVR_RETRY=900
 HVR_MIN_RECHECK=60 # a plugin.json change re-checks at most once a minute (two live plugin roots must not ping-pong the shared cache)
 HVR_TIMEOUT=8
 HVR_REMOTE_DEFAULT="https://github.com/Synx-Data-Labs/ccxp-skills.git"
+HVU_TTL=3600
+HVU_API_DEFAULT="https://api.github.com"
 HVR_SEMVER_RE='^([0-9]{1,9})\.([0-9]{1,9})\.([0-9]{1,9})(-[0-9A-Za-z.-]{1,40})?$'
 
 hvr-state-dir() { printf '%s' "${HUD_VERSION_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-version}"; }
@@ -122,6 +133,70 @@ hvr-refresh() {
   return 0
 }
 
+# $1 repo URL (https://github.com/<owner>/<repo>) $2 installed version -> the compare API URL for tag...main.
+hvu-api-url() {
+  local slug="${1#https://github.com/}"
+  printf '%s/repos/%s/compare/ccxp-skills--v%s...main' "${HVU_API:-$HVU_API_DEFAULT}" "$slug" "$2"
+}
+
+# stdin: compare API JSON -> {"count":N,"subjects":[...]} (newest first, 3 at most), exit 1 when it is not a compare answer.
+hvu-parse() {
+  jq -c -e 'if (.ahead_by | type) == "number" then {count: (.ahead_by | floor), subjects: ([.commits[]? | .commit.message | tostring | split("\n")[0] | explode | map(select(. >= 32 and . != 127 and (. < 128 or . > 159))) | implode | .[0:72]] | reverse | .[0:3])} else empty end' 2>/dev/null
+}
+
+# $1 cache file $2 key ("<installed> <repo>") $3 api url
+hvu-refresh() {
+  local file="$1" key="$2" api="$3" tmp now body="" prev="" empty='{"count":0,"subjects":[]}'
+  now=$(date +%s)
+  tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
+  if command -v curl >/dev/null 2>&1; then
+    body=$(curl -fsS --max-time "$HVR_TIMEOUT" -H 'Accept: application/vnd.github+json' "$api" 2>/dev/null | hvu-parse) || body=""
+  fi
+  if [ -n "$body" ]; then
+    jq -n -c --arg k "$key" --argjson f "$now" --argjson d "$body" '{key: $k, fetched: $f} + $d' >"$tmp"
+  else
+    # Failed: keep the old answer for the same key and retry in ~15 min.
+    prev=$(jq -c --arg k "$key" 'select(.key == $k) | {count, subjects}' "$file" 2>/dev/null) || prev=""
+    jq -n -c --arg k "$key" --argjson f "$((now - HVU_TTL + HVR_RETRY))" --argjson d "${prev:-$empty}" '{key: $k, fetched: $f} + $d' >"$tmp"
+  fi
+  mv -f "$tmp" "$file"
+  rm -f "$tmp" 2>/dev/null
+  return 0
+}
+
+# $1 installed $2 repo url ("" = the public default) -> {"count":N,"subjects":[...]} on stdout, nothing when unknown or zero.
+# Answers from the cache; starts ONE detached refresh when it is older than HVU_TTL or was written for another version/repo.
+hvu-json() {
+  # A relocated tag remote (HUD_VERSION_REMOTE, a test hook) without its own HUD_UNRELEASED_URL: no lookup, never a stray request.
+  [ -z "${HUD_VERSION_REMOTE:-}" ] || [ -n "${HUD_UNRELEASED_URL:-}" ] || return 0
+  local installed="$1" url="${2:-${HVR_REMOTE_DEFAULT%.git}}" dir file key now fetched=0 cached="" ckey=""
+  dir=$(hvr-state-dir); file="$dir/unreleased.json"; key="$installed $url"; now=$(date +%s)
+  if [ -r "$file" ]; then
+    cached=$(jq -c '.' "$file" 2>/dev/null) || cached=""
+    ckey=$(jq -r '.key // ""' <<<"${cached:-null}" 2>/dev/null) || ckey=""
+    fetched=$(jq -r '(.fetched // 0) | floor' <<<"${cached:-null}" 2>/dev/null) || fetched=0
+    [[ "$fetched" =~ ^[0-9]+$ ]] || fetched=0
+    [ "$fetched" -le "$now" ] || fetched=0
+  fi
+  local age=$((now - fetched))
+  if { [ "$age" -ge "$HVU_TTL" ] || { [ "$ckey" != "$key" ] && [ "$age" -ge "$HVR_MIN_RECHECK" ]; }; } && mkdir -p "$dir" 2>/dev/null; then
+    local lock="$dir/unreleased.lock" api="${HUD_UNRELEASED_URL:-$(hvu-api-url "$url" "$installed")}"
+    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then rmdir "$lock" 2>/dev/null || true; fi
+    if mkdir "$lock" 2>/dev/null; then
+      if [ "${CCXP_HUD_VERSION_SYNC:-}" = 1 ]; then
+        hvu-refresh "$file" "$key" "$api"
+        rmdir "$lock" 2>/dev/null || true
+        cached=$(jq -c '.' "$file" 2>/dev/null) || cached=""; ckey="$key"
+      else
+        ( hvu-refresh "$file" "$key" "$api"; rmdir "$lock" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+        disown 2>/dev/null || true
+      fi
+    fi
+  fi
+  [ "$ckey" = "$key" ] || return 0
+  jq -c 'select((.count | type) == "number" and .count > 0) | {count: (.count | floor), subjects: ((.subjects // []) | map(select(type == "string")) | .[0:3])}' <<<"${cached:-null}" 2>/dev/null || true
+}
+
 hud-version-json() {
   local root="$1" enabled="$2" remote="${3:-${HUD_VERSION_REMOTE:-$HVR_REMOTE_DEFAULT}}"
   [ "$enabled" = 1 ] || { printf 'null'; return 0; }
@@ -161,6 +236,7 @@ hud-version-json() {
 
   [ -z "$cached" ] || latest=$(jq -r '.latest // ""' <<<"$cached" 2>/dev/null | head -n1) || latest=""
   hvr-valid "$latest" || latest=""
-  local url; url=$(hvr-url "$root")
-  jq -n -c --arg i "$installed" --arg l "$latest" --arg u "$url" '{installed: $i, latest: (if $l == "" then null else $l end)} + (if $u == "" then {} else {url: $u} end)'
+  local url unrel; url=$(hvr-url "$root")
+  unrel=$(hvu-json "$installed" "$url") || unrel=""
+  jq -n -c --arg i "$installed" --arg l "$latest" --arg u "$url" --argjson n "${unrel:-null}" '{installed: $i, latest: (if $l == "" then null else $l end)} + (if $u == "" then {} else {url: $u} end) + (if $n == null then {} else {unreleased: $n} end)'
 }
