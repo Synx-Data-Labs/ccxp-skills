@@ -68,7 +68,6 @@ reprioritize.
 - [T20261124-870400](T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md): autopilot Phase 3/4 classification and housekeeping dispatch into scripts
 - [T20261124-444596](T20261124-444596-address-pr-gates-and-drive-phases-prose-to-scripts-survey.md): address-pr gates and drive phases: survey, then first script
 - [T20261124-140678](T20261124-140678-autopilot-effective-max-dop-from-subscription-quota.md): Autopilot steers max_dop from subscription quota headroom
-- [T20261124-776095](T20261124-776095-hud-queue-max-rolling-windows.md): HUD queue max: non-overlapping rolling windows
 - [T20261124-419462](T20261124-419462-todo-deps-chain-and-tree.md): todo-deps.sh chain and tree
 - [T20261124-177980](T20261124-177980-blocked-by-migration-script-and-dry-run-report.md): Blocked by migration script and dry-run report
 - [T20261124-112157](T20261124-112157-drive-and-autopilot-work-first-open-leaf.md): Drive and autopilot work the first open leaf
