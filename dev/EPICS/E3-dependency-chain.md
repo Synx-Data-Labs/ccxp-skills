@@ -14,7 +14,7 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 - Typed non-task waits: `status: Blocked by person:<alias>` and `Blocked by ext:<text>` (lint checks the alias; `task-query.sh --waiting-on` reads them; sweep ignores them).
 - `queue.md` holds order only. `claimed_by:` (runtime, `/drive` via `_session/task_claim.sh`) records the driver. `blocks:` lists dependants; a legacy free-text `blocked-by:` key is still in the lint allowlist.
 - Per-machine autopilot visit counters live in `dev/.autopilot-state.json`; the HUD derives claimed, revisited and auto-parked counts from them and from the task files.
-- Behaviours keyed on `Blocked by T{id}` today: auto-pick skip; `/todo sweep` Phase 2 (clears a stale blocker to `Design` or `Open`, orders blockers before dependants); `/top` blocker-chain expansion (`lifecycle.md`); `/drive` Phase 6 (parks the goal as `Blocked by T{B}`, recurses into the blocker, mirrors `status.sh <id> Blocked`); autopilot `bottom` and `park` guards; lint (`Blocked by` must point at an open task); HUD held count; `migrate-task`, `cleanup-branch`, `epic.sh`, `task_claim.sh`, `task-state.sh` and the persona asset mention or read it.
+- Behaviours keyed on `Blocked by T{id}` today: auto-pick skip; `/todo sweep` Phase 2 (clears a stale blocker to `Design` or `Open`, orders blockers before dependants); `/top` blocker-chain expansion (`lifecycle.md`); `/drive` Phase 6 (parks the goal as `Blocked by T{B}`, recurses into the blocker, mirrors `status.sh <id> Blocked`); autopilot `bottom` and `park` guards; lint (`Blocked by` must point at an open task); HUD held count; `migrate-task`, `cleanup-branch`, `epic.sh`, `task_claim.sh` and `task-state.sh` mention or read it. The persona asset does not name `Blocked by` (checked), so it needs no change.
 
 ## Spec (to review)
 
@@ -32,21 +32,20 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 - (a) schema, lint, compat reader: nothing changes for users; old files keep working.
 - (b) `todo-deps.sh chain/tree`: read-only view.
 - (c) migration script and a read-only dry-run report on the real synxdb-build-pipeline queue; no consumer file is changed by this epic.
-- (d) `/drive` Phase 6 and autopilot pick behavior; removes `Blocked by` from the auto-pick gate once the compat reader is in.
+- (d) `/drive` Phase 6 and autopilot pick behavior (also makes auto-pick and the ccxp pre-flight gate read `needs:`); runs after (c) so the migrated repos are not left on a gate that ignores `Blocked by`; removes `Blocked by` from the auto-pick gate once the compat reader is in.
 - (e) HUD chain display and sweep Phase 2; then a deprecation window of one minor release, then drop the compat reader and the `Blocked by` status.
 
 ## Open questions
 
 - Q1: field name `depends_on` vs reusing `blocked-by:` (already in the allowlist, free text). Proposed `depends_on` (clear inverse of `blocks:`, and the old key stays a legacy alias read by the compat reader).
 - Q2: `needs:` value vocabulary and whether it replaces the `SUPERVISED` / `needs manual` / `sign-off` substrings outright or only alongside them (the ccxp pre-flight gate in consumer repos greps them).
-- Q3: cross-repo dependencies (a task in another repo): `depends_on: [owner/repo#T..]`, or typed `ext:` only? Proposed `needs: ext:<text>` until the multi-repo cursor work lands.
+- Q3: cross-repo dependencies (a task in another repo): `depends_on: [owner/repo#T..]`, or typed `ext:` only? Proposed `needs: ext:<text>` until the multi-repo cursor work lands. Answered in (a)'s Closed section.
 - Q4: when every open leaf of a chain is held by live peers, does the cycle take the next queue task (lateral) or wait? Proposed: take the next queue task; the goal is not stalled because it is still `In Progress` and its leaf is being worked.
-- Q5: deprecation window length for `Blocked by` (proposed one minor release after (e)).
+- Q5: deprecation window length for `Blocked by` (proposed one minor release after (e)); answered in (e)'s Closed section.
 - Q6: the `/drive` Phase 6 Project-board mirror (`_session/status.sh <id> Blocked`) is vestigial since the board was retired; drop it in (d).
 
 ## Follow-ups outside this epic
 
-- Persona `agent-pairing/assets/ccxp-agent.md` mentions `Blocked by`; it is at its size cap and is not edited here. After (d), file a note for the owner: a wording change is net-negative in size and rides with a persona move task of epic E2.
 - Consumer repo task files (for example synxdb-build-pipeline) are migrated by their owners with the (c) script after the release; this epic never edits them.
 
 - [T20261124-320024](../TODO/T20261124-320024-depends-on-schema-lint-and-compat-reader.md) — (a) spec, `depends_on` schema, lint, compat reader
