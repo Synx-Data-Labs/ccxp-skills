@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 blocks: [T20261124-420719]
 source: owner request 2026-11-24 (decision d155), epic E2
 related: [T20261124-420719, T20261124-315192]
 description: /retro reviews the decisions log against the persona and proposes persona and skill edits through a tested script
+claimed_by: cc1-50ac6891:7e1d72cc6f5f5d2f
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-147908: /retro persona-review step and `persona-review.sh`
