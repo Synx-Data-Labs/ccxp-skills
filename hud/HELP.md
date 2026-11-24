@@ -88,7 +88,7 @@ In `/hud details` the RELEASE row shows the plugin's GitHub address first (click
 
 ## rate
 
-Opt-in: how much of your Claude subscription's usage window is left and when it resets, e.g. `20% left · resets 1h12m`. It shows the window with less left (the 5 hour or the 7 day one), without saying which. Green from 50% left, yellow under 50%, red under 25%. A limit Claude does not report (API-key use, older versions) is left out. When the band is tight it shrinks to `20% left · 1h12m`, then `20% left`, then goes, before any other cell. `/hud details` shows it on the SESSION row (`resets in 1h12m`). The HUD also saves the latest numbers, both windows, to a small file for the autopilot (`rate-limits.json` in the HUD cache folder). Switch: `rate` in `fields` (not on by default).
+Opt-in: how much of your Claude subscription's usage window is left and when it resets, e.g. `20% left · resets 1h12m`. It shows the window with less left (the 5 hour or the 7 day one), without saying which. Green from 25% left, orange under 25%, red under 10%. A limit Claude does not report (API-key use, older versions) is left out. When the band is tight it shrinks to `20% left · 1h12m`, then `20% left`, then goes, before any other cell. `/hud details` shows it on the SESSION row (`resets in 1h12m`). The HUD also saves the latest numbers, both windows, to a small file for the autopilot (`rate-limits.json` in the HUD cache folder). Switch: `rate` in `fields` (not on by default).
 
 ## colors | colours, markers
 

@@ -268,16 +268,37 @@ export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'
   return 'error'
 }
 
-/** Subscription limit LEFT, in percent: below this the cell is yellow (the warning tone). Owner decision 2026-11-24. */
-export const RATE_WARN_LEFT = 50
-/** Subscription limit LEFT, in percent: below this the cell is red (the error tone). Owner decision 2026-11-24. */
-export const RATE_CRIT_LEFT = 25
-
-/** Colour of the subscription limit LEFT percentage: red under 25, yellow under 50, the success colour from 50 up (strict, on the rounded number). */
+/** Colour of the subscription limit LEFT percentage: red under 10, orange (the warning tone) under 25, green otherwise. */
 export function rateTone(left: number): Tone {
-  if (left < RATE_CRIT_LEFT) return 'error'
-  if (left < RATE_WARN_LEFT) return 'warning'
+  if (left < 10) return 'error'
+  if (left < 25) return 'warning'
   return 'success'
+}
+
+/** Rate-limit window length the engine reports for `five_hour`. */
+export const RATE_WINDOW_SEC = 5 * 3600
+
+/**
+ * Hours until the 5-hour limit hits 100% at the burn rate so far (used% / elapsed time in the window), or
+ * null when it would not run out before the window resets, or when there is too little to go on (no reset
+ * time, under 1% used, or under 2 minutes elapsed). `resetsAt` is epoch seconds. The cell does not show it for
+ * now (owner decision: percent and reset time only); the data stays for the HUD limit-cell revision.
+ */
+export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number): number | null {
+  if (resetsAt === null) return null
+  if (used >= 100 || !(used >= 1)) return null // already at the limit, or too little used to project
+  const remaining = resetsAt - nowMs / 1000
+  const elapsed = RATE_WINDOW_SEC - remaining
+  if (remaining <= 0 || elapsed < 120) return null
+  const secToFull = (100 - used) / (used / elapsed)
+  return secToFull < remaining ? secToFull / 3600 : null
+}
+
+/** `1.5h` from an hour or more, `40m` below (never `0m`). */
+export function formatRunout(hours: number): string {
+  const min = Math.max(1, Math.round(hours * 60))
+  if (min >= 60) return `${Math.round(hours * 10) / 10}h`
+  return `${min}m`
 }
 
 /** Reset time as epoch seconds: accepts seconds, milliseconds or an ISO string; null when absent or unparseable. */

@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatLeft, rateWindows, resetEpochSec, rateTone, RATE_WARN_LEFT, RATE_CRIT_LEFT, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatLeft, formatRunout, rateRunoutHours, rateWindows, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -770,10 +770,26 @@ test('details: a narrow terminal wraps a section onto an indented line, never cu
 const RATE_NOW = 1_800_000_000_000
 const rateReset = (elapsedSec: number) => RATE_NOW / 1000 + 5 * 3600 - elapsedSec
 
-test('rateTone: red under 25 left, yellow under 50, otherwise green (owner decision 2026-11-24)', () => {
-  expect([RATE_WARN_LEFT, RATE_CRIT_LEFT]).toEqual([50, 25])
-  // the boundaries 50, 49, 25, 24, plus the ends
-  expect([100, 50, 49, 25, 24, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+test('rateTone: red under 10 left, orange under 25, otherwise green', () => {
+  expect([100, 25, 24, 10, 9, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+})
+
+test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it outlasts the window or data is thin (kept for the limit-cell revision, not shown)', () => {
+  // 50% in 1h: 1h more to full, 4h still in the window
+  expect(Math.round(rateRunoutHours(50, rateReset(3600), RATE_NOW)! * 1000)).toBe(1000)
+  // 80% in 2h: 0.5h to full
+  expect(Math.round(rateRunoutHours(80, rateReset(7200), RATE_NOW)! * 1000)).toBe(500)
+  // 10% in 2h: 18h to full, past the reset
+  expect(rateRunoutHours(10, rateReset(7200), RATE_NOW)).toBeNull()
+  expect(rateRunoutHours(50, null, RATE_NOW)).toBeNull() // no reset time
+  expect(rateRunoutHours(0, rateReset(3600), RATE_NOW)).toBeNull() // nothing used
+  expect(rateRunoutHours(50, rateReset(60), RATE_NOW)).toBeNull() // under 2 minutes elapsed: no projection
+  expect(rateRunoutHours(50, RATE_NOW / 1000 - 5, RATE_NOW)).toBeNull() // window already reset
+  expect(rateRunoutHours(100, rateReset(3600), RATE_NOW)).toBeNull() // already at the limit: no estimate
+})
+
+test('formatRunout: 1.5h from an hour, 40m below, never 0m', () => {
+  expect([formatRunout(1.5), formatRunout(1), formatRunout(2.04), formatRunout(2 / 3), formatRunout(0.001), formatRunout(0.995)]).toEqual(['1.5h', '1h', '2h', '40m', '1m', '1h'])
 })
 
 
@@ -781,18 +797,18 @@ test('resetEpochSec: epoch seconds, milliseconds, a numeric string or an ISO str
   expect([resetEpochSec(1_800_000_000), resetEpochSec(1_800_000_000_000), resetEpochSec('1800000000'), resetEpochSec('2027-01-15T08:00:00Z'), resetEpochSec('x'), resetEpochSec(null), resetEpochSec(0)]).toEqual([1_800_000_000, 1_800_000_000, 1_800_000_000, 1_800_000_000, null, null, null])
 })
 
-test('rate cell: just the percent left and the reset time, no window label, no runout; coloured at 50 and 25', () => {
+test('rate cell: just the percent left and the reset time, no window label, no runout; coloured by the percent left', () => {
   const rate = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
   const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
   expect(find(rate({ rateUsed: 35 }), /65% left/)?.color).toBe('success')
-  expect(find(rate({ rateUsed: 50 }), /50% left/)?.color).toBe('success') // 50 left: not yet yellow
-  expect(find(rate({ rateUsed: 51 }), /49% left/)?.color).toBe('warning')
-  expect(find(rate({ rateUsed: 75 }), /25% left/)?.color).toBe('warning') // 25 left: not yet red
-  expect(find(rate({ rateUsed: 76 }), /24% left/)?.color).toBe('error')
+  expect(find(rate({ rateUsed: 75 }), /25% left/)?.color).toBe('success') // 25 left: still green
+  expect(find(rate({ rateUsed: 76 }), /24% left/)?.color).toBe('warning')
+  expect(find(rate({ rateUsed: 90 }), /10% left/)?.color).toBe('warning') // 10 left: still orange
+  expect(find(rate({ rateUsed: 91 }), /9% left/)?.color).toBe('error')
   expect(find(rate({ rateUsed: 95, rateResetsAt: rateReset(3600) }), /resets/)?.color).toBe('error') // the time carries the tone
   const row = text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))
   expect(row).toContain('50% left · resets 4h')
-  expect(row).not.toMatch(/5h|5-hour|7d|out \d/)
+  expect(row).not.toMatch(/5h|5-hour|7d|out \d|runs out/)
 })
 
 const inSec = (sec: number) => RATE_NOW / 1000 + sec
