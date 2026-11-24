@@ -189,12 +189,12 @@ export function cleanAnswer(answer: unknown): string {
   } else t = String(answer)
   for (let i = 0; i < 4; i++) {
     t = t.trim()
-    const close = WRAPPERS[t[0]]
+    const close = WRAPPERS[t[0]!]
     if (close && t.length >= 2 && t.endsWith(close)) t = t.slice(1, -1)
     else break
   }
   t = t.trim()
-  if (/^(https?:\/\/|(www\.)?github\.com\/)/i.test(t)) t = t.split(/\s+/)[0].replace(/[)>"'`.,;]+$/, '')
+  if (/^(https?:\/\/|(www\.)?github\.com\/)/i.test(t)) t = t.split(/\s+/)[0]!.replace(/[)>"'`.,;]+$/, '')
   return t
 }
 
@@ -226,7 +226,7 @@ export function ciFromAnswer(answer: unknown): { ok: true; ci: CiConfig | null }
     return bad('the URL path is not valid')
   }
   if (seg.length < 2) return bad('the URL has no owner/repo')
-  const repo = `${seg[0]}/${seg[1].replace(/\.git$/, '')}`
+  const repo = `${seg[0]}/${seg[1]!.replace(/\.git$/, '')}`
   if (!REPO_RE.test(repo)) return bad(`"${repo}" is not a valid owner/name`)
   let workflow: string | undefined
   let branch: string | undefined
