@@ -26,7 +26,7 @@ ledger.sh decision review [--scope <s>] [--json]
 - `text` is a one-line title (max 400 chars); `--quote` is the owner's own words (max 600). Longer values and anything that looks like a credential are rejected (same check as saved job prompts). Control characters are stripped.
 - `--scope` defaults to `global`; `supersede` keeps the old entry's scope unless one is given. `--context` must be an absolute path.
 - `supersede` creates the new entry and marks the old one `superseded` with `superseded_by`; history stays. `retire` marks it `retired` with the optional reason. Both fail on an unknown or already closed ref.
-- `enforce <ref> [<target>]` sets the optional `enforced_by` field (a repo path, a PR number, or a task id; max 200 chars; no target clears it); `add` and `supersede` take `--enforced-by` too. `list`, `show` and the `.md` render show `enforced-by: ...`. Files without the field read as empty.
+- `enforce <ref> [<target>]` sets the optional `enforced_by` field (a repo path, a PR number, or a task id; max 200 chars; no target clears it); `add` and `supersede` take `--enforced-by` too. `list`, `show` and the `.md` render show `enforced-by: ...`. Files without the field read as empty. Only active decisions take `enforce`; `supersede` does not carry the field over (the new text may need a new target); the value is not validated when set, only at review time.
 - `list` prints active entries newest first (ref, date, scope, text, quote, context); `--all` adds closed ones; `--scope` matches exactly.
 
 ## Review (stale, overlapping, contradicting)
@@ -41,7 +41,7 @@ ledger.sh decision review [--scope <s>] [--json]
 
 - `/retro` Phase 4f moves decisions down the chain decisions, persona, skill, script. `bucket` adds a target stage and repo to each hint; `script-or-hook` marks what a script, gate, lint or hook can enforce.
 - `tasks` lists one conversion per decision and dedupes against open tasks naming the ref; retro files the rest with `/new-task`. The task carries the mapping (decision refs, target path or PR, retire reason), so it lives in git.
-- `retire-enforced` (dry-run; `--apply` in retro) retires a decision itself, without owner approval (owner rule, d155 follow-up), only when all hold: `enforced_by` is a merged PR number or a file on origin/main (an open PR, a missing path, a directory or a bare task id stays pending; origin/main is not fetched, so a stale clone fails safe), and one `T<id>` task file names both the ref and the target. The reason is `folded into <target> (task T...)`; retro logs each retirement. Other buckets, contradictions and persona edits stay proposals.
+- `retire-enforced` (dry-run; `--apply` in retro) retires a decision itself, without owner approval (owner rule, d155 follow-up), only when all hold: `enforced_by` is a merged PR number or a file on origin/main (an open PR, a missing path, a directory or a bare task id stays pending; origin/main is not fetched, so a stale clone fails safe), and one `T<id>` task file names both the ref and the target (token match: `#N`/`pull/N`, or the exact path). `tasks` dedupes on the ref alone: any open task naming it counts as the conversion. The reason is `folded into <target> (task T...)`; retro logs each retirement. Other buckets, contradictions and persona edits stay proposals.
 
 ## Schema (version 1)
 

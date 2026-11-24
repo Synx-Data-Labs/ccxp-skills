@@ -212,3 +212,15 @@ mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open ta
   [ "$status" -eq 0 ]
   [[ "$output" == *"no active decision has enforced-by"* ]]
 }
+
+@test "retire-enforced: the task must name the target on token boundaries, not as a substring" {
+  mkrepo
+  printf -- '# T20261124-333333: near miss\n\n- d2 relates to scripts/gate.sh.bak and #77\n' > "$R/dev/TODO/T20261124-333333-near.md"
+  jq '.decisions |= map(if .ref == "d2" then .enforced_by = "scripts/gate.sh" else . end)' "$CCXP_DECISIONS_FILE" > "$BATS_TEST_TMPDIR/n.json"
+  cp "$BATS_TEST_TMPDIR/n.json" "$CCXP_DECISIONS_FILE"
+  run_s retire-enforced --repo "$R"
+  [[ "$output" == *$'d2\tpending\tno task names both d2'* ]]
+  printf -- '- d2 done via scripts/gate.sh.\n' >> "$R/dev/TODO/T20261124-333333-near.md"
+  run_s retire-enforced --repo "$R"
+  [[ "$output" == *$'d2\twould-retire\t'* ]]
+}
