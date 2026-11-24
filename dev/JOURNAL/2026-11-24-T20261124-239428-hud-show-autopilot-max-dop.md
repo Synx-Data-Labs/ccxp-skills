@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: Owner request in session, 2026-11-24 (job 1500)
 related: T20261124-182499
 description: HUD AP band shows the autopilot's effective max_dop and how it is used
-claimed_by: cc1-50ac6891:3d2eab04334e1034
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -64,3 +64,19 @@ scheduled: 2026-11-23
 - [x] Silent with the autopilot off and no config: tests "band: silent without a config answer", `tests/hud_data.bats` "ap_config is null".
 - [x] One narrow-width step drops it: test "dop sits right after the AP cell".
 - [x] README and help updated: `hud/README.md` "max_dop cell", `hud/HELP.md` `## dop`.
+
+## Closed (2026-11-24)
+
+- Shipped in PR #744 (implementation) after claim PR #737 and staging PR #724; the owner asked for "the AP's maxdop" on the HUD "so that at least we know what's the current config".
+- Met: band cell `dop 8/16` after the AP cell (warning colour at the routine limit, also when every slot is taken; urgent cycles left out of the routine count), WORK-row details cell, `ap_config` helper field cached per repo, README and `/hud help` topic `dop`; tests in `hud/pure.test.ts` and `tests/hud_data.bats`.
+- Unverified: the TypeScript tests run only inside Claude Code; they were run under a local shim of the test runner (5 unrelated failures there come from missing matchers in the shim, same on main).
+- Quality regression (shellcheck_error,shellcheck_warning,shellcheck_info,max_fn_lines,file_loc): not new defects. The probe measures whole touched files; the shellcheck findings (SC2066, SC2010) and the long functions are already in `hud/scripts/hud-lib.sh` and `hud/model.ts` on main, and the change adds about 600 lines of tests and docs to files that were already large.
+- Review: five independent review rounds on #744 found a stale cache key (same-second rewrite), urgent cycles counted against the routine limit, a missing every-slot-taken warning, an unvalidated cache line and doc drift; all fixed before merge.
+- Follow-up: none filed.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, tests were written together with the code in one pass and run until green.
+- Verification (`superpowers:verification-before-completion`): yes, bats, the shimmed TS tests, lint-docs, design-score (87) and doc-impact before the PR, and the pre-merge check in /address-pr.
+- Systematic debugging: no, did not get stuck.
+- Receiving code review (`superpowers:receiving-code-review`): yes, /address-pr 2.d, five rounds on #744, every finding fixed in the same PR.
