@@ -1290,7 +1290,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     jobCells.push(one('state', [{ text: state.text, color: state.color }]), one('parked', [{ text: `parked ${parked}`, dim: parked === 0 }]), js ? one('jobs24', js) : null)
   }
   const dopSegs = dopDetailSegs(h)
-  // Holds (the state file's `.holds`, via the queue breakdown): only while the autopilot is on or paused, and only above 0.
+  // Holds (the state file's `.holds`, via the queue breakdown): only while there is an autopilot record (on, paused, idle), and only above 0.
   const holds = ap ? h?.queue?.apholds ?? 0 : 0
   const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held`, color: 'warning' }]) : null
   section('AUTOPILOT', [apItem, dopSegs ? one('dop', dopSegs) : null, holdsItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null])

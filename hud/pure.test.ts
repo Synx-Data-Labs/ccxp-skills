@@ -724,6 +724,11 @@ test('details split: AUTOPILOT carries status, max_dop use, holds count, 24h mer
   expect(sect(splitLines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: AP_Q }), 'AUTOPILOT')).not.toContain('held')
 })
 
+test('details split: a paused autopilot still shows its holds', async () => {
+  const lines = splitLines({ autopilot: { ...AP, prefix: '[p]', status: 'paused' }, queue: { ...AP_Q, apholds: 2 } })
+  expect(sect(lines, 'AUTOPILOT')).toMatch(/paused.*│ 2 held │ next loop paused/)
+})
+
 test('details split: autopilot off leaves AUTOPILOT as `AP off` only (no running, holds, wake or 24h cells) and WORK keeps every job', async () => {
   const lines = splitLines({ autopilot: null, queue: { ...AP_Q, apholds: 3 } })
   expect(sect(lines, 'AUTOPILOT')).toBe('AP off')
