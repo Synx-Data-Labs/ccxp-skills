@@ -325,8 +325,8 @@ test('rate limits (5h and 7d) reach the cache file and the band shows the tighte
   const band = await $.ui.mount(BAND(200))
   // the window with less headroom (5h: 20% left), its percent and reset time, no window label
   expect(await band.find({ type: 'Text', text: /20% left/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /resets 1h/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /66% left|3d4h|5h|7d/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /reset \d\d:\d\d/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /66% left|7d|5h/ })).toBeUndefined()
   await band.unmount()
   const i = w.runs.findIndex(r => r.some(a => a.endsWith('hud-rate-cache.sh')))
   expect(i).toBeGreaterThanOrEqual(0)

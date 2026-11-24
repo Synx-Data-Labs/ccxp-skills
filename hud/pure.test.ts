@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatLeft, formatRunout, rateRunoutHours, rateWindows, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatResetClock, formatRunout, gapTone, rateRunoutHours, rateRunoutSec, rateWindows, resetEpochSec, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -770,11 +770,14 @@ test('details: a narrow terminal wraps a section onto an indented line, never cu
 const RATE_NOW = 1_800_000_000_000
 const rateReset = (elapsedSec: number) => RATE_NOW / 1000 + 5 * 3600 - elapsedSec
 
-test('rateTone: red under 10 left, orange under 25, otherwise green', () => {
-  expect([100, 25, 24, 10, 9, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+test('gapTone: more than 30 minutes green, more than 10 up to 30 yellow, 10 or less red, no runout green', () => {
+  expect([31, 30, 11, 10, 1, 0].map(m => gapTone(m * 60))).toEqual(['success', 'warning', 'warning', 'error', 'error', 'error'])
+  expect(gapTone(30 * 60 + 1)).toBe('success')
+  expect(gapTone(10 * 60 + 1)).toBe('warning')
+  expect(gapTone(null)).toBe('success')
 })
 
-test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it outlasts the window or data is thin (kept for the limit-cell revision, not shown)', () => {
+test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it outlasts the window or data is thin ', () => {
   // 50% in 1h: 1h more to full, 4h still in the window
   expect(Math.round(rateRunoutHours(50, rateReset(3600), RATE_NOW)! * 1000)).toBe(1000)
   // 80% in 2h: 0.5h to full
@@ -797,26 +800,47 @@ test('resetEpochSec: epoch seconds, milliseconds, a numeric string or an ISO str
   expect([resetEpochSec(1_800_000_000), resetEpochSec(1_800_000_000_000), resetEpochSec('1800000000'), resetEpochSec('2027-01-15T08:00:00Z'), resetEpochSec('x'), resetEpochSec(null), resetEpochSec(0)]).toEqual([1_800_000_000, 1_800_000_000, 1_800_000_000, 1_800_000_000, null, null, null])
 })
 
-test('rate cell: just the percent left and the reset time, no window label, no runout; coloured by the percent left', () => {
+// A 5-hour window with `elapsed` seconds gone and `used` percent spent runs out after (100 - used) * elapsed / used seconds.
+const gapMin = (m: number) => ({ rateUsed: 50, rateResetsAt: rateReset(m * 60) }) // 50% used after m minutes: runs out m minutes from now
+
+test('rateRunoutSec: seconds to 100% at the burn rate; the window length is a parameter', () => {
+  expect(rateRunoutSec(50, rateReset(1800), RATE_NOW)).toBe(1800)
+  expect(rateRunoutSec(50, RATE_NOW / 1000 + 6 * 86400, RATE_NOW, 7 * 86400)).toBe(86400)
+  expect(rateRunoutSec(10, rateReset(1800), RATE_NOW)).toBeNull() // outlasts the window
+})
+
+test('rate cell: percent left, runs out in Nm and the reset time; coloured by the gap to runout (boundaries 31/30/11/10 minutes)', () => {
   const rate = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
   const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
-  expect(find(rate({ rateUsed: 35 }), /65% left/)?.color).toBe('success')
-  expect(find(rate({ rateUsed: 75 }), /25% left/)?.color).toBe('success') // 25 left: still green
-  expect(find(rate({ rateUsed: 76 }), /24% left/)?.color).toBe('warning')
-  expect(find(rate({ rateUsed: 90 }), /10% left/)?.color).toBe('warning') // 10 left: still orange
-  expect(find(rate({ rateUsed: 91 }), /9% left/)?.color).toBe('error')
-  expect(find(rate({ rateUsed: 95, rateResetsAt: rateReset(3600) }), /resets/)?.color).toBe('error') // the time carries the tone
-  const row = text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))
-  expect(row).toContain('50% left · resets 4h')
-  expect(row).not.toMatch(/5h|5-hour|7d|out \d|runs out/)
+  const tone = (m: number) => find(rate(gapMin(m)), /runs out/)?.color
+  expect([31, 30, 11, 10].map(tone)).toEqual(['success', 'warning', 'warning', 'error'])
+  expect(find(rate(gapMin(30)), /50% left/)?.color).toBe('warning') // the percent is coloured by the gap too, not by itself
+  expect(find(rate(gapMin(10)), /reset /)?.color).toBe('error')
+  const row = text(rate(gapMin(28)))
+  expect(row).toMatch(/50% left · runs out in 28m · reset \d\d:\d\d \S+/)
+  expect(row).not.toMatch(/5h|5-hour|7d|resets/)
+  // no runout before the reset: no runout text, green, however little is left
+  const noRunout = rate({ rateUsed: 20, rateResetsAt: rateReset(7200) })
+  expect(text(noRunout)).toMatch(/80% left · reset \d\d:\d\d/)
+  expect(text(noRunout)).not.toMatch(/runs out/)
+  expect(find(noRunout, /80% left/)?.color).toBe('success')
+  // a spent limit is red
+  expect(find(rate({ rateUsed: 100, rateResetsAt: rateReset(7200) }), /0% left/)?.color).toBe('error')
+  // low percent but a long gap stays green (the colour follows the gap, not the percent)
+  expect(find(rate({ rateUsed: 92, rateResetsAt: rateReset(17900) }), /8% left/)?.color).toBe('success')
+})
+
+test('formatResetClock: local clock time with the timezone abbreviation, weekday when not today', () => {
+  const at = Date.UTC(2027, 0, 15, 19, 55) / 1000 // 13:55 in Chicago (CST), 20:55 in Paris, 03:55 next day in Shanghai
+  const now = Date.UTC(2027, 0, 15, 10, 0)
+  expect(formatResetClock(at, now, 'America/Chicago')).toBe('13:55 CST')
+  expect(formatResetClock(at, now, 'Asia/Shanghai')).toBe('Sat 03:55 CST')
+  expect(formatResetClock(at, now, 'UTC')).toBe('19:55 UTC')
+  expect(formatResetClock(at, now, 'Europe/Paris')).toMatch(/^20:55 (CET|GMT\+1)$/)
+  expect(formatResetClock(NaN, now, 'UTC')).toBeNull()
 })
 
 const inSec = (sec: number) => RATE_NOW / 1000 + sec
-
-test('formatLeft: compact time to reset, rounded down; past or now is null', () => {
-  expect([40, 59, 60, 119, 3599, 3600, 4320, 86400, 90000, 3 * 86400 + 4 * 3600 + 1799].map(s => formatLeft(inSec(s), RATE_NOW))).toEqual(['<1m', '<1m', '1m', '1m', '59m', '1h', '1h12m', '1d', '1d1h', '3d4h'])
-  expect([formatLeft(inSec(0), RATE_NOW), formatLeft(inSec(-10), RATE_NOW)]).toEqual([null, null])
-})
 
 test('rateWindows: a missing percent or a reset time already past drops that window only', () => {
   const w = (over: object) => rateWindows({ ...EMPTY, ...over } as any, RATE_NOW).map(x => x.label)
@@ -830,32 +854,37 @@ test('rateWindows: a missing percent or a reset time already past drops that win
 
 test('rate cell: the window with less headroom wins, no labels; a missing or past window shows nothing, never an error', () => {
   const band = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
+  const CLOCK = '\\d\\d:\\d\\d \\S+'
   const both = { rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
-  // 5h has 20% left, 7d has 66%: the 5-hour window shows
-  expect(text(band(both))).toContain('20% left · resets 1h12m')
-  expect(text(band(both))).not.toMatch(/66%|3d4h|7d|5h/)
-  // 7d tighter: it shows, with its own time
+  // 5h has 20% left, 7d has 66%: the 5-hour window shows, runs out in 57m (80% used 13680 s into the window)
+  expect(text(band(both))).toMatch(new RegExp(`20% left · runs out in 57m · reset ${CLOCK}`))
+  expect(text(band(both))).not.toMatch(/66%|7d|5h/)
+  // 7d tighter: it shows, projected over the 7-day window, with the weekday on its reset
   const sevenTight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
-  expect(text(band(sevenTight))).toContain('10% left · resets 3d4h')
-  // a tie keeps the 5-hour window
-  expect(text(band({ rateUsed: 50, rateResetsAt: inSec(60), rate7Used: 50, rate7ResetsAt: inSec(86400) }))).toContain('50% left · resets 1m')
+  expect(text(band(sevenTight))).toMatch(new RegExp(`10% left · runs out in 10.2h · reset (Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${CLOCK}`))
   // one window only
-  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('20% left · resets 1h12m')
-  expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('66% left · resets 1d1h')
-  expect(text(band({}))).not.toMatch(/% left · resets/) // both missing: no cell
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('20% left · runs out in 57m')
+  expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('66% left')
+  expect(text(band({}))).not.toMatch(/% left · /) // both missing: no cell
   expect(text(band({ rateUsed: 80, rateResetsAt: inSec(-5) }))).not.toMatch(/20% left/) // past reset: dropped
-  // narrow: the word `resets` goes first (the band is never drawn narrower than 20 columns)
+  // narrow: the reset time goes first, then the runout; the percent stays
   const narrow = (cols: number) => text(bandRows({ ...EMPTY, ...both } as any, { ...NOCI, fields: ['rate'] }, cols, RATE_NOW))
-  expect(narrow(40)).toBe('20% left · resets 1h12m')
-  expect(narrow(22)).toBe('20% left · 1h12m')
+  expect(narrow(60)).toMatch(new RegExp(`^20% left · runs out in 57m · reset ${CLOCK}$`))
+  expect(narrow(28)).toBe('20% left · runs out in 57m')
+  expect(narrow(22)).toBe('20% left')
   // rounding: 79.6 used shows 20% left
   expect(text(band({ rateUsed: 79.6 }))).toContain('20% left')
 })
 
-test('details: the SESSION row carries the percent left and the reset time, no label', () => {
+test('rate cell: NO_COLOR keeps the text (the colour is a theme token the renderer drops), so the gap is still readable', () => {
+  const rows = bandRows(fullSnap(gapMin(5)) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, 200, RATE_NOW)
+  expect(text(rows)).toContain('runs out in 5m')
+})
+
+test('details: the SESSION row carries the full limit text: percent left, runs out in, reset time, no label', () => {
   const d = (over: object) => sect(detailRows(fullSnap(over) as any, NOCI, 400, RATE_NOW).map(r => r.map(g => g.text).join('')), 'SESSION')
-  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toMatch(/│ 20% left · resets in 1h12m( │|$)/)
-  expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toContain('66% left · resets in 1d')
+  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toMatch(/│ 20% left · runs out in 57m · reset \d\d:\d\d \S+( │|$)/)
+  expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toMatch(/66% left · reset \S+ \d\d:\d\d/)
   expect(d({ rateUsed: 80, rateResetsAt: inSec(4320) })).not.toMatch(/5-hour|7-day|limit/)
 })
 
@@ -1736,7 +1765,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   issues: /issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
   bus: /bus 2 unread notes · newest from home/,
   ci: /CI \(/,
-  rate: /\d+% left · resets in \d/,
+  rate: /\d+% left · .*reset \d\d:\d\d/,
   lastat: /you \d/,
   ver: /ccxp \d/,
   stale: /stale/,
@@ -1771,7 +1800,7 @@ test('details is a superset of the band: every band cell has a details counterpa
   }
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
-  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '60% left · resets 1h', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '60% left · reset ', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })
 
 // --- the old details-on output, cell by cell (#1508): every one must still be in the sectioned layout ---
@@ -1798,7 +1827,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
   ['stale', 'REPO', /stale$/],
   ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
-  ['limit', 'SESSION', /10% left · resets in 1h/],
+  ['limit', 'SESSION', /10% left · runs out in 27m · reset \d\d:\d\d/],
   ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
   ['jobs state', 'WORK', /WORKING \(2\)/],
   ['parked', 'WORK', /parked 2/],
