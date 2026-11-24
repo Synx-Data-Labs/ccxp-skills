@@ -180,7 +180,7 @@ export type PluginVersion = {
   /** The plugin's GitHub repo URL from its plugin.json (`https://github.com/<owner>/<repo>`); absent when unknown. */
   url?: string
   /** Commits on the default branch after the installed version's release tag (hud-version.sh); absent when none, unknown or offline. */
-  unreleased?: { count: number; subjects: string[] }
+  unreleased?: { count: number }
 }
 
 /** Unread notes on the cross-account bus (hud-bus.sh, from `bus.sh status --json`): how many and who sent the newest. */

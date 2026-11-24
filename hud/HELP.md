@@ -2,7 +2,7 @@
 
 The band above the prompt is a row of cells, separated by `│`. Each cell answers one question; a cell with nothing to say is left out, so a short band is a quiet band. Colours are theme colours: green = fine, yellow = needs a look, red = broken or waiting for you, dim = background information. A solid red row (reverse video) is the loudest signal: something failed and nobody has taken it on. With `NO_COLOR` the colours go but the marks (`✓ ✗ ▲ ▼`) stay.
 
-Try `/hud help <topic>` for one cell, `/hud config` for what is switched on and where each setting comes from, `/hud details` to expand the band into full lines (run it again to collapse).
+Try `/hud help <topic>` for one cell, `/hud config` for what is switched on and where each setting comes from, `/hud details` to expand the band into labeled sections (run it again to collapse).
 
 Every number comes from local files or a cached, background lookup (`git`, `gh`); the band itself never waits on the network.
 
@@ -76,7 +76,7 @@ Unread notes from another Claude Code session (another account or profile) on th
 
 The installed ccxp-skills version against the latest public release. `ccxp 6.4.0 (latest)` = up to date (green). `ccxp 6.4.0 (6.5.0 available)` = a newer release exists; update with `/plugin`. Plain `ccxp 6.4.0` (dim) = latest unknown (offline, not looked up yet). The cell never claims "latest" without a successful comparison. Source: the plugin's `plugin.json` and `git ls-remote --tags` of the public repo (no credentials), cached 6 hours. Hide with `"version": false`.
 
-In `/hud details` the line also shows the plugin's GitHub address and, right after it, the unreleased commits: `5 unreleased: fix: a; feat: b; docs: c +2 more` = the commits on `main` since the release you run (count, newest three subjects, `+N more`). Nothing shows when there are none, the release tag is unknown, or you are offline. Source: one anonymous GitHub request, cached 1 hour.
+In `/hud details` the RELEASE row shows the plugin's GitHub address first (clickable), then the version label, then how many commits `main` has after the release you run: `5 unreleased` (a number only, never the commit titles). Nothing shows when there are none, the release tag is unknown, or you are offline. Source: one anonymous GitHub request, cached 1 hour.
 
 ## lastat
 
@@ -99,7 +99,17 @@ Opt-in: the session cost in dollars. Switch: `cost` in `fields` (not on by defau
 
 ## details
 
-`/hud details` toggles an expanded band: up to seven live lines, eight with a CI row, spelling out the cells in full (never abbreviated) plus the plugin URL. Run it again to collapse. It updates live like the band.
+`/hud details` toggles an expanded view: one labeled row per section, spelling the cells out in full (never abbreviated). Run it again to collapse. It updates live like the band.
+
+- `SESSION` context left, 5-hour limit left, API-equivalent cost, unread bus notes, your last prompt time
+- `REPO` repo, branch, claimed task
+- `BUILD` CI (red when failing), nightly
+- `SUPPORT` customer issues (when configured)
+- `WORK` autopilot with its next loop and 24h numbers, then jobs (READY / WORKING, parked, jobs per day)
+- `QUEUE` the task queue breakdown
+- `RELEASE` the plugin's GitHub address, the version, and the count of unreleased commits
+
+A row too long for the terminal wraps onto an indented line; nothing is cut. A section with nothing to say is left out.
 
 ## config
 

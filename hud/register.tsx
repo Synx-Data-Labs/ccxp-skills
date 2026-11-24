@@ -25,7 +25,7 @@ import { ENV_NAMES, configReport } from './show'
 
 const snapshotAtom = atom({ plugin: 'ccxp-skills', key: 'snapshot' } as const, EMPTY)
 const configAtom = atom({ plugin: 'ccxp-skills', key: 'config' } as const, DEFAULTS)
-// `/hud details`: true while the band is expanded to its detail lines (up to eight) (this session only).
+// `/hud details`: true while the band is expanded to its detail lines (labeled sections, this session only).
 const detailsAtom = atom({ plugin: 'ccxp-skills', key: 'details' } as const, false)
 
 // Module-level state: a hot reload starts it over, which is fine (the config and
