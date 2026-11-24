@@ -1,11 +1,14 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 blocks: [T20261124-115593]
 source: epic split of T20261124-989194 (job 1514), owner request 2026-11-24
 related: [T20261124-989194]
 type: feature
 description: Phase 4 turns a NEEDS-ATTENTION or STUCK cycle into a needs-human or stalled hold instead of a bottom PR, and the HUD queue cell shows the held count
+claimed_by: cc1-50ac6891:da50a3e74f488718
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-321658: A stalled cycle creates a hold, not a bottom PR; HUD held count
