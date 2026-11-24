@@ -73,3 +73,4 @@ reprioritize.
 - [T20261124-315192](T20261124-315192-persona-move-detached-jobs-decisions-terms-to-skill.md): Persona move 2: detached jobs, decisions log, terms become pointers
 - [T20261124-870400](T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md): autopilot Phase 3/4 classification and housekeeping dispatch into scripts
 - [T20261124-444596](T20261124-444596-address-pr-gates-and-drive-phases-prose-to-scripts-survey.md): address-pr gates and drive phases: survey, then first script
+- [T20261124-182499](T20261124-182499-autopilot-max-dop-min-3-reserved-slots.md): Autopilot: max_dop at least 3, add reserved_slots (default 2)
