@@ -13,7 +13,7 @@ Scope notes:
 - Order: freshness gate first; the persona trim last (after the CI-failure and merge-gate moves).
 - Not in scope: adding d94 or d95 to the authorization list, any release, tag or version bump.
 
-- [T20261124-392722](../TODO/T20261124-392722-pre-dispatch-fresh-base-gate-d129.md) — d129: pre-dispatch fresh-base gate script
+- [T20261124-392722](../JOURNAL/2026-11-24-T20261124-392722-pre-dispatch-fresh-base-gate-d129.md) — d129: pre-dispatch fresh-base gate script
 - [T20261124-395783](../TODO/T20261124-395783-ci-failure-response-skill-d148.md) — d148: CI-failure response into a skill and script
 - [T20261124-290097](../TODO/T20261124-290097-shared-merge-gate-prompt-snippet-d101.md) — d101: shared job-prompt snippet for the merge gates
 - [T20261124-271756](../TODO/T20261124-271756-sensitive-name-alias-list-check-d96.md) — d96: customer and partner name check driven by an alias list

@@ -1,12 +1,12 @@
 ---
-status: Review
+status: Done
 estimation: 1
 source: owner request 2026-11-24 (job 1524), epic E4
 related: [T20261121-412600]
 description: Script that checks a branch or clone is based on the latest origin/main (rebase or fail loudly) before any workflow dispatch or push; wired into /drive and /land
 type: feature
-claimed_by: cc1-50ac6891:2a82d411376c36a9
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -64,3 +64,18 @@ scheduled: 2026-11-23
 - [x] Script returns the verdicts above: `tests/fresh_base.bats` the verdict cases.
 - [x] `/drive` and `/land` docs call it before push and dispatch: `drive/SKILL.md:352-353`, `gcpr/SKILL.md` step 5, the wiring test.
 - [x] A stale branch cannot reach a push or dispatch silently: any non-zero exit stops the flow (stale, conflict, dirty, fetch-failed, detached cases).
+
+## Closed (2026-11-24)
+
+- Shipped in PR #757 (`_gh/fresh-base.sh`, 15 bats cases, `/drive` and `/gcpr` wiring); claim PR #754; epic E4 split PR #750.
+- Reviews: three independent rounds fixed a fail-open (narrowed fetch refspec), added the detached/in-progress guard (exit 13), made `--dir` sourcing-safe, aligned docs ("any non-zero exit stops").
+- Dogfooded: the script reported `rebased` and `conflict` on this very branch; the conflict (append-only `metrics.jsonl`) was resolved by squashing.
+- Follow-up for the owner: decision d129 can be retired once the owner agrees the script plus docs cover it (not done here).
+- Quality probe: no regression.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, written test-with-code in one pass; tests cover every verdict
+- Verification (`superpowers:verification-before-completion`): yes, bats, shellcheck, skill-score and design-score run before each push
+- Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes, 3 review rounds, findings fixed
