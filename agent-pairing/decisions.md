@@ -18,6 +18,7 @@ ledger.sh decision supersede <ref> "<new text>" [same options]
 ledger.sh decision retire <ref> ["<reason>"]
 ledger.sh decision list [--all] [--scope <s>] [--json]
 ledger.sh decision show <ref>
+ledger.sh decision review [--scope <s>] [--json]
 ```
 
 - `add` prints a stable `d<n>` ref. The counter only grows (also across retire and supersede); `ref bump d<n>` and `set-counter d <n>` raise it.
@@ -25,6 +26,14 @@ ledger.sh decision show <ref>
 - `--scope` defaults to `global`; `supersede` keeps the old entry's scope unless one is given. `--context` must be an absolute path.
 - `supersede` creates the new entry and marks the old one `superseded` with `superseded_by`; history stays. `retire` marks it `retired` with the optional reason. Both fail on an unknown or already closed ref.
 - `list` prints active entries newest first (ref, date, scope, text, quote, context); `--all` adds closed ones; `--scope` matches exactly.
+
+## Review (stale, overlapping, contradicting)
+
+- `add` and `supersede` print the new ref alone on stdout and a review block on stderr: related active decisions (same scope or global, 2+ shared meaningful words, top 5), possibly stale ones, and possible contradictions. No block when no other decision is active. It ends with the line "Review these with the owner: retire stale ones, consolidate overlaps via `decision supersede`, and raise any contradiction before acting."
+- **Stale** means: the `--context` file is gone; the text names a past date next to "retire this decision", "once", "after" or "until" (grace `CCXP_DECISIONS_DATE_GRACE_DAYS`, 7); or it is older than `CCXP_DECISIONS_MAX_AGE_DAYS` (90) with no `source`.
+- **Contradiction** means two overlapping decisions with opposite wording (never/not/forbidden vs always/must/allowed) or a different number for the same unit word ("5 retries" vs "10 retries"). A heuristic: always a question for the owner, never a verdict.
+- `decision review [--scope S] [--json]` runs the same checks over all active decisions (overlap groups, stale, contradictions) without adding one. It changes nothing.
+- The agent relays the findings in one short list and retires or consolidates only with the owner's approval.
 
 ## Schema (version 1)
 
