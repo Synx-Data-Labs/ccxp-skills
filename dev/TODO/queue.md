@@ -83,3 +83,10 @@ reprioritize.
 - [T20261124-177980](T20261124-177980-blocked-by-migration-script-and-dry-run-report.md): Blocked by migration script and dry-run report
 - [T20261124-112157](T20261124-112157-drive-and-autopilot-work-first-open-leaf.md): Drive and autopilot work the first open leaf
 - [T20261124-158321](T20261124-158321-hud-chain-display-and-sweep-phase-2.md): HUD chain display and sweep Phase 2
+- [T20261124-392722](T20261124-392722-pre-dispatch-fresh-base-gate-d129.md): Pre-dispatch fresh-base gate script (d129)
+- [T20261124-395783](T20261124-395783-ci-failure-response-skill-d148.md): CI-failure response into a skill and script (d148)
+- [T20261124-290097](T20261124-290097-shared-merge-gate-prompt-snippet-d101.md): Shared job-prompt snippet for the merge gates (d101)
+- [T20261124-271756](T20261124-271756-sensitive-name-alias-list-check-d96.md): Customer and partner name check driven by an alias list (d96)
+- [T20261124-181781](T20261124-181781-slack-internal-channel-whitelist-d100.md): Slack internal-channel whitelist as config (d100)
+- [T20261124-141354](T20261124-141354-rulebook-rerender-trigger-d113.md): Rulebook re-render trigger on decision changes (d113)
+- [T20261124-209545](T20261124-209545-persona-trim-after-decision-moves.md): Persona trim after the decision moves (d155)
