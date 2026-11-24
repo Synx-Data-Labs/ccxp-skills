@@ -1,16 +1,16 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 blocks: [T20261124-140678]
 source: Owner chat 2026-11-24 (job 1490)
 related: T20261103-169088
-description: HUD shows the 5-hour and 7-day subscription windows with time left until reset, and caches the snapshot for the autopilot
-claimed_by: cc1-50ac6891:eb8e263254b40cff
-claimed_role: interactive
+description: HUD limit cell shows the subscription percent left and reset time, and caches both windows for the autopilot
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
-# T20261124-168446: HUD shows subscription time left (5h and 7d) and caches it
+# T20261124-168446: HUD shows subscription limit left and reset time, and caches it
 
 ## Problem
 
@@ -33,3 +33,20 @@ scheduled: 2026-11-23
 ## Phase 2 (separate task)
 
 - Autopilot steering, filed as T20261124-140678 (blocked by this task).
+
+## Closed (2026-11-24)
+
+- **Shipped in**: PR #745 (both windows with time left, `hud/scripts/hud-rate-cache.sh`, cache file `rate-limits.json`, tests, docs) and PR #748 (owner follow-up: the limit cell shows only the percent left and the reset time, window with less headroom, API-equivalent cost cell retired). Staging PR #720, claim PR #736. PR #739 was closed by mistake (branch deleted after a failed merge) and superseded by #745.
+- **Data used (verified against the status-line docs)**: `rate_limits.five_hour` and `rate_limits.seven_day`, each `used_percentage` (0-100) and `resets_at` (epoch seconds); the mod reads them as `rateLimits[]` `kind`, `percentUsed`, `resetsAt`. A missing window or no data (API-key login) shows nothing and never errors.
+- **Cache file for the autopilot**: `<profile>/state/hud-cache/rate-limits.json`, mode 600, atomic, no secrets, `{version, written_at, five_hour, seven_day}`; `hud-rate-cache.sh read [--max-age N]` for readers; a write never rolls a window back. Format in `hud/README.md`.
+- **Design**: approved in conversation (owner's brief), no design PR.
+- **Tests**: `claude plugin test .` 252 pass; 2 fail on a clean `main` too (config queue-source question text, "no ci configured" row count), unrelated; `tests/hud_rate_cache.bats` (16 tests).
+- **Not done here (separate tasks)**: the limit-cell revision (runout text, reset clock with timezone, colouring by the gap to the runout; owner decisions d166 and d167) is a new HUD task by another job; the autopilot steering is T20261124-140678 (it depends on this task's cache file, which has landed).
+- Quality probe: `dev/quality/metrics.jsonl` records the run; no regression.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, tests were written with the code, not red-first (see Closed)
+- Verification (`superpowers:verification-before-completion`): yes, test runs before each push and a fresh independent review on every PR head (#720 x4, #736, #745, #748 x3; the closed #739 x3)
+- Systematic debugging (`superpowers:systematic-debugging`): no, nothing got stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes, /address-pr 2.d on #739 (3 rounds) and #748 (2 rounds), 1 pushback (window without `resets_at`)
