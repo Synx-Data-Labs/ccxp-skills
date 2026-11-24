@@ -817,11 +817,11 @@ test('rate cell: percent left, runs out in Nm and the reset time; coloured by th
   expect(find(rate(gapMin(30)), /50% left/)?.color).toBe('warning') // the percent is coloured by the gap too, not by itself
   expect(find(rate(gapMin(10)), /reset /)?.color).toBe('error')
   const row = text(rate(gapMin(28)))
-  expect(row).toMatch(/50% left · runs out in 28m · reset \d\d:\d\d \S+/)
+  expect(row).toMatch(/50% left · runs out in 28m · reset (\w{3} )?\d\d:\d\d \S+/)
   expect(row).not.toMatch(/5h|5-hour|7d|resets/)
   // no runout before the reset: no runout text, green, however little is left
   const noRunout = rate({ rateUsed: 20, rateResetsAt: rateReset(7200) })
-  expect(text(noRunout)).toMatch(/80% left · reset \d\d:\d\d/)
+  expect(text(noRunout)).toMatch(/80% left · reset (\w{3} )?\d\d:\d\d/)
   expect(text(noRunout)).not.toMatch(/runs out/)
   expect(find(noRunout, /80% left/)?.color).toBe('success')
   // a spent limit is red
@@ -854,14 +854,14 @@ test('rateWindows: a missing percent or a reset time already past drops that win
 
 test('rate cell: the window with less headroom wins, no labels; a missing or past window shows nothing, never an error', () => {
   const band = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
-  const CLOCK = '\\d\\d:\\d\\d \\S+'
+  const CLOCK = '(\\w{3} )?\\d\\d:\\d\\d \\S+'
   const both = { rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
   // 5h has 20% left, 7d has 66%: the 5-hour window shows, runs out in 57m (80% used 13680 s into the window)
   expect(text(band(both))).toMatch(new RegExp(`20% left · runs out in 57m · reset ${CLOCK}`))
   expect(text(band(both))).not.toMatch(/66%|7d|5h/)
   // 7d tighter: it shows, projected over the 7-day window, with the weekday on its reset
   const sevenTight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
-  expect(text(band(sevenTight))).toMatch(new RegExp(`10% left · runs out in 10.2h · reset (Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${CLOCK}`))
+  expect(text(band(sevenTight))).toMatch(new RegExp(`10% left · runs out in 10\\.2h · reset (Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${CLOCK}`))
   // one window only
   expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('20% left · runs out in 57m')
   expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('66% left')
@@ -883,7 +883,7 @@ test('rate cell: NO_COLOR keeps the text (the colour is a theme token the render
 
 test('details: the SESSION row carries the full limit text: percent left, runs out in, reset time, no label', () => {
   const d = (over: object) => sect(detailRows(fullSnap(over) as any, NOCI, 400, RATE_NOW).map(r => r.map(g => g.text).join('')), 'SESSION')
-  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toMatch(/│ 20% left · runs out in 57m · reset \d\d:\d\d \S+( │|$)/)
+  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toMatch(/│ 20% left · runs out in 57m · reset (\w{3} )?\d\d:\d\d \S+( │|$)/)
   expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toMatch(/66% left · reset \S+ \d\d:\d\d/)
   expect(d({ rateUsed: 80, rateResetsAt: inSec(4320) })).not.toMatch(/5-hour|7-day|limit/)
 })
@@ -1765,7 +1765,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   issues: /issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
   bus: /bus 2 unread notes · newest from home/,
   ci: /CI \(/,
-  rate: /\d+% left · .*reset \d\d:\d\d/,
+  rate: /\d+% left · .*reset (\w{3} )?\d\d:\d\d/,
   lastat: /you \d/,
   ver: /ccxp \d/,
   stale: /stale/,
@@ -1827,7 +1827,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
   ['stale', 'REPO', /stale$/],
   ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
-  ['limit', 'SESSION', /10% left · runs out in 27m · reset \d\d:\d\d/],
+  ['limit', 'SESSION', /10% left · runs out in 27m · reset (\w{3} )?\d\d:\d\d/],
   ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
   ['jobs state', 'WORK', /WORKING \(2\)/],
   ['parked', 'WORK', /parked 2/],
