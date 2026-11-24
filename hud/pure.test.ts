@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatRunout, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatLeft, formatRunout, rateWindows, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -803,6 +803,52 @@ test('rate cell: N% left in its tone, runout only when it would run dry before t
   const d = (over: object) => detailRows(fullSnap(over) as any, NOCI, 200, RATE_NOW).map(r => r.map(g => g.text).join(''))[0]
   expect(d({ rateUsed: 80, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 20% left · runs out in 30m')
   expect(d({ rateUsed: 10, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 90% left')
+})
+
+const inSec = (sec: number) => RATE_NOW / 1000 + sec
+
+test('formatLeft: compact time to reset, rounded down; past or now is null', () => {
+  expect([40, 59, 60, 119, 3599, 3600, 4320, 86400, 90000, 3 * 86400 + 4 * 3600 + 1799].map(s => formatLeft(inSec(s), RATE_NOW))).toEqual(['<1m', '<1m', '1m', '1m', '59m', '1h', '1h12m', '1d', '1d1h', '3d4h'])
+  expect([formatLeft(inSec(0), RATE_NOW), formatLeft(inSec(-10), RATE_NOW)]).toEqual([null, null])
+})
+
+test('rateWindows: a missing percent or a reset time already past drops that window only', () => {
+  const w = (over: object) => rateWindows({ ...EMPTY, ...over } as any, RATE_NOW).map(x => x.label)
+  expect(w({ rateUsed: 20, rateResetsAt: inSec(3600), rate7Used: 30, rate7ResetsAt: inSec(86400) })).toEqual(['5h', '7d'])
+  expect(w({ rateUsed: 20, rateResetsAt: inSec(3600) })).toEqual(['5h']) // 7-day absent (older version, or a plan without it)
+  expect(w({ rate7Used: 30, rate7ResetsAt: inSec(86400) })).toEqual(['7d'])
+  expect(w({})).toEqual([]) // API-key login: nothing, no error
+  expect(w({ rateUsed: 20, rateResetsAt: inSec(-1), rate7Used: 30, rate7ResetsAt: inSec(86400) })).toEqual(['7d']) // 5h reset time passed
+  expect(w({ rateUsed: 20, rate7Used: 30 })).toEqual(['5h', '7d']) // percent without a reset time still shows
+})
+
+test('rate cell: both windows with the time left, the tighter one alone when narrow, colours at the boundaries', () => {
+  const band = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
+  const both = { rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
+  const row = text(band(both))
+  expect(row).toContain('5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h')
+  // one window only: nothing for the other, never an error
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('5h 20% left · out 57m · resets 1h12m')
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).not.toContain('7d')
+  expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('7d 66% left · resets 1d1h')
+  expect(text(band({}))).not.toMatch(/5h|7d/) // both missing: no cell
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(-5) }))).not.toMatch(/5h/) // past reset: dropped
+  // too narrow for both: the window with less headroom (the 7-day one here) stays
+  const tight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(86400) }
+  const narrow = text(bandRows({ ...EMPTY, ...tight } as any, { ...NOCI, fields: ['rate'] }, 30, RATE_NOW))
+  expect(narrow).toContain('7d 10% left')
+  expect(narrow).not.toContain('5h 90% left')
+  // colours: green at 25 left, orange at 24, orange at 10, red at 9
+  const col = (used: number) => band({ rateUsed: used }).flat().find(g => /5h \d+% left/.test(g.text))?.color
+  expect([75, 76, 90, 91].map(col)).toEqual(['success', 'warning', 'warning', 'error'])
+  // rounding: 79.6 used shows 20% left
+  expect(text(band({ rateUsed: 79.6 }))).toContain('5h 20% left')
+})
+
+test('details: both windows are spelled out with the time left', () => {
+  const d = (over: object) => sect(detailRows(fullSnap(over) as any, NOCI, 400, RATE_NOW).map(r => r.map(g => g.text).join('')), 'SESSION')
+  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toContain('5-hour limit 20% left · runs out in 57m · resets in 1h12m  7-day limit 66% left · resets in 3d4h')
+  expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toContain('7-day limit 66% left · resets in 1d')
 })
 
 test('details: the jobs cells never list the running jobs (the band already shows them); labels are spelled out', async () => {
