@@ -79,3 +79,4 @@ reprioritize.
 - [T20261124-140678](T20261124-140678-autopilot-effective-max-dop-from-subscription-quota.md): Autopilot steers max_dop from subscription quota headroom
 - [T20261124-776095](T20261124-776095-hud-queue-max-rolling-windows.md): HUD queue max: non-overlapping rolling windows
 - [T20261124-317732](T20261124-317732-hud-show-commits-behind-remote.md): HUD: show commits behind the remote
+- [T20261124-239428](T20261124-239428-hud-show-autopilot-max-dop.md): HUD shows the autopilot's effective max_dop
