@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: owner request, this conversation, 2026-11-24
 description: HUD queue max shows three non-overlapping rolling windows (last month / last week / this week) so the trend is visible
 type: bug
-claimed_by: cc1-50ac6891:026eafc622a13a79
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -47,21 +47,21 @@ scheduled: 2026-11-23
 
 ## Test plan
 
-- [ ] `tests/hud_queue_hwm.bats` (the existing 180d/30d/7d assertions are replaced; the sample-rotation tests stay, the 180-day cap remains for the issues cell): growing, shrinking, flat, no-change window, no history, first days of history, edges at exactly 7, 14 and 42 days (and one second either side), future samples, DST and time zones (UTC vs New_York/Berlin).
-- [ ] `hud/pure.test.ts` (new tests `queue max: ...`, replacing the `queue hwm: ...` ones): parse (nullable windows, old shape ignored), band and details text, arrow up/down/none, warning colour, narrow-terminal shrink steps, no `revisited`.
-- [ ] `tests/hud_lib.bats`, `tests/hud_data.bats`, `tests/hud_queue_source.bats`: queue JSON without `revisited`, `hwm` shape.
+- [x] `tests/hud_queue_hwm.bats` (the existing 180d/30d/7d assertions are replaced; the sample-rotation tests stay, the 180-day cap remains for the issues cell): growing, shrinking, flat, no-change window, no history, first days of history, edges at exactly 7, 14 and 42 days (and one second either side), future samples, DST and time zones (UTC vs New_York/Berlin).
+- [x] `hud/pure.test.ts` (new tests `queue max: ...`, replacing the `queue hwm: ...` ones): parse (nullable windows, old shape ignored), band and details text, arrow up/down/none, warning colour, narrow-terminal shrink steps, no `revisited`.
+- [x] `tests/hud_lib.bats`, `tests/hud_data.bats`, `tests/hud_queue_source.bats`: queue JSON without `revisited`, `hwm` shape.
 
 ## Done criteria
 
-- [ ] Three adjacent windows, the numbers differ and rise on a growing queue: `tests/hud_queue_hwm.bats` "a growing queue".
-- [ ] Window edges exact: `tests/hud_queue_hwm.bats` edge tests (7, 14, 42 days).
-- [ ] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history and no samples" (rewritten: older windows null), `hud/pure.test.ts` "queue max: the arrow compares" (`max -/-/44`).
-- [ ] Arrow up/down/none and warning colour at the highest of the three: `hud/pure.test.ts` "queue max: the arrow compares", "queue max: at the highest of the three".
-- [ ] Band and details text and the `queue.hwm` JSON shape (`lm`/`lw`/`tw`, nullable, `tw` clamped to the current length): `hud/pure.test.ts` "queue max: the band shows", "queue max: parseHelper"; `tests/hud_data.bats` queue key.
-- [ ] The issues cell keeps its nested 180/30/7 figures: `tests/hud_issues.bats` unchanged and green; docs reworded in `hud/README.md` and `hud/scripts/hud-issues.sh`.
-- [ ] Narrow terminals: the band shrinks `· max a/b/c ▲` then no max then `queue len/total`, never wider than the row: `hud/pure.test.ts` "queue max: a narrow band degrades" (new).
-- [ ] `revisited` gone from cell, details, JSON: `tests/hud_lib.bats` sl-queue-json tests, `hud/pure.test.ts` queue tests.
-- [ ] README "Queue high watermark" rewritten, HELP updated: `hud/README.md`, `hud/HELP.md`.
+- [x] Three adjacent windows, the numbers differ and rise on a growing queue: `tests/hud_queue_hwm.bats` "a growing queue".
+- [x] Window edges exact: `tests/hud_queue_hwm.bats` edge tests (7, 14, 42 days).
+- [x] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history and no samples" (rewritten: older windows null), `hud/pure.test.ts` "queue max: the arrow compares" (`max -/-/44`).
+- [x] Arrow up/down/none and warning colour at the highest of the three: `hud/pure.test.ts` "queue max: the arrow compares", "queue max: at the highest of the three".
+- [x] Band and details text and the `queue.hwm` JSON shape (`lm`/`lw`/`tw`, nullable, `tw` clamped to the current length): `hud/pure.test.ts` "queue max: the band shows", "queue max: parseHelper"; `tests/hud_data.bats` queue key.
+- [x] The issues cell keeps its nested 180/30/7 figures: `tests/hud_issues.bats` unchanged and green; docs reworded in `hud/README.md` and `hud/scripts/hud-issues.sh`.
+- [x] Narrow terminals: the band shrinks `· max a/b/c ▲` then no max then `queue len/total`, never wider than the row: `hud/pure.test.ts` "queue max: a narrow band degrades" (new).
+- [x] `revisited` gone from cell, details, JSON: `tests/hud_lib.bats` sl-queue-json tests, `hud/pure.test.ts` queue tests.
+- [x] README "Queue high watermark" rewritten, HELP updated: `hud/README.md`, `hud/HELP.md`.
 
 ## Original request
 
@@ -79,3 +79,21 @@ scheduled: 2026-11-23
 - Narrow terminals keep today's steps: `· max a/b/c`, then no watermark, then `queue len/total`.
 - Done: bats tests pin each window edge (exactly 7, 14 and 42 days), growing (three numbers differ and rise), shrinking, flat, no changes, no history, narrow terminal; `hud/README.md` section rewritten; `hud/HELP.md` updated.
 - Added by the owner during the work (same task and PRs): "I don't care about the revisited stats, so we can retire that info from the HUD." The `revisited` count leaves the queue cell, `/hud details`, `sl-queue-json`, the model, tests, README and HELP; `autoparked` stays; `autopilot/` and its state file are untouched.
+
+## Closed (2026-11-24)
+
+- Shipped in PR #738 (implementation), after #722 (staging), #727 (claim) and #730 (design); merged with green CI and a fresh independent review of every head.
+- Met:
+  - The queue cell's `max` is three adjacent rolling windows (last month 14 to 42 days ago, last week 7 to 14 days ago, this week the last 7 days) plus a trend arrow, from the existing `hist`/`samples` series (`sl-hwm-rolling` in `hud/scripts/hud-queue-hwm.sh`, `hud/model.ts`); the 180-day figure and the nesting rule are gone for the queue cell.
+  - Edge, growing, shrinking, flat, no-change, no-history, future-sample and DST cases are pinned in `tests/hud_queue_hwm.bats` and `hud/pure.test.ts`.
+  - The `revisited` count is retired from the cell, details, JSON, model, tests and docs; `autoparked` stays; `autopilot/` is untouched.
+- Unverified: `hud/pure.test.ts` needs the Claude Code test runner, which is not available outside it; the queue tests were run through a small node shim (all queue tests pass) and reviewed by hand.
+- Quality regression (shellcheck_error,shellcheck_warning,shellcheck_info,max_fn_lines,file_loc): the probe measures whole touched files, and this PR touches large existing files (`hud/pure.test.ts`, `hud/model.ts`, `hud/scripts/hud-lib.sh`, `tests/hud_queue_hwm.bats`); the shellcheck findings (SC2066 at `hud/scripts/hud-lib.sh:33`, SC2010 at line 551) are in code this PR does not touch and are also present on main; `file_loc` rose because the edge-case tests were added.
+- Follow-ups: none filed. A stale `revisited` mention in `dev/EPICS/E3-dependency-chain.md` belongs to the autopilot cursor work (decision d156).
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes in spirit, the bats edge tests were written with the implementation (code-class)
+- Verification (`superpowers:verification-before-completion`): yes, local bats and shim runs before each push and /address-pr gate on every head
+- Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
+- Receiving code review (`superpowers:receiving-code-review`): yes, /address-pr review rounds with pushbacks and fixes on #730 and #738
