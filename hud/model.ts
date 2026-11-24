@@ -278,30 +278,42 @@ export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'
   return 'error'
 }
 
-/** Colour of the subscription limit LEFT percentage: red under 10, orange (the warning tone) under 25, green otherwise. */
-export function rateTone(left: number): Tone {
-  if (left < 10) return 'error'
-  if (left < 25) return 'warning'
-  return 'success'
+/** Limit cell colouring by the gap to runout, in minutes (owner decision d166): more than GREEN is green, more than YELLOW up to GREEN is yellow, YELLOW or less is red. */
+export const RATE_GAP_GREEN_MIN = 30
+export const RATE_GAP_YELLOW_MIN = 10
+
+/** Colour of the limit cell from the seconds until it runs out; null (it will not run out before the reset) is green. */
+export function gapTone(gapSec: number | null): Tone {
+  if (gapSec === null) return 'success'
+  if (gapSec > RATE_GAP_GREEN_MIN * 60) return 'success'
+  if (gapSec > RATE_GAP_YELLOW_MIN * 60) return 'warning'
+  return 'error'
 }
 
 /** Rate-limit window length the engine reports for `five_hour`. */
 export const RATE_WINDOW_SEC = 5 * 3600
+/** ... and for `seven_day`. */
+export const RATE_WINDOW_7D_SEC = 7 * 86400
 
 /**
- * Hours until the 5-hour limit hits 100% at the burn rate so far (used% / elapsed time in the window), or
- * null when it would not run out before the window resets, or when there is too little to go on (no reset
- * time, under 1% used, or under 2 minutes elapsed). `resetsAt` is epoch seconds. The cell does not show it for
- * now (owner decision: percent and reset time only); the data stays for the HUD limit-cell revision.
+ * Seconds until a limit window hits 100% at the burn rate so far (used% / elapsed time in the window), or null when it
+ * would not run out before the window resets, or when there is too little to go on (no reset time, under 1% used, or
+ * under 2 minutes elapsed). `resetsAt` is epoch seconds; `windowSec` is the window length (5 hours by default).
  */
-export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number): number | null {
+export function rateRunoutSec(used: number, resetsAt: number | null, nowMs: number, windowSec: number = RATE_WINDOW_SEC): number | null {
   if (resetsAt === null) return null
   if (used >= 100 || !(used >= 1)) return null // already at the limit, or too little used to project
   const remaining = resetsAt - nowMs / 1000
-  const elapsed = RATE_WINDOW_SEC - remaining
+  const elapsed = windowSec - remaining
   if (remaining <= 0 || elapsed < 120) return null
-  const secToFull = (100 - used) / (used / elapsed)
-  return secToFull < remaining ? secToFull / 3600 : null
+  const secToFull = ((100 - used) * elapsed) / used
+  return secToFull < remaining ? secToFull : null
+}
+
+/** Hours form of `rateRunoutSec`. */
+export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number, windowSec: number = RATE_WINDOW_SEC): number | null {
+  const s = rateRunoutSec(used, resetsAt, nowMs, windowSec)
+  return s === null ? null : s / 3600
 }
 
 /** `1.5h` from an hour or more, `40m` below (never `0m`). */
@@ -318,24 +330,30 @@ export function resetEpochSec(v: unknown): number | null {
   return n > 1e11 ? n / 1000 : n
 }
 
+/** Zones whose short English name is only a GMT offset in ICU but which have an everyday abbreviation. */
+const TZ_ABBR: Record<string, string> = { 'Asia/Shanghai': 'CST', 'Asia/Hong_Kong': 'HKT', 'Asia/Tokyo': 'JST', 'Asia/Seoul': 'KST', 'Asia/Singapore': 'SGT', 'Asia/Kolkata': 'IST' }
+
 /**
- * Time left until a reset, compact: `1h12m`, `3d4h`, `40m`, `<1m` (whole units, rounded down; a zero minor unit is dropped:
- * `2h`, `3d`). `resetsAt` is epoch seconds; null when the window has already reset (nothing left to count down).
+ * Reset clock time in the local zone with its abbreviation: `13:55 CST`, with the weekday when the reset is not today
+ * (`Thu 13:55 CST`). The abbreviation comes from the system timezone (`tz` overrides it, for tests); a zone with no
+ * abbreviation shows its offset (`GMT+8`). null when `resetsAt` is not a usable time.
  */
-export function formatLeft(resetsAt: number, nowMs: number): string | null {
-  const s = Math.floor(resetsAt - nowMs / 1000)
-  if (s <= 0) return null
-  if (s < 60) return '<1m'
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  if (d > 0) return h > 0 ? `${d}d${h}h` : `${d}d`
-  if (h > 0) return m > 0 ? `${h}h${m}m` : `${h}h`
-  return `${m}m`
+export function formatResetClock(resetsAt: number, nowMs: number, tz?: string): string | null {
+  if (!Number.isFinite(resetsAt)) return null
+  const zone = tz ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  const at = new Date(resetsAt * 1000)
+  const part = (locale: string, o: Intl.DateTimeFormatOptions, d: Date = at) => new Intl.DateTimeFormat(locale, { timeZone: zone, ...o }).format(d)
+  const hm = part('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+  const abbr = (l: string) => new Intl.DateTimeFormat(l, { timeZone: zone, timeZoneName: 'short' }).formatToParts(at).find(p => p.type === 'timeZoneName')?.value ?? ''
+  let name = abbr('en-US')
+  if (/^(GMT|UTC)[+-]/.test(name)) name = abbr('en-GB')
+  if (/^(GMT|UTC)[+-]/.test(name) && TZ_ABBR[zone]) name = TZ_ABBR[zone]!
+  const sameDay = part('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }) === part('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }, new Date(nowMs))
+  return `${sameDay ? '' : `${part('en-US', { weekday: 'short' })} `}${hm}${name ? ` ${name}` : ''}`
 }
 
 /** One subscription window as the HUD knows it: percent used and the reset epoch (seconds), either may be unknown. */
-export type RateWindow = { label: string; used: number; resetsAt: number | null }
+export type RateWindow = { label: string; used: number; resetsAt: number | null; sec: number }
 
 /**
  * The windows worth showing: a window with no percent is absent, and so is one whose reset time has passed
@@ -343,13 +361,13 @@ export type RateWindow = { label: string; used: number; resetsAt: number | null 
  */
 export function rateWindows(snap: Pick<Snapshot, 'rateUsed' | 'rateResetsAt' | 'rate7Used' | 'rate7ResetsAt'>, nowMs: number): RateWindow[] {
   const out: RateWindow[] = []
-  const add = (label: string, used: number | null, resetsAt: number | null) => {
+  const add = (label: string, used: number | null, resetsAt: number | null, sec: number) => {
     if (used === null || !Number.isFinite(used)) return
     if (resetsAt !== null && resetsAt - nowMs / 1000 <= 0) return
-    out.push({ label, used, resetsAt })
+    out.push({ label, used, resetsAt, sec })
   }
-  add('5h', snap.rateUsed, snap.rateResetsAt)
-  add('7d', snap.rate7Used, snap.rate7ResetsAt)
+  add('5h', snap.rateUsed, snap.rateResetsAt, RATE_WINDOW_SEC)
+  add('7d', snap.rate7Used, snap.rate7ResetsAt, RATE_WINDOW_7D_SEC)
   return out
 }
 
@@ -361,19 +379,22 @@ function tighter(ws: RateWindow[]): RateWindow {
 }
 
 /**
- * The rate cell (owner decision 2026-11-24: just the percent and the reset time, no window label, no runout): the
- * percent LEFT of the window with less headroom, in its tone, then the time until it resets. `resets` is the word before
- * the time (`resets 1h12m`; `resets in 1h12m` in details; '' for the bare time); null drops the time. No window: null.
+ * The limit cell (owner decisions d166, d167): the percent LEFT of the window with less headroom, `runs out in 28m` when
+ * the burn rate would run it dry before it resets, and `reset 13:55 CST`, no window label. All of it is coloured by the gap
+ * to runout (`gapTone`): no runout before the reset is green, and a spent limit (0 left) is red. `parts` picks the pieces
+ * so the narrow forms can drop the reset time first, then the runout. No window: null.
  */
-function rateSegs(snap: Snapshot, nowMs: number, resets: string | null): Seg[] | null {
+function rateSegs(snap: Snapshot, nowMs: number, parts: { runout: boolean; reset: boolean }): Seg[] | null {
   const ws = rateWindows(snap, nowMs)
   if (ws.length === 0) return null
   const w = tighter(ws)
   const left = leftOf(w)
-  const color = rateTone(left)
+  const gap = left <= 0 ? 0 : rateRunoutSec(w.used, w.resetsAt, nowMs, w.sec)
+  const color = gapTone(gap)
   const segs: Seg[] = [{ text: `${left}% left`, color }]
-  const t = w.resetsAt === null || resets === null ? null : formatLeft(w.resetsAt, nowMs)
-  if (t !== null) segs.push({ text: ` · ${resets}${t}`, color })
+  if (parts.runout && gap !== null && left > 0) segs.push({ text: ` · runs out in ${formatRunout(gap / 3600)}`, color })
+  const clock = parts.reset && w.resetsAt !== null ? formatResetClock(w.resetsAt, nowMs) : null
+  if (clock !== null) segs.push({ text: ` · reset ${clock}`, color })
   return segs
 }
 
@@ -785,8 +806,8 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate': {
-      const full = rateSegs(snap, nowMs, 'resets ')
-      return full ? one(full, rateSegs(snap, nowMs, '')!, rateSegs(snap, nowMs, null)!) : null
+      const full = rateSegs(snap, nowMs, { runout: true, reset: true })
+      return full ? one(full, rateSegs(snap, nowMs, { runout: true, reset: false })!, rateSegs(snap, nowMs, { runout: false, reset: false })!) : null
     }
     case 'lastat': {
       const at = h?.last_input_at
@@ -1176,13 +1197,13 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   }
 
   // SESSION: context is what is LEFT (the band's ctx); the rate cell is the share LEFT of the subscription window with less
-  // headroom and when it resets, with no window label (owner decision 2026-11-24). The API-equivalent cost cell was retired.
+  // headroom, when it runs out and when it resets, coloured by the gap to runout (owner decisions d166, d167). The API-equivalent cost cell was retired.
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
     usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color: ctxTone(left, cfg) }]))
   }
-  const rateDetail = rateSegs(snap, nowMs, 'resets in ')
+  const rateDetail = rateSegs(snap, nowMs, { runout: true, reset: true })
   if (rateDetail) usage.push(one('rate', rateDetail))
   const at = h?.last_input_at
   section('SESSION', [
