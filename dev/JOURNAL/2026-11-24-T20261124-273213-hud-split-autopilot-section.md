@@ -1,8 +1,10 @@
 ---
-status: In Progress
+status: Done
 estimation: 1
 source: this conversation, 2026-11-24
 description: Split the HUD WORK section into AUTOPILOT (autopilot-only summary) and WORK (all non-autopilot ledger rows)
+claimed_by:
+claimed_role:
 ---
 
 # T20261124-273213: HUD: split WORK into AUTOPILOT and WORK sections
@@ -65,3 +67,11 @@ description: Split the HUD WORK section into AUTOPILOT (autopilot-only summary) 
 - Verification (`superpowers:verification-before-completion`): yes, pure.test.ts 201/201 through a local shim
 - Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
 - Receiving code review (`superpowers:receiving-code-review`): see PR
+
+## Closed (2026-11-24)
+
+- Shipped in the PR from branch `hud-autopilot-work-split` (this task's file closes in the same PR).
+- Met: all done criteria above; `hud/pure.test.ts` 201/201 through a local deno shim of the claude-code runner (the real runner is not available locally; CI runs the bats suites).
+- Quality probe: 8 files, shellcheck clean, no regression.
+- Not verified: the `hooks.test.tsx` suite (needs JSX in the real runner).
+- Follow-ups: none.
