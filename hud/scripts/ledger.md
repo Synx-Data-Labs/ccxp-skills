@@ -71,10 +71,12 @@ ledger.sh decision supersede <ref> "<new text>" [same options]   # old entry kep
 ledger.sh decision retire <ref> ["<reason>"]                     # no longer applies
 ledger.sh decision list [--all] [--scope <s>] [--json]           # active only unless --all, newest first
 ledger.sh decision show <ref>
+ledger.sh decision review [--scope <s>] [--json]            # read-only: overlap groups, stale and contradiction candidates over all active
 ledger.sh ref next d | ref bump d<n> | set-counter d <n>         # the d counter (never reused)
 ledger.sh reply [--tldr "<t>"] [--no-decisions]                  # adds "Decisions: N active (latest: d<k> ...)" + .md path before "Ledger:"
 ```
 
+- **Review**: `add` and `supersede` print the new ref alone on stdout, then a "Review existing decisions" block on stderr (nothing when no other decision is active): related active decisions (same scope or global, at least 2 shared meaningful words, top 5), possibly stale ones, and `possible contradiction: review dA vs dB`. It ends with "Review these with the owner: ...". Flags only; nothing is retired or changed. Tunables: `CCXP_DECISIONS_MAX_AGE_DAYS` (90), `CCXP_DECISIONS_DATE_GRACE_DAYS` (7).
 - Text is capped at 400 chars, `--quote` at 600; longer or credential-looking values are rejected, not cut.
 - `show` adds a `decisions` summary and `show --brief` a `decisions=N` field once a decisions file exists; `check` only reports malformed entries (`MALFORMED ...`).
 

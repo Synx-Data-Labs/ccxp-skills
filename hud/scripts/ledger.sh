@@ -655,6 +655,114 @@ decisions-missing() {
   fi
 }
 
+# ---- Decision review: deterministic, token-free checks over the active decisions ----
+# Overlap = shared meaningful words (stopword-filtered); stale = gone context file, a past date next to a
+# "retire this decision/once/after/until" phrase, or old with no source; contradiction = opposite polarity or a
+# different number for the same unit word between two overlapping decisions. Flags only; never decides.
+DECISIONS_REVIEW_JQ=$(cat <<'JQ'
+def stopwords: ["the","and","for","are","but","not","with","this","that","from","have","has","had","was","were","will","would","should","shall","can","could","may","its","our","you","your","all","any","use","used","using","when","then","than","into","onto","out","off","per","via","also","just","only","each","every","before","after","once","until","unless","never","always","must","dont","does","doing","done","being","been","they","them","their","there","here","what","which","who","how","why","where","about","over","under","too","very","more","most","some","such","own","same","other","new","one","two","get","got","let","make","made","need","needs","want","wants","like","allowed","forbidden","permitted","required","yes","repo","decision","decisions","owner","rule","rules","retire"];
+(stopwords | map({(.): true}) | add) as $S
+| def words: ascii_downcase | [match("[a-z0-9]+"; "g").string] | map(select(length >= 3 and ($S[.] | not))) | unique;
+def inter($a; $b): $a | map(select(. as $x | any($b[]; . == $x)));
+def compat($a; $b): $a == $b or $a == "global" or $b == "global";
+def norm: ascii_downcase | gsub("must not"; "never") | gsub("(not|never|n.t) +(be +)?(allowed|permitted|ok|okay)"; "forbidden")
+  | gsub("off[- ]limits"; "forbidden") | gsub("do not|don.t|dont"; "never");
+def pol: norm as $n
+  | ($n | test("\\b(never|not|no|forbidden|ban|banned|avoid|disallow|disallowed|prohibited|without)\\b")) as $neg
+  | ($n | test("\\b(always|must|yes|allowed|permitted|required|require|requires|mandatory)\\b")) as $pos
+  | if $neg and ($pos | not) then -1 elif $pos and ($neg | not) then 1 else 0 end;
+def nums: [match("([0-9]+(?:\\.[0-9]+)?) *([a-z]{3,})"; "g").captures | {n: .[0].string, u: .[1].string}] | map(select(.u as $u | $S[$u] | not));
+def clash($a; $b):
+  if ($a.pol * $b.pol) == -1 then "opposite wording: never/not/forbidden vs always/must/allowed"
+  else ([($a.nums[] as $x | $b.nums[] as $y | select($x.u == $y.u and ($x.n | tonumber) != ($y.n | tonumber)) | "different number for \"\($x.u)\": \($x.n) vs \($y.n)")] | .[0] // empty) end;
+(now - ($grace * 86400) | strftime("%Y-%m-%d")) as $cut
+| def stale($e): ($e.text + " " + $e.quote) as $t | [
+    (if any($missing[]; . == $e.ref) then "context file is gone: \($e.context)" else empty end),
+    (if ($t | test("retire this decision|\\bonce\\b|\\bafter\\b|\\buntil\\b"; "i")) and ([$t | match("[0-9]{4}-[0-9]{2}-[0-9]{2}"; "g").string] | any(. < $cut))
+       then "its retire/once/after condition names a date that has passed" else empty end),
+    (if $e.source == "" and (try (((now - ($e.added_at | fromdateiso8601)) / 86400) > $maxage) catch false)
+       then "older than \($maxage) days with no source" else empty end)];
+[.decisions[] | select(.status == "active")] as $act0
+| ($act0 | map(select($scope == "" or .scope == $scope))
+    | map(. + {w: (.text + " " + .quote | words), pol: (.text | pol), nums: (.text | ascii_downcase | nums)})) as $E
+| def pair($a; $b): inter($a.w; $b.w) as $sh | select(compat($a.scope; $b.scope) and ($sh | length) >= 2)
+    | {a: $a.ref, b: $b.ref, score: ($sh | length), shared: $sh, clash: clash($a; $b)};
+if $mode == "add" then
+  ($E | map(select(.ref == $newref)) | .[0]) as $n
+  | ($E | map(select(.ref != $newref))) as $o
+  | ([$o[] | . as $x | pair($n; $x) | {ref: $x.ref, scope: $x.scope, text: $x.text, score, shared, clash}] | sort_by(-.score)) as $rel
+  | {others: ($o | length),
+     related: ($rel | map(del(.clash)) | .[0:5]),
+     stale: [$o[] | . as $x | stale($x) as $r | select($r | length > 0) | {ref, text, reasons: $r}],
+     contradictions: [$rel[] | select(.clash != null) | {a: $newref, b: .ref, reason: .clash}]}
+else
+  ([range(0; $E | length) as $i | range($i + 1; $E | length) as $j | pair($E[$i]; $E[$j])]) as $pairs
+  | {others: ($E | length),
+     overlaps: ($pairs | map(del(.clash))),
+     groups: ((reduce $pairs[] as $p ([]; . as $g
+        | ([$g[] | select(any(.[]; . == $p.a or . == $p.b))]) as $hit
+        | ([$g[] | select(any(.[]; . == $p.a or . == $p.b) | not)]) + [([$hit[][]] + [$p.a, $p.b] | unique)]))
+       | map(. as $refs | {refs: $refs, shared: ([$pairs[] | . as $p | select(any($refs[]; . == $p.a)) | .shared[]] | unique)})),
+     stale: [$E[] | . as $x | stale($x) as $r | select($r | length > 0) | {ref, text, reasons: $r}],
+     contradictions: [$pairs[] | select(.clash != null) | {a, b, reason: .clash}]}
+end
+JQ
+)
+
+# Refs of active decisions whose --context file no longer exists, as a JSON array.
+decisions-missing-ctx() {
+  local r c out=""
+  while IFS=$'\t' read -r r c; do [[ -e "$c" ]] || out+="$r"$'\n'; done \
+    < <(decisions-read | jq -r '.decisions[] | select(.status == "active" and .context != "") | [.ref, .context] | @tsv')
+  printf '%s' "$out" | jq -Rsc 'split("\n") | map(select(. != ""))'
+}
+
+# $1 mode (add|all), $2 new ref (add), $3 scope filter ("" = none); prints the review JSON.
+decisions-review-json() {
+  local age="${CCXP_DECISIONS_MAX_AGE_DAYS:-90}" grace="${CCXP_DECISIONS_DATE_GRACE_DAYS:-7}"
+  [[ "$age" =~ ^[0-9]{1,5}$ ]] || age=90; [[ "$grace" =~ ^[0-9]{1,5}$ ]] || grace=7
+  decisions-read | jq -c --arg mode "$1" --arg newref "${2:-}" --arg scope "${3:-}" --argjson maxage "$age" --argjson grace "$grace" \
+    --argjson missing "$(decisions-missing-ctx)" "$DECISIONS_REVIEW_JQ"
+}
+
+DECISIONS_REVIEW_LINE='Review these with the owner: retire stale ones, consolidate overlaps via `decision supersede`, and raise any contradiction before acting.'
+
+# $1 review JSON (add mode), $2 new ref: the block printed after `decision add|supersede` (stderr). Nothing when no other decision is active.
+decisions-review-block() {
+  local j="$1" n
+  n=$(jq -r '.others' <<<"$j") || return 0
+  [[ "$n" =~ ^[0-9]+$ && "$n" -gt 0 ]] || return 0
+  jq -r --arg new "$2" '
+    "Review existing decisions (new \($new); \(.others) other active):",
+    (if (.related | length) > 0 then "  related active decisions:" else empty end),
+    (.related[] | "    \(.ref) [\(.scope)] shares \(.score) words (\(.shared | join(", "))): \(.text[0:100])"),
+    (if (.stale | length) > 0 then "  possibly stale:" else empty end),
+    (.stale[] | "    \(.ref): \(.reasons | join("; ")) -- \(.text[0:100])"),
+    (.contradictions[] | "  possible contradiction: review \(.a) vs \(.b) (\(.reason))"),
+    (if (.related | length) + (.stale | length) + (.contradictions | length) == 0 then "  nothing flagged" else empty end)' <<<"$j" >&2
+  printf '%s\n' "$DECISIONS_REVIEW_LINE" >&2
+}
+
+# $1 review JSON (all mode): the text view of `decision review`.
+decisions-review-text() {
+  jq -r --arg line "$DECISIONS_REVIEW_LINE" '
+    "Decision review (\(.others) active):",
+    (if (.groups | length) > 0 then "  overlap groups:" else empty end),
+    (.groups[] | "    \(.refs | join(", ")) (shared: \(.shared | join(", ")))"),
+    (if (.stale | length) > 0 then "  possibly stale:" else empty end),
+    (.stale[] | "    \(.ref): \(.reasons | join("; ")) -- \(.text[0:100])"),
+    (.contradictions[] | "  possible contradiction: review \(.a) vs \(.b) (\(.reason))"),
+    (if (.groups | length) + (.stale | length) + (.contradictions | length) == 0 then "  nothing flagged" else $line end)' <<<"$1"
+}
+
+# After add/supersede: the review block for the new entry (DECISIONS_LAST), on stderr; never fails the caller.
+decisions-review-after() {
+  local ref rj; ref=$(jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST")
+  rj=$(decisions-review-json add "$ref" "") || return 0
+  decisions-review-block "$rj" "$ref" || true
+  return 0
+}
+
 # decision add|supersede|retire|list|show ...
 ledger-decision() {
   local sub="${1:-}"; shift || true
@@ -667,7 +775,8 @@ ledger-decision() {
       decisions-update '.counter += 1 | .decisions += [{ref: ("d" + (.counter | tostring)), text: $t, quote: $q, scope: $s,
           context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
         --arg t "$text" --arg q "$QUOTE" --arg s "${SCOPE:-global}" --arg c "$CTX" --arg src "$SRC" || return 1
-      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST" ;;
+      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST"
+      decisions-review-after ;;
     supersede)
       ledger-args "$@" || return 2
       local r st text; r=$(decisions-id "${POS[0]:-}") || return 2
@@ -682,7 +791,12 @@ ledger-decision() {
         | .decisions += [{ref: $new, text: $t, quote: $q, scope: (if $hs then $s else $old.scope end),
             context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
         --arg r "$r" --arg t "$text" --arg q "$QUOTE" --arg s "$SCOPE" --argjson hs "$HAVE_SCOPE" --arg c "$CTX" --arg src "$SRC" || return 1
-      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST" ;;
+      jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST"
+      decisions-review-after ;;
+    review)
+      ledger-args "$@" || return 2
+      local rj; rj=$(decisions-review-json all "" "$SCOPE") || { echo "ledger: decision review failed" >&2; return 1; }
+      if [[ "$JSON" == true ]]; then jq -c 'del(.others)' <<<"$rj"; else decisions-review-text "$rj"; fi ;;
     retire)
       ledger-args "$@" || return 2
       local r st reason; r=$(decisions-id "${POS[0]:-}") || return 2
@@ -712,7 +826,7 @@ ledger-decision() {
       else
         echo "ledger: no decision $r" >&2; return 1
       fi ;;
-    *) echo "usage: ledger.sh decision add <text> [--quote q] [--scope global|repo:<name>] [--context <abs path>] [--source s] | supersede <ref> <text> [same options] | retire <ref> [reason] | list [--all] [--scope s] [--json] | show <ref>" >&2; return 2 ;;
+    *) echo "usage: ledger.sh decision add <text> [--quote q] [--scope global|repo:<name>] [--context <abs path>] [--source s] | supersede <ref> <text> [same options] | retire <ref> [reason] | list [--all] [--scope s] [--json] | show <ref> | review [--scope s] [--json]" >&2; return 2 ;;
   esac
 }
 

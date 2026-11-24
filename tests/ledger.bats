@@ -1455,3 +1455,84 @@ cx_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
   IFS=$'\t' read -r job title ctx prompt started agent flags rest <<<"$output"
   [ "$job" = "21" ]; [ "$flags" = "needs-confirmation,repo-changing" ]
 }
+
+# ---- decision review (block after add/supersede, and the read-only `decision review`) ----
+
+@test "decision add: ref stays alone on stdout; a related decision shows in the review block on stderr" {
+  bash "$LEDGER" decision add "Squash merge is never used in the ccxp-skills repo" >/dev/null
+  run --separate-stderr bash "$LEDGER" decision add "Always squash merge pull requests in ccxp-skills"
+  [ "$status" -eq 0 ]
+  [ "$output" = "d2" ]
+  [[ "$stderr" == *"Review existing decisions"* ]]
+  [[ "$stderr" == *"d1 [global] shares"* ]]
+  [[ "$stderr" == *"squash"* ]]
+  [ "$(tail -1 <<<"$stderr")" = 'Review these with the owner: retire stale ones, consolidate overlaps via `decision supersede`, and raise any contradiction before acting.' ]
+}
+
+@test "decision supersede prints the review block too, and never lists the superseded entry" {
+  bash "$LEDGER" decision add "Deploy builds only from the release branch" >/dev/null
+  bash "$LEDGER" decision add "Run the nightly job at midnight UTC" >/dev/null
+  run --separate-stderr bash "$LEDGER" decision supersede d1 "Deploy builds only from the main branch"
+  [ "$output" = "d3" ]
+  [[ "$stderr" == *"Review existing decisions (new d3; 1 other active)"* ]]
+  [[ "$stderr" != *"d1 ["* ]]
+}
+
+@test "decision add: no block when there are no other active decisions" {
+  run --separate-stderr bash "$LEDGER" decision add "First and only"
+  [ "$output" = "d1" ]; [ -z "$stderr" ]
+  bash "$LEDGER" decision retire d1
+  run --separate-stderr bash "$LEDGER" decision add "Second after retire"
+  [ "$output" = "d2" ]; [ -z "$stderr" ]
+}
+
+@test "decision add: a gone context file is flagged as possibly stale" {
+  touch "$BATS_TEST_TMPDIR/ctx.md"
+  bash "$LEDGER" decision add "Keep the cache warm" --context "$BATS_TEST_TMPDIR/ctx.md" >/dev/null
+  bash "$LEDGER" decision add "Other unrelated rule about logging" >/dev/null
+  mv "$BATS_TEST_TMPDIR/ctx.md" "$BATS_TEST_TMPDIR/ctx-gone.md"
+  run --separate-stderr bash "$LEDGER" decision add "Third unrelated rule about naming"
+  [[ "$stderr" == *"possibly stale"* ]]
+  [[ "$stderr" == *"d1: context file is gone"* ]]
+  [[ "$stderr" != *"d2: context"* ]]
+}
+
+@test "decision review: past date next to a retire/once phrase and an old entry without a source are stale" {
+  bash "$LEDGER" decision add "Retire this decision after 2020-01-02: freeze the schema" >/dev/null
+  bash "$LEDGER" decision add "Plain old rule about widgets" >/dev/null
+  jq '.decisions[1].added_at = "2020-01-01T00:00:00Z"' "$(dj)" > "$BATS_TEST_TMPDIR/t.json" && cp "$BATS_TEST_TMPDIR/t.json" "$(dj)"
+  run bash "$LEDGER" decision review --json
+  [ "$(jq -r '.stale | map(.ref) | join(",")' <<<"$output")" = "d1,d2" ]
+  [[ "$(jq -r '.stale[0].reasons[0]' <<<"$output")" == *"date that has passed"* ]]
+  [[ "$(jq -r '.stale[1].reasons[0]' <<<"$output")" == *"older than 90 days"* ]]
+}
+
+@test "decision add: opposite wording and a different number on overlapping decisions are flagged, never decided" {
+  bash "$LEDGER" decision add "Never auto-merge dependency bump pull requests" >/dev/null
+  run --separate-stderr bash "$LEDGER" decision add "Always auto-merge dependency bump pull requests"
+  [ "$output" = "d2" ]
+  [[ "$stderr" == *"possible contradiction: review d2 vs d1"* ]]
+  bash "$LEDGER" decision add "Keep 5 retries for flaky network calls" >/dev/null
+  run --separate-stderr bash "$LEDGER" decision add "Keep 10 retries for flaky network calls"
+  [[ "$stderr" == *'possible contradiction: review d4 vs d3 (different number for "retries": 10 vs 5)'* ]]
+  [ "$(bash "$LEDGER" decision list --json | jq 'length')" = "4" ]
+}
+
+@test "decision review --json: shape, scope filter, and unrelated decisions are not grouped" {
+  bash "$LEDGER" decision add "Never squash merge in ccxp-skills" --scope repo:ccxp-skills >/dev/null
+  bash "$LEDGER" decision add "Always squash merge in ccxp-skills" --scope repo:ccxp-skills >/dev/null
+  bash "$LEDGER" decision add "Greet people politely" --scope repo:other >/dev/null
+  run bash "$LEDGER" decision review --json
+  [ "$status" -eq 0 ]
+  [ "$(jq -c 'keys' <<<"$output")" = '["contradictions","groups","overlaps","stale"]' ]
+  [ "$(jq -c '.groups | map(.refs)' <<<"$output")" = '[["d1","d2"]]' ]
+  [ "$(jq -c '.contradictions | map([.a,.b])' <<<"$output")" = '[["d1","d2"]]' ]
+  [ "$(jq -c '.overlaps[0] | keys' <<<"$output")" = '["a","b","score","shared"]' ]
+  run bash "$LEDGER" decision review --scope repo:other --json
+  [ "$(jq -c '[.groups, .overlaps, .stale, .contradictions]' <<<"$output")" = '[[],[],[],[]]' ]
+  run bash "$LEDGER" decision review
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"overlap groups:"* ]]
+  [[ "$output" == *"possible contradiction: review d1 vs d2"* ]]
+  [[ "$output" == *"Review these with the owner"* ]]
+}

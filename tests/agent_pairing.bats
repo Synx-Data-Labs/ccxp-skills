@@ -739,3 +739,10 @@ install_outdated_agent() {
   for w in 'Read-only' 'Machine-state' 'ledger' '/top' '/address-pr' '/land' 'dev/TODO/' 'd-ref'; do grep -q -- "$w" "$d"; done
   [ "$(wc -c < "$f")" -lt 48500 ]
 }
+
+@test "asset: Decisions log tells the dispatcher to relay the review block and retire only with the owner's approval" {
+  f="$REPO_ROOT/agent-pairing/assets/ccxp-agent.md"
+  grep -q '\*\*Review\*\*: `decision add`/`supersede` prints a review block' "$f"
+  grep -q "ONLY with the owner's approval" "$f"
+  grep -q 'decision review' "$f"
+}
