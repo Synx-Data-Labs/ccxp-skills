@@ -1732,6 +1732,7 @@ EOS
   run _ap hold-add T20261124-000001 stalled "pr:1" "   "; [ "$status" -eq 2 ]
   run _ap hold-add T20261124-000001 stalled "pr:1"; [ "$status" -eq 2 ]
   run _ap hold-add nope stalled "pr:1" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled $'file-changed a\tb' "r"; [ "$status" -eq 2 ]
   [ ! -s "$AUTOPILOT_STATE_FILE" ] || [ "$(_j '.holds // {} | length')" -eq 0 ]
 }
 

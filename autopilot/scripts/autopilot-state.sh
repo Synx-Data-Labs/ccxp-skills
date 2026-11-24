@@ -616,6 +616,7 @@ AP_HOLD_USAGE='hold-add <task-id> <waiting|needs-human|stalled> "<until <time>|r
 _ap_hold_cond() {
   local c arg
   c=$(printf '%s' "$*" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  case "$c" in *$'\t'*|*$'\n'*) return 1 ;; esac   # the TSV listing and holds-check split on tabs
   case "$c" in
     "until "*)
       arg=$(printf '%s' "${c#until }" | sed -E 's/^[[:space:]]+//')
