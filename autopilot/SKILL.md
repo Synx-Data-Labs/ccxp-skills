@@ -24,12 +24,12 @@ Anything else (including a leftover pre-redesign wake such as `/autopilot until 
 
 All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.sh` (unit-tested in `tests/autopilot_state.bats`); call it instead of editing JSON by hand. One command per call.
 
-- `dev/.autopilot-state.json` (gitignored, schema 2) — the loop's source of truth. Fields: `status` on|paused|off, `started_at`, `paused_at`, counters (`cycle_count`, `merged_count`, `stuck_count`, `waiting_count`, `*_today`), `last_outcome`/`last_task`/`last_stuck_reason`, `next_wake_at`, `busy_since`, `current_task` (the busy cycle's task id, informational; with parallel cycles both mirror the oldest running slot), `slots`, `dispatch_clone_paths`, `last_hold`, notify-once flags, `notices`. Also `visits` (task id to its count of no-progress visits) and `parked` (the last 50 tasks the loop parked: `{id, at, reason, visits}`); both are local to this machine and carry over `off`/`start`. There is **no skip list and nothing in any task file** that says why a task could not be finished: the queue order is the record of priority (Phase 3).
+- `dev/.autopilot-state.json` (gitignored, schema 2) — the loop's source of truth. Fields: `status` on|paused|off, `started_at`, `paused_at`, counters (`cycle_count`, `merged_count`, `stuck_count`, `waiting_count`, `*_today`), `last_outcome`/`last_task`/`last_stuck_reason`, `next_wake_at`, `busy_since`, `current_task` (the busy cycle's task id, informational; with parallel cycles both mirror the oldest running slot), `slots`, `dispatch_clone_paths`, `last_hold`, notify-once flags, `notices`. Also `holds` and `cursors` (below), local to this machine and carried over `off`/`start`. There is **no skip list and nothing in any task file** that says why a task could not be finished: the queue order is the record of priority (Phase 3).
 - Holds (state `holds`, kept over `off`/`start`): `hold-add <T-id> waiting|needs-human|stalled <condition> "<reason>"`, `holds`, `release <T-id>`, `holds-check`. Condition: `until <time>`, `run:<id>`, `pr:<n>`, `file-changed <path>`, `task-left-todo <T-id>`; no hold without both (d152).
 - Tier cursors (state `cursors`): `top` picks in the highest tier (`tier:` 1-4, default 3) with a free, not-held task, the last-dispatched task of a tier last; `top --urgent`: tiers 1-2.
 - `dev/.autopilot-history.jsonl` (gitignored, append-only) — one `{ts, outcome, merged, task}` line per `record` call (`task` is a task id or `""`; no free text, no secrets). Written by `record` itself (so nothing else logs a merge), a write failure is swallowed and never breaks `record`. It survives `off`/`start`. The state file also keeps `lifetime_started_at`, `lifetime_cycles` and `lifetime_merged`, which `start` carries over (a state from before they existed is seeded from its run counters), so `off` then `start` never resets the lifetime baseline.
 - `autopilot-state.sh stats [--json]` — progress over the rolling last 24 h (merged, cycles, stuck, waiting, idle; `capped` ticks are not cycles) and the lifetime average per 24 h (`lifetime_merged / max(1, days since lifetime_started_at)`), with a trend (`up`/`down`/`flat`). The 24 h figures are exact when the log reaches back over the whole window, or when no cycle ran inside it; otherwise (`approx: true`) an estimate: the larger of the log and the state's calendar-day counters (HUD: `~`). The HUD's AP band shows it (`hud/README.md`).
-- `dev/.autopilot-config.json` (gitignored, optional) — `{"daily_cycle_cap": 64, "daily_merge_cap": 64, "idle_retry_minutes": 32, "max_visits": 4, "max_dop": 3, "reserved_slots": 2}`. Missing keys use these defaults. `max_visits` is how many no-progress visits park a task. `max_dop` (3-16, default **3**): `/drive` cycles at once, `reserved_slots` (0-8, default 2) kept for urgent work.
+- `dev/.autopilot-config.json` (gitignored, optional) — `{"daily_cycle_cap": 64, "daily_merge_cap": 64, "idle_retry_minutes": 32, "max_dop": 3, "reserved_slots": 2}`. Missing keys use these defaults. `max_dop` (3-16, default **3**): `/drive` cycles at once, `reserved_slots` (0-8, default 2) kept for urgent work.
 - This skill must run in the main session: only it can `ScheduleWakeup` and receive `pause`/`off`.
 
 ## Workflow
@@ -39,7 +39,7 @@ All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.s
 For `status` (and for an unsupported argument): run `autopilot-state.sh report` and relay it. Then add, derived live and never from a cache:
 
 - **Done**: `autopilot-state.sh done` (journal files added since `started_at`, one bullet each; prints "- No tasks merged this run" when empty).
-- **Needs your attention**: `autopilot-state.sh parked-list` (tasks the loop parked since this run started: `parked by autopilot: T<id> — <reason>`), plus a task whose `status:` flags a human-only condition (`SUPERVISED`, a sign-off) and an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
+- **Needs your attention**: `autopilot-state.sh holds` (each held task with its kind, reason and release condition), plus a task whose `status:` flags a human-only condition (`SUPERVISED`, a sign-off) and an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
 
 No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 
@@ -48,7 +48,7 @@ No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 The helper validates and writes atomically (mode 600, other keys kept); never edit the JSON by hand.
 
 - `config` / `config show`: `config-show [--json]`, read-only: effective value, `default` or `override`, range, file path.
-- `config set <key> <value>`: `config-set`. Keys `daily_cycle_cap`, `daily_merge_cap` (1-1000), `idle_retry_minutes` (30-60), `max_visits` (1-20), `max_dop` (3-16, default 3), `reserved_slots` (0-8, default 2); a non-negative integer. Exit 2 = refused, nothing written: relay the message. On success relay `config-show`.
+- `config set <key> <value>`: `config-set`. Keys `daily_cycle_cap`, `daily_merge_cap` (1-1000), `idle_retry_minutes` (30-60), `max_dop` (3-16, default 3), `reserved_slots` (0-8, default 2); a non-negative integer. Exit 2 = refused, nothing written: relay the message. On success relay `config-show`.
 - `config reset [<key>]`: `config-reset [<key>]` drops that override or all; unknown keys stay.
 - Any other `config` form: show the usage, stop.
 
@@ -58,7 +58,7 @@ Touches neither the state file nor the schedule; a running loop reads the value 
 
 1. `ScheduleWakeup(stop: true)` first, always (for `off` and `pause`).
 2. A sub-agent dispatched (mid-cycle: the cycle agents)? `SendMessage` each to commit and push WIP (no PR needed, `/drive` resumes from a pushed branch) and report; wait up to 2 minutes, then `TaskStop`. When they have reported (or been stopped), run `autopilot-state.sh busy off`.
-3. `off`: `autopilot-state.sh off` prints `off <clone-path>` (plus a `clone <path>` line per extra slot clone). Capture the final report **before** removing the clone, from the clone's fresh `main` (the park PRs land there first): `git -C <clone-path> pull -q`, then `AUTOPILOT_REPO_ROOT=<clone-path> autopilot-state.sh final-report > <tmp file>` (Phase 5). Then remove each clone directory with `rm -rf` of the literal path (they are under `/tmp`, which the rm-guard hook allows) and post the saved report to the user. `noop` (already off, or nothing to pause): report the current state and stop.
+3. `off`: `autopilot-state.sh off` prints `off <clone-path>` (plus a `clone <path>` line per extra slot clone). Capture the final report **before** removing the clone, from the clone's fresh `main`: `git -C <clone-path> pull -q`, then `AUTOPILOT_REPO_ROOT=<clone-path> autopilot-state.sh final-report > <tmp file>` (Phase 5). Then remove each clone directory with `rm -rf` of the literal path (they are under `/tmp`, which the rm-guard hook allows) and post the saved report to the user. `noop` (already off, or nothing to pause): report the current state and stop.
 4. `pause`: `autopilot-state.sh pause` (`noop` if not on: report the state); keep the clone and state; report.
 5. `resume`: `autopilot-state.sh resume` prints `dispatch` (go to Phase 2, the cap check, then one cycle now) or `busy` (the interrupted cycle is still finishing: do nothing, its Phase 4 re-reads `on` and arms the next wake) or `noop` (not paused: report).
 
@@ -94,7 +94,7 @@ A dirty or mid-rebase leftover: remove the directory and re-run the block. Full 
 
 - `pick`: `todo-next.sh --skip-gated` finds a task `/drive` may take. Dispatch.
 - `drift`: nothing pickable, but `todo-sweep.sh plan` has mechanical findings (untracked task file, stale queue entry, closed-but-queued task); `/drive`'s own Phase 1 sweep fixes them. Dispatch. A drift dispatch that merges nothing ends `idle`/`stuck` and waits out its back-off, so permanent drift costs at most one agent per interval.
-- `none`: queue empty, or every queued task gated, held or parked. Go to Phase 4 `idle` without dispatching.
+- `none`: queue empty, or every queued task gated or held. Go to Phase 4 `idle` without dispatching.
 
 **Priority is the queue; task files stay clean.**
 
@@ -141,7 +141,7 @@ Write the sub-agent's final message to a temp file and run `autopilot-state.sh c
 - No `/bottom`, no `queue.md` edit, no housekeeping agent or PR. The owner or `/todo sweep` still reorder the queue; `autopilot-state.sh holds` lists the holds and `release <id>` frees one by hand. The held task's claim stays until this clone's next claim runs `release-others` (it returns to `Open` there).
 - Then run `autopilot-state.sh record <outcome> <merged-count> <task-id> "<reason>"` with the `classify` fields (id `-`: pass `""`); it prints a notice kind or `none` and sets the next wake time.
 
-**Notify** for each non-`none` kind returned: `autopilot-state.sh notify <kind> "<text>"`, one concise bullet list (kind `idle` names the tasks from `parked-list` and says retries are silent; `resumed` says work is flowing again; `stuck` names the task and reason; `waiting` names the PR; `capped` names the cap; `parked` names the task, its last reason and "autopilot visited <n> times without progress"). `notify` tries `/slack --channel dev` and, when the env vars are unset or the post fails, records the notice in the state file (shown by `status` and the HUD); it never errors, so never retry or escalate it.
+**Notify** for each non-`none` kind returned: `autopilot-state.sh notify <kind> "<text>"`, one concise bullet list (kind `idle` names the held tasks from `holds` and says retries are silent; `resumed` says work is flowing again; `stuck` names the task and reason; `waiting` names the PR; `capped` names the cap). `notify` tries `/slack --channel dev` and, when the env vars are unset or the post fails, records the notice in the state file (shown by `status` and the HUD); it never errors, so never retry or escalate it.
 
 Then `ScheduleWakeup(delaySeconds: <autopilot-state.sh delay <outcome>>, prompt: "/autopilot on", reason: "autopilot <outcome>")` and end the turn. Every wake carries the same prompt; the state file decides whether it dispatches (Phase 1).
 
@@ -159,7 +159,7 @@ Done:
 (one bullet per merged task this run, from the `done` journal scan; "- No tasks merged this run" if none)
 
 Needs your attention:
-- <tasks parked by autopilot (from `parked-list`), stuck tasks, PRs stuck beyond any skill>
+- <held tasks (from `holds`), stuck tasks, PRs stuck beyond any skill>
 (or "- Nothing outstanding")
 ```
 
@@ -167,7 +167,7 @@ Every `T<id>`/`PR #<n>` carries a short slug (bare id if it cannot be recovered)
 
 ## Important Notes
 
-- **Needs-your-attention filter**: only items no skill can resolve unattended. Exclude `Blocked by T{id}` and an open PR with routine CI/review/rebase work (drained by the next `/drive` Phase 0). Include `parked-list` entries (tasks parked after `max_visits` no-progress visits), `last_outcome == "stuck"`, and tasks whose `status:` names a human-only condition.
+- **Needs-your-attention filter**: only items no skill can resolve unattended. Exclude `Blocked by T{id}` and an open PR with routine CI/review/rebase work (drained by the next `/drive` Phase 0). Include `holds` entries (`needs-human` and `stalled`), `last_outcome == "stuck"`, and tasks whose `status:` names a human-only condition.
 - **Never loop inside one turn.** One cycle (per slot) is exactly one `ScheduleWakeup` boundary.
 - **One run per repo, best-effort.** No lock beyond the state file's write lock, the busy marks and `next_wake_at`.
 - **Idle is not a stop.** Going idle notifies once; retries are silent; new work (`/stage`, `/todo sweep`) is picked up on the next retry.
@@ -176,5 +176,5 @@ Every `T<id>`/`PR #<n>` carries a short slug (bare id if it cannot be recovered)
 
 - `/drive` — does the selection/implementation/merge work, one cycle per dispatch (`/drive T<id> --auto-selected`)
 - `/slack` — `notify` posts to `--channel dev`
-- `/todo` — `next --skip-gated` and `sweep` plan feed `pickable`; `todo-sweep.sh park` is the park; `/address-pr` — drains and merges PRs
+- `/todo` — `next --skip-gated` and `sweep` plan feed `pickable`; `/address-pr` — drains and merges PRs
 - `hud/` — `AP on/off` band reads `dev/.autopilot-state.json` (`hud/scripts/hud-lib.sh`)
