@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatResetClock, formatRunout, gapTone, rateRunoutHours, rateRunoutSec, rateWindows, resetEpochSec, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatResetClock, formatRunout, gapTone, rateRunoutHours, rateRunoutSec, firstToRunOut, rateWindows, resetEpochSec, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -828,6 +828,76 @@ test('rate cell: percent left, runs out in Nm and the reset time; coloured by th
   expect(find(rate({ rateUsed: 100, rateResetsAt: rateReset(7200) }), /0% left/)?.color).toBe('error')
   // low percent but a long gap stays green (the colour follows the gap, not the percent)
   expect(find(rate({ rateUsed: 92, rateResetsAt: rateReset(17900) }), /8% left/)?.color).toBe('success')
+})
+
+test('rate cell: colour and text use the same whole minutes, rounded down (10m20s reads 10m and is red)', () => {
+  const rate = (over: object) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, 200, RATE_NOW)
+  const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
+  const secs = (s: number) => ({ rateUsed: 50, rateResetsAt: rateReset(s) }) // 50% used: runs out s seconds from now
+  const at = (s: number) => find(rate(secs(s)), /runs out/)
+  expect([at(10 * 60 + 20)?.text, at(10 * 60 + 20)?.color]).toEqual([' · runs out in 10m', 'error'])
+  expect([at(11 * 60 - 1)?.text, at(11 * 60 - 1)?.color]).toEqual([' · runs out in 10m', 'error'])
+  expect([at(11 * 60)?.text, at(11 * 60)?.color]).toEqual([' · runs out in 11m', 'warning'])
+  expect([at(31 * 60 - 1)?.text, at(31 * 60 - 1)?.color]).toEqual([' · runs out in 30m', 'warning'])
+  expect([at(31 * 60)?.text, at(31 * 60)?.color]).toEqual([' · runs out in 31m', 'success'])
+})
+
+const win = (label: '5h' | '7d', used: number, resetIn: number, sec: number) => ({ label, used, resetsAt: RATE_NOW / 1000 + resetIn, sec })
+const five = (used: number, resetIn: number) => win('5h', used, resetIn, 5 * 3600)
+const seven = (used: number, resetIn: number) => win('7d', used, resetIn, 7 * 86400)
+const DAY = 86400
+
+test('firstToRunOut: both run out, the 5-hour one first even with more % left; the 7-day one first when it is the only one that runs out', () => {
+  expect(firstToRunOut([five(80, 4320), seven(95, 3 * DAY + 4 * 3600)], RATE_NOW).w.label).toBe('5h') // 57m vs ~4h
+  expect(Math.round(firstToRunOut([five(80, 4320), seven(95, 3 * DAY + 4 * 3600)], RATE_NOW).gap!)).toBe(3420)
+  // 5h has more left (30%) than 7d (5%) yet runs out sooner: runout time ranks, not % left
+  expect(firstToRunOut([five(90, 3000), seven(95, 3 * DAY)], RATE_NOW).w.label).toBe('5h')
+  // 7d first: 5h does not run out before its reset
+  const r = firstToRunOut([five(10, 4320), seven(90, 3 * DAY + 4 * 3600)], RATE_NOW)
+  expect(r.w.label).toBe('7d')
+  expect(r.gap).not.toBeNull()
+})
+
+test('firstToRunOut: a window that runs out beats one with less % left that does not; neither running out falls back to less % left, a full tie keeps 5h', () => {
+  // 7d: 60% used 6 days in, 4 days to full is past its 1 day reset (no runout), but 5h (80% used) runs out
+  expect(firstToRunOut([five(80, 4320), seven(60, DAY)], RATE_NOW).w.label).toBe('5h')
+  expect(firstToRunOut([seven(96, 3 * DAY), five(10, 7200)], RATE_NOW).w.label).toBe('7d') // 7d runs out, 5h does not
+  expect(firstToRunOut([five(20, 7200), seven(40, 3 * DAY)], RATE_NOW).w.label).toBe('7d') // neither runs out: less left
+  expect(firstToRunOut([five(60, 7200), seven(20, 3 * DAY)], RATE_NOW).w.label).toBe('5h')
+  const tie = firstToRunOut([five(20, 7200), seven(20, 3 * DAY)], RATE_NOW)
+  expect([tie.w.label, tie.gap]).toEqual(['5h', null])
+  expect(firstToRunOut([seven(34, DAY)], RATE_NOW).w.label).toBe('7d') // one window
+})
+
+test('firstToRunOut: a spent window (0 left) runs out first, at gap 0', () => {
+  const s = firstToRunOut([five(80, 4320), seven(100, 3 * DAY)], RATE_NOW)
+  expect([s.w.label, s.gap]).toEqual(['7d', 0])
+})
+
+test('rate cell: the window that runs out first is shown with the gap colour computed from it (5h first, 7d first, neither, one missing, tie)', () => {
+  const band = (over: object) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, 200, RATE_NOW)
+  const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
+  const D = 86400
+  // 5h: 70% used 4320 s from reset, 7d: 95% used (5% left, less): 5h runs out first, so 5h shows
+  const fiveFirst = band({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 95, rate7ResetsAt: inSec(3 * D) })
+  expect(text(fiveFirst)).toMatch(/20% left · runs out in 57m/)
+  expect(text(fiveFirst)).not.toMatch(/5% left/)
+  // 7d first: 5h is fine (no runout before reset), 7d runs out
+  const sevenFirst = band({ rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(3 * D + 4 * 3600) })
+  expect(text(sevenFirst)).toMatch(/10% left · runs out in 10\.2h/)
+  expect(find(sevenFirst, /10% left/)?.color).toBe('success') // gap 10.2h, from the chosen (7d) window
+  // neither runs out: less % left wins (the 7-day one here), green
+  const neither = band({ rateUsed: 20, rateResetsAt: inSec(7200), rate7Used: 40, rate7ResetsAt: inSec(3 * D) })
+  expect(text(neither)).toMatch(/60% left · reset/)
+  expect(text(neither)).not.toMatch(/runs out|80% left/)
+  expect(find(neither, /60% left/)?.color).toBe('success')
+  // one window missing: the other shows; both missing (API-key login): nothing
+  expect(text(band({ rate7Used: 40, rate7ResetsAt: inSec(3 * D) }))).toMatch(/60% left/)
+  expect(text(band({ rateUsed: 20, rateResetsAt: inSec(7200) }))).toMatch(/80% left/)
+  expect(text(band({}))).not.toMatch(/% left · /)
+  // tie in runout (none) and in % left: the 5-hour window (nearer reset, same text pieces)
+  const tie = band({ rateUsed: 20, rateResetsAt: inSec(7200), rate7Used: 20, rate7ResetsAt: inSec(3 * D) })
+  expect(text(tie)).toMatch(/80% left · reset (\w{3} )?\d\d:\d\d/)
 })
 
 test('formatResetClock: local clock time with the timezone abbreviation, weekday when not today', () => {
@@ -1827,7 +1897,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
   ['stale', 'REPO', /stale$/],
   ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
-  ['limit', 'SESSION', /10% left · runs out in 27m · reset (\w{3} )?\d\d:\d\d/],
+  ['limit', 'SESSION', /10% left · runs out in 26m · reset (\w{3} )?\d\d:\d\d/],
   ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
   ['jobs state', 'WORK', /WORKING \(2\)/],
   ['parked', 'WORK', /parked 2/],
