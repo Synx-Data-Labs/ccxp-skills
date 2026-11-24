@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: Job 1393/1394, 2026-11-23 (release 6.5.0 blocked)
 type: bug
 related: T20261122-212315
 description: claude plugin validate rejects the dynamic $.env.get(name) in hud/register.tsx; blocks the 6.5.0 release gate
+claimed_by: cc1-50ac6891:558a3308005a69ff
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261123-137260: Fix `claude plugin validate` error: $.env.get needs a literal name (hud/register.tsx:380)
