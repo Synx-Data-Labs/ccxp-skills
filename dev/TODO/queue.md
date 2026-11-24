@@ -74,7 +74,6 @@ reprioritize.
 - [T20261124-315192](T20261124-315192-persona-move-detached-jobs-decisions-terms-to-skill.md): Persona move 2: detached jobs, decisions log, terms become pointers
 - [T20261124-870400](T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md): autopilot Phase 3/4 classification and housekeeping dispatch into scripts
 - [T20261124-444596](T20261124-444596-address-pr-gates-and-drive-phases-prose-to-scripts-survey.md): address-pr gates and drive phases: survey, then first script
-- [T20261124-182499](T20261124-182499-autopilot-max-dop-min-3-reserved-slots.md): Autopilot: max_dop at least 3, add reserved_slots (default 2)
 - [T20261124-168446](T20261124-168446-hud-subscription-time-left-display.md): HUD shows subscription time left (5h and 7d) and caches it
 - [T20261124-140678](T20261124-140678-autopilot-effective-max-dop-from-subscription-quota.md): Autopilot steers max_dop from subscription quota headroom
 - [T20261124-776095](T20261124-776095-hud-queue-max-rolling-windows.md): HUD queue max: non-overlapping rolling windows

@@ -88,4 +88,3 @@ scheduled: 2026-11-23
 - Verification (`superpowers:verification-before-completion`): yes, local bats and skill-score runs before each PR, address-pr hard gate x4
 - Systematic debugging (`superpowers:systematic-debugging`): no, did not get stuck
 - Receiving code review (`superpowers:receiving-code-review`): yes, three fresh reviews on the design PR and two on the implementation PR, findings fixed or accepted with a comment
-
