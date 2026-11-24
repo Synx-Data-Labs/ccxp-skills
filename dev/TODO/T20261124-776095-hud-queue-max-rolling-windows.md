@@ -1,9 +1,12 @@
 ---
-status: Open
+status: Design
 estimation: 1
 source: owner request, this conversation, 2026-11-24
 description: HUD queue max shows three non-overlapping rolling windows (last month / last week / this week) so the trend is visible
 type: bug
+claimed_by: cc1-50ac6891:026eafc622a13a79
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-776095: HUD queue max: non-overlapping rolling windows
