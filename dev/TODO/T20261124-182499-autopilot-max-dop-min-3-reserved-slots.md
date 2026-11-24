@@ -1,8 +1,11 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request, this conversation, 2026-11-24 (decisions d154, d157)
 description: Autopilot max_dop minimum 3 plus a reserved_slots setting (default 2) for urgent tier 1 and 2 work
+claimed_by: cc1-50ac6891:bf6b098f35f88e3b
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-182499: Autopilot: max_dop at least 3, add reserved_slots (default 2)
