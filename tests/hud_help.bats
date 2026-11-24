@@ -36,15 +36,6 @@ has_topic() { topics | grep -Fxq "$1"; }
   done
 }
 
-@test "alerts help defines never checked and the last-check file" {
-  run grep -F 'alerts never checked' "$HELP"
-  [ "$status" -eq 0 ]
-  run grep -F 'last-check' "$HELP"
-  [ "$status" -eq 0 ]
-  run grep -F 'alerts-due.sh' "$HELP"
-  [ "$status" -eq 0 ]
-}
-
 @test "README points at HELP.md and register.tsx reads it" {
   run grep -F '(HELP.md)' "$ROOT/hud/README.md"
   [ "$status" -eq 0 ]

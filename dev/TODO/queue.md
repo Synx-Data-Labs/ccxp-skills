@@ -66,3 +66,5 @@ reprioritize.
 - [T20261120-105513](T20261120-105513-persona-idle-wake-readonly-checks.md): Persona idle wake with read-only alert and CI checks (n362 step 5)
 - [T20261120-160823](T20261120-160823-flaky-lock-bats-tests-on-ci.md): Flaky lock bats tests on CI (ledger concurrent adds, autopilot state lock)
 - [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config
+- [T20261123-248916](T20261123-248916-hud-drop-alerts-cell.md): drop the alerts cell from the HUD
+- [T20261123-424791](T20261123-424791-hud-slack-failure-rca-progress.md): HUD shows RCA progress for each Slack-reported failure
