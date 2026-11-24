@@ -9,13 +9,17 @@
 #   start                       print started|busy|dispatch|already-on|paused
 #   pause | off                 transitions; print paused | "off <clone-path>" | noop
 #   resume                      print dispatch|busy (a cycle is still finishing: do nothing)|noop
-#   busy on [<task-id>] [--slot N]|off [--slot N]
-#                               mark a dispatched cycle running in slot N (default 1; 1-16)
+#   busy on [<task-id>] [--slot N] [--urgent]|off [--slot N]
+#                               mark a dispatched cycle running in slot N (default 1; 1-16); --urgent marks
+#                               urgent tier 1/2 work, which runs in a reserved slot and does not use up routine-free
 #                               (optionally which task it drives, T<yyyymmdd>-<6 digits>; an
 #                               invalid id is ignored; the HUD shows "running r<n>" from the
 #                               ledger) / finished; bare `off` clears every slot. `on` re-marks a
 #                               busy slot (as before) but exits 3 when the task is in another slot.
-#   slots                       "<slot><TAB><task><TAB><since>" per busy slot (fresh: under 3 h)
+#   slots [--summary]           "<slot><TAB><task><TAB><since>" per busy slot (fresh: under 3 h);
+#                               --summary prints one line instead: "routine 1 of 3, reserved 2, busy 0, routine-free 1, free 3"
+#   routine-free                routine slots still free: max_dop minus reserved_slots minus the running cycles not marked --urgent, never below 0
+#                               (a routine pick needs this above 0; the reserved slots are for urgent tier 1/2 work only)
 #   guard                       ok | hold <reason> (exit 0 / 1): free memory and load, for a slot
 #                               beyond the first running one (see ap-guard)
 #   hold <seconds> <reason>     wake again in <seconds> without recording a cycle (a guard hold,
@@ -91,12 +95,14 @@
 #                               and the config file path (read-only)
 #   config-set <key> <value>    validate, then atomically write one override (keeps other keys,
 #                               file mode 600); exit 2 on a bad key/value, state untouched
-#   config-reset [<key>]        drop one override, or all five settings' overrides
+#   config-reset [<key>]        drop one override, or all six settings' overrides
 # Env (tests): AUTOPILOT_GUARD_MEM_FREE_PCT, AUTOPILOT_GUARD_LOAD, AUTOPILOT_GUARD_NCPU, AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 # Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
 #   max_visits (no-progress visits before a task is parked, default 4), max_dop (cycles at the
-#   same time, 1-16, default 1: one task at a time).
+#   same time, 3-16, default 3: 2 slots are always reserved for urgent work, so below 3 is refused and a
+#   smaller file value reads as 3), reserved_slots (0-8, default 2, at most max_dop minus 1: slots kept for
+#   urgent tier 1/2 work; routine picks fill max_dop minus reserved_slots).
 
 set -euo pipefail
 
@@ -118,11 +124,48 @@ _ap_iso() {
   date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "$1" +%Y-%m-%dT%H:%M:%SZ
 }
 
-# max_dop: the configured number of cycles at the same time, clamped to 1-16 (default 1).
+# max_dop: the configured number of cycles at the same time, clamped to 3-16 (default 3): 2 slots are
+# always reserved for urgent work. A smaller file value reads as 3 (never rewritten; config-show and report say so).
 ap-max-dop() {
-  local v; v=$(ap-config max_dop 1)
-  if [ "$v" -gt 16 ]; then v=16; fi
+  local v; v=$(ap-config max_dop 3)
+  if [ "$v" -gt 16 ]; then v=16; elif [ "$v" -lt 3 ]; then v=3; fi
   printf '%s' "$v"
+}
+
+# reserved_slots: slots kept for urgent tier 1/2 work (0-8, default 2), at most max_dop minus 1.
+# A zero is a valid value here, so it is read apart from ap-config (which ignores non-positive numbers).
+ap-reserved-slots() {
+  local f v="" max; f=$(ap-config-file); max=$(( $(ap-max-dop) - 1 ))
+  [ -f "$f" ] && v=$(jq -r '.reserved_slots // empty' "$f" 2>/dev/null || true)
+  [[ "$v" =~ ^[0-9]+$ ]] || v=2
+  if [ "$v" -gt 8 ]; then v=8; fi
+  if [ "$v" -gt "$max" ]; then v=$max; fi
+  printf '%s' "$v"
+}
+
+# Routine slots: how many cycles routine picks may fill (max_dop minus reserved_slots, at least 1).
+ap-routine-limit() { printf '%s' $(( $(ap-max-dop) - $(ap-reserved-slots) )); }
+
+ap-routine-free() {
+  local n; n=$(( $(ap-routine-limit) - $(_ap_routine_busy) ))
+  if [ "$n" -lt 0 ]; then n=0; fi
+  printf '%s\n' "$n"
+}
+
+# One line: "routine 1 of 3, reserved 2" (the dispatcher and the HUD read this).
+ap-routine-line() { printf 'routine %s of %s, reserved %s' "$(ap-routine-limit)" "$(ap-max-dop)" "$(ap-reserved-slots)"; }
+
+# One notice per config value that was clamped on read (empty when the file is fine). Never rewrites the file.
+ap-config-notices() {
+  local f raw; f=$(ap-config-file); [ -f "$f" ] || return 0
+  raw=$(jq -r '.max_dop // empty' "$f" 2>/dev/null || true)
+  if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" -lt 3 ]; then
+    echo "notice: max_dop $raw in the config file is below 3 (2 slots are reserved for urgent work); using 3. Fix it with: config set max_dop <3-16>"
+  fi
+  raw=$(jq -r '.reserved_slots // empty' "$f" 2>/dev/null || true)
+  if [[ "$raw" =~ ^[0-9]+$ ]] && [ "$raw" != "$(ap-reserved-slots)" ]; then
+    echo "notice: reserved_slots $raw in the config file is above the cap (8, and max_dop minus 1); using $(ap-reserved-slots). Fix it with: config set reserved_slots <n>"
+  fi
 }
 
 # Config value with default; a missing file, key or non-positive-integer gives the default.
@@ -189,16 +232,19 @@ AP_JQ_MIGRATE='(if (.slots | type) == "object" then . else
     .slots = (if ((.busy_since | strings) // "") != "" then {"1": {task: .current_task, since: .busy_since}} else {} end) end)'
 
 # Busy slots (fresh: marked under 3 h ago, else a crashed cycle), one "<slot><TAB><task><TAB><since>" each.
+# `_ap_slots routine` leaves out the slots marked urgent (busy on ... --urgent).
 _ap_slots() {
-  local f now; f=$(ap-state-file)
+  local f now only="${1:-}"; f=$(ap-state-file)
   [ -f "$f" ] || return 0
   now=$(_ap_epoch "$(ap-now)"); [[ "$now" =~ ^[0-9]+$ ]] || return 0
-  jq -r --argjson now "$now" "$AP_JQ_MIGRATE"' | .slots | to_entries
-    | map(select((.value | type) == "object" and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and ($now - $e) < 10800)))
+  jq -r --argjson now "$now" --arg only "$only" "$AP_JQ_MIGRATE"' | .slots | to_entries
+    | map(select((.value | type) == "object" and ($only != "routine" or .value.urgent != true) and ((.value.since | strings | (try fromdateiso8601 catch null)) as $e | $e != null and ($now - $e) < 10800)))
     | sort_by(.key | tonumber)[] | [.key, (.value.task // ""), .value.since] | @tsv' "$f" 2>/dev/null || true
 }
 
 _ap_busy_count() { _ap_slots | grep -c . || true; }
+# Cycles that count against the routine limit (urgent ones run in the reserved slots).
+_ap_routine_busy() { _ap_slots routine | grep -c . || true; }
 
 # 0 when any cycle is marked busy.
 _ap_is_busy() { [ "$(_ap_busy_count)" -gt 0 ]; }
@@ -252,7 +298,7 @@ AP_WAKE_TOLERANCE="${AP_WAKE_TOLERANCE:-59}"
 _ap_due() {
   local tol="$AP_WAKE_TOLERANCE"
   [[ "$tol" =~ ^[0-9]+$ ]] || tol=59
-  if [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo already-on; return 0; fi
+  if [ "$(_ap_routine_busy)" -ge "$(ap-routine-limit)" ] || [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo already-on; return 0; fi
   if [ "$(ap-remaining)" -gt "$tol" ]; then echo already-on; else echo dispatch; fi
 }
 
@@ -286,7 +332,7 @@ ap-resume() {
     _ap_update --arg ns "$(_ap_iso $(( se + now - pe )))" '.started_at = $ns'
   fi
   _ap_update '.status = "on" | .paused_at = null | .next_wake_at = null'
-  if [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo busy; else echo dispatch; fi
+  if [ "$(_ap_routine_busy)" -ge "$(ap-routine-limit)" ] || [ "$(_ap_busy_count)" -ge "$(ap-max-dop)" ]; then echo busy; else echo dispatch; fi
 }
 
 # Prints the dispatch clone path for the caller to remove, and clears the state's copy.
@@ -307,23 +353,33 @@ ap-busy() {
   case "$mode" in
     on)
       # An id that is not a task id is ignored (the cycle is still marked busy), never an error.
-      local t="${AP_REST[0]:-}" inflight
+      local t="" inflight urgent=false a
+      for a in ${AP_REST[@]+"${AP_REST[@]}"}; do
+        if [ "$a" = --urgent ]; then urgent=true; elif [ -z "$t" ]; then t="$a"; fi
+      done
       [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]] || t=""
       [ "$(ap-status)" = off ] && return 0
       inflight=$(_ap_slots | awk -F'\t' -v s="$AP_SLOT" -v t="$t" 't != "" && $2 == t && $1 != s {f=1} END {exit !f}' && echo yes || true)
       if [ -n "$inflight" ]; then echo "busy: $t is already in flight in another slot" >&2; return 3; fi
-      _ap_update --arg now "$(ap-now)" --arg t "$t" --arg s "$AP_SLOT" "$AP_JQ_MIGRATE"' | .slots[$s] = {task: (if $t == "" then null else $t end), since: $now} | '"$AP_JQ_MIRROR" ;;
+      _ap_update --arg now "$(ap-now)" --arg t "$t" --arg s "$AP_SLOT" --argjson u "$urgent" "$AP_JQ_MIGRATE"' | .slots[$s] = ({task: (if $t == "" then null else $t end), since: $now} + (if $u then {urgent: true} else {} end)) | '"$AP_JQ_MIRROR" ;;
     off)
       if [ ${#AP_REST[@]} -eq 0 ] && ! printf '%s ' "$@" | grep -q -- '--slot'; then
         _ap_update "$AP_JQ_MIGRATE"' | .slots = {} | '"$AP_JQ_MIRROR"
       else
         _ap_update --arg s "$AP_SLOT" "$AP_JQ_MIGRATE"' | .slots |= del(.[$s]) | '"$AP_JQ_MIRROR"
       fi ;;
-    *) echo "busy on [<task-id>] [--slot N]|off [--slot N]" >&2; return 2 ;;
+    *) echo "busy on [<task-id>] [--slot N] [--urgent]|off [--slot N]" >&2; return 2 ;;
   esac
 }
 
-ap-slots() { _ap_slots; }
+ap-slots() {
+  case "${1:-}" in
+    "") _ap_slots ;;
+    --summary) printf '%s, busy %s, routine-free %s, free %s\n' "$(ap-routine-line)" "$(_ap_busy_count)" "$(ap-routine-free)" \
+      "$(( $(ap-max-dop) - $(_ap_busy_count) > 0 ? $(ap-max-dop) - $(_ap_busy_count) : 0 ))" ;;
+    *) echo "slots [--summary]" >&2; return 2 ;;
+  esac
+}
 
 # set-clone <slot> <path>: remember a slot's dispatch clone (slot 1 is dispatch_clone_path).
 ap-set-clone() {
@@ -734,13 +790,12 @@ ap-report() {
   while IFS=$'\t' read -r aid areason; do
     if [ -n "$aid" ]; then printf 'parked by autopilot: %s — %s\n' "$aid" "$areason"; fi
   done < <(ap-parked-list 2>/dev/null || true)
-  if [ "$(ap-max-dop)" -gt 1 ] || [ "$(_ap_busy_count)" -gt 1 ]; then
-    echo "slots: $(_ap_busy_count) of $(ap-max-dop) running"
-    local sl stask ssince
-    while IFS=$'\t' read -r sl stask ssince; do [ -z "$sl" ] || printf '  slot %s: %s since %s\n' "$sl" "${stask:-a cycle}" "$ssince"; done < <(_ap_slots)
-    jq -r 'select(.last_hold) | "last hold \(.last_hold.at): \(.last_hold.reason)"' "$f" 2>/dev/null || true
-  fi
-  if [ "$st" = on ] && [ "$(_ap_busy_count)" -lt "$(ap-max-dop)" ] && ! _ap_is_busy; then
+  ap-config-notices
+  echo "slots: $(_ap_busy_count) of $(ap-max-dop) running ($(ap-routine-line))"
+  local sl stask ssince
+  while IFS=$'\t' read -r sl stask ssince; do [ -z "$sl" ] || printf '  slot %s: %s since %s\n' "$sl" "${stask:-a cycle}" "$ssince"; done < <(_ap_slots)
+  jq -r 'select(.last_hold) | "last hold \(.last_hold.at): \(.last_hold.reason)"' "$f" 2>/dev/null || true
+  if [ "$st" = on ] && [ "$(_ap_busy_count)" -lt "$(ap-routine-limit)" ] && ! _ap_is_busy; then
     local w we now; w=$(jq -r '.next_wake_at // empty' "$f"); we=$(_ap_epoch "$w"); now=$(_ap_epoch "$(ap-now)")
     if [ -n "$we" ] && [ -n "$now" ] && [ $(( now - we )) -gt 600 ]; then echo "overdue: no wake fired since $w — type /autopilot on to recover"; fi
   fi
@@ -985,14 +1040,14 @@ ap-final-report() {
 # Config settings: key<TAB>default<TAB>min<TAB>max. The only source of the valid keys and ranges.
 _ap_config_spec() {
   printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 64 1 1000 daily_merge_cap 64 1 1000 \
-    idle_retry_minutes 32 30 60 max_visits 4 1 20 max_dop 1 1 16
+    idle_retry_minutes 32 30 60 max_visits 4 1 20 max_dop 3 3 16 reserved_slots 2 0 8
 }
 
 # The raw override for a key ("" when absent or not a positive integer).
 _ap_config_raw() {
   local f v=""; f=$(ap-config-file)
   [ -f "$f" ] && v=$(jq -r --arg k "$1" '.[$k] // empty' "$f" 2>/dev/null || true)
-  if [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -gt 0 ]; then printf '%s' "$v"; fi
+  if [[ "$v" =~ ^[0-9]+$ ]] && { [ "$v" -gt 0 ] || [ "$1" = reserved_slots ]; }; then printf '%s' "$v"; fi
 }
 
 ap-config-show() {
@@ -1000,13 +1055,14 @@ ap-config-show() {
   case "${1:-}" in --json) json=1 ;; "") ;; *) echo "config-show [--json]" >&2; return 2 ;; esac
   f=$(ap-config-file)
   while IFS=$'\t' read -r key def min max; do
-    raw=$(_ap_config_raw "$key"); val=$(ap-config "$key" "$def")
+    raw=$(_ap_config_raw "$key")
+    case "$key" in max_dop) val=$(ap-max-dop) ;; reserved_slots) val=$(ap-reserved-slots) ;; *) val=$(ap-config "$key" "$def") ;; esac
     if [ -n "$raw" ] && [ "$raw" = "$val" ]; then src=override; else src=default; fi
     rows="${rows}${key}"$'\t'"${val}"$'\t'"${src}"$'\t'"${def}"$'\t'"${min}-${max}"$'\n'
   done < <(_ap_config_spec)
   if [ "$json" = 1 ]; then
-    printf '%s' "$rows" | jq -Rn --arg file "$f" '{file: $file, settings: ([inputs | split("\t") |
-      {key: .[0], value: {value: (.[1] | tonumber), source: .[2], default: (.[3] | tonumber), range: .[4]}}] | from_entries)}'
+    printf '%s' "$rows" | jq -Rn --arg file "$f" --argjson notices "$(ap-config-notices | jq -R . | jq -sc .)" '{file: $file, settings: ([inputs | split("\t") |
+      {key: .[0], value: {value: (.[1] | tonumber), source: .[2], default: (.[3] | tonumber), range: .[4]}}] | from_entries), notices: $notices}'
     return 0
   fi
   printf '%-20s %6s  %-8s %s\n' setting value source "default (range)"
@@ -1015,6 +1071,7 @@ ap-config-show() {
     printf '%-20s %6s  %-8s %s (%s)\n' "$key" "$val" "$src" "$def" "$min"
   done <<< "$rows"
   if [ -f "$f" ]; then echo "config file: $f"; else echo "config file: $f (absent: all defaults)"; fi
+  ap-config-notices
 }
 
 # Atomic config write: jq filter (args like _ap_update) over the file's object, temp file + mv, mode 600.
@@ -1038,9 +1095,22 @@ ap-config-set() {
     [ "$k" = "$key" ] && { found=1; break; }
   done < <(_ap_config_spec)
   [ -n "$found" ] || { echo "config: unknown key '$key' (valid: $(_ap_config_spec | cut -f1 | paste -sd' ' -))" >&2; return 2; }
-  [[ "$val" =~ ^[1-9][0-9]{0,5}$ ]] || { echo "config: $key must be a positive integer, got '$val'" >&2; return 2; }
+  [[ "$val" =~ ^(0|[1-9][0-9]{0,5})$ ]] \
+    || { echo "config: $key must be a $([ "$min" = 0 ] && echo non-negative || echo positive) integer, got '$val'" >&2; return 2; }
   if [ "$val" -lt "$min" ] || [ "$val" -gt "$max" ]; then
-    echo "config: $key must be between $min and $max, got $val" >&2; return 2
+    if [ "$key" = max_dop ]; then
+      echo "config: max_dop must be between $min and $max, got $val (2 slots are always reserved for urgent tier 1/2 work, so at least 3)" >&2
+    else
+      echo "config: $key must be between $min and $max, got $val" >&2
+    fi
+    return 2
+  fi
+  # Cross-key rule: at least one routine slot (reserved_slots is at most max_dop minus 1).
+  if [ "$key" = reserved_slots ] && [ "$val" -gt $(( $(ap-max-dop) - 1 )) ]; then
+    echo "config: reserved_slots $val leaves no routine slot with max_dop $(ap-max-dop); at most $(( $(ap-max-dop) - 1 )) (raise max_dop first)" >&2; return 2
+  fi
+  if [ "$key" = max_dop ] && [ "$(_ap_config_raw reserved_slots)" -gt $(( val - 1 )) ] 2>/dev/null; then
+    echo "config: max_dop $val is too low for the stored reserved_slots $(_ap_config_raw reserved_slots) (needs max_dop above it); lower reserved_slots first" >&2; return 2
   fi
   _ap_config_write --arg k "$key" --argjson v "$val" '.[$k] = $v' || return $?
   echo "set $key=$val ($(ap-config-file))"
@@ -1065,7 +1135,7 @@ autopilot-state() {
     status) ap-status ;; report) ap-report ;; start) ap-start ;; pause) ap-pause ;; resume) ap-resume ;;
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
-    slots) ap-slots ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
+    slots) ap-slots "$@" ;; routine-free) ap-routine-free ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;

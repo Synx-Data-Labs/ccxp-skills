@@ -1,8 +1,12 @@
-# Autopilot: parallel cycles (`max_dop` above 1)
+# Autopilot: parallel cycles and reserved slots
 
-Loaded by `autopilot/SKILL.md` Phase 3 when `max_dop` is above 1. With the default (1) none of this applies.
+Loaded by `autopilot/SKILL.md` Phase 3. `max_dop` is 3-16 (default 3) and `reserved_slots` (0-8, default 2, at most `max_dop` minus 1) are kept for urgent tier 1 or tier 2 work (d154, d157).
 
-For each free slot in turn, all in the same reply (one `Agent` call per slot, issued together so they run side by side):
+- Routine picks fill at most `max_dop` minus `reserved_slots`: `autopilot-state.sh routine-free` prints how many more routine cycles may start (0 = none); `slots --summary` prints `routine 8 of 10, reserved 2, busy 3, routine-free 5, free 7`. With the default (one routine slot) the loop is single-cycle for routine work and the rest of this file applies only to urgent work.
+- Urgent work (a new or `/top`'d task, a CI-failure response) takes the lowest free slot number up to `max_dop` with `busy on <id> --slot <N> --urgent`, even when `routine-free` is 0 while `free` (in `slots --summary`) is above 0. An urgent cycle never counts against `routine-free`. Only urgent work belongs in the reserved slots.
+- A `max_dop` below 3 in the config file reads as 3 (`config-show` and `report` print a notice); `config set max_dop 2` is refused.
+
+For each free routine slot in turn, all in the same reply (one `Agent` call per slot, issued together so they run side by side):
 
 1. Slots beyond the first running cycle need the machine guard: `autopilot-state.sh guard` prints `ok` or `hold <reason>` (free memory under 20 % of the total, or 1-minute load per CPU over 1.5, or a probe that cannot be read). On `hold`: dispatch no more slots this wake, tell the user why (`slot <N> held: <reason>`), run `autopilot-state.sh hold 300 "<reason>"` and end with the Phase 4 `ScheduleWakeup(300, ...)` (`hold` has recorded that wake) unless a cycle is about to be dispatched. **One extra slot per wake**: after starting a slot beyond the first, stop filling; if slots are still free, run `autopilot-state.sh hold 120 ramp` and `ScheduleWakeup(120, "/autopilot on")`, so the next guard read includes the new cycle's load (record `hold` with the same seconds you schedule; `ScheduleWakeup` rounds to the minute and `start` accepts a wake up to 59 s early, so the ramp does not stall one wake). Slot 1 with nothing running is never held.
 2. `ID=$(autopilot-state.sh top "$CLONE_PATH")`: the first eligible task that is not in flight in another slot (`top --nth N` = the Nth). An empty id (a `drift` or `none` pickable) means no extra cycle: skip this and every later slot, and when other cycles are still running record nothing (no `record idle`, which would free a running slot): just end the turn, the running cycles' Phase 4 re-arms the wake. If instead you re-arm an idle wait yourself (slots busy, nothing to dispatch), run `autopilot-state.sh wake <seconds> "idle, slots busy"` before the `ScheduleWakeup`: never arm a wake without recording it. Never dispatch two slots on one task.
