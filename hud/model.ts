@@ -205,7 +205,7 @@ export function parseHelper(stdout: string): HelperData | null {
     let unreleased: PluginVersion['unreleased']
     if (typeof un === 'object' && un !== null && !Array.isArray(un)) {
       const u = un as Record<string, unknown>
-      const subjects = Array.isArray(u.subjects) ? u.subjects.filter((x): x is string => typeof x === 'string' && x.length > 0 && !/[\u0000-\u001f\u007f-\u009f]/.test(x)).slice(0, 3).map(x => x.slice(0, 72)) : []
+      const subjects = Array.isArray(u.subjects) ? u.subjects.filter((x): x is string => typeof x === 'string' && x.length > 0 && !/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/.test(x)).slice(0, 3).map(x => x.slice(0, 72)) : []
       if (typeof u.count === 'number' && Number.isFinite(u.count) && u.count >= 1) unreleased = { count: Math.min(Math.floor(u.count), 9999), subjects }
     }
     if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}), ...(unreleased ? { unreleased } : {}) }
