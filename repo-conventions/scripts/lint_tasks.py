@@ -94,6 +94,7 @@ class Ctx:
         self.name = self.path.name
         self.error = None
         self.keys = {}
+        self.block = ""
         self.body = ""
         m = TASK_ID_RE.match(self.name)
         self.file_id = m.group(0) if m else None
@@ -107,6 +108,7 @@ class Ctx:
             self.error = "missing YAML frontmatter (--- block)"
             return
         self.keys = parse_keys(block)
+        self.block = block
         self.body = body
 
 
@@ -142,9 +144,13 @@ TIER_RE = re.compile(r"^[1-4]$")
 def check_tier(ctx):
     if "tier" not in ctx.keys:
         return []
-    v = re.sub(r"\s+#.*$", "", str(ctx.keys["tier"]).strip()).strip("\"'")
+    # Judge the raw text, as todo-tier (todo/scripts/_lib.sh) reads it: yaml turns
+    # `02` or `+2` into the integer 2, but the reader would treat those as the default 3.
+    m = re.search(r"^tier:[ \t]*(.*)$", ctx.block, re.M)
+    raw = m.group(1) if m else str(ctx.keys["tier"])
+    v = re.sub(r"\s+#.*$", "", raw.strip()).strip("\"'").strip()
     if not TIER_RE.match(v):
-        return [f"tier '{ctx.keys['tier']}' must be an integer 1..4 "
+        return [f"tier '{raw.strip()}' must be an integer 1..4, written plainly "
                 f"(1 urgent, 2 support, 3 default, 4 low)"]
     return []
 

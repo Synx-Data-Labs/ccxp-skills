@@ -83,6 +83,10 @@ template's own instructions), then:
 - <the gathered Problem bullets>
 ```
 
+**Tier (optional).** Set `tier: 1`-`4` only when the request states an urgency
+(1 red-nightly related work, 2 a new support issue); omit it otherwise (default 3).
+Semantics: `todo/SKILL.md` "Task metadata".
+
 **Dimensions (optional, never invented).** Set `when`, `when-end`, `place`,
 `person` in the frontmatter only when the request states them ("call with
 person A on Friday 14:00, needs VPN" gives `when: <date>T14:00`,

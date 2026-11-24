@@ -1678,3 +1678,140 @@ _ap_on() { _ap start >/dev/null; }
   _ap wake 300 >/dev/null
   AUTOPILOT_NOW="2026-10-28T10:00:05Z" run _ap start; [ "$output" = already-on ] # a longer delay keeps a typed on out
 }
+
+# --- holds (T20261124-340374) ---------------------------------------------------
+
+_hold_repo() {
+  HROOT="$BATS_TEST_TMPDIR/hrepo"; mkdir -p "$HROOT/dev/TODO"
+  printf -- '---\nstatus: Open\n---\n' > "$HROOT/dev/TODO/T20261124-000001-a.md"
+  printf -- '---\nstatus: Open\n---\n' > "$HROOT/dev/TODO/T20261124-000002-b.md"
+}
+_gh_stub() { # _gh_stub <runs-status> <pr-state>
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/gh" <<EOS
+#!/usr/bin/env bash
+case "\$*" in
+  *actions/runs/*) [ "$1" = fail ] && exit 1; echo "$1" ;;
+  *pulls/*) [ "$2" = fail ] && exit 1; echo "$2" ;;
+  *) exit 1 ;;
+esac
+EOS
+  chmod +x "$BATS_TEST_TMPDIR/bin/gh"; export PATH="$BATS_TEST_TMPDIR/bin:$PATH"
+}
+
+@test "hold-add: records a hold; holds lists it in TSV and JSON" {
+  run _ap hold-add T20261124-000001 stalled "pr:12" "no progress twice"
+  [ "$status" -eq 0 ]; [ "$output" = "held T20261124-000001 stalled" ]
+  run _ap holds
+  [ "$output" = $'T20261124-000001\tstalled\tno progress twice\tpr:12\t2026-10-28T10:00:00Z' ]
+  run _ap holds --json
+  [ "$(jq -r '.[0].task + " " + .[0].kind + " " + .[0].condition' <<<"$output")" = "T20261124-000001 stalled pr:12" ]
+}
+
+@test "hold-add: every condition form is accepted, as one argument or several" {
+  _ap hold-add T20261124-000001 waiting "until 2026-11-01" "wait"
+  [ "$(_j '.holds["T20261124-000001"].cond')" = "until 2026-11-01T00:00:00Z" ]
+  _ap hold-add T20261124-000001 waiting until 2026-11-01T12:30Z "wait"
+  [ "$(_j '.holds["T20261124-000001"].cond')" = "until 2026-11-01T12:30:00Z" ]
+  _ap hold-add T20261124-000001 needs-human run:99 "r"
+  [ "$(_j '.holds["T20261124-000001"].cond')" = "run:99" ]
+  _ap hold-add T20261124-000001 needs-human "file-changed dev/TODO/x.md" "r"
+  [ "$(_j '.holds["T20261124-000001"].cond')" = "file-changed dev/TODO/x.md" ]
+  _ap hold-add T20261124-000001 stalled task-left-todo T20261124-000002 "r"
+  [ "$(_j '.holds["T20261124-000001"].cond')" = "task-left-todo T20261124-000002" ]
+  [ "$(_j '.holds | length')" -eq 1 ]   # same task again replaces its hold
+}
+
+@test "hold-add: refuses an unknown kind or condition and an empty reason (exit 2, nothing written)" {
+  run _ap hold-add T20261124-000001 napping "pr:1" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "tomorrow" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "pr:abc" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "until someday" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "file-changed /etc/passwd" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "task-left-todo nope" "r"; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "pr:1" "   "; [ "$status" -eq 2 ]
+  run _ap hold-add T20261124-000001 stalled "pr:1"; [ "$status" -eq 2 ]
+  run _ap hold-add nope stalled "pr:1" "r"; [ "$status" -eq 2 ]
+  [ ! -s "$AUTOPILOT_STATE_FILE" ] || [ "$(_j '.holds // {} | length')" -eq 0 ]
+}
+
+@test "release: removes one hold; none when absent; bad id exits 2" {
+  _ap hold-add T20261124-000001 stalled "pr:1" "r"; _ap hold-add T20261124-000002 waiting "pr:2" "r"
+  run _ap release T20261124-000001; [ "$output" = released ]
+  run _ap release T20261124-000001; [ "$output" = none ]
+  [ "$(_j '.holds | keys | join(",")')" = T20261124-000002 ]
+  run _ap release nope; [ "$status" -eq 2 ]
+}
+
+@test "holds: survive off and start; an old state file without holds reads fine" {
+  _ap start >/dev/null; _ap hold-add T20261124-000001 stalled "pr:1" "r"
+  _ap off >/dev/null; _ap start >/dev/null
+  [ "$(_j '.holds | keys | join(",")')" = T20261124-000001 ]
+  jq 'del(.holds)' "$AUTOPILOT_STATE_FILE" > "$BATS_TEST_TMPDIR/o.json" && mv "$BATS_TEST_TMPDIR/o.json" "$AUTOPILOT_STATE_FILE"
+  run _ap holds; [ "$status" -eq 0 ]; [ -z "$output" ]
+  run _ap holds --json; [ "$output" = "[]" ]
+  run _ap holds-check "$BATS_TEST_TMPDIR"; [ "$status" -eq 0 ]
+}
+
+@test "holds-check until: released once the time has passed" {
+  _hold_repo
+  _ap hold-add T20261124-000001 waiting "until 2026-10-28T11:00:00Z" "wait"
+  run _ap holds-check "$HROOT"; [ -z "$output" ]
+  AUTOPILOT_NOW="2026-10-28T11:00:00Z" run _ap holds-check "$HROOT"
+  [ "$output" = "released T20261124-000001 (until 2026-10-28T11:00:00Z)" ]
+  [ "$(_j '.holds | length')" -eq 0 ]
+}
+
+@test "holds-check run: and pr: use gh api; an error keeps the hold" {
+  _hold_repo
+  _ap hold-add T20261124-000001 waiting "run:55" "r"; _ap hold-add T20261124-000002 waiting "pr:7" "r"
+  _gh_stub in_progress open
+  run _ap holds-check "$HROOT"; [ -z "$output" ]
+  _gh_stub fail fail
+  run _ap holds-check "$HROOT"; [ -z "$output" ]; [ "$(_j '.holds | length')" -eq 2 ]
+  _gh_stub completed open
+  run _ap holds-check "$HROOT"; [ "$output" = "released T20261124-000001 (run:55)" ]
+  _gh_stub completed closed
+  run _ap holds-check "$HROOT"; [ "$output" = "released T20261124-000002 (pr:7)" ]
+}
+
+@test "holds-check file-changed: mtime or a git commit after the hold releases it" {
+  _hold_repo
+  export AUTOPILOT_NOW="2027-01-01T00:00:00Z"   # later than any real mtime
+  echo a > "$HROOT/dev/f.txt"
+  _ap hold-add T20261124-000001 waiting "file-changed dev/f.txt" "r"
+  run _ap holds-check "$HROOT"; [ -z "$output" ]
+  touch -t 203001010000 "$HROOT/dev/f.txt"
+  run _ap holds-check "$HROOT"; [ "$output" = "released T20261124-000001 (file-changed dev/f.txt)" ]
+  # a commit dated after the hold, file mtime still older
+  touch -t 202001010000 "$HROOT/dev/f.txt"
+  git -C "$HROOT" init -q; git -C "$HROOT" add dev/f.txt
+  GIT_COMMITTER_DATE="2027-06-01T00:00:00Z" GIT_AUTHOR_DATE="2027-06-01T00:00:00Z" git -C "$HROOT" -c user.name=t -c user.email=t@t commit -q -m c
+  _ap hold-add T20261124-000001 waiting "file-changed dev/f.txt" "r"
+  run _ap holds-check "$HROOT"; [ "$output" = "released T20261124-000001 (file-changed dev/f.txt)" ]
+  # a missing file is never a release
+  _ap hold-add T20261124-000001 waiting "file-changed dev/none.txt" "r"
+  run _ap holds-check "$HROOT"; [ -z "$output" ]
+}
+
+@test "holds-check task-left-todo: released when the named task has no dev/TODO file" {
+  _hold_repo
+  _ap hold-add T20261124-000001 stalled "task-left-todo T20261124-000002" "r"
+  run _ap holds-check "$HROOT"; [ -z "$output" ]
+  rm "$HROOT/dev/TODO/T20261124-000002-b.md"
+  run _ap holds-check "$HROOT"; [ "$output" = "released T20261124-000001 (task-left-todo T20261124-000002)" ]
+  # without a dev/TODO directory nothing is released (a wrong root never wipes holds)
+  _ap hold-add T20261124-000001 stalled "task-left-todo T20261124-000002" "r"
+  run _ap holds-check "$BATS_TEST_TMPDIR/nowhere"; [ -z "$output" ]
+}
+
+@test "prune: drops holds of tasks that left dev/TODO, prints each id once" {
+  _hold_repo
+  _ap start >/dev/null
+  _ap hold-add T20261124-000001 stalled "pr:1" "r"; _ap hold-add T20261124-000009 stalled "pr:2" "r"
+  _ap visit T20261124-000009 "x" >/dev/null
+  run _ap prune "$HROOT"
+  [ "$output" = "T20261124-000009" ]
+  [ "$(_j '.holds | keys | join(",")')" = T20261124-000001 ]
+  [ "$(_j '.visits | length')" -eq 0 ]
+}

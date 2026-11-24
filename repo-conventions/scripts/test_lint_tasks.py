@@ -78,6 +78,18 @@ class LintTasksTest(unittest.TestCase):
             f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")
             self.assertEqual(lint_tasks.lint_file(f), [], t)
 
+    def test_tier_non_canonical_spelling_fails(self):
+        # yaml reads 02 and +2 as the integer 2, but todo-tier would read the default 3.
+        for t in ("02", "+2", "2.0", "0x2"):
+            f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")
+            out = lint_tasks.lint_file(f)
+            self.assertTrue(any("tier" in m and "1..4" in m for m in out), (t, out))
+
+    def test_tier_quotes_and_comment_pass(self):
+        for t in ('"2"', "'2'", "2  # urgent"):
+            f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")
+            self.assertEqual(lint_tasks.lint_file(f), [], t)
+
     def test_tier_out_of_range_fails(self):
         for t in ("0", "5", "high", "2.5", ""):
             f = write_task(self.root, frontmatter=f"status: Open\nestimation: 2\ntier: {t}")

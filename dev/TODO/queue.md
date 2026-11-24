@@ -9,7 +9,6 @@ reprioritize.
 - [T20261124-502781](T20261124-502781-hud-restore-busvariants.md): Restore busVariants in hud/model.ts (regression)
 - [T20261121-261197](T20261121-261197-hud-redci-supersede-and-list.md): HUD red-CI counts superseded failures; add hud-redci.sh list
 - [T20261121-359191](T20261121-359191-context-file-naming-n-r-t-slug.md): Context file naming convention n<k>-r<job>-t<taskid>-slug
-- [T20261121-412600](T20261121-412600-task-per-job-rule-and-ledger-check.md): Task-per-job rule and ledger check
 - [T20261101-115518](T20261101-115518-rewire-todo-and-queue-skills-to-repo-resolve.md): Rewire todo and queue skills to repo-resolve
 - [T20261022-349299](T20261022-349299-dispatcher-detached-bg-jobs.md): ccxp-agent dispatches detached `claude --bg` jobs
 - [T20261022-287778](T20261022-287778-ccxp-hud-live-ui-smoke.md): ccxp-hud live-UI smoke test (manual)
@@ -60,16 +59,10 @@ reprioritize.
 - [T20261109-179471](T20261109-179471-rituals-usage-cost-warning.md): Usage-cost warning for the persona-driven daily rituals
 - [T20261109-584639](T20261109-584639-verify-rituals-live-after-release.md): Verify the persona-driven daily rituals live after the release
 - [T20261112-143063](T20261112-143063-configurable-customer-rulebook-hook.md): Configurable customer-provided rule book (config key, pending-export hook, generic renderer)
-- [T20261120-230152](T20261120-230152-hud-red-ci-unhandled-cell.md): HUD red-CI cell for unhandled failed runs (n362 step 1)
-- [T20261120-645606](T20261120-645606-hud-staleness-cells-alerts-autopilot.md): HUD staleness cells for alerts check and autopilot (n362 step 2)
-- [T20261120-369900](T20261120-369900-hud-latest-version-recheck-on-plugin-change.md): HUD latest-version cache re-check on plugin change (n362 step 3)
-- [T20261120-154507](T20261120-154507-persona-autopilot-health-red-and-restart.md): Autopilot health - overdue autopilot is red and offers a restart (n362 step 4)
-- [T20261120-105513](T20261120-105513-persona-idle-wake-readonly-checks.md): Persona idle wake with read-only alert and CI checks (n362 step 5)
 - [T20261120-160823](T20261120-160823-flaky-lock-bats-tests-on-ci.md): Flaky lock bats tests on CI (ledger concurrent adds, autopilot state lock)
 - [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config
 - [T20261123-248916](T20261123-248916-hud-drop-alerts-cell.md): drop the alerts cell from the HUD
 - [T20261123-424791](T20261123-424791-hud-slack-failure-rca-progress.md): HUD shows RCA progress for each Slack-reported failure
-- [T20261124-157602](T20261124-157602-hud-unreleased-commits.md): HUD shows unreleased commits after the plugin repo URL
 - [T20261124-420719](T20261124-420719-persona-move-alerts-routines-idle-wake-to-docs.md): Persona move 1: alerts, routines due, idle wake become pointers
 - [T20261124-315192](T20261124-315192-persona-move-detached-jobs-decisions-terms-to-skill.md): Persona move 2: detached jobs, decisions log, terms become pointers
 - [T20261124-870400](T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md): autopilot Phase 3/4 classification and housekeeping dispatch into scripts
@@ -89,3 +82,13 @@ reprioritize.
 - [T20261124-181781](T20261124-181781-slack-internal-channel-whitelist-d100.md): Slack internal-channel whitelist as config (d100)
 - [T20261124-141354](T20261124-141354-rulebook-rerender-trigger-d113.md): Rulebook re-render trigger on decision changes (d113)
 - [T20261124-209545](T20261124-209545-persona-trim-after-decision-moves.md): Persona trim after the decision moves (d155)
+- [T20261109-107704](T20261109-107704-ledger-context-file-naming.md): Ledger context file naming for Next items
+- [T20261122-192945](T20261122-192945-hud-one-ci-with-failed-run-url.md): HUD shows one CI, with the failed run URL when red
+- [T20261123-135901](T20261123-135901-scrub-pii-from-public-repo.md): Scrub PII from the public repo
+- [T20261123-136500](T20261123-136500-configurable-ci-job-cap.md): Configurable CI job cap
+- [T20261124-340374](T20261124-340374-autopilot-holds-store.md): Autopilot holds: store, `hold`, `release`, `holds`
+- [T20261124-153489](T20261124-153489-hud-details-sectioned-layout.md): HUD details: one labeled row per section
+- [T20261124-670976](T20261124-670976-autopilot-tier-cursor-selection.md): Autopilot picks by tier and a cursor
+- [T20261124-321658](T20261124-321658-autopilot-holds-replace-bottom.md): A stalled cycle creates a hold, not a bottom PR; HUD held count
+- [T20261124-115593](T20261124-115593-autopilot-retire-visits.md): Retire the visits counter, max_visits and park-after-N
+- [T20261124-989194](T20261124-989194-autopilot-cursor-and-holds.md): Autopilot cursor and holds replace bottom and visits

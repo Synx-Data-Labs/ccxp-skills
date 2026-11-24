@@ -65,13 +65,25 @@
 #                               "skip" with --stuck once stuck_count >= 3 (likely an
 #                               outage, not the task)
 #   advance <task-id>           the task moved forward: reset its counter; print reset|none
-#   prune [repo-root]           drop visit counters of tasks that are no longer in
+#   prune [repo-root]           drop visit counters and holds of tasks that are no longer in
 #                               <repo-root>/dev/TODO (closed or parked by someone else);
 #                               prints the dropped ids
 #   parked <task-id> [reason]   record that the task was parked (drops its counter, keeps
 #                               the last 50 in the state's "parked" list); print parked
 #   parked-list                 "<task-id><TAB><reason>" per task parked since this run began
 #                               (run_started_at, which a pause does not shift)
+#   hold-add <task-id> <kind> <condition> <reason>
+#                               record a hold (d152: a hold is a recorded fact with a reason AND a release
+#                               condition, never a silent skip). kind waiting|needs-human|stalled; condition
+#                               `until <time>` (ISO UTC, or a date), `run:<id>`, `pr:<n>`, `file-changed <path>`
+#                               or `task-left-todo <T-id>` (one argument, or several joined by spaces); exit 2 on an
+#                               unknown kind/condition or an empty reason, nothing written. Stored in the state
+#                               file's "holds", which `off`/`start` carry over; nothing consumes holds yet.
+#   holds [--json]              "<task><TAB><kind><TAB><reason><TAB><condition><TAB><since>" per hold
+#   release <task-id>           drop one hold; print released|none
+#   holds-check [repo-root]     release every hold whose condition is met (time passed, run completed or PR
+#                               closed via `gh api`, file mtime or git commit after the hold, task no longer in
+#                               dev/TODO); print "released <task> (<condition>)" per release. A gh failure keeps the hold.
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -212,7 +224,8 @@ _ap_fresh() {
       lifetime_cycles: ((.lifetime_cycles // .cycle_count) | numbers // 0),
       lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0),
       visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0))),
-      parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:])}' "$f" 2>/dev/null) || carry=""
+      parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:]),
+      holds: ((.holds | objects // {}) | with_entries(select(.value | type == "object")))}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
   jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" --argjson carry "$carry" '{
     schema: 2, status: "on", started_at: $now, run_started_at: $now, paused_at: null,
@@ -220,7 +233,7 @@ _ap_fresh() {
     lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
-    visits: ($carry.visits // {}), parked: ($carry.parked // []),
+    visits: ($carry.visits // {}), parked: ($carry.parked // []), holds: ($carry.holds // {}),
     dispatch_clone_path: null, dispatch_clone_paths: {}, slots: {}, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
@@ -575,18 +588,135 @@ ap-parked() {
   echo parked
 }
 
-# prune [repo-root]: drop counters of tasks that no longer have a dev/TODO file. Needs a dev/TODO
-# directory (a wrong root never wipes the counters); prints each dropped id.
+# prune [repo-root]: drop counters and holds of tasks that no longer have a dev/TODO file. Needs a dev/TODO
+# directory (a wrong root never wipes them); prints each dropped id once.
 ap-prune() {
-  local root="${1:-$(ap-work-root)}" f id
+  local root="${1:-$(ap-work-root)}" f id seen=" "
   f=$(ap-state-file)
   [ -f "$f" ] && [ -d "$root/dev/TODO" ] || return 0
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if ! compgen -G "$root/dev/TODO/$id-*.md" >/dev/null; then
-      _ap_update --arg id "$id" 'if (.visits | type) == "object" then del(.visits[$id]) else . end' && printf '%s\n' "$id"
+      _ap_update --arg id "$id" '(if (.visits | type) == "object" then del(.visits[$id]) else . end)
+        | (if (.holds | type) == "object" then del(.holds[$id]) else . end)' || continue
+      case "$seen" in *" $id "*) ;; *) seen="$seen$id "; printf '%s\n' "$id" ;; esac
     fi
-  done < <(jq -r '(.visits | objects // {}) | keys[]' "$f" 2>/dev/null || true)
+  done < <(jq -r '[((.visits | objects // {}) | keys[]), ((.holds | objects // {}) | keys[])] | .[]' "$f" 2>/dev/null || true)
+  return 0
+}
+
+# --- holds (T20261124-340374) ----------------------------------------------------
+# A hold is a recorded fact: reason + one release condition (d152). The state keeps
+# .holds = {"<T-id>": {kind, reason, cond, since}}; cond is the canonical condition text.
+
+AP_HOLD_KIND_RE='^(waiting|needs-human|stalled)$'
+AP_HOLD_USAGE='hold-add <task-id> <waiting|needs-human|stalled> "<until <time>|run:<id>|pr:<n>|file-changed <path>|task-left-todo <T-id>>" "<reason>"'
+
+# _ap_hold_cond <words...>: print the canonical condition, or return 1 when it is not one of the five forms.
+_ap_hold_cond() {
+  local c arg
+  c=$(printf '%s' "$*" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+  case "$c" in
+    "until "*)
+      arg=$(printf '%s' "${c#until }" | sed -E 's/^[[:space:]]+//')
+      [[ "$arg" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z?)?$ ]] || return 1
+      case "$arg" in
+        *T*:*:*) arg="${arg%Z}Z" ;;
+        *T*) arg="${arg%Z}:00Z" ;;
+        *) arg="${arg}T00:00:00Z" ;;
+      esac
+      [ -n "$(_ap_epoch "$arg")" ] || return 1
+      printf 'until %s' "$arg" ;;
+    run:*) [[ "${c#run:}" =~ ^[0-9]+$ ]] || return 1; printf '%s' "$c" ;;
+    pr:*) [[ "${c#pr:}" =~ ^[0-9]+$ ]] || return 1; printf '%s' "$c" ;;
+    "file-changed "*)
+      arg=$(printf '%s' "${c#file-changed }" | sed -E 's/^[[:space:]]+//')
+      case "$arg" in ""|/*|..|../*|*/../*|*/..) return 1 ;; esac
+      printf 'file-changed %s' "$arg" ;;
+    "task-left-todo "*)
+      arg=$(printf '%s' "${c#task-left-todo }" | sed -E 's/^[[:space:]]+//')
+      [[ "$arg" =~ $AP_TASK_ID_RE ]] || return 1
+      printf 'task-left-todo %s' "$arg" ;;
+    *) return 1 ;;
+  esac
+}
+
+ap-hold-add() {
+  local id="${1:-}" kind="${2:-}" reason cond f
+  if [ $# -lt 4 ]; then echo "$AP_HOLD_USAGE" >&2; return 2; fi
+  shift 2
+  reason="${!#}"
+  cond=$(_ap_hold_cond "${@:1:$#-1}") || { echo "hold-add: unknown release condition '${*:1:$#-1}'. $AP_HOLD_USAGE" >&2; return 2; }
+  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "hold-add: bad task id '$id'. $AP_HOLD_USAGE" >&2; return 2; }
+  [[ "$kind" =~ $AP_HOLD_KIND_RE ]] || { echo "hold-add: unknown kind '$kind' (waiting|needs-human|stalled)" >&2; return 2; }
+  reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | cut -c1-200)
+  [ -n "$reason" ] || { echo "hold-add: a hold needs a reason (d152: no hold without a reason and a release condition)" >&2; return 2; }
+  f=$(ap-state-file)
+  if [ ! -s "$f" ]; then mkdir -p "$(dirname "$f")"; printf '{}\n' > "$f"; fi
+  _ap_update --arg id "$id" --arg k "$kind" --arg c "$cond" --arg r "$reason" --arg now "$(ap-now)" \
+    '.holds = (((.holds | objects) // {}) | .[$id] = {kind: $k, reason: $r, cond: $c, since: $now})' || return 1
+  printf 'held %s %s\n' "$id" "$kind"
+}
+
+# holds [--json]
+ap-holds() {
+  local f; f=$(ap-state-file)
+  if [ "${1:-}" = --json ]; then
+    { [ -f "$f" ] && jq -c '[((.holds | objects) // {}) | to_entries | sort_by(.value.since, .key)[]
+      | {task: .key, kind: .value.kind, reason: .value.reason, condition: .value.cond, since: .value.since}]' "$f" 2>/dev/null; } || echo '[]'
+    return 0
+  fi
+  [ -f "$f" ] || return 0
+  jq -r '((.holds | objects) // {}) | to_entries | sort_by(.value.since, .key)[]
+    | [.key, .value.kind, .value.reason, .value.cond, .value.since] | join("\t")' "$f" 2>/dev/null || true
+}
+
+# release <task-id> -> released | none
+ap-release() {
+  local id="${1:-}" f
+  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "release <task-id>" >&2; return 2; }
+  f=$(ap-state-file)
+  if [ -f "$f" ] && jq -e --arg id "$id" '((.holds | objects) // {}) | has($id)' "$f" >/dev/null 2>&1; then
+    _ap_update --arg id "$id" 'del(.holds[$id])' || return 1
+    echo released
+  else
+    echo none
+  fi
+}
+
+_ap_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || true; }
+
+# _ap_hold_met <condition> <since-iso> <root>: exit 0 when the release condition holds. Anything that
+# cannot be read (gh error, missing path or directory) is "not met": a hold is never dropped on a guess.
+_ap_hold_met() {
+  local cond="$1" since="$2" root="$3" arg v se mt
+  case "$cond" in
+    "until "*) se=$(_ap_epoch "${cond#until }"); v=$(_ap_epoch "$(ap-now)"); [ -n "$se" ] && [ -n "$v" ] && [ "$v" -ge "$se" ] ;;
+    run:*) arg="${cond#run:}"; v=$(cd "$root" && gh api "repos/{owner}/{repo}/actions/runs/$arg" --jq .status 2>/dev/null) || return 1; [ "$v" = completed ] ;;
+    pr:*) arg="${cond#pr:}"; v=$(cd "$root" && gh api "repos/{owner}/{repo}/pulls/$arg" --jq .state 2>/dev/null) || return 1; [ "$v" = closed ] ;;
+    "file-changed "*)
+      arg="${cond#file-changed }"; se=$(_ap_epoch "$since"); [ -n "$se" ] || return 1
+      mt=$(_ap_mtime "$root/$arg")
+      if [ -n "$mt" ] && [ "$mt" -gt "$se" ]; then return 0; fi
+      [ -n "$(git -C "$root" log -1 --format=%H --since="$since" -- "$arg" 2>/dev/null)" ] ;;
+    "task-left-todo "*)
+      arg="${cond#task-left-todo }"; [ -d "$root/dev/TODO" ] || return 1
+      ! compgen -G "$root/dev/TODO/$arg-*.md" >/dev/null ;;
+    *) return 1 ;;
+  esac
+}
+
+# holds-check [repo-root]: release every hold whose condition is met; print "released <task> (<condition>)".
+ap-holds-check() {
+  local root="${1:-$(ap-work-root)}" f id cond since
+  f=$(ap-state-file)
+  [ -f "$f" ] || return 0
+  while IFS=$'\t' read -r id cond since; do
+    [ -n "$id" ] || continue
+    if _ap_hold_met "$cond" "$since" "$root"; then
+      _ap_update --arg id "$id" 'del(.holds[$id])' && printf 'released %s (%s)\n' "$id" "$cond"
+    fi
+  done < <(jq -r '((.holds | objects) // {}) | to_entries | sort_by(.value.since, .key)[] | [.key, .value.cond, .value.since] | join("\t")' "$f" 2>/dev/null || true)
   return 0
 }
 
@@ -1138,6 +1268,7 @@ autopilot-state() {
     remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
     slots) ap-slots "$@" ;; routine-free) ap-routine-free ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
+    hold-add) ap-hold-add "$@" ;; holds) ap-holds "$@" ;; release) ap-release "$@" ;; holds-check) ap-holds-check "$@" ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     config-show) ap-config-show "$@" ;; config-set) ap-config-set "$@" ;; config-reset) ap-config-reset "$@" ;;
