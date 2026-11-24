@@ -40,13 +40,15 @@ hb-state-dir() {
 hb-ref() {
   local top="$1" ref="" sym=""
   git -C "$top" symbolic-ref -q HEAD >/dev/null 2>&1 || return 0
-  ref=$(git -C "$top" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || ref=""
+  ref=$(git -C "$top" rev-parse --symbolic-full-name '@{u}' 2>/dev/null) || ref=""
   if [ -n "$ref" ]; then printf '%s\tupstream' "$ref"; return 0; fi
-  sym=$(git -C "$top" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || sym=""
-  if [ -z "$sym" ]; then
+  sym=$(git -C "$top" symbolic-ref -q refs/remotes/origin/HEAD 2>/dev/null) || sym=""
+  # A dangling origin/HEAD (its branch is gone) must not hide the fallbacks.
+  if [ -z "$sym" ] || ! git -C "$top" rev-parse -q --verify "$sym" >/dev/null 2>&1; then
     local c
-    for c in origin/main origin/master; do
-      git -C "$top" rev-parse -q --verify "refs/remotes/$c" >/dev/null 2>&1 && { sym="$c"; break; }
+    sym=""
+    for c in refs/remotes/origin/main refs/remotes/origin/master; do
+      git -C "$top" rev-parse -q --verify "$c" >/dev/null 2>&1 && { sym="$c"; break; }
     done
   fi
   [ -z "$sym" ] || printf '%s\torigin' "$sym"
@@ -61,12 +63,15 @@ hb-key() {
 # $1 repo top $2 cache file
 hb-fetch() {
   local top="$1" file="$2" tmp now ok=0
-  local -a extra=(--recurse-submodules=no)
+  local -a extra=(--recurse-submodules=no) ssh="${GIT_SSH_COMMAND:-}"
+  # Keep the user's own ssh command (env, else core.sshCommand) and only add BatchMode, so a custom key still works.
+  [ -n "$ssh" ] || ssh=$(git -C "$top" config core.sshCommand 2>/dev/null) || ssh=""
+  [ -n "$ssh" ] || ssh=ssh
   # FETCH_HEAD belongs to the user's own `git pull`/`git fetch`: never overwrite it (git 2.29+; older git just skips the flag).
   if git fetch -h 2>&1 | grep -q 'write-fetch-head'; then extra+=(--no-write-fetch-head); fi
   now=$(date +%s)
-  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND='ssh -o BatchMode=yes' hci-run-timeout "$HB_TIMEOUT" \
-    git -C "$top" fetch --quiet --no-tags --no-prune "${extra[@]}" origin >/dev/null 2>&1 && ok=1
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true GIT_SSH_COMMAND="$ssh -o BatchMode=yes" hci-run-timeout "$HB_TIMEOUT" \
+    git -C "$top" -c gc.auto=0 -c maintenance.auto=false fetch --quiet --no-tags --no-prune "${extra[@]}" origin >/dev/null 2>&1 && ok=1
   tmp=$(mktemp "${file}.XXXXXX" 2>/dev/null) || return 0
   jq -n -c --argjson t "$now" --argjson ok "$ok" '{tried: $t, ok: ($ok == 1)}' >"$tmp"
   mv -f "$tmp" "$file"
@@ -103,6 +108,7 @@ hb-maybe-fetch() {
 hud-behind-json() {
   local top="${1:-}" rb ref base counts ahead behind
   [ -n "$top" ] && git -C "$top" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  git -C "$top" symbolic-ref -q HEAD >/dev/null 2>&1 || return 0 # detached: nothing is shown, so no fetch either
   hb-maybe-fetch "$top"
   rb=$(hb-ref "$top"); [ -n "$rb" ] || return 0
   ref="${rb%%$'\t'*}"; base="${rb##*$'\t'}"
