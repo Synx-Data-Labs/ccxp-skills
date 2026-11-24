@@ -25,11 +25,11 @@ const VERSION_RE = /^\d{1,9}\.\d{1,9}\.\d{1,9}(-[0-9A-Za-z.-]{1,40})?$/
 /** Strictly newer by numeric semver (10 > 9, not a string compare); a prerelease sorts below its release. */
 export function isNewer(a: string, b: string): boolean {
   if (!VERSION_RE.test(a) || !VERSION_RE.test(b)) return false
-  const [ca, pa] = a.split('-', 2)
-  const [cb, pb] = b.split('-', 2)
+  const [ca = '', pa] = a.split('-', 2)
+  const [cb = '', pb] = b.split('-', 2)
   const na = ca.split('.').map(Number)
   const nb = cb.split('.').map(Number)
-  for (let i = 0; i < 3; i++) if (na[i] !== nb[i]) return na[i] > nb[i]
+  for (let i = 0; i < 3; i++) if (na[i] !== nb[i]) return na[i]! > nb[i]!
   return pa === undefined && pb !== undefined
 }
 
@@ -151,7 +151,7 @@ export function parseHelper(stdout: string): HelperData | null {
       const e = (c as Record<string, unknown>).eta
       if (state === 'running' && typeof e === 'object' && e !== null && !Array.isArray(e)) {
         const eo = e as Record<string, unknown>
-        const [start, typ, min, max, count] = [eo.start, eo.typ, eo.min, eo.max, eo.n].map(num)
+        const [start, typ, min, max, count] = [eo.start, eo.typ, eo.min, eo.max, eo.n].map(num) as [number, number, number, number, number]
         if (start > 0 && typ > 0 && min > 0 && max >= min && count >= 3) ci.eta = { start, typ, min, max, n: count }
       }
     }
@@ -376,7 +376,7 @@ export function isApOn(snap: Snapshot): boolean {
 /** Last path segment; '' for an empty path. */
 export function baseName(path: string): string {
   const parts = path.split('/').filter(p => p !== '')
-  return parts.length ? parts[parts.length - 1] : ''
+  return parts.length ? parts[parts.length - 1]! : ''
 }
 
 /** True when `cwd` is `root` or below it. */
@@ -594,7 +594,7 @@ function repoVariants(snap: Snapshot): Variants | null {
   ]
   // Identical neighbours would waste a shrink step.
   const out: Variants = []
-  for (const v of all) if (out.length === 0 || joinText(out[out.length - 1]) !== joinText(v)) out.push(v)
+  for (const v of all) if (out.length === 0 || joinText(out[out.length - 1]!) !== joinText(v)) out.push(v)
   return out
 }
 
@@ -813,7 +813,7 @@ function render(items: Item[]): Seg[] {
   const out: Seg[] = []
   items.forEach((it, i) => {
     if (i > 0) out.push({ text: SEP, dim: true })
-    out.push(...it.variants[it.at])
+    out.push(...it.variants[it.at]!)
   })
   return out
 }
@@ -877,14 +877,15 @@ function fitRow(all: Item[], steps: readonly string[], width: number, ellipsis =
     // `ellipsis` (details): the cut ends in `…` so a clipped line says so; it takes one extra column.
     let over = widthOf(row) - width + (ellipsis ? 1 : 0)
     for (let i = row.length - 1; i >= 0 && over > 0; i--) {
-      const cut = Math.min(over, row[i].text.length)
-      row[i] = { ...row[i], text: row[i].text.slice(0, row[i].text.length - cut) }
+      const cur = row[i]!
+      const cut = Math.min(over, cur.text.length)
+      row[i] = { ...cur, text: cur.text.slice(0, cur.text.length - cut) }
       over -= cut
     }
     if (ellipsis) {
       let j = row.length - 1
-      while (j > 0 && row[j].text === '') j--
-      row[j] = { ...row[j], text: row[j].text + '…' }
+      while (j > 0 && row[j]!.text === '') j--
+      row[j] = { ...row[j]!, text: row[j]!.text + '…' }
     }
   }
   return row
@@ -1038,7 +1039,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   let apItem: Item | null = null
   if (ap) {
     const full = apVariants(ap)
-    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0] : [full[0][0], { text: `${truncate(ap.status, 14)} ` }, ...full[0].slice(1)]
+    const withStatus: Seg[] = ap.prefix === '[p]' || !ap.status ? full[0]! : [full[0]![0]!, { text: `${truncate(ap.status, 14)} ` }, ...full[0]!.slice(1)]
     apItem = one('ap', withStatus)
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
@@ -1065,7 +1066,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     }
   }
   const apStats = ap ? apStatsVariants(ap) : null
-  add([apItem, wakeItem, apStats ? one('apstats', apStats[0]) : null], DETAIL_STEPS.ap)
+  add([apItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null], DETAIL_STEPS.ap)
 
   // 5. the queue breakdown on its own line right after the AP line (labels in full)
   if (h?.queue) add([one('queue', ...queueVariants(h.queue, true))], DETAIL_STEPS.queue)

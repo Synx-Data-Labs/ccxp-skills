@@ -46,3 +46,12 @@ setup() {
   grep -q "version: boolean" "$ROOT/types/index.d.ts"
   grep -qE "^  version: true," "$ROOT/hud/config.ts"
 }
+
+@test "every \$.env.get in the hud mod takes a literal name, one per ENV_NAMES entry (claude plugin validate)" {
+  # The validator rejects a non-literal $.env.get argument (T20261123-137260).
+  run grep -rnE --include='*.ts' --include='*.tsx' '\$\.env\.get\((\)|[^'"'"')])' "$ROOT/hud"
+  [ "$status" -eq 1 ]
+  names=$(sed -n "/^export const ENV_NAMES/,/as const/p" "$ROOT/hud/show.ts" | grep -oE "'[A-Z_]+'")
+  [ -n "$names" ]
+  for n in $names; do grep -qF "\$.env.get($n)" "$ROOT/hud/register.tsx"; done
+}

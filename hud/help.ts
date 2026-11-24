@@ -17,7 +17,7 @@ export function parseHelp(text: string | undefined | null): HelpTopic[] {
     const m = /^##\s+(.+?)\s*$/.exec(line)
     if (m) {
       flush()
-      cur = { head: m[1], lines: [] }
+      cur = { head: m[1]!, lines: [] }
     } else cur?.lines.push(line)
   }
   flush()

@@ -374,13 +374,32 @@ export const register: Register = on => {
           root = undefined
         }
         const paths = configPaths(env, root)
-        const vars: Record<string, string | undefined> = {}
-        for (const name of ENV_NAMES) {
+        // Literal names only: `claude plugin validate` rejects a non-literal $.env.get argument, so no loop over ENV_NAMES.
+        const read = async (get: () => Promise<unknown>) => {
           try {
-            vars[name] = (await $.env.get(name)) || undefined
+            return ((await get()) as string | undefined) || undefined
           } catch {
-            vars[name] = undefined
+            return undefined
           }
+        }
+        const vars: Record<(typeof ENV_NAMES)[number], string | undefined> = {
+          CLAUDE_CONFIG_DIR: await read(() => $.env.get('CLAUDE_CONFIG_DIR')),
+          HOME: await read(() => $.env.get('HOME')),
+          NO_COLOR: await read(() => $.env.get('NO_COLOR')),
+          CCXP_ALERTS: await read(() => $.env.get('CCXP_ALERTS')),
+          CCXP_ALERTS_DIR: await read(() => $.env.get('CCXP_ALERTS_DIR')),
+          HUD_CACHE_DIR: await read(() => $.env.get('HUD_CACHE_DIR')),
+          HUD_CACHE_TTL: await read(() => $.env.get('HUD_CACHE_TTL')),
+          HUD_CI_STATE_DIR: await read(() => $.env.get('HUD_CI_STATE_DIR')),
+          HUD_NIGHTLY_STATE_DIR: await read(() => $.env.get('HUD_NIGHTLY_STATE_DIR')),
+          HUD_NIGHTLY_OFF: await read(() => $.env.get('HUD_NIGHTLY_OFF')),
+          HUD_NIGHTLY_REPO: await read(() => $.env.get('HUD_NIGHTLY_REPO')),
+          HUD_NIGHTLY_WORKFLOW: await read(() => $.env.get('HUD_NIGHTLY_WORKFLOW')),
+          HUD_NIGHTLY_TTL: await read(() => $.env.get('HUD_NIGHTLY_TTL')),
+          HUD_ISSUES_STATE_DIR: await read(() => $.env.get('HUD_ISSUES_STATE_DIR')),
+          HUD_ISSUES_TTL: await read(() => $.env.get('HUD_ISSUES_TTL')),
+          HUD_QUEUE_STATE_DIR: await read(() => $.env.get('HUD_QUEUE_STATE_DIR')),
+          HUD_QUEUE_FETCH_TTL: await read(() => $.env.get('HUD_QUEUE_FETCH_TTL')),
         }
         return { text: configReport({ paths, userText: await readText($, paths.user), projectText: await readText($, paths.project), env: vars }) }
       }
