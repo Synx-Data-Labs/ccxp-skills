@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 blocks: [T20261124-140678]
 source: Owner chat 2026-11-24 (job 1490)
 related: T20261103-169088
 description: HUD shows the 5-hour and 7-day subscription windows with time left until reset, and caches the snapshot for the autopilot
+claimed_by: cc1-50ac6891:eb8e263254b40cff
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-168446: HUD shows subscription time left (5h and 7d) and caches it
