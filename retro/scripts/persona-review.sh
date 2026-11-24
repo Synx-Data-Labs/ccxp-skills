@@ -23,7 +23,7 @@ set -euo pipefail
 PR_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PR_STOP=" about after again always before being could decision every first never other should still their there these those under until which while would write wrong using where when will with from have this that than then them they into also must only some such what your "
 
-function pr-die() { echo "persona-review.sh: $*" >&2; exit "${2:-2}"; }
+function pr-die() { echo "persona-review.sh: $1" >&2; exit "${2:-2}"; }
 
 function pr-decisions() { # active decisions as a JSON array
   local ledger="${LEDGER:-$PR_ROOT/hud/scripts/ledger.sh}"
@@ -49,7 +49,7 @@ function pr-sections() { # TSV line<TAB>section for every persona line
 function pr-overlap() { # $1 persona, $2 min shared; reads decisions JSON on stdin
   local persona="$1" min="$2" ref text words sec n
   sec=$(pr-sections "$persona")
-  while IFS=$'\t' read -r ref text; do
+  while IFS=$'\x1f' read -r ref text; do
     words=$(printf '%s' "$text" | pr-words)
     n=0
     while IFS= read -r l; do
@@ -65,7 +65,7 @@ function pr-overlap() { # $1 persona, $2 min shared; reads decisions JSON on std
         printf '%s\t%s\t%s\t%s\n' "$ref" "$n" "$(awk -F'\t' -v n="$n" '$1 == n {print $2}' <<<"$sec")" "${hits[*]}"
       fi
     done <"$persona"
-  done < <(jq -r '.[] | [.ref, .text] | @tsv')
+  done < <(jq -r '.[] | [.ref, .text] | join("\u001f")')
 }
 
 function pr-cap() { # $1 cap file
@@ -87,7 +87,7 @@ function pr-size() { # $1 persona, $2 cap file
     echo "note=an addition must trim at least (addition_bytes - headroom_bytes) bytes elsewhere"
   fi
   echo "section_bytes:"
-  awk '/^## /{if (n != "") printf "%6d\t%s\n", b, n; n=$0; sub(/^## /, "", n); b=0} {b += length($0) + 1} END{if (n != "") printf "%6d\t%s\n", b, n}' "$persona" | sort -rn
+  LC_ALL=C awk 'BEGIN{n="(preamble)"} /^## /{printf "%6d\t%s\n", b, n; n=$0; sub(/^## /, "", n); b=0} {b += length($0) + 1} END{printf "%6d\t%s\n", b, n}' "$persona" | sort -rn
 }
 
 function pr-age() { # $1 YYYY-MM-DD..., $2 today -> whole days (empty when unparsable)
@@ -99,8 +99,8 @@ function pr-age() { # $1 YYYY-MM-DD..., $2 today -> whole days (empty when unpar
 
 function pr-list() { # $1 scope ("" = all), $2 today
   local scope="$1" today="$2" ref added sc text age
-  pr-decisions | jq -r --arg s "$scope" '.[] | select($s == "" or .scope == $s) | [.ref, .added_at, .scope, .text] | @tsv' \
-    | while IFS=$'\t' read -r ref added sc text; do
+  pr-decisions | jq -r --arg s "$scope" '.[] | select($s == "" or .scope == $s) | [.ref, .added_at, .scope, .text] | join("\u001f")' \
+    | while IFS=$'\x1f' read -r ref added sc text; do
         age=$(pr-age "$added" "$today")
         printf '%s\t%s\t%s\t%s\t%s\n' "$ref" "${added:0:10}" "${age:-?}" "$sc" "$text"
       done
@@ -108,10 +108,11 @@ function pr-list() { # $1 scope ("" = all), $2 today
 
 function pr-bucket() { # $1 persona, $2 scope, $3 min shared
   local persona="$1" scope="$2" min="$3" decs rev ovl ref sc text b why
-  decs=$(pr-decisions | jq -c --arg s "$scope" '[.[] | select($s == "" or .scope == $s)]')
+  decs=$(pr-decisions) || return 3
+  decs=$(jq -c --arg s "$scope" '[.[] | select($s == "" or .scope == $s)]' <<<"$decs")
   rev=$(pr-review-json)
   ovl=$(jq -c '.' <<<"$decs" | pr-overlap "$persona" "$min" || true)
-  while IFS=$'\t' read -r ref sc text; do
+  while IFS=$'\x1f' read -r ref sc text; do
     b="" why=""
     local low; low=$(printf '%s' "$text" | tr '[:upper:]' '[:lower:]')
     if jq -e --arg r "$ref" '[(.contradictions // [])[] | tostring | select(test("\\b" + $r + "\\b"))] | length > 0' <<<"$rev" >/dev/null 2>&1; then
@@ -120,28 +121,29 @@ function pr-bucket() { # $1 persona, $2 scope, $3 min shared
       b=retire why="decision review marks it stale: $(jq -r --arg r "$ref" '[.stale[] | select(.ref == $r) | .reasons[]] | join("; ")' <<<"$rev")"
     elif grep -qE "^${ref}	" <<<"$ovl"; then
       b=already-covered why="persona line $(grep -E "^${ref}	" <<<"$ovl" | head -1 | awk -F'\t' '{print $2 " (" $3 ")"}')"
-    elif [[ "$low" =~ (autopilot|/drive|/retro|/ccxp|skill|script|hud|ledger\.sh|workflow|parallel) ]]; then
-      b=skill-task why="mentions ${BASH_REMATCH[1]}"
-    elif [[ "$low" =~ (authz|whitelist|channel|profile|config|taste|agenda) ]]; then
-      b=profile-config why="mentions ${BASH_REMATCH[1]}"
+    elif [[ "$low" =~ (^|[^a-z])(autopilot|/drive|/retro|/ccxp|skills?|scripts?|hud|ledger\.sh|workflows?|parallel)([^a-z]|$) ]]; then
+      b=skill-task why="mentions ${BASH_REMATCH[2]}"
+    elif [[ "$low" =~ (^|[^a-z])(authz|whitelist|channels?|profiles?|config|taste|agenda)([^a-z]|$) ]]; then
+      b=profile-config why="mentions ${BASH_REMATCH[2]}"
     elif [[ "$sc" == repo:* ]]; then
       b=keep-in-log why="repo-scoped ($sc)"
-    elif [[ "$low" =~ (always|never|must|forbidden|only) ]]; then
-      b=persona why="global rule wording (${BASH_REMATCH[1]}) with no persona overlap"
+    elif [[ "$low" =~ (^|[^a-z])(always|never|must|forbidden|only)([^a-z]|$) ]]; then
+      b=persona why="global rule wording (${BASH_REMATCH[2]}) with no persona overlap"
     else
       b=keep-in-log why="no persona, skill or config signal"
     fi
     printf '%s\t%s\t%s\n' "$ref" "$b" "$why"
-  done < <(jq -r '.[] | [.ref, .scope, .text] | @tsv' <<<"$decs")
+  done < <(jq -r '.[] | [.ref, .scope, .text] | join("\u001f")' <<<"$decs")
 }
 
 function pr-commands() { # $1 persona, $2 scope, $3 min shared
-  local ref b why n=0
+  local ref b why n=0 rows
+  rows=$(pr-bucket "$1" "$2" "$3") || exit 3
   while IFS=$'\t' read -r ref b why; do
     [[ "$b" == retire ]] || continue
     n=$((n + 1))
-    printf '# propose to the owner, do not run unprompted\nbash "$L" decision retire %s "%s"\n' "$ref" "${why//\"/\'}"
-  done < <(pr-bucket "$1" "$2" "$3")
+    printf '# propose to the owner, do not run unprompted (L = hud/scripts/ledger.sh)\nbash "$L" decision retire %s %q\n' "$ref" "$why"
+  done <<<"$rows"
   [[ $n -gt 0 ]] || echo "# no decision is bucketed retire"
 }
 

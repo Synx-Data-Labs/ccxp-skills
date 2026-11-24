@@ -30,7 +30,7 @@ scheduled: 2026-11-23
 
 ## Done criteria
 
-- [x] `retro/scripts/persona-review.sh` with list, overlap, size, bucket, commands; `tests/persona_review.bats` (11 tests) green.
+- [x] `retro/scripts/persona-review.sh` with list, overlap, size, bucket, commands; `tests/persona_review.bats` (12 tests) green.
 - [x] `retro/SKILL.md` Phase 4f added (15 lines) plus a `## Persona review` report section.
 - [x] Persona asset untouched (48481 B, headroom 18 B under the 48500 cap).
 
@@ -47,4 +47,4 @@ scheduled: 2026-11-23
 - TDD (`superpowers:test-driven-development`): no, written together with its tests in one pass; tests were run red-to-green once (line numbers fixed).
 - Verification (`superpowers:verification-before-completion`): yes, ratchets, doc-impact, lint-identifiers and bats run before the PR.
 - Systematic debugging: no, did not get stuck.
-- Receiving code review: see PR (independent review via /address-pr).
+- Receiving code review: yes, /address-pr 2.d: first review found 8 issues (hidden ledger failure in `commands`, tab-collapsing TSV, substring bucket matches, date-dependent fixtures, weak tests), all fixed in the same PR.
