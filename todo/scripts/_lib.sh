@@ -40,6 +40,32 @@ function todo-gated() {
   printf '%s' "${1:-}" | grep -qiE '(^|[^[:alpha:]])(supervised|blocked)([^[:alpha:]]|$)|needs manual|sign-off'
 }
 
+# --- dependencies (compat reader, epic E3, T20261124-320024) -------------------
+# Prints the task ids a task depends on, one per line, de-duplicated: the ids in
+# its `depends_on:` (flow `[T1, T2]` or block list form) followed by the ids in a
+# legacy `status: Blocked by T..` (so old and new files read the same while
+# several repos run different plugin versions). Prints nothing when it has none.
+# A task with only `depends_on:` keeps its real status, so todo-gated never
+# skips it; only the legacy status word does. Read-only.
+function todo-deps() {
+  local file="$1"
+  {
+    tr -d '\r' < "$file" | awk '
+      NR==1 && $0=="---" { infm=1; next }
+      infm && $0=="---" { exit }
+      infm && /^depends_on:/ { indep=1; sub(/#.*$/, ""); print; next }
+      infm && indep && /^[[:space:]]*-/ { sub(/#.*$/, ""); print; next }
+      infm && indep && /^[[:space:]]*(#.*)?$/ { next }
+      infm && indep { indep=0 }
+    '
+    local status
+    status="$(todo-fm-get "$file" status)"
+    case "$status" in
+      [Bb]locked\ by*) printf '%s\n' "$status" ;;
+    esac
+  } | grep -oE 'T[0-9]{8}-[0-9]{6}' | awk '!seen[$0]++' || true
+}
+
 # Claim-state verdict for one task id: mine|peer:<claimant>|reclaimable:<claimant>|unclaimed
 # $2 (optional) overrides the repo root task_claim.sh is invoked from — tests
 # pass a throwaway task file's directory; real callers omit it (defaults to

@@ -4,7 +4,8 @@ estimation: 1
 # Optional — delete the lines you don't use:
 # deadline: 2026-06-30         # hard date (release / compliance / customer) — informational, does not affect queue order
 # blocks: [T20260101-000001]   # task IDs that depend on THIS one (bidirectional)
-# blocked-by: T20260101-000002 # the task blocking this one (pair with its blocks:)
+# depends_on: [T20260101-000002] # tasks this one waits on (pair with their blocks:); keep your real status
+# needs: [human]               # human-only condition: human|vpn|owner-decision|person:<alias>|ext:<text>
 # source: Retro 2026-06-09     # one-line origin (retro / RCA run / ticket / conversation)
 # related: T20260101-000003    # see-also, non-blocking
 # owner: Your Name             # who is driving it
@@ -21,7 +22,7 @@ estimation: 1
 # place: [office, vpn]         # context needed to do the work (slugs); absent = anywhere
 # person: [person-a]           # aliases involved (call, review, handoff) — never emails or real names
 # type: feature                # chore|feature|bug|event|research|spike|rca|support|other; `event` needs `when`
-#   (waiting on someone: `status: Blocked by person:<alias>` or `ext:<text>`, no new field)
+#   (waiting on someone: `needs: [person:<alias>]` or `needs: [ext:<text>]`)
 # tier: 3                     # autopilot tier 1..4 (1 urgent: red nightly and the like; 2 support issues; 3 default when absent; 4 low) — omit unless the owner states one
 # support-report: on                   # opt in to outward status reports (default off; later phase)
 #
@@ -64,8 +65,9 @@ SCAFFOLD NOTES (delete this block once the task is filed):
   `/todo sweep`, which picks up any untracked task automatically). New tasks
   always enter at the end of the queue; use `/top T{ID}` if it needs to jump
   the line.
-- To mark a dependency, set `status: Blocked by T{id}` on the blocked task AND add
-  this task's ID to the blocker's `blocks:` list (both directions).
+- To mark a dependency, add the dependency's ID to this task's `depends_on:` AND this
+  task's ID to the dependency's `blocks:` (both directions); keep the real `status:`
+  (`Blocked by T{id}` is deprecated).
 - As the task enters `/drive`, grow this body into the full design using
   repo-conventions/templates/design-doc.md (TLDR · Problem · Context ·
   Solution · Test plan · Done criteria · Closed · Skills invoked; +Root cause

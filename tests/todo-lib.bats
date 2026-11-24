@@ -112,3 +112,50 @@ EOF
   printf -- '---\nstatus: Open\ntier: 9\n---\n' > "$d/bad.md"; [ "$(todo-tier "$d/bad.md")" = 3 ]
   printf -- '---\nstatus: Open\ntier: 2  # urgent\n---\n' > "$d/c.md"; [ "$(todo-tier "$d/c.md")" = 2 ]
 }
+
+# --- todo-deps (compat reader, T20261124-320024) ------------------------------
+
+mk_dep_task() {
+  # $1 = file, rest = frontmatter lines
+  local f="$1"; shift
+  { printf -- '---\n'; printf '%s\n' "$@"; printf -- '---\n\n# T20260611-000001: x\n'; } > "$f"
+}
+
+@test "todo-deps reads a flow-list depends_on" {
+  mk_dep_task "$BATS_TEST_TMPDIR/t.md" "status: In Progress" "estimation: 1" "depends_on: [T20260611-000010, T20260611-000020]"
+  run todo-deps "$BATS_TEST_TMPDIR/t.md"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020')" ]
+}
+
+@test "todo-deps reads a block-list depends_on and stops at the next key" {
+  mk_dep_task "$BATS_TEST_TMPDIR/t.md" "status: Open" "depends_on:" "  - T20260611-000010" "  - T20260611-000020" "blocks: [T20260611-000099]"
+  run todo-deps "$BATS_TEST_TMPDIR/t.md"
+  [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020')" ]
+}
+
+@test "todo-deps reads a legacy Blocked by status and merges without duplicates" {
+  mk_dep_task "$BATS_TEST_TMPDIR/t.md" "status: Blocked by T20260611-000020 and T20260611-000030 - waiting" "depends_on: [T20260611-000010, T20260611-000020]"
+  run todo-deps "$BATS_TEST_TMPDIR/t.md"
+  [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020\nT20260611-000030')" ]
+}
+
+@test "todo-deps prints nothing for a task with no dependencies" {
+  mk_dep_task "$BATS_TEST_TMPDIR/t.md" "status: Open" "estimation: 1" "blocks: [T20260611-000099]"
+  run todo-deps "$BATS_TEST_TMPDIR/t.md"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "a task with only depends_on is not gated; the legacy status word still is" {
+  run todo-gated "In Progress"
+  [ "$status" -ne 0 ]
+  run todo-gated "Blocked by T20260611-000010"
+  [ "$status" -eq 0 ]
+}
+
+@test "todo-deps reads an unindented block list, CRLF files and ignores comments" {
+  printf -- '---\r\nstatus: Open\r\ndepends_on:\r\n- T20260611-000010 # was T20260611-000099\r\n# note\r\n- T20260611-000020\r\nblocks: []\r\n---\r\n' > "$BATS_TEST_TMPDIR/t.md"
+  run todo-deps "$BATS_TEST_TMPDIR/t.md"
+  [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020')" ]
+}
