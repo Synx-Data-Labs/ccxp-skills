@@ -472,6 +472,16 @@ Idempotent — skip if an open chore for that same `<metric> on <repo>` regressi
 
 **Report**: add a `## External skillset scan` section to the retro report (Phase 5), directly after `## Skill quality`, and an `External scan:` line to the Slack summary (Phase 6), directly after `Skill quality:`.
 
+### Phase 4f: Persona review (decisions to persona and skills)
+
+- Applies when the ccxp-agent persona (`agent-pairing/assets/ccxp-agent.md`) and a decisions log exist; otherwise report "no persona review" and skip. Proposes only: never edit the persona, never run `decision add/retire/supersede`.
+- Run in order (`P=<skills-root>/retro/scripts/persona-review.sh`; deterministic, read-only): `bash $P size`, `bash $P bucket`, `bash $P overlap`, `bash $P commands`; read `ledger.sh decision review` too.
+- Treat each bucket as a hint and confirm it against the decision text: persona, skill-task, profile-config, keep-in-log, already-covered, retire, contradiction.
+- Propose persona and skill edits with the bytes that pay for them (`size` shows the headroom under the bats cap; every addition needs an equal trim), and list the `commands` lines for the owner to run.
+- Offer one docs PR with the proposed edits; report contradictions as questions for the owner.
+
+**Report**: add a `## Persona review` section to the retro report (Phase 5), directly after `## External skillset scan`: size line, bucket counts, proposed edits, retire commands, contradictions.
+
 ### Phase 5: Write the retro report
 
 Create `dev/JOURNAL/YYYY-MM-DD-retro-weekly.md` with:
@@ -537,6 +547,11 @@ Same link convention as the Focus list grade table above (`taskid-mdlink T<id>`,
 ## External skillset scan
 - Marketplaces scanned: `<marketplace>`, `<marketplace>` (or "none configured")
 - Candidates found: `<our-skill>` vs. `<external-marketplace>:<external-skill>` — filed T<id> (Category: quality) | (or "none flagged")
+
+## Persona review
+- Persona: N bytes of cap C (headroom H); decisions: A active
+- Buckets: persona N, skill-task N, profile-config N, keep-in-log N, already-covered N, retire N, contradiction N (or "no persona review")
+- Proposed edits (with the trims that pay for them), retire/supersede commands for the owner, contradictions (or "none")
 
 ## Memory review
 - Total: N memories across M clone(s) (user: X, feedback: Y, project: Z, reference: W)
