@@ -28,7 +28,7 @@
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
 #                         # `source`/`branch` unless stdin `queue_source` is "working-tree" (opt-in): read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
-#                         # `hwm`: {"d180","d30","d7"} high watermark of the queue length (last 180 days / 30 days / 7 days), from
+#                         # `hwm`: {"lm","lw","tw"} the largest queue length in the 14-to-42-days-ago, 7-to-14-days-ago and last-7-days windows (null = no data), from
 #                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)

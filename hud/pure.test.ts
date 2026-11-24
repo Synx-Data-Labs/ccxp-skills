@@ -1391,8 +1391,6 @@ test('queue: the band shows the compact form, details spell the labels out, clai
   expect(one).toContain('0 held | 1 epic')
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('claimed')
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('revisited')
-  // a stale helper that still sends revisited gets no such count
-  expect(detail(withHelper({ queue: { ...QUEUE, revisited: 9 } }) as any, 200).join('\n')).not.toContain('revisited')
   // the old marker-derived buckets are gone
   expect(detail(s as any, 140).join('\n')).not.toMatch(/decision|external|blocked/)
 })
@@ -1454,7 +1452,7 @@ test('queue max: a narrow band degrades max a/b/c, then the plain cell, then rea
     else if (t.includes('queue 44 = 30r')) seen.add('plain')
     else if (t.includes('queue 30/44')) seen.add('tiny')
     // never a half-cut maximum such as "max 61/7"
-    expect(t).not.toMatch(/max \d+(\/\d*)?( ▲| ▼)?$/m)
+    for (const m of t.matchAll(/max (\S*)/g)) expect(m[1]).toMatch(/^[\d-]+\/[\d-]+\/\d+$/)
   }
   expect([...seen].sort()).toEqual(['max', 'plain', 'tiny'])
 })

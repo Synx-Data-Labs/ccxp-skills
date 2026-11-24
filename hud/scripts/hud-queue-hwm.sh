@@ -17,7 +17,7 @@
 #                 samples older than 180 days (keeping the newest of those, the value in force at the
 #                 window start), and only if that is not enough the oldest half.
 # A window's value at its start counts too (a queue that was 40 for the whole week and changed
-# 8 days ago still has a 7d maximum of 40). A window with no samples inside it carries that value; a
+# 8 days ago still has 40 for last week). A window with no samples inside it carries that value; a
 # window with no data at all (before the first sample) is null. There is no lifetime maximum; old
 # `max-<key>` files from earlier versions are ignored.
 #
