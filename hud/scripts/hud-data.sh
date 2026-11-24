@@ -21,6 +21,7 @@
 #                         "busy_slots",   # parallel cycles running (max_dop > 1), 0 when none, 1 for a single cycle
 #                         "busy_routine", # of those, the cycles in routine slots (not marked urgent), the ones counted against max_dop less reserved
 #                         "stats"},   # null | {"has_history","approx","merged_24h","cycles_24h","avg_merged_24h","trend"}: rolling 24h vs lifetime avg/day
+#    "ap_config": null | {"max_dop","reserved_slots","source","file"},   # the autopilot's EFFECTIVE settings (autopilot-state.sh config-show --json via sl-autopilot-config, cached per repo): null unless the autopilot is on/paused or dev/.autopilot-config.json exists; reserved_slots is null when the autopilot script does not report it; source = override|default; file = the config file exists
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
 #    "queue": null | {"total","ready","held","epic","claimed","revisited","autoparked"[,"source","branch"|"fallback"]},

@@ -375,7 +375,8 @@ sl-autopilot-config() {
   f="$cdir/ap-config-$key"
   if [ "$ttl" -gt 0 ] && [ -r "$f" ]; then
     IFS=$'\t' read -r stamp croot csig line < "$f" || true
-    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$croot" = "$repo_root" ] && [ "$csig" = "$sig" ] && [ -n "$line" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ]; then
+    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$croot" = "$repo_root" ] && [ "$csig" = "$sig" ] && [ -n "$line" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ] \
+      && printf '%s' "$line" | jq -e 'type == "object" and (.max_dop | type) == "number"' >/dev/null 2>&1; then
       printf '%s' "$line"
       return 0
     fi

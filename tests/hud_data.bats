@@ -761,3 +761,17 @@ STUB
   run _hud "$repo" --json
   [ "$(jq -r .autopilot.busy_routine <<<"$output")" = "0" ]
 }
+
+@test "sl-autopilot-config: a corrupt cache entry is ignored and recomputed, never passed on" {
+  local repo; repo=$(_make_repo r-cfg-corrupt)
+  _cfg "$repo" '{"max_dop":8}'
+  export CCXP_HUD_CACHE_DIR="$BATS_TEST_TMPDIR/cfg-cache2"
+  run bash -c "source '$SCRIPT'; sl-autopilot-config '$repo' ''"
+  [ "$(jq -r .max_dop <<<"$output")" = "8" ]
+  local f; f=$(ls "$CCXP_HUD_CACHE_DIR"/ap-config-*)
+  local stamp sig; stamp=$(date +%s)
+  sig=$(cut -f3 "$f")
+  printf '%s\t%s\t%s\t%s\n' "$stamp" "$repo" "$sig" 'not json {' > "$f"
+  run bash -c "source '$SCRIPT'; sl-autopilot-config '$repo' ''"
+  [ "$(jq -r .max_dop <<<"$output")" = "8" ]
+}
