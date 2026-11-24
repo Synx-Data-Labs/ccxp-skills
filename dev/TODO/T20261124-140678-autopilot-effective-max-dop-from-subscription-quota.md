@@ -1,5 +1,6 @@
 ---
-status: Open
+status: Blocked by T20261124-168446
+scheduled: 2026-12-07
 blocked-by: T20261124-168446
 estimation: 1
 source: Owner chat 2026-11-24 (job 1490)
