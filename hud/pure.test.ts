@@ -869,6 +869,13 @@ test('firstToRunOut: a window that runs out beats one with less % left that does
   expect(firstToRunOut([seven(34, DAY)], RATE_NOW).w.label).toBe('7d') // one window
 })
 
+test('firstToRunOut: equal runout gaps fall back to less % left, then 5h', () => {
+  // both spent: gap 0 each, equal % left, so the first listed (5h in practice) stays
+  const a = firstToRunOut([five(100, 3600), seven(100, 3 * DAY)], RATE_NOW)
+  expect([a.w.label, a.gap]).toEqual(['5h', 0])
+  expect(firstToRunOut([seven(100, 3 * DAY), five(100, 3600)], RATE_NOW).w.label).toBe('7d') // full tie keeps the first listed
+})
+
 test('firstToRunOut: a spent window (0 left) runs out first, at gap 0', () => {
   const s = firstToRunOut([five(80, 4320), seven(100, 3 * DAY)], RATE_NOW)
   expect([s.w.label, s.gap]).toEqual(['7d', 0])
