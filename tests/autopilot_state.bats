@@ -775,19 +775,10 @@ _nh_task() {
   [ "$(_j .busy_since)" = "$AUTOPILOT_NOW" ]; [ "$(_j .next_wake_at)" = null ]
 }
 
-@test "a fresh state has empty visits and parked; a 5.9.0 state without them loads silently" {
-  _ap start >/dev/null
-  [ "$(_j '.visits')" = '{}' ]; [ "$(_j '.parked')" = '[]' ]
-  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":1,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"capped_notified":false,"idle_notified":false,"stuck_notified":false,"waiting_notified":false,"notices":[],"next_wake_at":null}' > "$AUTOPILOT_STATE_FILE"
-  run _ap start; [ "$output" = dispatch ]
-  run _ap visit T20260101-000001 "x"; [ "$output" = "bottom 1" ]
-  [ "$(_j '.notices|length')" = 0 ]
-}
-
-@test "retired commands: skip, unskip, marked and attention-list are usage errors" {
+@test "retired commands: skip, unskip, marked, attention-list, visit, advance, parked and parked-list are usage errors" {
   _ap start >/dev/null
   local c
-  for c in skip unskip marked attention-list; do run _ap "$c" T1; [ "$status" -eq 2 ]; done
+  for c in skip unskip marked attention-list visit advance parked parked-list; do run _ap "$c" T1; [ "$status" -eq 2 ]; done
 }
 
 @test "eligible: the five pre-5.9.0 human-only words are refused; the 5.9.0 'needs a human' text is not a gate" {
@@ -806,103 +797,6 @@ _nh_task() {
 
 _hlines() { cat "$(_hist)" 2>/dev/null || true; }
 
-@test "visit: counts up, says bottom three times then park at the fourth, logs each visit" {
-  _ap start >/dev/null
-  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 1" ]
-  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 2" ]
-  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "bottom 3" ]
-  run _ap visit T20260101-000001 "needs a decision"; [ "$output" = "park 4" ]
-  [ "$(_j '.visits["T20260101-000001"]')" = 4 ]
-  [ "$(_hlines | jq -s '[.[] | select(.outcome == "visit")] | length')" = 4 ]
-  [ "$(_hlines | tail -1 | jq -r '"\(.task) \(.visits) \(.merged)"')" = "T20260101-000001 4 0" ]
-  # other tasks count separately
-  run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
-}
-
-@test "visit: the limit is max_visits from the config (default 4, bad values fall back)" {
-  _ap start >/dev/null
-  printf '{"max_visits": 2}' > "$AUTOPILOT_CONFIG_FILE"
-  _ap visit T20260101-000001 >/dev/null
-  run _ap visit T20260101-000001; [ "$output" = "park 2" ]
-  printf '{"max_visits": 0}' > "$AUTOPILOT_CONFIG_FILE"
-  run _ap visit T20260101-000003 ; [ "$output" = "bottom 1" ]
-  _ap visit T20260101-000003 >/dev/null
-  _ap visit T20260101-000003 >/dev/null
-  run _ap visit T20260101-000003 ; [ "$output" = "park 4" ]
-  printf '{"max_visits": "many"}' > "$AUTOPILOT_CONFIG_FILE"
-  run _ap visit T20260101-000004; [ "$output" = "bottom 1" ]
-}
-
-@test "visit and advance do nothing unless on; a bad id is a usage error" {
-  run _ap visit T20260101-000001; [ "$output" = none ]
-  _ap start >/dev/null; _ap pause >/dev/null
-  run _ap visit T20260101-000001; [ "$output" = none ]
-  run _ap advance T20260101-000001; [ "$output" = none ]
-  _ap resume >/dev/null
-  run _ap visit nonsense; [ "$status" -eq 2 ]
-  run _ap advance; [ "$status" -eq 2 ]
-}
-
-@test "advance: resets a counted task and logs it; an uncounted task is a quiet none" {
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
-  run _ap advance T20260101-000001; [ "$output" = reset ]
-  [ "$(_j '.visits | has("T20260101-000001")')" = false ]
-  [ "$(_hlines | jq -s '[.[] | select(.outcome == "advance")] | length')" = 1 ]
-  run _ap advance T20260101-000001; [ "$output" = none ]
-  [ "$(_hlines | jq -s '[.[] | select(.outcome == "advance")] | length')" = 1 ]
-  run _ap visit T20260101-000001; [ "$output" = "bottom 1" ]
-}
-
-@test "parked: drops the counter, keeps the entry, replaces a repeat, keeps the last 50" {
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
-  run _ap parked T20260101-000001 $'needs an owner\tdecision\nsecond line'; [ "$output" = parked ]
-  [ "$(_j '.visits | length')" = 0 ]
-  [ "$(_j '.parked | length')" = 1 ]
-  [ "$(_j '.parked[0] | "\(.id) \(.visits) \(.at)"')" = "T20260101-000001 3 $AUTOPILOT_NOW" ]
-  [ "$(_j '.parked[0].reason')" = "needs an owner decision second line" ]
-  [ "$(_hlines | jq -s '[.[] | select(.outcome == "park")] | length')" = 1 ]
-  _ap parked T20260101-000001 "again" >/dev/null
-  [ "$(_j '.parked | length')" = 1 ]
-  local i
-  for i in $(seq 1 55); do _ap parked "$(printf 'T20260102-%06d' "$i")" "r" >/dev/null; done
-  [ "$(_j '.parked | length')" = 50 ]
-  [ "$(_j '.parked[-1].id')" = T20260102-000055 ]
-}
-
-@test "parked-list: only entries parked since this run started" {
-  _ap start >/dev/null
-  _ap parked T20260101-000001 "old" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T12:00:00Z" _ap parked T20260101-000002 "new" >/dev/null
-  jq '.started_at = "2026-10-28T11:00:00Z" | .run_started_at = "2026-10-28T11:00:00Z"' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
-  run _ap parked-list
-  [ "$output" = $'T20260101-000002\tnew' ]
-}
-
-@test "parked-list survives pause and resume (run_started_at is not shifted)" {
-  _ap start >/dev/null
-  AUTOPILOT_NOW="2026-10-28T10:30:00Z" _ap parked T20260101-000001 "r" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T11:00:00Z" _ap pause >/dev/null
-  AUTOPILOT_NOW="2026-10-28T15:00:00Z" _ap resume >/dev/null
-  [ "$(_j .started_at)" != "$(_j .run_started_at)" ]
-  run _ap parked-list; [ "$output" = $'T20260101-000001\tr' ]
-}
-
-@test "a malformed visits value never leaves a temp file or breaks advance, parked and prune" {
-  _ap start >/dev/null
-  jq '.visits = [1,2]' "$AUTOPILOT_STATE_FILE" > "$AUTOPILOT_STATE_FILE.t" && mv "$AUTOPILOT_STATE_FILE.t" "$AUTOPILOT_STATE_FILE"
-  run _ap advance T20260101-000001; [ "$status" -eq 0 ]
-  run _ap parked T20260101-000001 "r"; [ "$status" -eq 0 ]
-  run _ap prune "$BATS_TEST_TMPDIR"; [ "$status" -eq 0 ]
-  run _ap visit T20260101-000002 "x"; [ "$output" = "bottom 1" ]
-  [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'state.json.tmp' || true)" ]
-  # a failing jq filter returns non-zero and leaves no temp file behind
-  run bash -c "source '$SCRIPT'; _ap_update 'this is not a jq filter ('"
-  [ "$status" -ne 0 ]
-  [ -z "$(ls "$BATS_TEST_TMPDIR" | grep 'state.json.tmp' || true)" ]
-}
-
 @test "done: a merge from before a pause stays in the Done list (the pause shifts started_at, not run_started_at)" {
   _final_fixture
   printf -- '---\nstatus: Done\n---\n\nPR #77.\n' > dev/JOURNAL/2026-10-28-T9111111-fix-widget.md
@@ -912,37 +806,6 @@ _hlines() { cat "$(_hist)" 2>/dev/null || true; }
   [ "$(_j .started_at)" = "2026-10-28T12:00:00Z" ]; [ "$(_j .run_started_at)" = "2026-10-28T08:00:00Z" ]
   AUTOPILOT_NOW="2026-10-28T15:00:00Z" run _ap done
   [[ "$output" == *"- Merged T9111111 (fix-widget) — PR #77"* ]]
-}
-
-@test "off then start carries visits and parked over; a fresh first start has none" {
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000001 >/dev/null
-  _ap parked T20260101-000009 "r" >/dev/null
-  _ap off >/dev/null
-  run _ap start; [ "$output" = started ]
-  [ "$(_j '.visits["T20260101-000001"]')" = 2 ]
-  [ "$(_j '.parked[0].id')" = T20260101-000009 ]
-}
-
-@test "stats: visit, advance and park log lines are not cycles and do not create history" {
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null; _ap advance T20260101-000001 >/dev/null; _ap parked T20260101-000001 >/dev/null
-  [ "$(_stat .has_history)" = false ]
-  [ "$(_stat .cycles_24h)" = 0 ]
-  _ap record progress 1 T20260101-000002 >/dev/null
-  [ "$(_stat .cycles_24h)" = 1 ]; [ "$(_stat .merged_24h)" = 1 ]
-}
-
-@test "prune: drops counters of tasks that left dev/TODO, keeps the others, never wipes on a wrong root" {
-  _nh_repo
-  _nh_task T20260101-000001 "Open" a
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null; _ap visit T20260101-000002 >/dev/null
-  run _ap prune "$BATS_TEST_TMPDIR/not-a-repo"; [ -z "$output" ]
-  [ "$(_j '.visits | length')" = 2 ]
-  run _ap prune "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
-  [ "$(_j '.visits | keys | join(",")')" = T20260101-000001 ]
-  run _ap prune "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
 }
 
 # --- plan: which tasks a cycle advanced and which it stalled on ---
@@ -1011,18 +874,6 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   [ "$output" = $'T20260101-000003\tstalled\ta b\tattention' ]
 }
 
-@test "visit --stuck: counts while fewer than 3 cycles in a row ended stuck, then skips (likely an outage)" {
-  _ap start >/dev/null
-  run _ap visit T20260101-000001 "x" --stuck; [ "$output" = "bottom 1" ]
-  _ap record stuck 0 T20260101-000001 "ci" >/dev/null; _ap record stuck 0 T20260101-000002 "ci" >/dev/null
-  run _ap visit T20260101-000002 "x" --stuck; [ "$output" = "bottom 1" ]
-  _ap record stuck 0 T20260101-000003 "ci" >/dev/null
-  run _ap visit T20260101-000003 "x" --stuck; [ "$output" = skip ]
-  [ "$(_j '.visits | has("T20260101-000003")')" = false ]
-  # a NEEDS-ATTENTION stall (no --stuck) always counts, outage or not
-  run _ap visit T20260101-000003 "needs a human"; [ "$output" = "bottom 1" ]
-}
-
 @test "record bottomed: a cycle that wakes in 60 s and leaves the stuck/waiting counters and notices alone" {
   _ap start >/dev/null
   _ap record stuck 0 T20260101-000001 "ci" >/dev/null; _ap record stuck 0 T20260101-000001 "ci" >/dev/null
@@ -1049,35 +900,6 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 
 # --- reports list the revisited and parked tasks ---
 
-@test "report: lists revisited tasks with the limit and tasks parked by autopilot" {
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null
-  _ap parked T20260101-000002 "waiting on HashData; autopilot visited 3 times without progress" >/dev/null
-  run _ap report
-  [[ "$output" == *"revisiting: T20260101-000001 (1/4 no-progress visits)"* ]]
-  [[ "$output" == *"parked by autopilot: T20260101-000002 — waiting on HashData; autopilot visited 3 times without progress"* ]]
-  printf '{"max_visits": 5}' > "$AUTOPILOT_CONFIG_FILE"
-  run _ap report
-  [[ "$output" == *"(1/5 no-progress visits)"* ]]
-}
-
-@test "final-report: parked tasks and a stuck last task are listed once each, with slugs" {
-  _final_fixture
-  mkdir -p dev/PARKING dev/TODO
-  printf -- '---\nstatus: Parked\n---\n' > dev/PARKING/T20261001-555555-big-decision.md
-  printf -- '---\nstatus: Open\n---\n' > dev/TODO/T20261001-666666-flaky.md
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" _ap parked T20261001-555555 "needs an owner decision; autopilot visited 3 times without progress" >/dev/null
-  _ap record stuck 0 T20261001-666666 "CI keeps failing" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [[ "$output" == *"- Parked by autopilot: T20261001-555555 (big-decision) — needs an owner decision; autopilot visited 3 times without progress"* ]]
-  [[ "$output" == *"- Stuck: T20261001-666666 (flaky) — CI keeps failing"* ]]
-  [[ "$output" != *"Nothing outstanding"* ]]
-  # a stuck task that is also parked is not listed twice
-  _ap record stuck 0 T20261001-555555 "again" >/dev/null
-  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
-  [ "$(grep -c 'T20261001-555555' <<<"$output")" = 1 ]
-}
-
 @test "final-report: missing state file is exit 2" {
   _final_fixture
   rm "$AUTOPILOT_STATE_FILE"
@@ -1094,16 +916,6 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   # nothing pickable but a task file is missing from the queue: a sweep would fix it
   sed -i.bak '/000002/d' "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = drift ]
-}
-
-@test "pickable: a bottomed task is still pickable when it is the only one (priority is queue order only)" {
-  _nh_repo
-  echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
-  _nh_task T20260101-000001 "Open" a
-  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
-  _ap start >/dev/null
-  _ap visit T20260101-000001 >/dev/null
-  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
 }
 
 @test "no script writes a marker into a task file: needs-human.sh and its parser are gone" {
@@ -1125,7 +937,7 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run grep -n 'autopilot-state.sh prune' "$s"; [ "$status" -eq 0 ]
   run grep -n 'No `/bottom`, no `queue.md` edit, no housekeeping agent' "$s"; [ "$status" -eq 0 ]
   run grep -n -E 'autopilot-state.sh visit|park refused|BOTTOMED:|HOUSEKEEPING-FAILED' "$s"; [ "$status" -ne 0 ]
-  run grep -n 'max_visits' "$s"; [ "$status" -eq 0 ]   # the config key and park path go in T20261124-115593
+  run grep -n -E 'max_visits|parked-list|park after|no-progress visit' "$s"; [ "$status" -ne 0 ]   # retired in T20261124-115593
   run grep -n -E 'needs-human\.sh|autopilot-state\.sh (marked|attention-list|skip|unskip)|skip_ids|--skip-needs-human' "$s"; [ "$status" -ne 0 ]
 }
 
@@ -1143,18 +955,18 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   printf '%s' '{"daily_cycle_cap": 100}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap config-show
   [[ "$output" == *"daily_cycle_cap"*"100"*"override"* ]]
-  [[ "$output" == *"max_visits"*"4"*"default"* ]]
+  [[ "$output" == *"idle_retry_minutes"*"32"*"default"* ]]
   run _ap config-show --json
   [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.value')" = 100 ]
   [ "$(printf '%s' "$output" | jq -r '.settings.daily_cycle_cap.source')" = override ]
-  [ "$(printf '%s' "$output" | jq -r '.settings.max_visits.source')" = default ]
+  [ "$(printf '%s' "$output" | jq -r '.settings.idle_retry_minutes.source')" = default ]
   [ "$(printf '%s' "$output" | jq -r '.file')" = "$AUTOPILOT_CONFIG_FILE" ]
 }
 
 @test "config-show: an invalid override is ignored (shown as default)" {
-  printf '%s' '{"max_visits": "abc", "daily_merge_cap": 0}' > "$AUTOPILOT_CONFIG_FILE"
+  printf '%s' '{"idle_retry_minutes": "abc", "daily_merge_cap": 0}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap config-show
-  [[ "$output" == *"max_visits"*"4"*"default"* ]]
+  [[ "$output" == *"idle_retry_minutes"*"32"*"default"* ]]
   [[ "$output" == *"daily_merge_cap"*"64"*"default"* ]]
 }
 
@@ -1171,10 +983,10 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 }
 
 @test "config-set: preserves other and unknown keys, leaves no temp file" {
-  printf '%s' '{"max_visits": 5, "future_key": "x"}' > "$AUTOPILOT_CONFIG_FILE"
+  printf '%s' '{"daily_cycle_cap": 5, "future_key": "x"}' > "$AUTOPILOT_CONFIG_FILE"
   run _ap config-set idle_retry_minutes 30
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.max_visits' "$AUTOPILOT_CONFIG_FILE")" = 5 ]
+  [ "$(jq -r '.daily_cycle_cap' "$AUTOPILOT_CONFIG_FILE")" = 5 ]
   [ "$(jq -r '.future_key' "$AUTOPILOT_CONFIG_FILE")" = x ]
   [ "$(jq -r '.idle_retry_minutes' "$AUTOPILOT_CONFIG_FILE")" = 30 ]
   run _ap delay idle; [ "$output" = 1800 ]
@@ -1184,8 +996,8 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 @test "config-set: rejects bad keys and values without touching the file" {
   printf '%s' '{"max_visits": 5}' > "$AUTOPILOT_CONFIG_FILE"
   before=$(cat "$AUTOPILOT_CONFIG_FILE")
-  for args in "bogus 5" "max_visits 0" "max_visits -1" "max_visits abc" "max_visits 1.5" "max_visits 21" \
-              "daily_cycle_cap 1001" "daily_merge_cap 0" "idle_retry_minutes 29" "idle_retry_minutes 61" "max_visits 007" "max_visits"; do
+  for args in "bogus 5" "max_visits 3" "daily_cycle_cap 0" "daily_cycle_cap -1" "daily_cycle_cap abc" "daily_cycle_cap 1.5" "reserved_slots 9" \
+              "daily_cycle_cap 1001" "daily_merge_cap 0" "idle_retry_minutes 29" "idle_retry_minutes 61" "daily_cycle_cap 007" "daily_cycle_cap"; do
     run _ap config-set $args
     [ "$status" -eq 2 ] || { echo "accepted: $args"; return 1; }
     [[ "$output" == *"config:"* || "$output" == *"config-set"* ]]
@@ -1195,14 +1007,14 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 
 @test "config-set: accepts the range bounds" {
   run _ap config-set daily_cycle_cap 1000; [ "$status" -eq 0 ]
-  run _ap config-set max_visits 20; [ "$status" -eq 0 ]
+  run _ap config-set max_dop 16; [ "$status" -eq 0 ]
   run _ap config-set idle_retry_minutes 60; [ "$status" -eq 0 ]
   run _ap config-set idle_retry_minutes 30; [ "$status" -eq 0 ]
 }
 
 @test "config-set: refuses to overwrite a file that is not a JSON object" {
   printf '{not json' > "$AUTOPILOT_CONFIG_FILE"
-  run _ap config-set max_visits 4
+  run _ap config-set daily_cycle_cap 4
   [ "$status" -eq 2 ]
   [ "$(cat "$AUTOPILOT_CONFIG_FILE")" = "{not json" ]
 }
@@ -1214,11 +1026,11 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   [ "$(cat "$AUTOPILOT_STATE_FILE")" = "$before" ]
 }
 
-@test "config-reset: one key keeps the rest, no key drops all four but keeps unknown keys" {
-  printf '%s' '{"max_visits": 5, "daily_cycle_cap": 9, "future_key": 1}' > "$AUTOPILOT_CONFIG_FILE"
-  run _ap config-reset max_visits
+@test "config-reset: one key keeps the rest, no key drops all five but keeps unknown keys" {
+  printf '%s' '{"idle_retry_minutes": 31, "daily_cycle_cap": 9, "future_key": 1}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-reset idle_retry_minutes
   [ "$status" -eq 0 ]
-  [ "$(jq -r 'has("max_visits")' "$AUTOPILOT_CONFIG_FILE")" = false ]
+  [ "$(jq -r 'has("idle_retry_minutes")' "$AUTOPILOT_CONFIG_FILE")" = false ]
   [ "$(jq -r '.daily_cycle_cap' "$AUTOPILOT_CONFIG_FILE")" = 9 ]
   run _ap config-reset
   [ "$status" -eq 0 ]
@@ -1809,11 +1621,9 @@ EOS
   _hold_repo
   _ap start >/dev/null
   _ap hold-add T20261124-000001 stalled "pr:1" "r"; _ap hold-add T20261124-000009 stalled "pr:2" "r"
-  _ap visit T20261124-000009 "x" >/dev/null
   run _ap prune "$HROOT"
   [ "$output" = "T20261124-000009" ]
   [ "$(_j '.holds | keys | join(",")')" = T20261124-000001 ]
-  [ "$(_j '.visits | length')" -eq 0 ]
 }
 
 # --- tiers and cursors (T20261124-670976) -----------------------------------------
@@ -1967,4 +1777,60 @@ _tier_repo() { _nh_repo; echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/qu
   printf 'STUCK: dispatch failed — last task T20260101-000001 (a)\n' > "$BATS_TEST_TMPDIR/r.txt"
   run _ap hold-report "$BATS_TEST_TMPDIR/r.txt"; [ "$output" = "skip T20260101-000001" ]
   [ "$(_j '.holds // {} | length')" -eq 0 ]
+}
+
+# --- visits, max_visits and park-after-N are retired (T20261124-115593) ---------------------
+
+@test "retired: an old state file with visits and parked loads, and both keys go on the next write" {
+  printf '%s' '{"schema":2,"status":"on","started_at":"2026-10-28T09:00:00Z","cycle_count":1,"merged_count":0,"stuck_count":0,"waiting_count":0,"day":"2026-10-28","cycles_today":0,"merges_today":0,"notices":[],"next_wake_at":null,"visits":{"T20260101-000001":3},"parked":[{"id":"T20260101-000002","at":"2026-10-28T09:00:00Z","reason":"r","visits":4}]}' > "$AUTOPILOT_STATE_FILE"
+  run _ap report; [ "$status" -eq 0 ]; [[ "$output" != *"parked by autopilot"* ]]; [[ "$output" != *"revisiting"* ]]
+  run _ap start; [ "$output" = dispatch ]
+  _ap hold-add T20260101-000001 stalled "pr:1" "r" >/dev/null     # any write drops the retired keys
+  [ "$(_j 'has("visits") or has("parked")')" = false ]
+  [ "$(_j '.holds | length')" -eq 1 ]
+  # off then start does not bring them back, and a fresh state has neither
+  _ap off >/dev/null; _ap start >/dev/null
+  [ "$(_j 'has("visits") or has("parked")')" = false ]
+}
+
+@test "retired: max_visits is no longer a config key (an old override is ignored, config-set refuses it)" {
+  printf '{"max_visits": 5, "daily_cycle_cap": 10}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show --json; [ "$status" -eq 0 ]; [ "$(jq -r '.settings | has("max_visits")' <<<"$output")" = false ]
+  [ "$(jq -r .settings.daily_cycle_cap.value <<<"$output")" = 10 ]
+  run _ap config-set max_visits 3; [ "$status" -eq 2 ]
+  run _ap config-reset daily_cycle_cap; [ "$status" -eq 0 ]
+  [ "$(jq -r .max_visits "$AUTOPILOT_CONFIG_FILE")" = 5 ]    # unknown keys stay, as before
+}
+
+@test "stats: old visit, advance and park history lines are not cycles" {
+  _ap start >/dev/null
+  printf '%s\n' '{"ts":"2026-10-28T09:00:00Z","outcome":"visit","merged":0,"task":"T20260101-000001","visits":1}' '{"ts":"2026-10-28T09:01:00Z","outcome":"park","merged":0,"task":"T20260101-000001","visits":4}' > "$(_hist)"
+  [ "$(_stat .cycles_24h)" = 0 ]
+  _ap record progress 1 T20260101-000002 >/dev/null
+  [ "$(_stat .cycles_24h)" = 1 ]; [ "$(_stat .merged_24h)" = 1 ]
+}
+
+@test "report: lists each hold with its kind, reason and release condition" {
+  _ap start >/dev/null
+  _ap hold-add T20260101-000001 needs-human "pr:12" "waiting on HashData" >/dev/null
+  run _ap report
+  [[ "$output" == *"held: T20260101-000001 (needs-human) — waiting on HashData; releases on pr:12"* ]]
+}
+
+@test "final-report: holds and a stuck last task are listed once each, with slugs" {
+  _final_fixture
+  mkdir -p dev/TODO
+  printf -- '---\nstatus: Open\n---\n' > dev/TODO/T20261001-555555-big-decision.md
+  printf -- '---\nstatus: Open\n---\n' > dev/TODO/T20261001-666666-flaky.md
+  _ap hold-add T20261001-555555 needs-human "file-changed dev/TODO/T20261001-555555-big-decision.md" "needs an owner decision" >/dev/null
+  _ap record stuck 0 T20261001-666666 "CI keeps failing" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [[ "$output" == *"- Held (needs-human): T20261001-555555 (big-decision) — needs an owner decision; releases on file-changed dev/TODO/T20261001-555555-big-decision.md"* ]]
+  [[ "$output" == *"- Stuck: T20261001-666666 (flaky) — CI keeps failing"* ]]
+  [[ "$output" != *"Nothing outstanding"* ]]
+  # a stuck task that is also held is not listed twice
+  _ap hold-add T20261001-666666 stalled "pr:3" "r" >/dev/null
+  _ap record stuck 0 T20261001-555555 "again" >/dev/null
+  AUTOPILOT_NOW="2026-10-28T09:00:00Z" run _ap final-report
+  [ "$(grep -c 'T20261001-555555' <<<"$output")" = 1 ]
 }

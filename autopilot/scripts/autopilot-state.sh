@@ -60,20 +60,9 @@
 #                               advanced; NEEDS-ATTENTION: or STUCK: last task = stalled
 #                               unless advanced; source = merged|advanced|attention|stuck).
 #                               A STUCK with no task id names the --fallback task, if given.
-#   visit <task-id> [reason] [--stuck]
-#                               a no-progress visit: count it (dev/.autopilot-state.json
-#                               "visits"), log it, print "bottom <n>" or "park <n>" (park
-#                               when n >= max_visits, default 4); "none" unless on;
-#                               "skip" with --stuck once stuck_count >= 3 (likely an
-#                               outage, not the task)
-#   advance <task-id>           the task moved forward: reset its counter; print reset|none
-#   prune [repo-root]           drop visit counters and holds of tasks that are no longer in
+#   prune [repo-root]           drop the holds of tasks that are no longer in
 #                               <repo-root>/dev/TODO (closed or parked by someone else);
 #                               prints the dropped ids
-#   parked <task-id> [reason]   record that the task was parked (drops its counter, keeps
-#                               the last 50 in the state's "parked" list); print parked
-#   parked-list                 "<task-id><TAB><reason>" per task parked since this run began
-#                               (run_started_at, which a pause does not shift)
 #   hold-add <task-id> <kind> <condition> <reason>
 #                               record a hold (d152: a hold is a recorded fact with a reason AND a release
 #                               condition, never a silent skip). kind waiting|needs-human|stalled; condition
@@ -116,11 +105,11 @@
 #                               and the config file path (read-only)
 #   config-set <key> <value>    validate, then atomically write one override (keeps other keys,
 #                               file mode 600); exit 2 on a bad key/value, state untouched
-#   config-reset [<key>]        drop one override, or all six settings' overrides
+#   config-reset [<key>]        drop one override, or all five settings' overrides
 # Env (tests): AUTOPILOT_GUARD_MEM_FREE_PCT, AUTOPILOT_GUARD_LOAD, AUTOPILOT_GUARD_NCPU, AUTOPILOT_STATE_FILE, AUTOPILOT_CONFIG_FILE, AUTOPILOT_HISTORY_FILE,
 #   AUTOPILOT_NOW, AUTOPILOT_TODAY, AUTOPILOT_SLACK_SEND, AUTOPILOT_REPO_ROOT.
 # Config (dev/.autopilot-config.json): daily_cycle_cap, daily_merge_cap, idle_retry_minutes,
-#   max_visits (no-progress visits before a task is parked, default 4), max_dop (cycles at the
+#   max_dop (cycles at the
 #   same time, 3-16, default 3: 2 slots are always reserved for urgent work, so below 3 is refused and a
 #   smaller file value reads as 3), reserved_slots (0-8, default 2, at most max_dop minus 1: slots kept for
 #   urgent tier 1/2 work; routine picks fill max_dop minus reserved_slots).
@@ -218,7 +207,8 @@ _ap_unlock() { lock_release "$(ap-state-file).lock"; }
 _ap_update() {
   local f tmp rc=0; f=$(ap-state-file); tmp="$f.tmp.$$"
   _ap_lock || { echo "autopilot-state: could not lock $f" >&2; return 1; }
-  if jq "$@" "$f" > "$tmp" && mv "$tmp" "$f"; then :; else rm -f "$tmp"; rc=1; fi
+  # the retired visits counter and parked list (T20261124-115593) are dropped from an old file on its next write
+  if jq "$@" "$f" | jq 'if type == "object" then del(.visits, .parked) else . end' > "$tmp" && mv "$tmp" "$f"; then :; else rm -f "$tmp"; rc=1; fi
   _ap_unlock
   return $rc
 }
@@ -232,8 +222,6 @@ _ap_fresh() {
       lifetime_started_at: (((.lifetime_started_at // .started_at) | strings | select(test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))) // null),
       lifetime_cycles: ((.lifetime_cycles // .cycle_count) | numbers // 0),
       lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0),
-      visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0))),
-      parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:]),
       holds: ((.holds | objects // {}) | with_entries(select(.value | type == "object"))),
       cursors: ((.cursors | objects // {}) | with_entries(select(.value | type == "string")))}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
@@ -243,7 +231,7 @@ _ap_fresh() {
     lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
-    visits: ($carry.visits // {}), parked: ($carry.parked // []), holds: ($carry.holds // {}), cursors: ($carry.cursors // {}),
+    holds: ($carry.holds // {}), cursors: ($carry.cursors // {}),
     dispatch_clone_path: null, dispatch_clone_paths: {}, slots: {}, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
@@ -534,85 +522,20 @@ ap-history-append() {
   return 0
 }
 
-# Appends one {ts, outcome: visit|advance|park, merged: 0, task, visits} line to the history log
-# (same failure-tolerant single append as ap-history-append). `stats` ignores these outcomes.
-ap-history-event() {
-  local kind="$1" task="$2" n="$3" h line
-  [[ "$n" =~ ^[0-9]+$ ]] || n=0
-  {
-    h=$(ap-history-file)
-    mkdir -p "$(dirname "$h")" &&
-      line=$(jq -nc --arg ts "$(ap-now)" --arg o "$kind" --arg t "$task" --argjson n "$n" '{ts: $ts, outcome: $o, merged: 0, task: $t, visits: $n}') &&
-      printf '%s\n' "$line" >> "$h"
-  } 2>/dev/null || true
-  return 0
-}
-
 AP_TASK_ID_RE='^T[0-9]+(-[0-9]+)?$'
 
-# visit <task-id> [reason] [--stuck] -> "bottom <n>" | "park <n>" | "none" | "skip" (see the usage header)
-ap-visit() {
-  local id="" f n max stuck=0 a
-  for a in "$@"; do
-    if [ "$a" = --stuck ]; then stuck=1; elif [ -z "$id" ]; then id="$a"; fi
-  done
-  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "visit <task-id> [reason] [--stuck]" >&2; return 2; }
-  [ "$(ap-status)" = on ] || { echo none; return 0; }
-  f=$(ap-state-file)
-  if [ "$stuck" = 1 ] && [ "$(jq -r '(.stuck_count | numbers) // 0' "$f")" -ge 3 ]; then echo skip; return 0; fi
-  _ap_update --arg id "$id" '.visits = ((.visits | objects // {}) | .[$id] = (((.[$id] | numbers) // 0) + 1))'
-  n=$(jq -r --arg id "$id" '.visits[$id]' "$f")
-  ap-history-event visit "$id" "$n"
-  max=$(ap-config max_visits 4)
-  if [ "$n" -ge "$max" ]; then echo "park $n"; else echo "bottom $n"; fi
-}
-
-# advance <task-id> -> reset | none: the task moved forward, so its no-progress counter restarts.
-ap-advance() {
-  local id="${1:-}" f had
-  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "advance <task-id>" >&2; return 2; }
-  [ "$(ap-status)" = on ] || { echo none; return 0; }
-  f=$(ap-state-file)
-  had=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
-  if [ "$had" -gt 0 ]; then
-    _ap_update --arg id "$id" 'if (.visits | type) == "object" then del(.visits[$id]) else . end'
-    ap-history-event advance "$id" 0
-    echo reset
-  else
-    echo none
-  fi
-}
-
-# parked <task-id> [reason] -> parked: the dispatcher landed the park PR. Drops the counter and
-# keeps the entry (last 50) so reports and the HUD can say "parked by autopilot".
-ap-parked() {
-  local id="${1:-}" reason="${2:-}" f n
-  [[ "$id" =~ $AP_TASK_ID_RE ]] || { echo "parked <task-id> [reason]" >&2; return 2; }
-  [ -f "$(ap-state-file)" ] || { echo none; return 0; }
-  f=$(ap-state-file)
-  reason=$(printf '%s' "$reason" | tr '\n\t\r' '   ' | cut -c1-200)
-  n=$(jq -r --arg id "$id" '((.visits | objects // {})[$id] | numbers) // 0' "$f")
-  _ap_update --arg id "$id" --arg r "$reason" --arg now "$(ap-now)" --argjson n "$n" '
-    (if (.visits | type) == "object" then del(.visits[$id]) else . end)
-    | .parked = ((((.parked | arrays // []) | map(select(.id != $id))) + [{id: $id, at: $now, reason: $r, visits: $n}]) | .[-50:])'
-  ap-history-event park "$id" "$n"
-  echo parked
-}
-
-# prune [repo-root]: drop counters and holds of tasks that no longer have a dev/TODO file. Needs a dev/TODO
-# directory (a wrong root never wipes them); prints each dropped id once.
+# prune [repo-root]: drop the holds of tasks that no longer have a dev/TODO file. Needs a dev/TODO
+# directory (a wrong root never wipes them); prints each dropped id.
 ap-prune() {
-  local root="${1:-$(ap-work-root)}" f id seen=" "
+  local root="${1:-$(ap-work-root)}" f id
   f=$(ap-state-file)
   [ -f "$f" ] && [ -d "$root/dev/TODO" ] || return 0
   while IFS= read -r id; do
     [ -n "$id" ] || continue
     if ! compgen -G "$root/dev/TODO/$id-*.md" >/dev/null; then
-      _ap_update --arg id "$id" '(if (.visits | type) == "object" then del(.visits[$id]) else . end)
-        | (if (.holds | type) == "object" then del(.holds[$id]) else . end)' || continue
-      case "$seen" in *" $id "*) ;; *) seen="$seen$id "; printf '%s\n' "$id" ;; esac
+      _ap_update --arg id "$id" 'if (.holds | type) == "object" then del(.holds[$id]) else . end' && printf '%s\n' "$id"
     fi
-  done < <(jq -r '[((.visits | objects // {}) | keys[]), ((.holds | objects // {}) | keys[])] | .[]' "$f" 2>/dev/null || true)
+  done < <(jq -r '((.holds | objects) // {}) | keys[]' "$f" 2>/dev/null || true)
   return 0
 }
 
@@ -775,14 +698,6 @@ ap-holds-check() {
   return 0
 }
 
-# parked-list -> "<task-id><TAB><reason>" per task parked since this run's started_at.
-ap-parked-list() {
-  local f; f=$(ap-state-file)
-  [ -f "$f" ] || return 0
-  jq -r '(.run_started_at // .started_at // "") as $s | (.parked | arrays // [])[] | select(type == "object" and (.at // "") >= $s)
-    | "\(.id)\t\(.reason // "")"' "$f" 2>/dev/null || true
-}
-
 # stats [--json]: progress over the rolling last 24 h (now-86400 < ts <= now) and lifetime
 # averages per 24 h. One jq pass over the state file and the history log.
 #   - window counts come from the history log only (cycles exclude `capped` ticks,
@@ -817,6 +732,7 @@ ap-stats() {
     def r2: (. * 100 | round) / 100;
     ($st[0] | if type == "object" then . else {} end) as $s
     | [inputs | fromjson? | select(type == "object")
+       # old logs may hold visit|advance|park lines from the retired counter: not cycles
        | select(((.outcome | strings // "") | IN("visit", "advance", "park")) | not)
        | select((.ts | strings | ep) != null) | {t: (.ts | ep), o: (.outcome | strings // ""), m: (.merged | n)}] as $h
     | ($now - 86400) as $cut
@@ -1031,11 +947,9 @@ ap-report() {
   jq -r '"cycles \(.cycle_count) (today \(.cycles_today)), merged \(.merged_count) (today \(.merges_today)), stuck \(.stuck_count), last \(.last_outcome // "none")",
          (if .next_wake_at then "next cycle \(.next_wake_at)" else empty end),
          (.notices[-3:][]? | "notice [\(.via)] \(.kind): \(.text)")' "$f"
-  local aid areason max; max=$(ap-config max_visits 4)
-  jq -r --argjson max "$max" '(.visits | objects // {}) | to_entries[] | select(.value | numbers > 0) | "revisiting: \(.key) (\(.value)/\($max) no-progress visits)"' "$f" 2>/dev/null || true
-  while IFS=$'\t' read -r aid areason; do
-    if [ -n "$aid" ]; then printf 'parked by autopilot: %s — %s\n' "$aid" "$areason"; fi
-  done < <(ap-parked-list 2>/dev/null || true)
+  ap-holds | while IFS=$'\t' read -r aid kind areason acond _; do
+    [ -z "$aid" ] || printf 'held: %s (%s) — %s; releases on %s\n' "$aid" "$kind" "$areason" "$acond"
+  done
   ap-config-notices
   echo "slots: $(_ap_busy_count) of $(ap-max-dop) running ($(ap-routine-line))"
   local sl stask ssince
@@ -1142,7 +1056,7 @@ EOF_LINES
 # advanced = on a MERGED: or ADVANCED: line; stalled = on a NEEDS-ATTENTION: line, or the "last task"
 # of a STUCK: line, and not also advanced. A STUCK without a task id names the --fallback task (the
 # one the dispatcher recorded before dispatch) when given. WAITING lines and an unparseable report
-# name nothing (no visit is counted).
+# name nothing (`hold-report` handles WAITING).
 ap-plan() {
   local src="" fallback="" line rest id reason recs="" lines
   while [ $# -gt 0 ]; do
@@ -1266,12 +1180,12 @@ ap-final-report() {
   printf 'Autopilot run: %s elapsed — stopped: %s\n\nDone:\n' "$el" "$why"
   ap-done
   printf '\nNeeds your attention:\n'
-  local out="" id reason ids
-  while IFS=$'\t' read -r id reason; do
+  local out="" id kind reason cond ids
+  while IFS=$'\t' read -r id kind reason cond _; do
     [ -n "$id" ] || continue
-    out="${out}- Parked by autopilot: $(_ap_label "$id") — ${reason}"$'\n'
-  done < <(ap-parked-list)
-  ids=$(ap-parked-list | cut -f1)
+    out="${out}- Held ($kind): $(_ap_label "$id") — ${reason}; releases on ${cond}"$'\n'
+  done < <(ap-holds)
+  ids=$(ap-holds | cut -f1)
   if [ "$(jq -r '.last_outcome // empty' "$f")" = stuck ]; then
     id=$(jq -r '.last_task // empty' "$f"); reason=$(jq -r '.last_stuck_reason // "stuck"' "$f")
     if [ -n "$id" ] && ! printf '%s\n' "$ids" | grep -qxF "$id"; then
@@ -1286,7 +1200,7 @@ ap-final-report() {
 # Config settings: key<TAB>default<TAB>min<TAB>max. The only source of the valid keys and ranges.
 _ap_config_spec() {
   printf '%s\t%s\t%s\t%s\n' daily_cycle_cap 64 1 1000 daily_merge_cap 64 1 1000 \
-    idle_retry_minutes 32 30 60 max_visits 4 1 20 max_dop 3 3 16 reserved_slots 2 0 8
+    idle_retry_minutes 32 30 60 max_dop 3 3 16 reserved_slots 2 0 8
 }
 
 # The raw override for a key ("" when absent or not a positive integer).
@@ -1382,7 +1296,7 @@ autopilot-state() {
     off) ap-off ;; busy) ap-busy "$@" ;; cap) ap-cap ;; record) ap-record "$@" ;; stats) ap-stats "$@" ;; delay) ap-delay "$@" ;;
     remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
     slots) ap-slots "$@" ;; routine-free) ap-routine-free ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
-    top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
+    top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; 
     hold-add) ap-hold-add "$@" ;; hold-report) ap-hold-report "$@" ;; holds) ap-holds "$@" ;; release) ap-release "$@" ;; holds-check) ap-holds-check "$@" ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
