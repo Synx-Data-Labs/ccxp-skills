@@ -42,7 +42,14 @@ const mem = {
   movedLeft: 0,
   // cwd + root at the last refresh: a change refreshes at once instead of at the next poll.
   lastWhere: null as string | null,
+  // The rate-limit snapshot last handed to hud-rate-cache.sh (JSON text) and when (ms), so an unchanged reading is
+  // rewritten only once a minute (it keeps the file's written_at fresh for readers) instead of on every poll.
+  lastRateBody: null as string | null,
+  lastRateAt: 0,
 }
+
+/** How often an unchanged rate-limit reading is rewritten to the cache file. */
+const RATE_CACHE_REFRESH_MS = 60_000
 
 /** Refreshes the arrow stays after the working repo changed. */
 const MOVED_REFRESHES = 2
@@ -177,6 +184,7 @@ async function refresh($: any, cfg: HudConfig) {
     agents = []
   }
   const usage = await readUsage($)
+  await writeRateCache($, usage, mem.lastHelperAt)
   if (isOk && helper) {
     // A different working tree than last time (or a different folder outside any repo) is a move.
     const key = helper.repo_root ?? (helper.cwd || where.cwd)
@@ -216,9 +224,31 @@ function usagePart(u: any): Partial<Snapshot> {
     const five = u.rateLimits.find((r: any) => r?.kind === 'five_hour')
     out.rateUsed = typeof five?.percentUsed === 'number' ? five.percentUsed : null
     out.rateResetsAt = resetEpochSec(five?.resetsAt ?? five?.resets_at ?? five?.resetAt)
+    const seven = u.rateLimits.find((r: any) => r?.kind === 'seven_day')
+    out.rate7Used = typeof seven?.percentUsed === 'number' ? seven.percentUsed : null
+    out.rate7ResetsAt = resetEpochSec(seven?.resetsAt ?? seven?.resets_at ?? seven?.resetAt)
   }
   if (u?.cost) out.costUsd = typeof u.cost.usd === 'number' ? u.cost.usd : null
   return out
+}
+
+/**
+ * Hands the engine's rate limits to hud-rate-cache.sh, which keeps the latest snapshot on disk for the autopilot
+ * (only the HUD sees them). Best effort and silent: no limits (API-key use), no write, a failure changes nothing.
+ */
+async function writeRateCache($: any, usage: Partial<Snapshot>, now: number) {
+  try {
+    const win = (used: number | null | undefined, resetsAt: number | null | undefined) =>
+      typeof used === 'number' ? { used_percentage: used, ...(typeof resetsAt === 'number' ? { resets_at: resetsAt } : {}) } : undefined
+    const body = JSON.stringify({ five_hour: win(usage.rateUsed, usage.rateResetsAt), seven_day: win(usage.rate7Used, usage.rate7ResetsAt) })
+    if (body === '{}') return
+    if (body === mem.lastRateBody && now - mem.lastRateAt < RATE_CACHE_REFRESH_MS) return
+    mem.lastRateBody = body
+    mem.lastRateAt = now
+    await $.process.run(['bash', `${$.plugin.root}/hud/scripts/hud-rate-cache.sh`, 'write'], { stdin: body, timeoutMs: 3000 })
+  } catch {
+    /* the cache is an extra: never disturb the band */
+  }
 }
 
 async function mirrorStatus($: any, cfg: HudConfig) {

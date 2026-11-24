@@ -233,6 +233,9 @@ export type Snapshot = {
   rateUsed: number | null
   /** Epoch seconds when the 5-hour window resets, or null when the engine does not say. */
   rateResetsAt: number | null
+  /** 7-day window: percent used and reset epoch seconds (null when the engine reports no such window). */
+  rate7Used: number | null
+  rate7ResetsAt: number | null
   costUsd: number | null
   jobs: Jobs
   /** True when the last helper run failed: the helper part is the previous one. */

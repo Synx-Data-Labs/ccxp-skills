@@ -84,7 +84,7 @@ In `/hud details` the RELEASE row shows the plugin's GitHub address first (click
 
 ## rate
 
-Opt-in: the 5 hour usage limit, used percent and when it would run out at the current pace. Dropped first when the band is tight. Switch: `rate` in `fields` (not on by default).
+Opt-in: your Claude subscription's two usage windows, 5 hours and 7 days: `5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h` is the share still left, how long until each window resets (and, for the 5 hour one, when it would run out at the current pace). Green from 25% left, orange under 25%, red under 10%. A window Claude does not report (API-key use, older versions) is left out. When the band is tight it shows only the window with less left, and drops first of all. `/hud details` shows both in full. The HUD also saves the latest numbers to a small file for the autopilot (`rate-limits.json` in the HUD cache folder). Switch: `rate` in `fields` (not on by default).
 
 ## cost
 
