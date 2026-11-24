@@ -30,6 +30,8 @@ P
  {"ref":"d10","text":"Always push straight to main in repo demo","quote":"","source":"r1","scope":"repo:demo","context":"","added_at":"2026-11-10T10:00:00Z","status":"active","superseded_by":"","reason":"","closed_at":""},
  {"ref":"d11","text":"Never push straight to main in repo demo","quote":"","source":"r1","scope":"repo:demo","context":"","added_at":"2026-11-10T10:00:00Z","status":"active","superseded_by":"","reason":"","closed_at":""},
  {"ref":"d12","text":"Never write a long description in commit titles","quote":"","source":"r1","scope":"global","context":"","added_at":"2026-11-10T10:00:00Z","status":"active","superseded_by":"","reason":"","closed_at":""},
+ {"ref":"d13","text":"Taste for the weekly agenda lives in the profile","quote":"","source":"r1","scope":"global","context":"","added_at":"2026-11-10T10:00:00Z","status":"active","superseded_by":"","reason":"","closed_at":""},
+ {"ref":"d14","text":"Block merges that skip the rebase-on-main gate","quote":"","source":"r1","scope":"repo:demo","context":"","added_at":"2026-11-10T10:00:00Z","status":"active","superseded_by":"","reason":"","closed_at":""},
  {"ref":"d8","text":"Old closed one","quote":"","source":"r1","scope":"global","context":"","added_at":"2026-10-01T10:00:00Z","status":"retired","superseded_by":"","reason":"x","closed_at":"2026-10-02T00:00:00Z"}
 ]}
 J
@@ -44,7 +46,7 @@ run_s() { run bash "$SCRIPT" "$@" --persona "$PERSONA" --cap-file "$CAP" --today
   [ "$status" -eq 0 ]
   [[ "$output" == *$'d1\t2026-11-01\t23\tglobal'* ]]
   [[ "$output" != *"d8"* ]]
-  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 10 ]
+  [ "$(printf '%s\n' "$output" | wc -l | tr -d ' ')" -eq 12 ]
 }
 
 @test "list --scope filters exactly" {
@@ -83,7 +85,9 @@ run_s() { run bash "$SCRIPT" "$@" --persona "$PERSONA" --cap-file "$CAP" --today
   [ "$status" -eq 0 ]
   [[ "$output" == *$'d1\talready-covered'* ]]
   [[ "$output" == *$'d2\tskill-task'* ]]
-  [[ "$output" == *$'d3\tprofile-config'* ]]
+  [[ "$output" == *$'d3\tscript-or-hook'* ]]
+  [[ "$output" == *$'d13\tprofile-config'* ]]
+  [[ "$output" == *$'d14\tscript-or-hook'*$'\tscript\tdemo'* ]]   # stage and repo columns, repo from the scope
   [[ "$output" == *$'d4\tpersona'* ]]
   [[ "$output" == *$'d5\tretire'* ]]
   [[ "$output" == *$'d6\tkeep-in-log'* ]]
@@ -103,7 +107,7 @@ run_s() { run bash "$SCRIPT" "$@" --persona "$PERSONA" --cap-file "$CAP" --today
 
 @test "read-only: no subcommand changes the decisions log or the persona" {
   ls -A "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/.ls-before"
-  for s in list overlap size bucket commands; do run_s "$s"; [ "$status" -eq 0 ]; done
+  for s in list overlap size bucket commands tasks retire-enforced; do run_s "$s"; [ "$status" -eq 0 ]; done
   ls -A "$BATS_TEST_TMPDIR" | diff - "$BATS_TEST_TMPDIR/.ls-before" >/dev/null || true
   [ "$(ls -A "$BATS_TEST_TMPDIR" | wc -l)" -eq "$(wc -l < "$BATS_TEST_TMPDIR/.ls-before")" ]
   [ "$(cksum < "$CCXP_DECISIONS_FILE")" = "$BEFORE_DEC" ]
@@ -138,4 +142,73 @@ run_s() { run bash "$SCRIPT" "$@" --persona "$PERSONA" --cap-file "$CAP" --today
   [ "$status" -eq 0 ]
   [[ "$output" == *"cap_bytes=48500"* ]]
   [[ "$output" == *"HUD job ledger"* ]]
+}
+
+@test "bucket: every row carries a target stage and repo" {
+  run_s bucket
+  [[ "$output" == *$'d4\tpersona'*$'\tpersona\tccxp-skills'* ]]
+  [[ "$output" == *$'d2\tskill-task'*$'\tskill\tdemo'* ]]
+  [[ "$output" == *$'d13\tprofile-config'*$'\tprofile-config\tlocal-profile'* ]]
+  [[ "$output" == *$'d10\tcontradiction'*$'\towner-review\t-'* ]]
+}
+
+mkrepo() { # a git repo whose origin/main holds scripts/gate.sh, plus an open task naming d3 and a done one naming d1, d4, d6, d9
+  R="$BATS_TEST_TMPDIR/repo"; mkdir -p "$R/scripts" "$R/dev/TODO" "$R/dev/JOURNAL"
+  git -C "$R" init -q . && echo ok > "$R/scripts/gate.sh"
+  git -C "$R" add . && git -C "$R" -c user.email=a@b -c user.name=n commit -qm x
+  git -C "$R" update-ref refs/remotes/origin/main HEAD
+  printf -- '---\nstatus: Open\n---\n# T20261124-111111: gate\n\n- folds d3 into a script\n' > "$R/dev/TODO/T20261124-111111-gate.md"
+  printf -- '# T20261124-222222: done\n\n- d1, d4, d6 and d9 fold\n' > "$R/dev/JOURNAL/2026-11-24-T20261124-222222-done.md"
+  FAKE="$BATS_TEST_TMPDIR/fakegh"
+  printf '#!/usr/bin/env bash\n[[ "$3" == 7 ]] && echo MERGED || echo OPEN\n' > "$FAKE"; chmod +x "$FAKE"
+  export PR_GH="bash $FAKE"
+}
+
+@test "tasks: one row per conversion, deduped against open tasks naming the ref" {
+  mkrepo
+  run_s tasks --repo "$R"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'d3\tscript-or-hook\tscript\tccxp-skills\texists:T20261124-111111\t'* ]]
+  [[ "$output" == *$'d4\tpersona\tpersona\tccxp-skills\tfile\t'* ]]   # the done task does not dedupe
+  [[ "$output" != *$'d10\t'* && "$output" != *$'d5\t'* ]]
+  [ "$(cksum < "$CCXP_DECISIONS_FILE")" = "$BEFORE_DEC" ]
+}
+
+@test "retire-enforced: dry-run reports, --apply retires only merged or on-main targets with a task" {
+  mkrepo
+  jq '.decisions |= map(if .ref == "d1" then .enforced_by = "scripts/gate.sh"
+      elif .ref == "d4" then .enforced_by = "#7" elif .ref == "d6" then .enforced_by = "#8"
+      elif .ref == "d9" then .enforced_by = "scripts/nope.sh" elif .ref == "d3" then .enforced_by = "scripts/gate.sh"
+      elif .ref == "d12" then .enforced_by = "T20261124-111111" else . end)' "$CCXP_DECISIONS_FILE" > "$BATS_TEST_TMPDIR/n.json"
+  cp "$BATS_TEST_TMPDIR/n.json" "$CCXP_DECISIONS_FILE"
+  run_s retire-enforced --repo "$R"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'d1\twould-retire\tfolded into scripts/gate.sh (task T20261124-222222)'* ]]
+  [[ "$output" == *$'d4\twould-retire\tfolded into #7'* ]]
+  [[ "$output" == *$'d6\tpending\t#8 is not merged yet'* ]]
+  [[ "$output" == *$'d9\tpending\tscripts/nope.sh is not on origin/main'* ]]
+  [[ "$output" == *$'d12\tpending\t'*"task id"* ]]
+  [[ "$output" == *$'d3\twould-retire\tfolded into scripts/gate.sh (task T20261124-111111)'* ]]
+  [ "$(jq '[.decisions[] | select(.status == "retired")] | length' "$CCXP_DECISIONS_FILE")" = "1" ]
+  run_s retire-enforced --repo "$R" --apply
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'d1\tretired\t'* && "$output" == *$'d4\tretired\t'* && "$output" == *$'d3\tretired\t'* ]]
+  [ "$(jq -r '.decisions[] | select(.ref == "d1") | .status + ":" + .reason' "$CCXP_DECISIONS_FILE")" = "retired:folded into scripts/gate.sh (task T20261124-222222)" ]
+  [ "$(jq -r '.decisions[] | select(.ref == "d6") | .status' "$CCXP_DECISIONS_FILE")" = "active" ]
+  [ "$(jq -r '.decisions[] | select(.ref == "d9") | .status' "$CCXP_DECISIONS_FILE")" = "active" ]
+}
+
+@test "retire-enforced: a resolved target without any task naming the ref is never retired" {
+  mkrepo
+  jq '.decisions |= map(if .ref == "d2" then .enforced_by = "scripts/gate.sh" else . end)' "$CCXP_DECISIONS_FILE" > "$BATS_TEST_TMPDIR/n.json"
+  cp "$BATS_TEST_TMPDIR/n.json" "$CCXP_DECISIONS_FILE"
+  run_s retire-enforced --repo "$R" --apply
+  [[ "$output" == *$'d2\tpending\tno task names d2'* ]]
+  [ "$(jq -r '.decisions[] | select(.ref == "d2") | .status' "$CCXP_DECISIONS_FILE")" = "active" ]
+}
+
+@test "retire-enforced: no enforced-by anywhere prints a note" {
+  run_s retire-enforced
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no active decision has enforced-by"* ]]
 }

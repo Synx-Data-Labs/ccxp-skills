@@ -280,7 +280,7 @@ ledger-ctx() {
 # Split args into POS (positional), CTX/HAVE_CTX (--context) and TTL/HAVE_TTL (--title).
 ledger-args() {
   POS=(); CTX=""; TTL=""; TXT=""; REF=""; HAVE_CTX=false; HAVE_TTL=false; HAVE_TXT=false
-  QUOTE=""; NOTE=""; SCOPE=""; SRC=""; HAVE_SCOPE=false; ALL=false; JSON=false
+  QUOTE=""; NOTE=""; SCOPE=""; SRC=""; ENF=""; HAVE_SCOPE=false; ALL=false; JSON=false
   PF=""; AGT=""; FLG=""; TASK=""; NOTASK=""; HAVE_TASK=false; HAVE_NOTASK=false; HAVE_PF=false; HAVE_AGT=false; HAVE_FLG=false; PSTDIN=false; SAT=""; HAVE_SAT=false
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -316,6 +316,8 @@ ledger-args() {
         SCOPE="$2"; HAVE_SCOPE=true; shift 2 ;;
       --source) [[ $# -ge 2 ]] || { echo "ledger: --source needs a value" >&2; return 2; }
         SRC=$(ledger-bounded "$2" 120 --source) || return 2; shift 2 ;;
+      --enforced-by) [[ $# -ge 2 ]] || { echo "ledger: --enforced-by needs a path or task id" >&2; return 2; }
+        ENF=$(ledger-bounded "$2" 200 --enforced-by) || return 2; shift 2 ;;
       --all) ALL=true; shift ;;
       --json) JSON=true; shift ;;
       --title) [[ $# -ge 2 ]] || { echo "ledger: --title needs a value" >&2; return 2; }
@@ -496,7 +498,7 @@ decisions-read() {
        | {ref, text, quote: (.quote | strings // ""), scope: (.scope | strings // "global"), context: (.context | strings // ""),
           source: (.source | strings // ""), added_at: (.added_at | strings // ""),
           status: (if (.status | strings // "active") | IN("active", "superseded", "retired") then .status // "active" else "active" end),
-          superseded_by: (.superseded_by | strings // ""), reason: (.reason | strings // ""), closed_at: (.closed_at | strings // "")}] as $d
+          enforced_by: (.enforced_by | strings // ""), superseded_by: (.superseded_by | strings // ""), reason: (.reason | strings // ""), closed_at: (.closed_at | strings // "")}] as $d
     | {schema: 1, updated_at: (.updated_at | strings // ""),
        counter: ([(.counter | numbers // 0)] + [$d[].ref[1:] | tonumber] | max), decisions: $d}' "$f" 2>/dev/null) || out=""
   printf '%s' "${out:-$DECISIONS_EMPTY}"
@@ -572,7 +574,8 @@ decisions-render-file() {
       def day: .added_at[0:10];
       def item: "- " + .ref + " [" + day + "] " + .text
         + (if .quote != "" then "\n  quote: \"" + .quote + "\"" else "" end)
-        + (if .context != "" then "\n  file://" + (.context | enc) else "" end);
+        + (if .context != "" then "\n  file://" + (.context | enc) else "" end)
+        + (if .enforced_by != "" then "\n  enforced-by: " + .enforced_by else "" end);
       def num: .ref[1:] | tonumber;
       [.decisions[] | select(.status == "active")] as $act
       | [.decisions[] | select(.status != "active")] as $old
@@ -634,7 +637,8 @@ decisions-entry-text() {
         + (if .reason != "" then " (\(.reason))" else "" end) + (if .closed_at != "" then " on \(.closed_at[0:10])" else "" end) else "" end)
     + (if .quote != "" then "\n  quote: \"\(.quote)\"" else "" end)
     + (if .context != "" then "\n  context: \(.context)" else "" end)
-    + (if .source != "" then "\n  source: \(.source)" else "" end)'
+    + (if .source != "" then "\n  source: \(.source)" else "" end)
+    + (if .enforced_by != "" then "\n  enforced-by: \(.enforced_by)" else "" end)'
 }
 
 # $1 ref; prints status ("" when unknown)
@@ -773,8 +777,8 @@ ledger-decision() {
       [[ -n "$text" ]] || { echo "ledger: empty decision text" >&2; return 2; }
       decisions-ctx-ok || return 2
       decisions-update '.counter += 1 | .decisions += [{ref: ("d" + (.counter | tostring)), text: $t, quote: $q, scope: $s,
-          context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
-        --arg t "$text" --arg q "$QUOTE" --arg s "${SCOPE:-global}" --arg c "$CTX" --arg src "$SRC" || return 1
+          context: $c, source: $src, enforced_by: $enf, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
+        --arg t "$text" --arg q "$QUOTE" --arg s "${SCOPE:-global}" --arg c "$CTX" --arg src "$SRC" --arg enf "$ENF" || return 1
       jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST"
       decisions-review-after ;;
     supersede)
@@ -789,10 +793,18 @@ ledger-decision() {
       decisions-update '(.decisions | map(select(.ref == $r)) | .[0]) as $old | (.counter += 1) | ("d" + (.counter | tostring)) as $new
         | .decisions |= map(if .ref == $r then .status = "superseded" | .superseded_by = $new | .closed_at = $now else . end)
         | .decisions += [{ref: $new, text: $t, quote: $q, scope: (if $hs then $s else $old.scope end),
-            context: $c, source: $src, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
-        --arg r "$r" --arg t "$text" --arg q "$QUOTE" --arg s "$SCOPE" --argjson hs "$HAVE_SCOPE" --arg c "$CTX" --arg src "$SRC" || return 1
+            context: $c, source: $src, enforced_by: $enf, added_at: $now, status: "active", superseded_by: "", reason: "", closed_at: ""}]' \
+        --arg r "$r" --arg t "$text" --arg q "$QUOTE" --arg s "$SCOPE" --argjson hs "$HAVE_SCOPE" --arg c "$CTX" --arg src "$SRC" --arg enf "$ENF" || return 1
       jq -r '.decisions[-1].ref' <<<"$DECISIONS_LAST"
       decisions-review-after ;;
+    enforce) # enforce <ref> [<path or task id>]: record (or, with no target, clear) what enforces the decision
+      ledger-args "$@" || return 2
+      local r st tgt; r=$(decisions-id "${POS[0]:-}") || return 2
+      tgt=$(ledger-bounded "${POS[1]:-${ENF}}" 200 "enforced-by") || return 2
+      st=$(decisions-status "$r")
+      [[ -n "$st" ]] || { decisions-missing "$r"; return 1; }
+      decisions-update '.decisions |= map(if .ref == $r then .enforced_by = $e else . end)' --arg r "$r" --arg e "$tgt" || return 1
+      printf '%s\n' "$r" ;;
     review)
       ledger-args "$@" || return 2
       local rj; rj=$(decisions-review-json all "" "$SCOPE") || { echo "ledger: decision review failed" >&2; return 1; }
@@ -826,7 +838,7 @@ ledger-decision() {
       else
         echo "ledger: no decision $r" >&2; return 1
       fi ;;
-    *) echo "usage: ledger.sh decision add <text> [--quote q] [--scope global|repo:<name>] [--context <abs path>] [--source s] | supersede <ref> <text> [same options] | retire <ref> [reason] | list [--all] [--scope s] [--json] | show <ref> | review [--scope s] [--json]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh decision add <text> [--quote q] [--scope global|repo:<name>] [--context <abs path>] [--source s] [--enforced-by <path|T id>] | supersede <ref> <text> [same options] | enforce <ref> [<path or task id>] | retire <ref> [reason] | list [--all] [--scope s] [--json] | show <ref> | review [--scope s] [--json]" >&2; return 2 ;;
   esac
 }
 
@@ -1173,7 +1185,7 @@ ledger() {
       else
         printf '{}\n'
       fi ;;
-    *) echo "usage: ledger.sh start <n> <title> | finish <n> | stats [--json] | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|retire|list|show | context set <id> <abs path> | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
+    *) echo "usage: ledger.sh start <n> <title> | finish <n> | stats [--json] | reconcile --alive <list> | resumed <n> | set-started <n> HH:MM | park <k> | unpark <k> | next add|done|set | set-counter <n|s|k|d> <v> | ref next|bump | decision add|supersede|enforce|retire|list|show | context set <id> <abs path> | authz list|show|set | render | reply [--tldr t] | check <file|-> | show [--brief]" >&2; return 2 ;;
   esac
 }
 
