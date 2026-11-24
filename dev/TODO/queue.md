@@ -68,3 +68,4 @@ reprioritize.
 - [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config
 - [T20261123-248916](T20261123-248916-hud-drop-alerts-cell.md): drop the alerts cell from the HUD
 - [T20261123-424791](T20261123-424791-hud-slack-failure-rca-progress.md): HUD shows RCA progress for each Slack-reported failure
+- [T20261124-157602](T20261124-157602-hud-unreleased-commits.md): HUD shows unreleased commits after the plugin repo URL
