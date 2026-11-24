@@ -133,11 +133,9 @@ For each logical group:
 
 ### 5. Push branch
 
-On a machine with multiple `gh`-authenticated accounts, a bare `git push` can silently
-authenticate as whichever account is globally active — which may not have write access to
-this repo. Route through `_gh/git.sh`, which auto-detects the account with write access the
-same way `_gh/gh.sh` does for `gh` calls (process-scoped `GH_TOKEN`, no global `gh auth
-switch`):
+**Fresh base (d129):** `bash <skills-root>/_gh/fresh-base.sh check --rebase`; any non-zero exit means stop, never push stale.
+
+A bare `git push` can authenticate as the wrong `gh` account; route through `_gh/git.sh` (auto-detects the account with write access, process-scoped `GH_TOKEN`):
 
 ```bash
 bash <skills-root>/_gh/git.sh push -u origin <branch>
