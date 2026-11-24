@@ -929,14 +929,14 @@ test('rateWindows: a missing percent or a reset time already past drops that win
   expect(w({ rateUsed: 20, rate7Used: 30 })).toEqual(['5h', '7d']) // percent without a reset time still shows
 })
 
-test('rate cell: the window with less headroom wins, no labels; a missing or past window shows nothing, never an error', () => {
+test('rate cell: the window that runs out first wins, no labels; a missing or past window shows nothing, never an error', () => {
   const band = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
   const CLOCK = '(\\w{3} )?\\d\\d:\\d\\d \\S+'
   const both = { rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
   // 5h has 20% left, 7d has 66%: the 5-hour window shows, runs out in 57m (80% used 13680 s into the window)
   expect(text(band(both))).toMatch(new RegExp(`20% left · runs out in 57m · reset ${CLOCK}`))
   expect(text(band(both))).not.toMatch(/66%|7d|5h/)
-  // 7d tighter: it shows, projected over the 7-day window, with the weekday on its reset
+  // 7d runs out first: it shows, projected over the 7-day window, with the weekday on its reset
   const sevenTight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
   expect(text(band(sevenTight))).toMatch(new RegExp(`10% left · runs out in 10\\.2h · reset (Mon|Tue|Wed|Thu|Fri|Sat|Sun) ${CLOCK}`))
   // one window only
