@@ -352,25 +352,26 @@ sl-autopilot-stats() {
 # values (default, range, clamp) come from `autopilot-state.sh config-show --json` (read-only, no network):
 # nothing is re-derived here. `reserved_slots` is null when that script does not report the key (an older
 # plugin copy), so the HUD shows max_dop alone then. config-show costs ~150 ms (a dozen jq calls), so the
-# answer is cached per repo (CCXP_HUD_CACHE_DIR, as sl-gh-account) and reused while the config file's mtime
-# is unchanged and the entry is younger than CCXP_HUD_CACHE_TTL x 10 seconds (default 600; 0 disables).
+# answer is cached per repo (CCXP_HUD_CACHE_DIR, as sl-gh-account) and reused while the config file and the
+# autopilot script are byte-for-byte unchanged (a cksum of each, so a same-second rewrite or a plugin upgrade
+# is seen) and the entry is younger than CCXP_HUD_CACHE_TTL x 10 seconds (default 600; 0 disables).
 # Never fails the prompt.
 sl-autopilot-config() {
   local repo_root="$1" rec="${2:-}" script="$_SL_DIR/../../autopilot/scripts/autopilot-state.sh" cf out
   local ttl="${CCXP_HUD_CACHE_TTL:-60}" cdir="${CCXP_HUD_CACHE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-cache}"
-  local key f now stamp cmt line mt="none"
+  local key f now stamp croot csig line sig="none"
   cf="$repo_root/dev/.autopilot-config.json"
   [ -n "$rec" ] || [ -f "$cf" ] || return 0
   [ -f "$script" ] || return 0
   [[ "$ttl" =~ ^[0-9]+$ ]] || ttl=60
   ttl=$(( ttl * 10 ))
-  if [ -f "$cf" ]; then mt=$(stat -c %Y "$cf" 2>/dev/null || stat -f %m "$cf" 2>/dev/null || echo none); fi
+  sig="$(if [ -f "$cf" ]; then cksum < "$cf"; else echo none; fi | tr ' ' '-')/$(cksum < "$script" | tr ' ' '-')"
   now=$(date +%s)
   key=$(printf '%s' "$repo_root" | cksum | awk '{print $1}')
   f="$cdir/ap-config-$key"
   if [ "$ttl" -gt 0 ] && [ -r "$f" ]; then
-    IFS=$'\t' read -r stamp cmt line < "$f" || true
-    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$cmt" = "$mt" ] && [ -n "$line" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ]; then
+    IFS=$'\t' read -r stamp croot csig line < "$f" || true
+    if [[ "$stamp" =~ ^[0-9]+$ ]] && [ "$croot" = "$repo_root" ] && [ "$csig" = "$sig" ] && [ -n "$line" ] && [ $(( now - stamp )) -lt "$ttl" ] && [ $(( now - stamp )) -ge 0 ]; then
       printf '%s' "$line"
       return 0
     fi
@@ -382,7 +383,7 @@ sl-autopilot-config() {
         source: ($s.max_dop.source // "default"), file: $f}' 2>/dev/null) || return 0
   [ -n "$out" ] || return 0
   if [ "$ttl" -gt 0 ]; then
-    { mkdir -p "$cdir" && printf '%s\t%s\t%s\n' "$now" "$mt" "$out" > "$f.$$" && mv "$f.$$" "$f"; } 2>/dev/null || rm -f "$f.$$" 2>/dev/null || true
+    { mkdir -p "$cdir" && printf '%s\t%s\t%s\t%s\n' "$now" "$repo_root" "$sig" "$out" > "$f.$$" && mv "$f.$$" "$f"; } 2>/dev/null || rm -f "$f.$$" 2>/dev/null || true
   fi
   printf '%s' "$out"
 }

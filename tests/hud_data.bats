@@ -738,9 +738,12 @@ STUB
   export HUD_TEST_CALLS="$BATS_TEST_TMPDIR/calls"
   run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''; sl-autopilot-config '$repo' ''"
   [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 1 ]
-  touch -t 203001010000 "$repo/dev/.autopilot-config.json"   # the config changed: recomputed
+  _cfg "$repo" '{"max_dop":12}'   # the config changed (even within the same second): recomputed
   run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
   [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 2 ]
+  printf '# upgraded\n' >> "$fake/autopilot/scripts/autopilot-state.sh"   # the autopilot script changed: recomputed
+  run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''"
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 3 ]
   CCXP_HUD_CACHE_TTL=0 run bash -c "source '$fake/hud/scripts/hud-lib.sh'; sl-autopilot-config '$repo' ''; sl-autopilot-config '$repo' ''"
-  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 4 ]
+  [ "$(wc -l < "$BATS_TEST_TMPDIR/calls")" -eq 5 ]
 }
