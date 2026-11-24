@@ -88,11 +88,7 @@ In `/hud details` the RELEASE row shows the plugin's GitHub address first (click
 
 ## rate
 
-Opt-in: your Claude subscription's two usage windows, 5 hours and 7 days: `5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h` is the share still left, how long until each window resets (and, for the 5 hour one, when it would run out at the current pace). Green from 25% left, orange under 25%, red under 10%. A window Claude does not report (API-key use, older versions) is left out. When the band is tight it shows only the window with less left, and goes before any other cell (only the cost and stale tags go earlier). `/hud details` shows both in full. The HUD also saves the latest numbers to a small file for the autopilot (`rate-limits.json` in the HUD cache folder). Switch: `rate` in `fields` (not on by default).
-
-## cost
-
-Opt-in: the session cost in dollars. Switch: `cost` in `fields` (not on by default).
+Opt-in: how much of your Claude subscription's usage window is left and when it resets, e.g. `20% left · resets 1h12m`. It shows the window with less left (the 5 hour or the 7 day one), without saying which. Green from 50% left, yellow under 50%, red under 25%. A limit Claude does not report (API-key use, older versions) is left out. When the band is tight it drops `resets`, then the whole cell, before any other cell. `/hud details` shows it on the SESSION row (`resets in 1h12m`). The HUD also saves the latest numbers, both windows, to a small file for the autopilot (`rate-limits.json` in the HUD cache folder). Switch: `rate` in `fields` (not on by default).
 
 ## colors | colours, markers
 
@@ -105,7 +101,7 @@ Opt-in: the session cost in dollars. Switch: `cost` in `fields` (not on by defau
 
 `/hud details` toggles an expanded view: one labeled row per section, spelling the cells out in full (never abbreviated). Run it again to collapse. It updates live like the band.
 
-- `SESSION` context left, 5-hour and 7-day limits left with time to reset, API-equivalent cost, unread bus notes, your last prompt time
+- `SESSION` context left, subscription limit left with its reset time, unread bus notes, your last prompt time
 - `REPO` repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)

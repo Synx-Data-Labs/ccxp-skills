@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'bus'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'bus'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -241,7 +241,6 @@ export type Snapshot = {
   /** 7-day window: percent used and reset epoch seconds (null when the engine reports no such window). */
   rate7Used: number | null
   rate7ResetsAt: number | null
-  costUsd: number | null
   jobs: Jobs
   /** True when the last helper run failed: the helper part is the previous one. */
   stale: boolean

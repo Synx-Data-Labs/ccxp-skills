@@ -81,7 +81,7 @@ export function configReport(input: ShowInput): string {
   const on = cfg.fields
   const off = ALL_FIELDS.filter(f => !on.includes(f))
   L.push(`Cells switched on (fields, ${src('fields')}): ${on.join(', ') || 'none'}`)
-  L.push(`Cells switched off: ${off.join(', ') || 'none'}${off.some(f => f === 'rate' || f === 'cost') ? ' (rate and cost are opt-in extras)' : ''}`)
+  L.push(`Cells switched off: ${off.join(', ') || 'none'}${off.includes('rate') ? ' (rate is an opt-in extra)' : ''}`)
   const hint: string[] = []
   if (on.includes('issues') && !cfg.issues) hint.push('issues is listed but draws nothing until "issues": {"repo": "owner/name"} is set')
   if (on.includes('ci') && !cfg.ci) hint.push('ci is listed but there is no "ci" setting, so no CI row')
