@@ -179,3 +179,18 @@ _run() { run bash "$BEHIND" "$WORK"; }
   _run
   [ ! -e "$HUD_BEHIND_STATE_DIR" ]
 }
+
+@test "HUD_BEHIND_FETCH=0: counts from disk, never fetches or writes state" {
+  _origin_adds 2
+  HUD_BEHIND_FETCH=0 run bash "$BEHIND" "$WORK"
+  [ -z "$output" ]
+  [ ! -e "$HUD_BEHIND_STATE_DIR" ]
+}
+
+@test "a user's GIT_SSH wrapper is not overridden by a GIT_SSH_COMMAND of ours" {
+  _origin_adds 1
+  printf '#!/usr/bin/env bash\necho wrapper > "%s/ssh-used"; exit 1\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/mywrap"; chmod +x "$BATS_TEST_TMPDIR/mywrap"
+  git -C "$WORK" remote set-url origin "ssh://git@example.invalid/x.git"
+  GIT_SSH="$BATS_TEST_TMPDIR/mywrap" run bash "$BEHIND" "$WORK"
+  [ -e "$BATS_TEST_TMPDIR/ssh-used" ]
+}

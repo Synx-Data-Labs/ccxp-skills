@@ -12,7 +12,7 @@ Which repo you are working in: `owner/name @ branch ↑2 ↓134*`. It follows `/
 
 - `↓N` = commits your branch is BEHIND its remote, `↑M` = commits it is AHEAD (only shown above 0; nothing at all when level, on a detached HEAD, or outside a repo). `↓` is neutral (dim) under 20 and yellow from 20; `↑` is always neutral.
 - Compared with the branch's upstream (`@{u}`); with no upstream set, with `origin/<default branch>` instead. A narrow band drops `↑` first, then the whole indicator.
-- It reads the remote-tracking branch already on disk, kept fresh by one background `git fetch origin` (at most every 5 minutes per repo, 15 s limit, no prompts; it only moves remote-tracking refs, never your branch or files). A failed fetch keeps the last number.
+- It reads the remote-tracking branch already on disk, kept fresh by one background `git fetch origin` (at most every 5 minutes per repo, 15 s limit, no prompts; it only moves remote-tracking refs, never your branch or files). A failed fetch keeps the last number. Set `HUD_BEHIND_FETCH=0` to turn the background fetch off.
 
 - `*` (yellow) = tracked files changed in the working tree. Untracked files are not counted.
 - `(wt X)` = you are in a linked git worktree; `(account)` = the `gh` account of this directory; `(root: X)` = a shell `cd` moved you out of the session root; a leading `→` = the repo changed a moment ago.

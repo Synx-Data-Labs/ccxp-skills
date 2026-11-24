@@ -400,6 +400,7 @@ export const register: Register = on => {
           HUD_QUEUE_FETCH_TTL: await read(() => $.env.get('HUD_QUEUE_FETCH_TTL')),
           HUD_BEHIND_STATE_DIR: await read(() => $.env.get('HUD_BEHIND_STATE_DIR')),
           HUD_BEHIND_TTL: await read(() => $.env.get('HUD_BEHIND_TTL')),
+          HUD_BEHIND_FETCH: await read(() => $.env.get('HUD_BEHIND_FETCH')),
         }
         return { text: configReport({ paths, userText: await readText($, paths.user), projectText: await readText($, paths.project), env: vars }) }
       }
