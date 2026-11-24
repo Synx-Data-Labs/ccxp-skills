@@ -50,8 +50,10 @@
 #                               (todo-next.sh --skip-gated --check), drift =
 #                               nothing pickable but `todo-sweep.sh plan` has mechanical
 #                               findings (a /drive sweep would fix them), none = idle
-#   top [repo-root] [--nth N]   the id of the first (Nth) task todo-next.sh --skip-gated lists
-#                               that is not in flight in a busy slot (nor Blocked by one), or nothing
+#   top [repo-root] [--nth N] [--urgent]
+#                               the id of the first (Nth) task of the tiered order: tiers 1..4 (--urgent: 1 and 2,
+#                               what a reserved slot takes), each in queue order rotated by its cursor (the last task
+#                               dispatched from the tier comes last), skipping gated, in-flight and held tasks; or nothing
 #   plan <file|-> [--fallback T<id>]
 #                               one "<task-id><TAB>advanced|stalled<TAB><reason><TAB><source>"
 #                               line per task a /drive report names (MERGED:/ADVANCED: =
@@ -225,7 +227,8 @@ _ap_fresh() {
       lifetime_merged: ((.lifetime_merged // .merged_count) | numbers // 0),
       visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0))),
       parked: ((.parked | arrays // []) | map(select(type == "object")) | .[-50:]),
-      holds: ((.holds | objects // {}) | with_entries(select(.value | type == "object")))}' "$f" 2>/dev/null) || carry=""
+      holds: ((.holds | objects // {}) | with_entries(select(.value | type == "object"))),
+      cursors: ((.cursors | objects // {}) | with_entries(select(.value | type == "string")))}' "$f" 2>/dev/null) || carry=""
   [ -n "$carry" ] || carry=null
   jq -n --arg now "$(ap-now)" --arg day "$(ap-today)" --argjson carry "$carry" '{
     schema: 2, status: "on", started_at: $now, run_started_at: $now, paused_at: null,
@@ -233,7 +236,7 @@ _ap_fresh() {
     lifetime_cycles: ($carry.lifetime_cycles // 0), lifetime_merged: ($carry.lifetime_merged // 0),
     cycle_count: 0, merged_count: 0, stuck_count: 0, waiting_count: 0,
     last_cycle_at: null, last_outcome: null, last_task: null, last_stuck_reason: null,
-    visits: ($carry.visits // {}), parked: ($carry.parked // []), holds: ($carry.holds // {}),
+    visits: ($carry.visits // {}), parked: ($carry.parked // []), holds: ($carry.holds // {}), cursors: ($carry.cursors // {}),
     dispatch_clone_path: null, dispatch_clone_paths: {}, slots: {}, idle_notified: false, stuck_notified: false,
     waiting_notified: false, capped_notified: false,
     day: $day, cycles_today: 0, merges_today: 0, notices: [],
@@ -375,7 +378,8 @@ ap-busy() {
       [ "$(ap-status)" = off ] && return 0
       inflight=$(_ap_slots | awk -F'\t' -v s="$AP_SLOT" -v t="$t" 't != "" && $2 == t && $1 != s {f=1} END {exit !f}' && echo yes || true)
       if [ -n "$inflight" ]; then echo "busy: $t is already in flight in another slot" >&2; return 3; fi
-      _ap_update --arg now "$(ap-now)" --arg t "$t" --arg s "$AP_SLOT" --argjson u "$urgent" "$AP_JQ_MIGRATE"' | .slots[$s] = ({task: (if $t == "" then null else $t end), since: $now} + (if $u then {urgent: true} else {} end)) | '"$AP_JQ_MIRROR" ;;
+      _ap_update --arg now "$(ap-now)" --arg t "$t" --arg s "$AP_SLOT" --argjson u "$urgent" "$AP_JQ_MIGRATE"' | .slots[$s] = ({task: (if $t == "" then null else $t end), since: $now} + (if $u then {urgent: true} else {} end)) | '"$AP_JQ_MIRROR"
+      [ -z "$t" ] || _ap_cursor_set "$t" ;;
     off)
       if [ ${#AP_REST[@]} -eq 0 ] && ! printf '%s ' "$@" | grep -q -- '--slot'; then
         _ap_update "$AP_JQ_MIGRATE"' | .slots = {} | '"$AP_JQ_MIRROR"
@@ -863,33 +867,83 @@ ap-work-root() {
   if [ -n "$c" ] && [ -d "$c/dev/TODO" ]; then printf '%s' "$c"; else _ap_root; fi
 }
 
-# top [repo-root] [--nth N]: the id of the first (Nth) task todo-next.sh --skip-gated lists that is not in
-# flight in a busy slot (nor Blocked by one), or nothing. With no slot busy it is the id bare /drive picks.
+# --- tier cursors (T20261124-670976) -------------------------------------------
+# A task's tier is its frontmatter `tier:` (todo-tier, default 3). The pick is made inside the
+# highest tier (lowest number) with an eligible task; a per-tier cursor (state `.cursors`, tier ->
+# the last task dispatched from it) rotates that tier's queue-order list so the task just dispatched
+# comes last: a task that ended without a hold is not re-picked ahead of its tier-mates, and the
+# list wraps. Only a recorded hold (`holds`) makes the pick pass over a task (d152).
+
+# _ap_tier_of <root> <task-id>: the task file's effective tier, nothing when it has no file there.
+_ap_tier_of() {
+  local f
+  f=$(compgen -G "$1/dev/TODO/$2-*.md" | head -1) || true
+  [ -n "$f" ] || return 0
+  # shellcheck source=../../todo/scripts/_lib.sh
+  ( source "$(_ap_dir)/../../todo/scripts/_lib.sh" && todo-tier "$f" )
+}
+
+# _ap_cursor_set <task-id>: remember it as its tier's cursor (a task without a file is ignored).
+_ap_cursor_set() {
+  local t
+  t=$(_ap_tier_of "$(ap-work-root)" "$1") || true
+  [[ "$t" =~ ^[1-4]$ ]] || return 0
+  _ap_update --arg t "$t" --arg id "$1" '.cursors = (((.cursors | objects) // {}) | .[$t] = $id)' || true
+}
+
+# held task ids, comma separated
+_ap_held() { jq -r '((.holds | objects) // {}) | keys | join(",")' "$(ap-state-file)" 2>/dev/null || true; }
+
+# in-flight and held ids as one --exclude list (empty when none)
+_ap_exclude() {
+  local a b; a=$(_ap_inflight); b=$(_ap_held)
+  if [ -n "$a" ] && [ -n "$b" ]; then printf '%s,%s' "$a" "$b"; else printf '%s%s' "$a" "$b"; fi
+}
+
+# _ap_rotate <tier> : stdin = a tier's ids in queue order; stdout = the same ids, the tier's cursor task last.
+_ap_rotate() {
+  local c i n=0 pos=-1; local -a ids
+  c=$(jq -r --arg t "$1" '((.cursors | objects) // {})[$t] // empty' "$(ap-state-file)" 2>/dev/null || true)
+  ids=(); while IFS= read -r i; do [ -z "$i" ] || ids+=("$i"); done
+  n=${#ids[@]}; [ "$n" -gt 0 ] || return 0
+  if [ -n "$c" ]; then for ((i = 0; i < n; i++)); do [ "${ids[i]}" = "$c" ] && pos=$i; done; fi
+  for ((i = pos + 1; i < n; i++)); do printf '%s\n' "${ids[i]}"; done
+  if [ "$pos" -ge 0 ]; then for ((i = 0; i <= pos; i++)); do printf '%s\n' "${ids[i]}"; done; fi
+}
+
+# top [repo-root] [--nth N] [--urgent]: the id of the first (Nth) task of the tiered order: tiers 1..4
+# (--urgent: 1 and 2 only, what a reserved slot may take), each tier in queue order rotated by its cursor,
+# skipping gated tasks, tasks in flight in a busy slot (and tasks Blocked by one) and held tasks. Nothing
+# when none. With no cursor and no tiers set it is the id bare /drive picks.
 ap-top() {
-  local root="" nth="" inflight a
+  local root="" nth=1 urgent=0 tiers="1 2 3 4" t excl order="" ids
   while [ $# -gt 0 ]; do
     case "$1" in
-      --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "top [repo-root] [--nth N]" >&2; return 2; }; nth="$2"; shift 2 ;;
+      --nth) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "top [repo-root] [--nth N] [--urgent]" >&2; return 2; }; nth="$2"; shift 2 ;;
+      --urgent) urgent=1; tiers="1 2"; shift ;;
       *) root="$1"; shift ;;
     esac
   done
   [ -n "$root" ] || root=$(ap-work-root)
-  inflight=$(_ap_inflight); local -a args=(--skip-gated)
-  [ -z "$inflight" ] || args+=(--exclude "$inflight")
-  [ -z "$nth" ] || args+=(--nth "$nth")
-  local first id
-  first=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || return 0
-  id=$(printf '%s\n' "$first" | sed -nE 's/^#[0-9]+ of [0-9]+: (T[0-9]+(-[0-9]+)?) .*/\1/p' | head -1)
+  excl=$(_ap_exclude)
+  for t in $tiers; do
+    local -a args=(--skip-gated --ids --tier "$t")
+    [ -z "$excl" ] || args+=(--exclude "$excl")
+    ids=$(cd "$root" && bash "$(_ap_dir)/../../todo/scripts/todo-next.sh" "${args[@]}" 2>/dev/null) || continue
+    order="$order$(printf '%s\n' "$ids" | _ap_rotate "$t")"$'\n'
+  done
+  local id
+  id=$(printf '%s' "$order" | grep -E "$AP_TASK_ID_RE" | sed -n "${nth}p") || true
   [[ "$id" =~ $AP_TASK_ID_RE ]] && printf '%s\n' "$id"
   return 0
 }
 
-# pickable [repo-root]: pick | drift | none (see the usage header). Tasks in flight in a busy slot are
-# not pickable; drift (a /drive sweep would fix mechanical findings) only counts when no slot is busy.
+# pickable [repo-root]: pick | drift | none (see the usage header). Tasks in flight in a busy slot and held
+# tasks are not pickable; drift (a /drive sweep would fix mechanical findings) only counts when no slot is busy.
 ap-pickable() {
-  local root="${1:-$(ap-work-root)}" scripts plan inflight; local -a args=(--skip-gated --check)
+  local root="${1:-$(ap-work-root)}" scripts plan excl; local -a args=(--skip-gated --check)
   scripts="$(_ap_dir)/../../todo/scripts"
-  inflight=$(_ap_inflight); [ -z "$inflight" ] || args+=(--exclude "$inflight")
+  excl=$(_ap_exclude); [ -z "$excl" ] || args+=(--exclude "$excl")
   if (cd "$root" && bash "$scripts/todo-next.sh" "${args[@]}") 2>/dev/null; then echo pick; return 0; fi
   if _ap_is_busy; then echo none; return 0; fi
   plan=$(bash "$scripts/todo-sweep.sh" plan --root "$root" 2>/dev/null || true)

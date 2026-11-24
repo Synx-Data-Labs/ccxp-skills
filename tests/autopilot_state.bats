@@ -1816,3 +1816,102 @@ EOS
   [ "$(_j '.holds | keys | join(",")')" = T20261124-000001 ]
   [ "$(_j '.visits | length')" -eq 0 ]
 }
+
+# --- tiers and cursors (T20261124-670976) -----------------------------------------
+
+# $1 id, $2 tier, $3 slug: an Open task with a frontmatter tier, queued last
+_tier_task() {
+  printf -- '---\nstatus: Open\nestimation: 1\ntier: %s\n---\n# %s\n' "$2" "$1" > "$AUTOPILOT_REPO_ROOT/dev/TODO/$1-${3:-slug}.md"
+  printf -- '- [%s](%s-%s.md): t\n' "$1" "$1" "${3:-slug}" >> "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
+}
+_tier_repo() { _nh_repo; echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"; }
+
+@test "top: picks inside the highest tier that has an eligible task, queue order within it" {
+  _tier_repo
+  _tier_task T20260101-000001 4 a
+  _tier_task T20260101-000002 3 b          # no tier would read the same default 3
+  _nh_task T20260101-000003 Open c         # no tier: default 3
+  _tier_task T20260101-000004 2 d
+  _tier_task T20260101-000005 2 e
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000004 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 2; [ "$output" = T20260101-000005 ]   # --nth walks the same order
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 3; [ "$output" = T20260101-000002 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 4; [ "$output" = T20260101-000003 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 5; [ "$output" = T20260101-000001 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth 6; [ -z "$output" ]
+}
+
+@test "top --urgent: only tiers 1 and 2 (the reserved slots)" {
+  _tier_repo
+  _tier_task T20260101-000001 3 a
+  run _ap top "$AUTOPILOT_REPO_ROOT" --urgent; [ -z "$output" ]
+  _tier_task T20260101-000002 2 b
+  _tier_task T20260101-000003 1 c
+  run _ap top "$AUTOPILOT_REPO_ROOT" --urgent; [ "$output" = T20260101-000003 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --urgent --nth 2; [ "$output" = T20260101-000002 ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --urgent --nth 3; [ -z "$output" ]
+  run _ap top "$AUTOPILOT_REPO_ROOT" --nth x; [ "$status" -eq 2 ]
+}
+
+@test "cursor: the task just dispatched goes behind its tier-mates, wraps, and a merged one is forgotten" {
+  _tier_repo
+  _tier_task T20260101-000001 3 a; _tier_task T20260101-000002 3 b; _tier_task T20260101-000003 3 c
+  _ap_on
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000001 ]
+  _ap busy on T20260101-000001; [ "$(_j '.cursors["3"]')" = T20260101-000001 ]
+  _ap busy off
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]    # not re-picked ahead of its mates
+  _ap busy on T20260101-000002; _ap busy off
+  _ap busy on T20260101-000003; _ap busy off
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000001 ]    # wrapped to the tier's start
+  # the cursor task finished (left the queue): the tier restarts at its top
+  _ap busy on T20260101-000001; _ap busy off
+  rm "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000001-a.md"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
+  # a single task is still picked again
+  rm "$AUTOPILOT_REPO_ROOT/dev/TODO/T20260101-000002-b.md"
+  _ap busy on T20260101-000003; _ap busy off
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]
+}
+
+@test "cursor: per tier, kept over off/start, a task without a file is ignored, old state loads" {
+  _tier_repo
+  _tier_task T20260101-000001 1 a; _tier_task T20260101-000002 3 b
+  _ap_on
+  _ap busy on T20260101-000001; _ap busy off
+  _ap busy on T20260101-000002; _ap busy off
+  _ap busy on T20260101-000999; _ap busy off     # no such task file: no cursor written, no error
+  [ "$(_j '.cursors | keys | join(",")')" = "1,3" ]
+  _ap off >/dev/null; _ap start >/dev/null
+  [ "$(_j '.cursors["1"]')" = T20260101-000001 ]
+  jq 'del(.cursors)' "$AUTOPILOT_STATE_FILE" > "$BATS_TEST_TMPDIR/o.json" && mv "$BATS_TEST_TMPDIR/o.json" "$AUTOPILOT_STATE_FILE"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000001 ]
+}
+
+@test "holds: a held task is passed over by top and pickable, and release puts it back" {
+  _tier_repo
+  _tier_task T20260101-000001 2 a; _tier_task T20260101-000002 2 b; _tier_task T20260101-000003 3 c
+  _ap_on
+  _ap hold-add T20260101-000001 needs-human "pr:5" "waiting for the owner"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
+  _ap hold-add T20260101-000002 stalled "pr:6" "r"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]
+  _ap hold-add T20260101-000003 waiting "pr:7" "r"
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
+  _ap release T20260101-000001
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000001 ]
+  run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
+}
+
+@test "todo-next --tier and --ids: filter by effective tier, list every survivor id" {
+  _tier_repo
+  _tier_task T20260101-000001 2 a; _nh_task T20260101-000002 Open b; _tier_task T20260101-000003 2 c
+  cd "$AUTOPILOT_REPO_ROOT"
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids; [ "$output" = $'T20260101-000001\nT20260101-000002\nT20260101-000003' ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 2; [ "$output" = $'T20260101-000001\nT20260101-000003' ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 3; [ "$output" = T20260101-000002 ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 4; [ -z "$output" ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 5; [ "$status" -eq 2 ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 2 --check; [ "$status" -eq 0 ]
+}
