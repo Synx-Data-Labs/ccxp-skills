@@ -228,7 +228,6 @@ function usagePart(u: any): Partial<Snapshot> {
     out.rate7Used = typeof seven?.percentUsed === 'number' ? seven.percentUsed : null
     out.rate7ResetsAt = resetEpochSec(seven?.resetsAt ?? seven?.resets_at ?? seven?.resetAt)
   }
-  if (u?.cost) out.costUsd = typeof u.cost.usd === 'number' ? u.cost.usd : null
   return out
 }
 

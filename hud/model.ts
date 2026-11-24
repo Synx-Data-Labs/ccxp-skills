@@ -11,7 +11,6 @@ export const EMPTY: Snapshot = {
   rateResetsAt: null,
   rate7Used: null,
   rate7ResetsAt: null,
-  costUsd: null,
   jobs: { running: 0, waiting: 0, failed: 0 },
   stale: false,
   moved: false,
@@ -269,29 +268,16 @@ export function ctxTone(left: number, cfg: Pick<HudConfig, 'ctxWarn' | 'ctxCrit'
   return 'error'
 }
 
-/** Colour of the 5-hour limit LEFT percentage: red under 10, orange (the warning tone) under 25, green otherwise. */
+/** Subscription limit LEFT, in percent: below this the cell is yellow (the warning tone). Owner decision 2026-11-24. */
+export const RATE_WARN_LEFT = 50
+/** Subscription limit LEFT, in percent: below this the cell is red (the error tone). Owner decision 2026-11-24. */
+export const RATE_CRIT_LEFT = 25
+
+/** Colour of the subscription limit LEFT percentage: red under 25, yellow under 50, the success colour from 50 up (strict, on the rounded number). */
 export function rateTone(left: number): Tone {
-  if (left < 10) return 'error'
-  if (left < 25) return 'warning'
+  if (left < RATE_CRIT_LEFT) return 'error'
+  if (left < RATE_WARN_LEFT) return 'warning'
   return 'success'
-}
-
-/** Rate-limit window length the engine reports for `five_hour`. */
-export const RATE_WINDOW_SEC = 5 * 3600
-
-/**
- * Hours until the 5-hour limit hits 100% at the burn rate so far (used% / elapsed time in the window), or
- * null when it would not run out before the window resets, or when there is too little to go on (no reset
- * time, under 1% used, or under 2 minutes elapsed). `resetsAt` is epoch seconds.
- */
-export function rateRunoutHours(used: number, resetsAt: number | null, nowMs: number): number | null {
-  if (resetsAt === null) return null
-  if (used >= 100 || !(used >= 1)) return null // already at the limit, or too little used to project
-  const remaining = resetsAt - nowMs / 1000
-  const elapsed = RATE_WINDOW_SEC - remaining
-  if (remaining <= 0 || elapsed < 120) return null
-  const secToFull = (100 - used) / (used / elapsed)
-  return secToFull < remaining ? secToFull / 3600 : null
 }
 
 /** Reset time as epoch seconds: accepts seconds, milliseconds or an ISO string; null when absent or unparseable. */
@@ -300,16 +286,6 @@ export function resetEpochSec(v: unknown): number | null {
   if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) return null
   return n > 1e11 ? n / 1000 : n
 }
-
-/** `1.5h` from an hour or more, `40m` below (never `0m`). */
-export function formatRunout(hours: number): string {
-  const min = Math.max(1, Math.round(hours * 60))
-  if (min >= 60) return `${Math.round(hours * 10) / 10}h`
-  return `${min}m`
-}
-
-/** Rate-limit window length the engine reports for `seven_day`. */
-export const RATE_WINDOW_7D_SEC = 7 * 86400
 
 /**
  * Time left until a reset, compact: `1h12m`, `3d4h`, `40m`, `<1m` (whole units, rounded down; a zero minor unit is dropped:
@@ -328,7 +304,7 @@ export function formatLeft(resetsAt: number, nowMs: number): string | null {
 }
 
 /** One subscription window as the HUD knows it: percent used and the reset epoch (seconds), either may be unknown. */
-export type RateWindow = { label: string; long: string; used: number; resetsAt: number | null; sec: number }
+export type RateWindow = { label: string; used: number; resetsAt: number | null }
 
 /**
  * The windows worth showing: a window with no percent is absent, and so is one whose reset time has passed
@@ -336,13 +312,13 @@ export type RateWindow = { label: string; long: string; used: number; resetsAt: 
  */
 export function rateWindows(snap: Pick<Snapshot, 'rateUsed' | 'rateResetsAt' | 'rate7Used' | 'rate7ResetsAt'>, nowMs: number): RateWindow[] {
   const out: RateWindow[] = []
-  const add = (label: string, long: string, used: number | null, resetsAt: number | null, sec: number) => {
+  const add = (label: string, used: number | null, resetsAt: number | null) => {
     if (used === null || !Number.isFinite(used)) return
     if (resetsAt !== null && resetsAt - nowMs / 1000 <= 0) return
-    out.push({ label, long, used, resetsAt, sec })
+    out.push({ label, used, resetsAt })
   }
-  add('5h', '5-hour', snap.rateUsed, snap.rateResetsAt, RATE_WINDOW_SEC)
-  add('7d', '7-day', snap.rate7Used, snap.rate7ResetsAt, RATE_WINDOW_7D_SEC)
+  add('5h', snap.rateUsed, snap.rateResetsAt)
+  add('7d', snap.rate7Used, snap.rate7ResetsAt)
   return out
 }
 
@@ -354,47 +330,20 @@ function tighter(ws: RateWindow[]): RateWindow {
 }
 
 /**
- * One window's segments: `5h 20% left`, then ` · out 1.5h` when the burn rate would run dry before the reset (5-hour
- * window only), then the time left (`resets 1h12m` with `resetsWord`, bare `3d4h` without).
+ * The rate cell (owner decision 2026-11-24: just the percent and the reset time, no window label, no runout): the
+ * percent LEFT of the window with less headroom, in its tone, then the time until it resets. `resets` is the word before
+ * the time (`resets 1h12m`; `resets in 1h12m` in details; '' for the bare time); null drops the time. No window: null.
  */
-function windowSegs(w: RateWindow, nowMs: number, o: { runout: string | null; resets: string | null; label: string }): Seg[] {
+function rateSegs(snap: Snapshot, nowMs: number, resets: string | null): Seg[] | null {
+  const ws = rateWindows(snap, nowMs)
+  if (ws.length === 0) return null
+  const w = tighter(ws)
   const left = leftOf(w)
   const color = rateTone(left)
-  const segs: Seg[] = [{ text: `${o.label}${left}% left`, color }]
-  if (o.runout !== null && w.sec === RATE_WINDOW_SEC) {
-    const out = rateRunoutHours(w.used, w.resetsAt, nowMs)
-    if (out !== null) segs.push({ text: ` · ${o.runout}${formatRunout(out)}`, color })
-  }
-  const t = w.resetsAt === null ? null : formatLeft(w.resetsAt, nowMs)
-  if (t !== null && o.resets !== null) segs.push({ text: ` · ${o.resets}${t}`, color })
+  const segs: Seg[] = [{ text: `${left}% left`, color }]
+  const t = w.resetsAt === null || resets === null ? null : formatLeft(w.resetsAt, nowMs)
+  if (t !== null) segs.push({ text: ` · ${resets}${t}`, color })
   return segs
-}
-
-/**
- * The band's rate cell, widest variant first: both windows with runout and `resets`, both with just the times, then only
- * the tighter window (runout and `resets`, the time, the percent alone). No window to show: null.
- */
-function rateVariants(snap: Snapshot, nowMs: number): Seg[][] | null {
-  const ws = rateWindows(snap, nowMs)
-  if (ws.length === 0) return null
-  const join = (parts: Seg[][]): Seg[] => parts.reduce<Seg[]>((acc, p, i) => (i === 0 ? p : [...acc, { text: '  ' }, ...p]), [])
-  const t = tighter(ws)
-  const first = (w: RateWindow) => windowSegs(w, nowMs, { label: `${w.label} `, runout: 'out ', resets: w === ws[0] ? 'resets ' : '' })
-  const bare = (w: RateWindow) => windowSegs(w, nowMs, { label: `${w.label} `, runout: null, resets: '' })
-  const variants: Seg[][] = []
-  if (ws.length > 1) {
-    variants.push(join(ws.map(first)), join(ws.map(bare)))
-  }
-  variants.push(windowSegs(t, nowMs, { label: `${t.label} `, runout: 'out ', resets: 'resets ' }), windowSegs(t, nowMs, { label: `${t.label} `, runout: null, resets: '' }), windowSegs(t, nowMs, { label: `${t.label} `, runout: null, resets: null }))
-  return variants
-}
-
-/** The details line: every window in full (`5-hour limit 20% left · runs out in 30m · resets in 1h12m`), one after the other. */
-function rateDetailSegs(snap: Snapshot, nowMs: number): Seg[] | null {
-  const ws = rateWindows(snap, nowMs)
-  if (ws.length === 0) return null
-  const parts = ws.map(w => windowSegs(w, nowMs, { label: `${w.long} limit `, runout: 'runs out in ', resets: 'resets in ' }))
-  return parts.reduce<Seg[]>((acc, p, i) => (i === 0 ? p : [...acc, { text: '  ' }, ...p]), [])
 }
 
 /** Jobs cell: green READY when nothing runs, yellow WORKING (N) otherwise; `withCount: false` is the narrow form. */
@@ -767,11 +716,9 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
     case 'ci':
       return null // the CI cell has its own row (ciRow), never a cell of the main row
     case 'rate': {
-      const v = rateVariants(snap, nowMs)
-      return v ? one(...v) : null
+      const full = rateSegs(snap, nowMs, 'resets ')
+      return full ? one(full, rateSegs(snap, nowMs, '')!, rateSegs(snap, nowMs, null)!) : null
     }
-    case 'cost':
-      return snap.costUsd === null ? null : one([{ text: `$${snap.costUsd.toFixed(2)}` }])
     case 'lastat': {
       const at = h?.last_input_at
       return at ? one([{ text: `you ${formatStamp(at)}`, dim: true }], [{ text: formatStamp(at), dim: true }]) : null
@@ -890,14 +837,14 @@ export function busVariants(b: Bus, full = false): Variants {
 
 /** Band order per mode; `fields` in the config only switches members of the mode on or off. */
 const ORDER = {
-  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'bus', 'rate', 'cost', 'lastat', 'ver'],
-  on: ['ap', 'queue', 'nightly', 'issues', 'bus', 'ctx', 'jobs', 'rate', 'cost', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
+  off: ['repo', 'branch', 'task', 'jobs', 'queue', 'nightly', 'issues', 'bus', 'rate', 'lastat', 'ver'],
+  on: ['ap', 'queue', 'nightly', 'issues', 'bus', 'ctx', 'jobs', 'rate', 'lastat', 'ver'], // AP, its 24h cell, then queue: AP and queue share a row
 } as const
 
 /** Shrink and drop steps, applied one at a time until the row fits (see README). */
 const STEPS = {
-  off: ['drop:stale', 'drop:cost', 'step:rate', 'step:rate', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
-  on: ['drop:stale', 'drop:cost', 'step:rate', 'step:rate', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
+  off: ['drop:stale', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:jobs', 'step:task', 'step:task', 'step:repo', 'step:repo', 'drop:task', 'step:repo', 'step:repo', 'step:repo', 'drop:ver'],
+  on: ['drop:stale', 'step:rate', 'step:rate', 'drop:rate', 'drop:lastat', 'step:queue', 'step:queue', 'step:queue', 'step:ver0', 'drop:ver0', 'step:nightly', 'step:nightly', 'step:issues', 'step:issues', 'step:issues', 'drop:issues', 'step:bus', 'drop:queue', 'drop:nightly', 'drop:bus', 'step:ver', 'step:ver', 'step:ctx', 'step:jobs', 'step:apstats', 'step:apstats', 'step:apstats', 'step:apstats', 'step:ap', 'step:ap', 'drop:ctx', 'drop:apstats', 'drop:ver', 'drop:stall'],
 }
 
 function render(items: Item[]): Seg[] {
@@ -1136,7 +1083,7 @@ function sectionRows(label: string, cells: Array<Seg[] | null>, width: number): 
 /**
  * `/hud details`: the band expanded into labeled SECTIONS, one row each (a long row wraps onto an indented line, nothing is
  * truncated or abbreviated; the one-row band keeps the short forms). A section with nothing to say is left out. Order:
- *   SESSION  context left, 5-hour limit left, API-equivalent cost, unread bus notes, last prompt (stamp and age)
+ *   SESSION  context left, subscription limit left with its reset time, unread bus notes, last prompt (stamp and age)
  *   REPO     repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
@@ -1157,16 +1104,15 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
     rows.push(...sectionRows(label, cells.map(c => (c === null || Array.isArray(c) ? c : full(c))), width))
   }
 
-  // SESSION: context is what is LEFT (the band's ctx), 5-hour limit is the share of the subscription's rolling 5-hour window LEFT
-  // (plus a runout estimate when it would run dry), cost is the engine's API-price estimate for this session.
+  // SESSION: context is what is LEFT (the band's ctx); the rate cell is the share LEFT of the subscription window with less
+  // headroom and when it resets, with no window label (owner decision 2026-11-24). The API-equivalent cost cell was retired.
   const usage: Array<Item | null> = []
   if (snap.ctxLeft !== null) {
     const left = Math.round(snap.ctxLeft)
     usage.push(one('ctx', [{ text: `context ${left}% left ${meter(left)}`, color: ctxTone(left, cfg) }]))
   }
-  const rateDetail = rateDetailSegs(snap, nowMs)
+  const rateDetail = rateSegs(snap, nowMs, 'resets in ')
   if (rateDetail) usage.push(one('rate', rateDetail))
-  if (snap.costUsd !== null) usage.push(one('cost', [{ text: `API-equivalent cost $${snap.costUsd.toFixed(2)}` }]))
   const at = h?.last_input_at
   section('SESSION', [
     ...usage,

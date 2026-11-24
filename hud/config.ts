@@ -6,7 +6,7 @@ import { FILL_DEFAULT, parseFillColor } from './fill'
 
 export type { CiConfig, Field, HudConfig, IssuesConfig, QueueConfig, QueueSource }
 
-export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'bus', 'ci', 'rate', 'cost', 'lastat']
+export const ALL_FIELDS: readonly Field[] = ['repo', 'branch', 'task', 'ap', 'ctx', 'jobs', 'queue', 'nightly', 'issues', 'bus', 'ci', 'rate', 'lastat']
 /** Text colour of the user's own prompt rows; the one place to change it. NO_COLOR is honoured by the renderer. */
 export const USER_TEXT_COLOR = 'yellow'
 export const BORDERS: readonly string[] = ['single', 'double', 'round', 'bold', 'singleDouble', 'doubleSingle', 'classic', 'quote']

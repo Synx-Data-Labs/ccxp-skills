@@ -5,7 +5,7 @@ import { FILL_BG, FILL_COLORS, charWidth, displayWidth, fillRow, fillStyleFor, f
 import { findTopic, helpText, parseHelp } from './help'
 import { configReport } from './show'
 import { alertSegs, isAlertRow } from './render'
-import { type Seg, EMPTY, ciEta, formatLeft, formatRunout, rateWindows, rateRunoutHours, resetEpochSec, rateTone, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
+import { type Seg, EMPTY, ciEta, formatLeft, rateWindows, resetEpochSec, rateTone, RATE_WARN_LEFT, RATE_CRIT_LEFT, STALL_GRACE_SEC, bandRows, baseName, compactLine, countJobs, ctxTone, busVariants, detailRows, issuesVariants, formatAge, formatIn, formatSpan, formatStamp, isApOn, isNewer, isWithin, jobState, meter, parseHelper, stalledFor, tierOf, truncateWords, versionState } from './model'
 
 const NOW = Math.floor(Date.now() / 1000)
 const RUN_AT = new Date(2026, 9, 26, 3, 0).getTime() / 1000
@@ -92,6 +92,8 @@ test('config: ci defaults to unset (no CI segment); jobs is the READY/WORKING ce
   expect(DEFAULTS.ci).toBeUndefined()
   expect(DEFAULTS.fields).toContain('jobs')
   expect(parseConfigText('{"fields": "ap,ctx,branch,task,jobs,last,lastat"}').fields).toEqual(['ap', 'ctx', 'branch', 'task', 'jobs', 'lastat'])
+  // `cost` was retired by the owner on 2026-11-24: an old fields list that names it keeps working, the cell just is not there
+  expect(parseConfigText('{"fields": "ctx,rate,cost,lastat"}').fields).toEqual(['ctx', 'rate', 'lastat'])
 })
 
 test('config: ctx thresholds default to 75 / 50 (context LEFT); custom values are kept and clamped', async () => {
@@ -652,15 +654,15 @@ test('AP ON (no duration): elapsed shows without a requested window; idle names 
 })
 
 test('details: sections in order: SESSION, REPO, WORK, RELEASE (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
-  const lines = detail(fullSnap({ rateUsed: 42, costUsd: 1.5 }))
+  const lines = detail(fullSnap({ rateUsed: 42 }))
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'WORK'])
-  expect(lines[0]).toMatch(/^SESSION {2}context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost \$1\.50 │ you \d\d:\d\d \(5m ago\)$/)
+  expect(lines[0]).toMatch(/^SESSION {2}context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you \d\d:\d\d \(5m ago\)$/)
   expect(lines[1]).toBe('REPO     acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[2]).toMatch(/^WORK {5}AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ WORKING \(2\) │ parked 2 │ last 24h: jobs 8 ▲ \/ average 5\.2\/day$/)
 })
 
 test('details: the section order is SESSION, REPO, BUILD, SUPPORT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
-  const snap = fullSnap({ rateUsed: 42, costUsd: 1.5 }) as any
+  const snap = fullSnap({ rateUsed: 42 }) as any
   snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
   const lines = detail(snap, 400, CI)
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(DETAIL_LABELS)
@@ -734,7 +736,7 @@ test('parseHelper: ledger.stats is kept when it is an object, otherwise null', a
 
 test('details: every line fits the terminal at every width and the band row is untouched', async () => {
   for (let cols = 140; cols >= 22; cols--) {
-    for (const s of [fullSnap(), fullSnap({ stale: true, rateUsed: 99, costUsd: 123.45 })]) {
+    for (const s of [fullSnap(), fullSnap({ stale: true, rateUsed: 99 })]) {
       for (const line of detail(s, cols)) expect(line.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
     }
   }
@@ -744,9 +746,9 @@ test('details: every line fits the terminal at every width and the band row is u
 const squash = (t: string) => t.replace(/[\s│]+/g, '')
 
 test('details: a narrow terminal wraps a section onto an indented line, never cuts or abbreviates anything', async () => {
-  const snap = () => fullSnap({ rateUsed: 42, costUsd: 1.5 })
+  const snap = () => fullSnap({ rateUsed: 42 })
   const wide = sections(detail(snap(), 400))
-  expect(wide.SESSION).toEqual([expect.stringMatching(/^context 64% left ▓▓▓▓▓▓░░░░ │ 5-hour limit 58% left │ API-equivalent cost \$1\.50 │ you /)])
+  expect(wide.SESSION).toEqual([expect.stringMatching(/^context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you /)])
   // 56 columns: the SESSION row no longer fits on one line, so it wraps under the cells (indented by the label width)
   const lines = detail(snap(), 56)
   const sess = lines.filter((l, i) => i < 3 && (l.startsWith('SESSION') || l.startsWith(' '.repeat(9))))
@@ -759,7 +761,7 @@ test('details: a narrow terminal wraps a section onto an indented line, never cu
     for (const label of Object.keys(wide)) expect(squash(narrow[label]!.join('')), `${label} at ${cols} columns`).toBe(squash(wide[label]!.join('')))
     expect(detail(snap(), cols).join('\n')).not.toContain('…')
     // no shortened forms at any width (the band's ctx / 5h / bare `total` forms never appear in details)
-    expect(detail(snap(), cols).join('\n')).not.toMatch(/\bctx\b|5h limit|│ cost \$|total \d|\bnext in\b/)
+    expect(detail(snap(), cols).join('\n')).not.toMatch(/\bctx\b|5h limit|5-hour limit|API-equivalent|total \d|\bnext in\b/)
   }
   const old = Math.floor(DETAIL_NOW / 1000) - 3 * 86400
   expect(sect(detail(fullSnap({ helper: { ...fullSnap().helper, last_input_at: old } }), 400), 'SESSION')).toMatch(/you \w{3} \d+ \d\d:\d\d \(3d ago\)$/)
@@ -768,41 +770,26 @@ test('details: a narrow terminal wraps a section onto an indented line, never cu
 const RATE_NOW = 1_800_000_000_000
 const rateReset = (elapsedSec: number) => RATE_NOW / 1000 + 5 * 3600 - elapsedSec
 
-test('rateTone: red under 10 left, orange under 25, otherwise green', () => {
-  expect([100, 25, 24, 10, 9, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
+test('rateTone: red under 25 left, yellow under 50, otherwise green (owner decision 2026-11-24)', () => {
+  expect([RATE_WARN_LEFT, RATE_CRIT_LEFT]).toEqual([50, 25])
+  // the boundaries 50, 49, 25, 24, plus the ends
+  expect([100, 50, 49, 25, 24, 0].map(rateTone)).toEqual(['success', 'success', 'warning', 'warning', 'error', 'error'])
 })
 
-test('rateRunoutHours: used% / elapsed projects the time to 100%; null when it outlasts the window or data is thin', () => {
-  // 50% in 1h: 1h more to full, 4h still in the window
-  expect(Math.round(rateRunoutHours(50, rateReset(3600), RATE_NOW)! * 1000)).toBe(1000)
-  // 80% in 2h: 0.5h to full
-  expect(Math.round(rateRunoutHours(80, rateReset(7200), RATE_NOW)! * 1000)).toBe(500)
-  // 10% in 2h: 18h to full, past the reset
-  expect(rateRunoutHours(10, rateReset(7200), RATE_NOW)).toBeNull()
-  expect(rateRunoutHours(50, null, RATE_NOW)).toBeNull() // no reset time
-  expect(rateRunoutHours(0, rateReset(3600), RATE_NOW)).toBeNull() // nothing used
-  expect(rateRunoutHours(50, rateReset(60), RATE_NOW)).toBeNull() // under 2 minutes elapsed: no projection
-  expect(rateRunoutHours(50, RATE_NOW / 1000 - 5, RATE_NOW)).toBeNull() // window already reset
-  expect(rateRunoutHours(100, rateReset(3600), RATE_NOW)).toBeNull() // already at the limit: no estimate
-})
 
-test('formatRunout: 1.5h from an hour, 40m below, never 0m', () => {
-  expect([formatRunout(1.5), formatRunout(1), formatRunout(2.04), formatRunout(2 / 3), formatRunout(0.001), formatRunout(0.995)]).toEqual(['1.5h', '1h', '2h', '40m', '1m', '1h'])
-  expect([resetEpochSec(1_800_000_000), resetEpochSec(1_800_000_000_000), resetEpochSec('1800000000'), resetEpochSec('2027-01-15T08:00:00Z'), resetEpochSec('x'), resetEpochSec(null), resetEpochSec(0)]).toEqual([1_800_000_000, 1_800_000_000, 1_800_000_000, 1_800_000_000, null, null, null])
-})
 
-test('rate cell: N% left in its tone, runout only when it would run dry before the reset; details spell it out', () => {
+test('rate cell: just the percent left and the reset time, no window label, no runout; coloured at 50 and 25', () => {
   const rate = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
   const find = (rows: Seg[][], re: RegExp) => rows.flat().find(g => re.test(g.text))
-  expect(find(rate({ rateUsed: 35 }), /5h 65% left/)?.color).toBe('success')
-  expect(find(rate({ rateUsed: 80 }), /5h 20% left/)?.color).toBe('warning')
-  expect(find(rate({ rateUsed: 95 }), /5h 5% left/)?.color).toBe('error')
-  expect(text(rate({ rateUsed: 35 }))).not.toMatch(/out /)
-  expect(text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))).toContain('5h 50% left · out 1h')
-  expect(text(rate({ rateUsed: 10, rateResetsAt: rateReset(7200) }))).not.toMatch(/out /)
-  const d = (over: object) => detailRows(fullSnap(over) as any, NOCI, 200, RATE_NOW).map(r => r.map(g => g.text).join(''))[0]
-  expect(d({ rateUsed: 80, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 20% left · runs out in 30m')
-  expect(d({ rateUsed: 10, rateResetsAt: rateReset(7200) })).toContain('5-hour limit 90% left')
+  expect(find(rate({ rateUsed: 35 }), /65% left/)?.color).toBe('success')
+  expect(find(rate({ rateUsed: 50 }), /50% left/)?.color).toBe('success') // 50 left: not yet yellow
+  expect(find(rate({ rateUsed: 51 }), /49% left/)?.color).toBe('warning')
+  expect(find(rate({ rateUsed: 75 }), /25% left/)?.color).toBe('warning') // 25 left: not yet red
+  expect(find(rate({ rateUsed: 76 }), /24% left/)?.color).toBe('error')
+  expect(find(rate({ rateUsed: 95, rateResetsAt: rateReset(3600) }), /resets/)?.color).toBe('error') // the time carries the tone
+  const row = text(rate({ rateUsed: 50, rateResetsAt: rateReset(3600) }))
+  expect(row).toContain('50% left · resets 4h')
+  expect(row).not.toMatch(/5h|5-hour|7d|out \d/)
 })
 
 const inSec = (sec: number) => RATE_NOW / 1000 + sec
@@ -822,43 +809,45 @@ test('rateWindows: a missing percent or a reset time already past drops that win
   expect(w({ rateUsed: 20, rate7Used: 30 })).toEqual(['5h', '7d']) // percent without a reset time still shows
 })
 
-test('rate cell: both windows with the time left, the tighter one alone when narrow, colours at the boundaries', () => {
+test('rate cell: the window with less headroom wins, no labels; a missing or past window shows nothing, never an error', () => {
   const band = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
   const both = { rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
-  const row = text(band(both))
-  expect(row).toContain('5h 20% left · out 57m · resets 1h12m  7d 66% left · 3d4h')
-  // one window only: nothing for the other, never an error
-  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('5h 20% left · out 57m · resets 1h12m')
-  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).not.toContain('7d')
-  expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('7d 66% left · resets 1d1h')
-  expect(text(band({}))).not.toMatch(/5h|7d/) // both missing: no cell
-  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(-5) }))).not.toMatch(/5h/) // past reset: dropped
-  // too narrow for both: the window with less headroom (the 7-day one here) stays
-  const tight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(86400) }
-  const narrow = text(bandRows({ ...EMPTY, ...tight } as any, { ...NOCI, fields: ['rate'] }, 30, RATE_NOW))
-  expect(narrow).toContain('7d 10% left')
-  expect(narrow).not.toContain('5h 90% left')
-  // colours: green at 25 left, orange at 24, orange at 10, red at 9
-  const col = (used: number) => band({ rateUsed: used }).flat().find(g => /5h \d+% left/.test(g.text))?.color
-  expect([75, 76, 90, 91].map(col)).toEqual(['success', 'warning', 'warning', 'error'])
+  // 5h has 20% left, 7d has 66%: the 5-hour window shows
+  expect(text(band(both))).toContain('20% left · resets 1h12m')
+  expect(text(band(both))).not.toMatch(/66%|3d4h|7d|5h/)
+  // 7d tighter: it shows, with its own time
+  const sevenTight = { rateUsed: 10, rateResetsAt: inSec(4320), rate7Used: 90, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) }
+  expect(text(band(sevenTight))).toContain('10% left · resets 3d4h')
+  // a tie keeps the 5-hour window
+  expect(text(band({ rateUsed: 50, rateResetsAt: inSec(60), rate7Used: 50, rate7ResetsAt: inSec(86400) }))).toContain('50% left · resets 1m')
+  // one window only
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(4320) }))).toContain('20% left · resets 1h12m')
+  expect(text(band({ rate7Used: 34, rate7ResetsAt: inSec(90000) }))).toContain('66% left · resets 1d1h')
+  expect(text(band({}))).not.toMatch(/% left · resets/) // both missing: no cell
+  expect(text(band({ rateUsed: 80, rateResetsAt: inSec(-5) }))).not.toMatch(/20% left/) // past reset: dropped
+  // narrow: the word `resets` goes first (the band is never drawn narrower than 20 columns)
+  const narrow = (cols: number) => text(bandRows({ ...EMPTY, ...both } as any, { ...NOCI, fields: ['rate'] }, cols, RATE_NOW))
+  expect(narrow(40)).toBe('20% left · resets 1h12m')
+  expect(narrow(22)).toBe('20% left · 1h12m')
   // rounding: 79.6 used shows 20% left
-  expect(text(band({ rateUsed: 79.6 }))).toContain('5h 20% left')
+  expect(text(band({ rateUsed: 79.6 }))).toContain('20% left')
 })
 
-test('details: both windows are spelled out with the time left', () => {
+test('details: the SESSION row carries the percent left and the reset time, no label', () => {
   const d = (over: object) => sect(detailRows(fullSnap(over) as any, NOCI, 400, RATE_NOW).map(r => r.map(g => g.text).join('')), 'SESSION')
-  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toContain('5-hour limit 20% left · runs out in 57m · resets in 1h12m  7-day limit 66% left · resets in 3d4h')
-  expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toContain('7-day limit 66% left · resets in 1d')
+  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320), rate7Used: 34, rate7ResetsAt: inSec(3 * 86400 + 4 * 3600) })).toMatch(/│ 20% left · resets in 1h12m( │|$)/)
+  expect(d({ rate7Used: 34, rate7ResetsAt: inSec(86400) })).toContain('66% left · resets in 1d')
+  expect(d({ rateUsed: 80, rateResetsAt: inSec(4320) })).not.toMatch(/5-hour|7-day|limit/)
 })
 
 test('details: the jobs cells never list the running jobs (the band already shows them); labels are spelled out', async () => {
-  const lines = detail(fullSnap({ rateUsed: 4, costUsd: 693.75, ctxLeft: 88 }), 400)
-  expect(sect(lines, 'SESSION')).toMatch(/^context 88% left ▓▓▓▓▓▓▓▓▓░ │ 5-hour limit 96% left │ API-equivalent cost \$693\.75/)
+  const lines = detail(fullSnap({ rateUsed: 4, ctxLeft: 88 }), 400)
+  expect(sect(lines, 'SESSION')).toMatch(/^context 88% left ▓▓▓▓▓▓▓▓▓░ │ 96% left/)
   const all = lines.join('\n')
   expect(all).not.toMatch(/r70|r73|Redo HUD|Autopilot cycle|\btot\b|\bctx\b/)
   expect(jobsPart(lines)).toBe('WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
   // ...but the one-row band keeps its short forms
-  expect(text(bandRows(fullSnap({ rateUsed: 4, costUsd: 693.75 }) as any, { ...NOCI, fields: [...CI.fields, 'rate', 'cost'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
+  expect(text(bandRows(fullSnap({ rateUsed: 4 }) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, 200))).toContain('ctx 64% ▓▓▓▓▓▓░░░░ │ WORKING (2)')
 })
 
 test('formatIn: under a minute, minutes, hours with minutes, days; due or past is now', async () => {
@@ -1728,8 +1717,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   issues: /issues \d+ open \| \d+ not delivered \| max open \d+ in 180 days/,
   bus: /bus 2 unread notes · newest from home/,
   ci: /CI \(/,
-  rate: /5-hour limit/,
-  cost: /API-equivalent cost \$/,
+  rate: /\d+% left · resets in \d/,
   lastat: /you \d/,
   ver: /ccxp \d/,
   stale: /stale/,
@@ -1738,7 +1726,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
 test('details is a superset of the band: every band cell has a details counterpart', async () => {
   const stalled = Math.floor(DETAIL_NOW / 1000) - 86400
   const s = {
-    ...fullSnap({ rateUsed: 40, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, costUsd: 1.23, stale: true }),
+    ...fullSnap({ rateUsed: 40, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, stale: true }),
   } as any
   s.helper = {
     ...s.helper,
@@ -1764,7 +1752,7 @@ test('details is a superset of the band: every band cell has a details counterpa
   }
   // And the band really does draw these cells with this fixture (so the check above is not vacuous).
   const bandText = text(band(s)) + '\n' + text(band(apOff))
-  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '5h', '$1.23', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
+  for (const w of ['AP ', 'last 24h', 'queue', 'nightly +-++.-+', 'issues 12 open / 7 undelivered', 'bus 2 · home', 'ctx', 'stalled', 'stale', 'CI (', '60% left · resets 1h', 'acme/widgets', 'T20261021-354035']) expect(bandText, `band does not show ${w}`).toContain(w)
 })
 
 // --- the old details-on output, cell by cell (#1508): every one must still be in the sectioned layout ---
@@ -1774,7 +1762,7 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   0c issues           open, not delivered, max open 180/30/7 days               -> SUPPORT
 //   0e bus              unread notes, newest from                                 -> SESSION
 //   1 where             repo @ branch*, worktree, account, root, task, stale      -> REPO
-//   2 usage             context left, 5-hour limit (+ runs out in), API cost      -> SESSION
+//   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
 //   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> WORK
 //   5 queue             queue (branch) N = ready | held | epics | claimed | revisited | auto-parked | max windows -> QUEUE
@@ -1791,8 +1779,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
   ['stale', 'REPO', /stale$/],
   ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
-  ['5-hour limit', 'SESSION', /5-hour limit 10% left · runs out in 27m/],
-  ['cost', 'SESSION', /API-equivalent cost \$1\.23/],
+  ['limit', 'SESSION', /10% left · resets in 1h/],
   ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
   ['jobs state', 'WORK', /WORKING \(2\)/],
   ['parked', 'WORK', /parked 2/],
@@ -1807,7 +1794,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
 ]
 
 test('details sections: every cell of the old details-on output is still present, in its section, at a wide and at a narrow terminal', async () => {
-  const s = fullSnap({ rateUsed: 90, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, costUsd: 1.23, stale: true }) as any
+  const s = fullSnap({ rateUsed: 90, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, stale: true }) as any
   s.helper = {
     ...s.helper,
     autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 60, stats: STATS },
@@ -1827,6 +1814,8 @@ test('details sections: every cell of the old details-on output is still present
       const want = new RegExp(re.source.replace(/\\?[ │]/g, ''))
       expect(want.test(flat), `old cell "${name}" missing from ${label} at ${cols} columns`).toBe(true)
     }
+    // Retired by the owner on 2026-11-24: the API-equivalent cost cell is gone from the details, in every section.
+    expect(Object.values(secs_).flat().join('\n'), `the retired cost cell is back at ${cols} columns`).not.toMatch(/API-equivalent|cost \$/)
   }
 })
 

@@ -309,11 +309,11 @@ test('a partial session.measure updates context and keeps the other units', asyn
   await $.session.measure({ context: { window: 200000, percent: 50 }, changed: ['context'] })
   const band = await $.ui.mount(BAND(140))
   expect(await band.find({ type: 'Text', text: /ctx 50%/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /5h 58% left/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /58% left/ })).toBeDefined()
   await band.unmount()
 })
 
-test('rate limits (5h and 7d) reach the band and are handed to hud-rate-cache.sh; none means no write', async ($: any, on: any) => {
+test('rate limits (5h and 7d) reach the cache file and the band shows the tighter window; both are handed to hud-rate-cache.sh; none means no write', async ($: any, on: any) => {
   const w = fresh()
   w.cfg = '{"fields": ["rate"]}'
   w.helper = { exitCode: 0, stdout: HELPER_AP }
@@ -323,9 +323,10 @@ test('rate limits (5h and 7d) reach the band and are handed to hud-rate-cache.sh
   w.usage = { startedAt: 0, context: { window: 200000, percent: 36 }, rateLimits: [{ kind: 'five_hour', percentUsed: 80, resetsAt: reset5 }, { kind: 'seven_day', percentUsed: 34, resetsAt: reset7 }] }
   await $.session.start(START)
   const band = await $.ui.mount(BAND(200))
-  expect(await band.find({ type: 'Text', text: /5h 20% left/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /7d 66% left/ })).toBeDefined()
-  expect(await band.find({ type: 'Text', text: /3d4h/ })).toBeDefined()
+  // the window with less headroom (5h: 20% left), its percent and reset time, no window label
+  expect(await band.find({ type: 'Text', text: /20% left/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /resets 1h/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /66% left|3d4h|5h|7d/ })).toBeUndefined()
   await band.unmount()
   const i = w.runs.findIndex(r => r.some(a => a.endsWith('hud-rate-cache.sh')))
   expect(i).toBeGreaterThanOrEqual(0)
@@ -340,7 +341,7 @@ test('no rate limits (API-key login): no cache write, no 7d text, no error', asy
   world($, on, w)
   await $.session.start(START)
   const band = await $.ui.mount(BAND(200))
-  expect(await band.find({ type: 'Text', text: /5h|7d/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: /% left/ })).toBeUndefined()
   await band.unmount()
   expect(w.runs.some(r => r.some(a => a.endsWith('hud-rate-cache.sh')))).toBe(false)
 })
