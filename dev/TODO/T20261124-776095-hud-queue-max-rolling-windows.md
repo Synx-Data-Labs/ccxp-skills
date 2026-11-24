@@ -32,10 +32,13 @@ scheduled: 2026-11-23
 
 ## Solution
 
-- Windows (elapsed seconds, so DST and calendar edges do not matter): this week `(now-7d, now]`, last week `(now-14d, now-7d)`, last month `(now-42d, now-14d)`; the value in force at a window start counts; a window with no data at all is `null` (shown `-`); points dated in the future are ignored.
+- Windows (elapsed seconds, so DST and calendar edges do not matter): each window is `[start, end)` over the series: this week `[now-7d, now]`, last week `[now-14d, now-7d)`, last month `[now-42d, now-14d)`; a point exactly on a boundary belongs to the newer window, and the value in force at a window start (the last point at or before it) counts for that window; a window with no data at all is `null` (shown `-`); points dated in the future are ignored.
 - New `sl-hwm-rolling` returns `{"lm","lw","tw"}`; `sl-queue-hwm` uses it; helper JSON `queue.hwm` changes shape (old `d180/d30/d7` ignored by the model).
 - Model: parse `tw` (required, never below the current length), `lm`/`lw` nullable, no nesting; band `· max 61/74/83 ▲`, details `max 61 last month / 74 last week / 83 this week ▲`; arrow compares this week with last week (nothing when equal or no last week); warning colour while the queue is at the highest of the three. Shrink: max, then no max, then `queue len/total`.
-- Remove `revisited` from `sl-queue-json`, the TS type and model, the band (`12v`), details, tests, README and HELP.
+- Remove `revisited` from `sl-queue-json` (code and its header comment), the TS type and model, the band (`12v`), details, tests (`tests/hud_lib.bats` sl-queue-json state test rewritten, fixtures in `hud/pure.test.ts`, `tests/hud_data.bats`, `tests/hud_queue_source.bats`), `hud/README.md` (Queue cell, autopilot-state paragraph, details table) and `hud/HELP.md`.
+- Narrow-terminal steps: the labelled band form (`max 61 last month / ...`) is dropped (it is now details-only); the band keeps `· max a/b/c ▲`, then no max, then `queue len/total`. This is the "same steps" minus the old 180d/30d/7d labelled step, which no longer has a meaning.
+- Docs: the issues cell text in `hud/README.md` and the header of `hud/scripts/hud-issues.sh` said it shares the queue's windows; reword them (issues keep the nested 180/30/7 figures via `sl-hwm-windows`).
+- A repo with under 42 days of history shows last month from the part of the window that has data (`-` when none); documented, accepted.
 - Alternatives rejected:
   - Calendar buckets (previous calendar month, Monday weeks): owner chose rolling windows; they also need DST, month and year rollover handling.
   - Keeping a 180-day figure: owner asked for no lifetime or 180-day figure.
@@ -45,15 +48,15 @@ scheduled: 2026-11-23
 ## Test plan
 
 - [ ] `tests/hud_queue_hwm.bats`: growing, shrinking, flat, no-change window, no history, first days of history, edges at exactly 7, 14 and 42 days (and one second either side), future samples, DST and time zones (UTC vs New_York/Berlin).
-- [ ] `hud/pure.test.ts`: parse (nullable windows, old shape ignored), band and details text, arrow up/down/none, warning colour, narrow-terminal shrink steps, no `revisited`.
+- [ ] `hud/pure.test.ts` (new tests `queue max: ...`, replacing the `queue hwm: ...` ones): parse (nullable windows, old shape ignored), band and details text, arrow up/down/none, warning colour, narrow-terminal shrink steps, no `revisited`.
 - [ ] `tests/hud_lib.bats`, `tests/hud_data.bats`, `tests/hud_queue_source.bats`: queue JSON without `revisited`, `hwm` shape.
 
 ## Done criteria
 
 - [ ] Three adjacent windows, the numbers differ and rise on a growing queue: `tests/hud_queue_hwm.bats` "a growing queue".
 - [ ] Window edges exact: `tests/hud_queue_hwm.bats` edge tests (7, 14, 42 days).
-- [ ] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history", `hud/pure.test.ts` "queue max: the arrow".
-- [ ] Narrow terminals shrink as before: `hud/pure.test.ts` "a narrow band degrades".
+- [ ] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history", `hud/pure.test.ts` "queue max: the arrow compares".
+- [ ] Narrow terminals shrink as before: `hud/pure.test.ts` "queue max: a narrow band degrades".
 - [ ] `revisited` gone from cell, details, JSON: `tests/hud_lib.bats` sl-queue-json tests, `hud/pure.test.ts` queue tests.
 - [ ] README "Queue high watermark" rewritten, HELP updated: `hud/README.md`, `hud/HELP.md`.
 
