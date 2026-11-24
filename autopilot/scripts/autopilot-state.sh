@@ -80,7 +80,7 @@
 #                               `until <time>` (ISO UTC, or a date), `run:<id>`, `pr:<n>`, `file-changed <path>`
 #                               or `task-left-todo <T-id>` (one argument, or several joined by spaces); exit 2 on an
 #                               unknown kind/condition or an empty reason, nothing written. Stored in the state
-#                               file's "holds", which `off`/`start` carry over; nothing consumes holds yet.
+#                               file's "holds", which `off`/`start` carry over; `top` and `pickable` pass over held tasks.
 #   holds [--json]              "<task><TAB><kind><TAB><reason><TAB><condition><TAB><since>" per hold
 #   release <task-id>           drop one hold; print released|none
 #   holds-check [repo-root]     release every hold whose condition is met (time passed, run completed or PR
@@ -1104,7 +1104,7 @@ $lines
 EOF_LINES
   # Precedence follows autopilot/SKILL.md Phase 4: progress (merged or advanced, nothing
   # stuck), waiting (nothing merged), stuck, then a lone NEEDS-ATTENTION = progress with 0
-  # merged (the stalled task is about to leave the top of the queue; wake in 60 s).
+  # merged (the stalled task gets a hold; wake in 60 s).
   if [ "$merged" -gt 0 ] && [ "$stuck" = 0 ]; then
     printf 'progress %s %s -\n' "$merged" "${merged_id:--}"
   elif [ "$adv" -gt 0 ] && [ "$stuck" = 0 ] && [ "$waiting" = 0 ]; then

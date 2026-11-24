@@ -22,9 +22,9 @@ argument-hint: "[task-id]"
   step 3 for the mechanics. **Opt-in only** — omitting this flag keeps the default, fully-inline
   behavior unchanged.
 - `--auto-selected` — marks the run as started by an **orchestrating skill** (`/autopilot`), not a
-  human's deliberate single-task request. Bare (`/drive --auto-selected`, what `/autopilot`
-  dispatches each cycle) it auto-picks exactly like bare `/drive`; with an explicit id (legacy
-  form) the id was resolved by the orchestrator. Only effect: Phase 0's skip rule does not
+  human's deliberate single-task request. With an explicit id (what `/autopilot` dispatches each cycle,
+  the id its tier cursor and holds chose) the id was resolved by the orchestrator; bare
+  (`/drive --auto-selected`) it auto-picks exactly like bare `/drive`. Only effect: Phase 0's skip rule does not
   apply (see Phase 0 below) — nothing else about Phase 1 onward changes.
 
 **Gated tasks.**
