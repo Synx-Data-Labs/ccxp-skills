@@ -1,11 +1,14 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 blocks: [T20261124-321658]
 source: epic split of T20261124-989194 (job 1514), owner request 2026-11-24
 related: [T20261124-989194]
 type: feature
 description: Make `top` and `pickable` choose within the highest tier with an eligible task, advancing a per-tier cursor that passes over held tasks only
+claimed_by: cc1-50ac6891:da50a3e74f488718
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-670976: Autopilot picks by tier and a cursor
