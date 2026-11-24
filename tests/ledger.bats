@@ -1536,3 +1536,13 @@ cx_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
   [[ "$output" == *"possible contradiction: review d1 vs d2"* ]]
   [[ "$output" == *"Review these with the owner"* ]]
 }
+
+@test "decision review: overlapping decisions without any clash are still listed as related and grouped" {
+  bash "$LEDGER" decision add "Run the nightly build on the shared runner pool" >/dev/null
+  run --separate-stderr bash "$LEDGER" decision add "Nightly build artifacts go to the shared runner pool cache"
+  [[ "$stderr" == *"d1 [global] shares"* ]]
+  [[ "$stderr" != *"possible contradiction"* ]]
+  run bash "$LEDGER" decision review --json
+  [ "$(jq -c '.groups | map(.refs)' <<<"$output")" = '[["d1","d2"]]' ]
+  [ "$(jq '.contradictions | length' <<<"$output")" = "0" ]
+}

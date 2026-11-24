@@ -674,7 +674,7 @@ def pol: norm as $n
 def nums: [match("([0-9]+(?:\\.[0-9]+)?) *([a-z]{3,})"; "g").captures | {n: .[0].string, u: .[1].string}] | map(select(.u as $u | $S[$u] | not));
 def clash($a; $b):
   if ($a.pol * $b.pol) == -1 then "opposite wording: never/not/forbidden vs always/must/allowed"
-  else ([($a.nums[] as $x | $b.nums[] as $y | select($x.u == $y.u and ($x.n | tonumber) != ($y.n | tonumber)) | "different number for \"\($x.u)\": \($x.n) vs \($y.n)")] | .[0] // empty) end;
+  else ([($a.nums[] as $x | $b.nums[] as $y | select($x.u == $y.u and ($x.n | tonumber) != ($y.n | tonumber)) | "different number for \"\($x.u)\": \($x.n) vs \($y.n)")] | .[0]) end;
 (now - ($grace * 86400) | strftime("%Y-%m-%d")) as $cut
 | def stale($e): ($e.text + " " + $e.quote) as $t | [
     (if any($missing[]; . == $e.ref) then "context file is gone: \($e.context)" else empty end),
