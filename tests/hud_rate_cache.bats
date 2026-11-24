@@ -99,3 +99,31 @@ both='{"five_hour":{"used_percentage":23.5,"resets_at":1800004000},"seven_day":{
   CLAUDE_CONFIG_DIR="$BATS_TEST_TMPDIR/prof" run bash "$RC" path
   [ "$output" = "$BATS_TEST_TMPDIR/prof/state/hud-cache/rate-limits.json" ]
 }
+
+@test "read: --max-age without a value is exit 64, never a hang" {
+  run timeout 5 bash "$RC" read --max-age
+  [ "$status" -eq 64 ]
+}
+
+@test "write: a malformed window does not drop the valid one" {
+  run bash -c "printf '%s' '{\"five_hour\":5,\"seven_day\":{\"used_percentage\":10,\"resets_at\":1800300000}}' | bash '$RC' write"
+  [ "$status" -eq 0 ]
+  run jq -c . "$F"
+  [ "$output" = '{"version":1,"written_at":1800000000,"seven_day":{"used_percentage":10,"resets_at":1800300000}}' ]
+}
+
+@test "write: an idle session with older numbers never overwrites newer ones; a new window replaces the old" {
+  printf '%s' '{"five_hour":{"used_percentage":60,"resets_at":1800004000}}' | bash "$RC" write
+  # same window, lower (older) percentage from a stale session: the higher one stays, written_at refreshes
+  HUD_RATE_NOW=1800000100 bash -c "printf '%s' '{\"five_hour\":{\"used_percentage\":40,\"resets_at\":1800004000}}' | bash '$RC' write"
+  run jq -c '[.written_at, .five_hour.used_percentage]' "$F"
+  [ "$output" = '[1800000100,60]' ]
+  # a later reset time is a newer window: it wins even with a lower percentage
+  HUD_RATE_NOW=1800009000 bash -c "printf '%s' '{\"five_hour\":{\"used_percentage\":5,\"resets_at\":1800022000}}' | bash '$RC' write"
+  run jq -c '[.five_hour.used_percentage, .five_hour.resets_at]' "$F"
+  [ "$output" = '[5,1800022000]' ]
+  # an older reset time (a session that never saw the new window) does not roll it back
+  HUD_RATE_NOW=1800009100 bash -c "printf '%s' '{\"five_hour\":{\"used_percentage\":99,\"resets_at\":1800004000}}' | bash '$RC' write"
+  run jq -c '.five_hour.used_percentage' "$F"
+  [ "$output" = 5 ]
+}
