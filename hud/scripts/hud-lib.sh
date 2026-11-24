@@ -346,6 +346,25 @@ sl-autopilot-stats() {
     | {has_history, approx, merged_24h, cycles_24h, avg_merged_24h, trend}' 2>/dev/null || true
 }
 
+# $1 repo_root -> compact JSON of the autopilot's EFFECTIVE parallelism settings
+# {max_dop, reserved_slots (a number or null), file (the config file exists)}, or nothing when the
+# autopilot is not on/paused (`$2` empty) and there is no config file, or anything fails. The effective
+# values (default and range; a value above the reported range maximum is clamped to it, as the loop does) come from `autopilot-state.sh config-show --json` (read-only, no network):
+# nothing is re-derived here. `reserved_slots` is null until that script knows the key (an older
+# autopilot), so the HUD shows max_dop alone then. Never fails the prompt.
+sl-autopilot-config() {
+  local repo_root="$1" rec="${2:-}" script="$_SL_DIR/../../autopilot/scripts/autopilot-state.sh" cf out
+  cf="$repo_root/dev/.autopilot-config.json"
+  [ -n "$rec" ] || [ -f "$cf" ] || return 0
+  [ -f "$script" ] || return 0
+  out=$(AUTOPILOT_CONFIG_FILE="$cf" AUTOPILOT_REPO_ROOT="$repo_root" bash "$script" config-show --json 2>/dev/null) || return 0
+  printf '%s' "$out" | jq -c --argjson f "$([ -f "$cf" ] && echo true || echo false)" \
+    'select(type == "object") | .settings as $s | select(($s.max_dop.value | type) == "number")
+     | ((($s.max_dop.range // "") | capture("-(?<m>[0-9]+)$").m | tonumber?) // null) as $hi
+     | {max_dop: (if $hi != null and $s.max_dop.value > $hi then $hi else $s.max_dop.value end), reserved_slots: (if ($s.reserved_slots.value | type) == "number" then $s.reserved_slots.value else null end),
+        source: ($s.max_dop.source // "default"), file: $f}' 2>/dev/null || true
+}
+
 # Job ledger (written by ledger.sh). Same default path convention as the other
 # state files: CLAUDE_CONFIG_DIR, else ~/.claude. CCXP_LEDGER_FILE overrides.
 sl-ledger-file() {

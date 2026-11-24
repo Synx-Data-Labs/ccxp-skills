@@ -2045,3 +2045,75 @@ test('bus cell: shrinks to the count in a narrow band, and is dropped before the
   expect(shrunk, 'bus never narrows to `bus 2`').toBe(true)
   expect(dropped, 'bus is never dropped as the band narrows').toBe(true)
 })
+
+// ---- AP max_dop cell (T20261124-239428) ----
+const dopSnap = (apc: object | null, ap: object | null = {}) => withHelper({ autopilot: ap === null ? null : { ...AP, ...ap }, ap_config: apc }) as any
+const CFG16 = { max_dop: 16, reserved_slots: 2, source: 'override', file: true }
+const dopLine = (s: object) => (detail(s).find(l => l.startsWith('WORK ')) ?? '').replace(/^WORK\s+/, '')
+const dopBand = (s: object, cols = 160) => text(bandRows(s as any, NOCI, cols))
+
+test('parseHelper: ap_config is kept when well formed, null when absent or malformed', async () => {
+  expect(parseHelper(JSON.stringify({ ...BASE, ap_config: CFG16 }))?.ap_config).toEqual(CFG16)
+  expect(parseHelper(JSON.stringify({ ...BASE, ap_config: { max_dop: 8, reserved_slots: null, source: 'default', file: false } }))?.ap_config?.reserved_slots).toBeNull()
+  for (const bad of [null, [], 'x', { max_dop: 0 }, { max_dop: 'a' }, {}]) expect(parseHelper(JSON.stringify({ ...BASE, ap_config: bad }))?.ap_config).toBeNull()
+  expect(parseHelper(HELPER)?.ap_config).toBeNull()
+})
+
+test('band: AP on shows `dop running/max_dop` (config present), neutral colour below the routine limit', async () => {
+  const s = dopSnap(CFG16, { busy_slots: 8 })
+  expect(dopBand(s)).toContain('dop 8/16')
+  expect(bandRows(s, NOCI, 160)[0]!.find(g => g.text === 'dop 8/16')?.color).toBeUndefined()
+  expect(dopBand(dopSnap({ ...CFG16, reserved_slots: null, max_dop: 8 }, {}))).toContain('dop 0/8') // idle, reserved key absent
+})
+
+test('band: warning colour at the routine limit (max_dop less reserved), also with the reserved key absent', async () => {
+  const color = (s: object) => bandRows(s as any, NOCI, 160)[0]!.find(g => g.text.startsWith('dop '))?.color
+  expect(color(dopSnap(CFG16, { busy_slots: 14 }))).toBe('warning') // 14 routine + 2 reserved: routine full
+  expect(color(dopSnap(CFG16, { busy_slots: 13 }))).toBeUndefined()
+  expect(color(dopSnap({ ...CFG16, reserved_slots: null }, { busy_slots: 16 }))).toBe('warning')
+  expect(color(dopSnap({ ...CFG16, reserved_slots: null }, { busy_slots: 15 }))).toBeUndefined()
+  expect(color(dopSnap({ ...CFG16, max_dop: 1, reserved_slots: null }, { busy_slots: 0 }))).toBeUndefined() // nothing running is never capped
+})
+
+test('band: max_dop lowered below the running count (running 8, max_dop 6) reads 8/6 in warning colour', async () => {
+  const s = dopSnap({ max_dop: 6, reserved_slots: null, source: 'override', file: true }, { busy_slots: 8 })
+  const g = bandRows(s, NOCI, 160)[0]!.find(x => x.text.startsWith('dop '))
+  expect(g).toEqual({ text: 'dop 8/6', color: 'warning' })
+})
+
+test('band: silent without a config answer, and with the autopilot off (the band shows no AP cell then)', async () => {
+  expect(dopBand(dopSnap(null, {}))).not.toContain('dop ')
+  expect(dopBand(dopSnap(CFG16, null))).not.toContain('dop ')
+  expect(dopBand(dopSnap(CFG16, { prefix: '[s]', status: 'stopped' }))).not.toContain('dop ')
+})
+
+test('band: dop sits right after the AP cell and is the one cell this feature drops on a narrow row, AP stays', async () => {
+  const s = dopSnap(CFG16, { busy_slots: 8, stats: { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' } })
+  expect(dopBand(s, 200)).toMatch(/^AP [^│]*│ dop 8\/16 │ /)
+  // shrinking order: dop is dropped after the AP cell has taken its shortest form and before the ctx cell goes
+  const widths = [160, 120, 100, 90, 80, 70, 60, 50, 40].map(w => dopBand(s, w))
+  const gone = widths.findIndex(t => !t.includes('dop '))
+  expect(gone).toBeGreaterThan(0) // present while wide
+  for (const t of widths.slice(gone)) expect(t).not.toContain('dop ') // once dropped, it stays dropped
+  expect(widths[gone]).toContain('AP 2/6h 3L ✓2') // the AP cell is at its shortest form by then
+  expect(widths[gone]).toContain('ctx')
+})
+
+test('details: AP line carries `max_dop 16 (14 routine + 2 reserved) · 8 running`; without reserved, max_dop alone', async () => {
+  expect(dopLine(dopSnap(CFG16, { busy_slots: 8 }))).toMatch(/^AP on [^│]*│ max_dop 16 \(14 routine \+ 2 reserved\) · 8 running(?: │ |$)/)
+  expect(detail(dopSnap({ ...CFG16, reserved_slots: null }, { busy_slots: 8 })).join('\n')).toContain('│ max_dop 16 · 8 running')
+  expect(detail(dopSnap(CFG16, { busy_slots: 0 })).join('\n')).toContain('max_dop 16 (14 routine + 2 reserved) · 0 running')
+})
+
+test('details: running above a lowered max_dop is called out; warning colour at the routine limit', async () => {
+  const rows = detailRows(dopSnap({ max_dop: 6, reserved_slots: 2, source: 'override', file: true }, { busy_slots: 8 }), NOCI, 200, DETAIL_NOW)
+  const ap = rows.find(r => r.some(g => g.text.startsWith('max_dop')))!
+  expect(ap.map(g => g.text).join('')).toContain('max_dop 6 (4 routine + 2 reserved) · 8 running (limit lowered)')
+  expect(ap.find(g => g.text.includes('running'))?.color).toBe('warning')
+})
+
+test('details: AP off shows the configured max_dop dim only when a config exists; silent with none', async () => {
+  expect(dopLine(dopSnap({ max_dop: 8, reserved_slots: null, source: 'override', file: true }, null))).toMatch(/^AP off │ max_dop 8(?: │ |$)/)
+  expect(dopLine(dopSnap(null, null))).toMatch(/^AP off(?: │ WORKING| │ READY|$)/)
+  expect(dopLine(dopSnap(null, null))).not.toContain('max_dop')
+})

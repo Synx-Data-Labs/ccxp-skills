@@ -38,6 +38,16 @@ The autopilot's last 24 hours (a rolling window, not a calendar day) against its
 - `~8` = an estimate (the history log is younger than 24 hours); an estimate never gets an arrow.
 - Source: `autopilot-state.sh stats` over `dev/.autopilot-history.jsonl`. Shown with AP on. Switch: `ap`.
 
+## dop | max_dop | parallel
+
+The autopilot's parallelism, so you can see the current config: `dop 8/16` = 8 cycles running out of `max_dop` 16.
+
+- Neutral colour normally; yellow when the running cycles are at the routine limit (`max_dop` less the reserved slots, all of `max_dop` while there is no reserved key). `dop 8/6` after lowering `max_dop` under live cycles stays yellow until they finish.
+- `/hud details` spells it out on the AP line: `max_dop 16 (14 routine + 2 reserved) · 8 running`, and `(limit lowered)` when more cycles run than `max_dop` allows. With the autopilot off but a config file present it shows the dim configured value: `max_dop 16`.
+- The reserved part comes from the autopilot's `reserved_slots` setting (default 2); with an older autopilot script that does not report it, `max_dop` is shown alone, e.g. `max_dop 16`.
+- A narrow terminal drops it whole (after the AP cell is at its shortest form, before the ctx cell). Silent with the autopilot off and no config file.
+- Source: `autopilot-state.sh config-show --json` (the effective value, default or override, from `dev/.autopilot-config.json`) and the number of busy slots in `dev/.autopilot-state.json`. Shown with AP on. Switch: `ap`.
+
 ## stalled
 
 Red `stalled 2d`: the autopilot should have woken up more than 10 minutes ago and has not (it is not paused and not mid-cycle). The number is how long it is overdue (largest unit). Nothing shows inside the 10 minute grace. Source: `next_wake_at` in the autopilot state.

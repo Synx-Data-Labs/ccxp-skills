@@ -65,6 +65,18 @@ export type ApStats = {
   trend: 'up' | 'down' | 'flat'
 }
 
+/** The autopilot's EFFECTIVE parallelism settings (`autopilot-state.sh config-show --json`); the HUD never re-derives defaults or clamps. */
+export type ApConfig = {
+  /** Cycles allowed at the same time. */
+  max_dop: number
+  /** Slots kept back from routine picks; null until the autopilot knows the key (then max_dop is shown alone). */
+  reserved_slots: number | null
+  /** `override` (set in dev/.autopilot-config.json) or `default`. */
+  source: 'override' | 'default'
+  /** dev/.autopilot-config.json exists. */
+  file: boolean
+}
+
 export type Autopilot = {
   status: string
   prefix: string
@@ -211,6 +223,8 @@ export type HelperData = {
   /** Commits behind and ahead of the upstream (or origin's default branch); null when level, detached or unknown. */
   behind: Behind | null
   autopilot: Autopilot | null
+  /** The autopilot's effective max_dop and reserved slots; null unless the autopilot is on/paused or a config file exists. */
+  ap_config: ApConfig | null
   /** Job ledger (hud/scripts/ledger.sh), null when there is none. */
   ledger: Ledger | null
   /** dev/TODO/queue.md breakdown; null when the repo has no queue. */
