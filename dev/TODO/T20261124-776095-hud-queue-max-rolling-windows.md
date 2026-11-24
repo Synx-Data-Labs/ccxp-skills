@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 1
 source: owner request, this conversation, 2026-11-24
 description: HUD queue max shows three non-overlapping rolling windows (last month / last week / this week) so the trend is visible

@@ -346,7 +346,7 @@ test('CI colours: green passing, yellow running, grey unknown get no highlight; 
 })
 
 test('AP and queue share the second row, queue right after the AP and 24h cells, at wide and narrow widths', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
   const s = withHelper({ autopilot: { ...AP, stats: { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' } }, queue: q }, HELPER_AP)
   for (const cols of [200, 140]) {
     const rows = bandRows(s, CI, cols)
@@ -663,7 +663,7 @@ test('details: sections in order: SESSION, REPO, WORK, RELEASE (no queue data, n
 
 test('details: the section order is SESSION, REPO, BUILD, SUPPORT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
   const snap = fullSnap({ rateUsed: 42 }) as any
-  snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
+  snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
   const lines = detail(snap, 400, CI)
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(DETAIL_LABELS)
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing .* │ nightly \+-\+\+\.-\+ \(last 7 days\)/)
@@ -1367,30 +1367,32 @@ test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
 
 // --- queue breakdown (dev/TODO/queue.md) ---
 
-const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
 // Short names: the queue cell is dropped early on a tight row (before repo/task shrink), so the long BASE names would crowd it out.
 const SHORT = { repo: 'r', branch: 'b', task_id: 'T1', task_title: 't' }
 
 test('queue: parseHelper clamps the counts and a missing or malformed queue is null', async () => {
   expect(parseHelper(HELPER)!.queue).toBeNull()
   expect(parseHelper(JSON.stringify({ ...BASE, queue: 'x' }))!.queue).toBeNull()
-  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 'a', decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, revisited: 0, autoparked: 0 })
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 7, decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, autoparked: 0 })
 })
 
-test('queue: the band shows the compact form, details spell the labels out, claimed/revisited/auto-parked only when above 0', async () => {
+test('queue: the band shows the compact form, details spell the labels out, claimed/auto-parked only when above 0, no revisited count', async () => {
   const s = withHelper({ ...SHORT, queue: QUEUE })
   expect(text(bandRows(s as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x')
   expect(detail(s as any, 140).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics')
   expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 160).join('\n')).toContain('3 epics | 2 claimed')
-  const ap = { ...QUEUE, revisited: 12, autoparked: 2 }
-  expect(detail(withHelper({ queue: ap }) as any, 160).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 12 revisited | 2 auto-parked')
-  expect(text(bandRows(withHelper({ ...SHORT, queue: ap }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 12v 2a')
-  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 1, revisited: 1, autoparked: 1 } }) as any, 200).join('\n')).toContain('3 epics | 1 claimed | 1 revisited | 1 auto-parked')
+  const ap = { ...QUEUE, autoparked: 2 }
+  expect(detail(withHelper({ queue: ap }) as any, 160).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 2 auto-parked')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: ap }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 2a')
+  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 1, autoparked: 1 } }) as any, 200).join('\n')).toContain('3 epics | 1 claimed | 1 auto-parked')
   // a count of 1 reads singular for epics, 0 stays plural
   const one = detail(withHelper({ queue: { ...QUEUE, epic: 1, held: 0 } }) as any, 160).join('\n')
   expect(one).toContain('0 held | 1 epic')
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('claimed')
   expect(text(bandRows(s as any, NOCI, 140))).not.toContain('revisited')
+  // a stale helper that still sends revisited gets no such count
+  expect(detail(withHelper({ queue: { ...QUEUE, revisited: 9 } }) as any, 200).join('\n')).not.toContain('revisited')
   // the old marker-derived buckets are gone
   expect(detail(s as any, 140).join('\n')).not.toMatch(/decision|external|blocked/)
 })
@@ -1402,50 +1404,68 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
 
-// --- queue high watermark (180d / 30d / 7d) ---
+// --- queue maxima: last month / last week / this week (adjacent rolling windows) ---
 
-const HWM = { d180: 90, d30: 61, d7: 52 }
+const HWM = { lm: 61, lw: 74, tw: 83 }
 
-test('queue hwm: parseHelper keeps a complete watermark, nests the windows and the current length, ignores anything else', async () => {
+test('queue max: parseHelper keeps this week (never below the current length), nulls windows without data, ignores anything else', async () => {
   const get = (hwm: unknown) => parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, hwm } }))!.queue!.hwm
-  expect(get(HWM)).toEqual(HWM)
-  expect(get({ d180: 10, d30: 20, d7: 30 })).toEqual({ d180: 44, d30: 44, d7: 44 }) // never below the nested window or the current length (44)
-  expect(get({ d180: 50.9, d30: -3, d7: 0 })).toEqual({ d180: 50, d30: 44, d7: 44 })
-  for (const bad of [undefined, null, 'x', [], {}, { d180: 9, d30: 5 }, { d180: '9', d30: 5, d7: 1 }, { d180: 9, d30: NaN, d7: 1 }, { life: 9, d30: 5, d7: 1 }]) expect(get(bad)).toBeUndefined()
+  expect(get({ lm: 61, lw: 74, tw: 83 })).toEqual({ lm: 61, lw: 74, tw: 83 })
+  expect(get({ lm: 10, lw: 20, tw: 30 })).toEqual({ lm: 10, lw: 20, tw: 44 }) // this week is never below the current length (44); the older windows are NOT nested
+  expect(get({ lm: null, lw: null, tw: 50.9 })).toEqual({ lm: null, lw: null, tw: 50 })
+  expect(get({ tw: 50 })).toEqual({ lm: null, lw: null, tw: 50 })
+  expect(get({ lm: -3, lw: 'x', tw: 50 })).toEqual({ lm: 0, lw: null, tw: 50 })
+  // the old nested shape (180d/30d/7d) and anything incomplete draw no maxima
+  for (const bad of [undefined, null, 'x', [], {}, { d180: 90, d30: 61, d7: 52 }, { lm: 1, lw: 2 }, { tw: '9' }, { tw: NaN }]) expect(get(bad)).toBeUndefined()
 })
 
-test('queue hwm: the band shows max 180d / 30d / 7d, details too; no watermark means the cell is unchanged', async () => {
+test('queue max: the band shows max last month/last week/this week with a trend arrow; details spell the labels out; no max means the cell is unchanged', async () => {
   const s = withHelper({ ...SHORT, queue: { ...QUEUE, hwm: HWM } })
-  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6h 3x · max 90 180d / 61 30d / 52 7d')
-  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | max 90 180d / 61 30d / 52 7d')
+  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6h 3x · max 61/74/83 ▲')
+  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | max 61 last month / 74 last week / 83 this week ▲')
   expect(text(bandRows(withHelper({ ...SHORT, queue: QUEUE }) as any, NOCI, 160))).not.toContain('max')
   expect(detail(withHelper({ queue: QUEUE }) as any, 200).join('\n')).not.toContain('max')
   // the source marker stays in front of the numbers
-  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6h 3x · max 90 180d / 61 30d / 52 7d')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6h 3x · max 61/74/83 ▲')
+  // the 180d/30d/7d wording is gone
+  expect(text(bandRows(s as any, NOCI, 160))).not.toMatch(/180d|30d/)
 })
 
-test('queue hwm: a narrow band degrades max 180d/30d/7d, then max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
+test('queue max: the arrow compares this week with last week: up, down, nothing when equal or when there is no last week', async () => {
+  const band = (hwm: unknown) => text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, hwm } }) as any, NOCI, 160))
+  expect(band({ lm: 40, lw: 50, tw: 60 })).toContain('max 40/50/60 ▲')   // growing: three different, rising numbers
+  expect(band({ lm: 70, lw: 60, tw: 50 })).toContain('max 70/60/50 ▼')   // shrinking
+  expect(band({ lm: 50, lw: 50, tw: 50 })).toContain('max 50/50/50')    // flat
+  expect(band({ lm: 50, lw: 50, tw: 50 })).not.toMatch(/[▲▼]/)
+  expect(band({ lm: null, lw: null, tw: 44 })).toContain('max -/-/44')  // no history yet: this week only
+  expect(band({ lm: null, lw: null, tw: 44 })).not.toMatch(/[▲▼]/)
+  expect(band({ lm: null, lw: 40, tw: 44 })).toContain('max -/40/44 ▲')
+  expect(detail(withHelper({ queue: { ...QUEUE, hwm: { lm: null, lw: null, tw: 44 } } }) as any, 200).join('\n')).toContain('max - last month / - last week / 44 this week')
+})
+
+test('queue max: a narrow band degrades max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
   const q = { ...QUEUE, hwm: HWM }
   const seen = new Set<string>()
   for (let cols = 160; cols >= 22; cols--) {
     const rows = bandRows(withHelper({ ...SHORT, task_title: '', queue: q, ledger: null, ci: null }) as any, NOCI, cols)
     const t = text(rows)
     for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
-    if (t.includes('max 90 180d / 61 30d / 52 7d')) seen.add('long')
-    else if (t.includes('max 90/61/52')) seen.add('short')
+    if (t.includes('max 61/74/83 ▲')) seen.add('max')
     else if (t.includes('queue 44 = 30r')) seen.add('plain')
     else if (t.includes('queue 30/44')) seen.add('tiny')
+    // never a half-cut maximum such as "max 61/7"
+    expect(t).not.toMatch(/max \d+(\/\d*)?( ▲| ▼)?$/m)
   }
-  expect([...seen].sort()).toEqual(['long', 'plain', 'short', 'tiny'])
-  // never a half-cut watermark such as "max 90 180d / 6"
-  for (let cols = 60; cols >= 40; cols--) expect(text(bandRows(withHelper({ ...SHORT, queue: q, ledger: null, ci: null }) as any, NOCI, cols))).not.toMatch(/max \d+ 180d \/( \d+( 30d)?)?$/m)
+  expect([...seen].sort()).toEqual(['max', 'plain', 'tiny'])
 })
 
-test('queue hwm: at the 180-day high the max reads in the warning colour, otherwise dim', async () => {
-  const find = (total: number) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, held: 0, epic: 0, hwm: { d180: 90, d30: 90, d7: 90 } } }) as any, NOCI, 200).flat().find(x => x.text.includes('max 90'))!
-  expect(find(90).color).toBe('warning')
-  expect(find(44).color).toBeUndefined()
-  expect(find(44).dim).toBe(true)
+test('queue max: at the highest of the three the max reads in the warning colour, otherwise dim', async () => {
+  const find = (total: number, hwm: unknown) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, held: 0, epic: 0, hwm } }) as any, NOCI, 200).flat().find(x => x.text.includes('max '))!
+  expect(find(90, { lm: 60, lw: 70, tw: 90 }).color).toBe('warning')
+  expect(find(44, { lm: 60, lw: 70, tw: 90 }).color).toBeUndefined()
+  expect(find(44, { lm: 60, lw: 70, tw: 90 }).dim).toBe(true)
+  // the queue is at this week's peak but an earlier window was higher: not at the highest
+  expect(find(44, { lm: 90, lw: 60, tw: 44 }).color).toBeUndefined()
 })
 
 // --- autopilot 24h progress and lifetime average -------------------------------------------------
@@ -1559,7 +1579,7 @@ test('AP stats: the details WORK row keeps the 24h cell in full and, when narrow
 // --- CI top row: detail view, highlight, NO_COLOR ---
 
 test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
   const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 400, CI)
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'WORK', 'QUEUE'])
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
@@ -1573,7 +1593,7 @@ test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its ow
 
 // --- details: the AP line (AP, next loop, 24h average) and the queue on its own line right after it ---
 
-const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
 const QLINE = 'queue 44 = 30 ready | 6 held | 3 epics'
 const linesOf = (helper: object, cols = 240, now = DETAIL_NOW) => detailRows(withHelper({ ci: null, ...helper }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join(''))
 const apLineOf = (helper: object, cols = 400) => apPart(linesOf(helper, cols))
@@ -1793,7 +1813,7 @@ test('nightly cell: `nightly ++-++-+ · 30d: 16✓ 14✗`, coloured per characte
 })
 
 test('nightly cell: shrinks strip+counts, then strip alone, and is dropped only after the queue cell', async () => {
-  const s = withHelper({ nightly: { red: 14, green: 16, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 } })
+  const s = withHelper({ nightly: { red: 14, green: 16, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 } })
   const rows: string[] = []
   for (let w = 200; w >= 20; w -= 1) rows.push(text(bandRows(s as any, NOCI, w)))
   expect(rows.some(t => t.includes('nightly ++-++-+ 16✓ 14✗') && !t.includes('30d:'))).toBe(true)
@@ -1816,7 +1836,7 @@ test('details: the nightly cell spells out the 7-day strip and the 30-day green 
 })
 
 test('details: the nightly cell sits right after the CI cell in the BUILD row (first when there is no CI), never in the queue row', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, revisited: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
   const helper = { ...fullSnap().helper, queue: q, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
   const ciOn = detail(withHelper(helper), 400, CI)
   expect(sect(ciOn, 'BUILD')).toMatch(/^CI \(nightly\.yml\).* │ nightly \+-\+\+\.-\+ \(last 7 days\) · last 30 days: 16 green ✓ \/ 14 red ✗$/)
@@ -1890,7 +1910,7 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
 //   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> WORK
-//   5 queue             queue (branch) N = ready | held | epics | claimed | revisited | auto-parked | max windows -> QUEUE
+//   5 queue             queue (branch) N = ready | held | epics | claimed | auto-parked | max last month/last week/this week -> QUEUE
 //   6 you               you HH:MM (age)                                           -> SESSION
 //   6 version           ccxp X (latest | Y available)                             -> RELEASE
 //   6 url               plugin GitHub URL                                         -> RELEASE
@@ -1912,7 +1932,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['AP', 'WORK', /AP on 2\/6h 3 loops ✓2 merged/],
   ['next loop', 'WORK', /next loop due|next loop overdue|next loop \d/],
   ['AP 24h', 'WORK', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
-  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| 4 auto-parked \| max 90 180d \/ 61 30d \/ 52 7d/],
+  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| 4 auto-parked \| max 61 last month \/ 74 last week \/ 83 this week ▲/],
   ['version', 'RELEASE', /ccxp 5\.0\.0 \(5\.1\.0 available\)/],
   ['plugin URL', 'RELEASE', /https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills/],
   ['unreleased', 'RELEASE', /4 unreleased/],
@@ -1923,7 +1943,7 @@ test('details sections: every cell of the old details-on output is still present
   s.helper = {
     ...s.helper,
     autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 60, stats: STATS },
-    queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 2, revisited: 0, autoparked: 4, branch: 'main', hwm: { d180: 90, d30: 61, d7: 52 } },
+    queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 2, autoparked: 4, branch: 'main', hwm: { lm: 61, lw: 74, tw: 83 } },
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
     issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
     bus: { unread: 2, from: 'home' },

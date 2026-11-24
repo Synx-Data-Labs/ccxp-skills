@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, QueueMax, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -132,19 +132,18 @@ export function parseHelper(stdout: string): HelperData | null {
     const q = qu as Record<string, unknown>
     // Counts are clamped to whole non-negative numbers; the buckets are the helper's job to keep summing to total.
     const n = (x: unknown) => Math.max(0, Math.floor(num(x)))
-    queue = { total: n(q.total), ready: n(q.ready), held: n(q.held), epic: n(q.epic), claimed: n(q.claimed), revisited: n(q.revisited), autoparked: n(q.autoparked) }
+    queue = { total: n(q.total), ready: n(q.ready), held: n(q.held), epic: n(q.epic), claimed: n(q.claimed), autoparked: n(q.autoparked) }
     // Untrusted: the branch is only drawn when it is a plain git ref name (the same shape the config accepts for `ci.branch`).
     const branch = str(q.branch)
     if (q.source === 'default-branch' && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch)) queue.branch = branch
     else if (q.fallback === true) queue.fallback = true
-    // The watermark is drawn only when all three numbers are there; the windows are nested by definition, so enforce it (and the current length).
+    // The maxima are three separate windows (not nested): only this week is required (never below the current length); an older window the helper has no data for is null and drawn as `-`.
     const h = q.hwm
     if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
       const hw = h as Record<string, unknown>
-      if ([hw.d180, hw.d30, hw.d7].every(x => typeof x === 'number' && Number.isFinite(x))) {
-        const d7 = Math.max(n(hw.d7), queue.total)
-        const d30 = Math.max(n(hw.d30), d7)
-        queue.hwm = { d180: Math.max(n(hw.d180), d30), d30, d7 }
+      if (typeof hw.tw === 'number' && Number.isFinite(hw.tw)) {
+        const old = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? n(x) : null)
+        queue.hwm = { lm: old(hw.lm), lw: old(hw.lw), tw: Math.max(n(hw.tw), queue.total) }
       }
     }
   }
@@ -835,12 +834,19 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
   }
 }
 
+const maxNum = (x: number | null) => (x === null ? '-' : String(x))
+/** ` ▲` when this week's peak is above last week's, ` ▼` below, nothing when equal or when there is no last week. */
+const trendMark = (m: QueueMax) => (m.lw === null || m.tw === m.lw ? '' : m.tw > m.lw ? ' ▲' : ' ▼')
+/** Warning colour while the queue sits at the highest of the three maxima. */
+const maxTone = (total: number, m: QueueMax) => (total > 0 && total >= Math.max(m.lm ?? 0, m.lw ?? 0, m.tw) ? ('warning' as const) : undefined)
+
 /**
  * Details (`full`): `queue 44 = 30 ready | 6 held | 3 epics`, the labels always in full
  * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); `epics` reads
  * singular at a count of 1. The one-row band (`!full`) starts at `queue 44 = 30r 6h 3x` and shrinks to
- * `queue 30/44`. `claimed` (held by another session), `revisited` and `autoparked` (autopilot: visited
- * without progress / parked this run) show only above 0: `2c`, `12v`, `2a` in the band.
+ * `queue 30/44`. `claimed` (held by another session) and `autoparked` (autopilot: parked this
+ * run) show only above 0: `2c`, `2a` in the band. The max block `max 61/74/83 ▲` (details spell the labels out)
+ * shows the queue's largest length in the previous 4 weeks, last week and this week (see hud-queue-hwm.sh).
  */
 export function queueVariants(q: Queue, full: boolean): Variants {
   const parts: Array<[string, string, string, number]> = [
@@ -849,7 +855,6 @@ export function queueVariants(q: Queue, full: boolean): Variants {
     ['epic', 'epics', 'x', q.epic],
   ]
   if (q.claimed > 0) parts.push(['claimed', 'claimed', 'c', q.claimed])
-  if (q.revisited > 0) parts.push(['revisited', 'revisited', 'v', q.revisited])
   if (q.autoparked > 0) parts.push(['auto-parked', 'auto-parked', 'a', q.autoparked])
   if (full) {
     const long: Seg[] = [{ text: `queue${q.branch ? ` (${q.branch})` : q.fallback ? ' (working tree, origin unavailable)' : ''} ${q.total} = ` }]
@@ -858,8 +863,8 @@ export function queueVariants(q: Queue, full: boolean): Variants {
       long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
     })
     if (q.hwm) {
-      const tone = q.total >= q.hwm.d180 && q.hwm.d180 > 0 ? 'warning' : undefined
-      long.push({ text: ' | ', dim: true }, { text: `max ${q.hwm.d180} 180d / ${q.hwm.d30} 30d / ${q.hwm.d7} 7d`, dim: !tone, color: tone })
+      const m = q.hwm, tone = maxTone(q.total, m)
+      long.push({ text: ' | ', dim: true }, { text: `max ${maxNum(m.lm)} last month / ${maxNum(m.lw)} last week / ${m.tw} this week${trendMark(m)}`, dim: !tone, color: tone })
     }
     return [long]
   }
@@ -868,11 +873,10 @@ export function queueVariants(q: Queue, full: boolean): Variants {
   const short: Seg[] = [{ text: `queue${at} ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
   const tiny: Seg[] = [{ text: `queue${at} ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
   if (!hw) return [short, tiny]
-  // High watermark: wide `max 40 180d / 31 30d / 22 7d`, then `max 40/31/22` (180d/30d/7d), then dropped. At the 180-day high: warning colour.
-  const tone = q.total >= hw.d180 && hw.d180 > 0 ? 'warning' : undefined
+  // Maxima: `max 31/40/52 ▲` (last month / last week / this week, `-` = no history that old, the arrow compares this week with last week), then dropped. At the highest of the three: warning colour.
+  const tone = maxTone(q.total, hw)
   return [
-    [...short, { text: ` · max ${hw.d180} 180d / ${hw.d30} 30d / ${hw.d7} 7d`, dim: !tone, color: tone }],
-    [...short, { text: ` · max ${hw.d180}/${hw.d30}/${hw.d7}`, dim: !tone, color: tone }],
+    [...short, { text: ` · max ${maxNum(hw.lm)}/${maxNum(hw.lw)}/${hw.tw}${trendMark(hw)}`, dim: !tone, color: tone }],
     short,
     tiny,
   ]
