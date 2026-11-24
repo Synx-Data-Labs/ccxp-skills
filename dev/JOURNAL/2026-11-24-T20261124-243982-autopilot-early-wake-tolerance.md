@@ -32,8 +32,9 @@ type: bug
 
 ## Closed (2026-11-24)
 
-- Shipped in the PR that carries this file. Finding: a 30 s tolerance already existed in `_ap_due` (hard-coded); it was too small for the observed 7-50 s early wakes. Now `AP_WAKE_TOLERANCE` (default 59, env override; must stay below the 60 s progress delay), tests in `tests/autopilot_state.bats` (exact, 10 s, 50 s, 59 s early dispatch; 60 s and 5 min early already-on), parallel.md pairing note (SKILL.md left untouched: autopilot sits exactly at its skill-quality baseline of 83, any added prose trips the gate).
+- Shipped in the PR that carries this file. Finding: a 30 s tolerance already existed in `_ap_due` (hard-coded); it was too small for the observed 7-50 s early wakes. Now `AP_WAKE_TOLERANCE` (default 59, env override; below the 60 s progress delay so an immediate typed on after a record is still already-on), tests in `tests/autopilot_state.bats` (exact, 10 s, 50 s, 59 s early dispatch; 60 s and 5 min early already-on), parallel.md pairing note (SKILL.md left untouched: autopilot sits exactly at its skill-quality baseline of 83, any added prose trips the gate).
 - Unverified: the minute-rounding mechanism in ScheduleWakeup (inferred from the owner's timestamps). A release is needed for the plugin to ship it (not done here).
+- Trade-off (review finding): an early wake and a typed `on` look the same, so within 59 s of `next_wake_at` a typed `on` dispatches; for the 60 s progress delay that is all but the first second. Delays of 120 s and more keep a typed `on` out for most of the wait. Accepted: dispatch only happens with a free slot, and the owner asked for this tolerance; pinned by a test.
 - Decision: claim PR and separate design PR skipped (one-bug, self-evident, owner-approved); task filed, fixed and closed in one PR.
 
 ## Skills invoked
