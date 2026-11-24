@@ -16,7 +16,7 @@
 #              The dedupe check looks for an open task naming the ref; the retro agent files
 #              the `file` rows with /new-task (one task per row, refs and target in the body)
 #   retire-enforced [--apply]   decisions with `enforced-by` (ledger.sh decision enforce) whose
-#              target is a file (blob) on origin/main or a merged PR number AND that a T<id> task
+#              target is a file (blob) on origin/main or a PR number merged into main AND that a T<id> task
 #              file names both the ref and the target (origin/main is not fetched here): dry-run
 #              by default; --apply runs `ledger.sh decision retire <ref> "folded into ..."`.
 #              The only retirement this script performs (owner rule, d155 follow-up).
@@ -209,8 +209,8 @@ function pr-resolved() { # $1 repo, $2 enforced-by; prints a verdict word on std
   if [[ "$t" =~ ^T[0-9]{8}-[0-9]{6}$ ]]; then echo task
   elif [[ "$t" =~ ^#?[0-9]+$ ]]; then
     gh="${PR_GH:-bash $PR_ROOT/_gh/gh.sh}"
-    state=$(cd "$repo" && $gh pr view "${t#\#}" --json state -q .state 2>/dev/null) || { echo missing; return 0; }
-    [[ "$state" == MERGED ]] && echo ok || echo unmerged
+    state=$(cd "$repo" && $gh pr view "${t#\#}" --json state,baseRefName -q '.state + " " + .baseRefName' 2>/dev/null) || { echo missing; return 0; }
+    [[ "$state" == "MERGED main" ]] && echo ok || echo unmerged
   elif [[ "$t" == /* || "$t" == *..* ]]; then echo missing
   elif [[ "$(git -C "$repo" cat-file -t "origin/main:${t#./}" 2>/dev/null)" == blob ]]; then echo ok
   else echo missing; fi
