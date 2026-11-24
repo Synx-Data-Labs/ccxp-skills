@@ -7,17 +7,21 @@ setup() {
   MODEL="$BATS_TEST_DIRNAME/../hud/model.ts"
 }
 
-@test "every xVariants helper called in hud/model.ts is defined there" {
-  called=$(grep -v '^ *\(//\|\*\|/\*\)' "$MODEL" | grep -oE '\b[a-zA-Z]+Variants\(' | tr -d '(' | sort -u)
-  [ -n "$called" ]
-  for fn in $called; do
-    grep -qE "^(export )?function $fn\(" "$MODEL" || { echo "undefined helper: $fn"; return 1; }
+# Prints each undefined helper of the file given as $1; empty output means every called helper is defined.
+undefined_helpers() {
+  local f="$1" fn
+  for fn in $(grep -v '^ *\(//\|\*\|/\*\)' "$f" | grep -oE '\b[a-zA-Z]+Variants\(' | tr -d '(' | sort -u); do
+    grep -qE "^(export )?function $fn\(" "$f" || echo "$fn"
   done
+}
+
+@test "every xVariants helper called in hud/model.ts is defined there" {
+  grep -qE '\bbusVariants\(' "$MODEL"
+  [ -z "$(undefined_helpers "$MODEL")" ]
 }
 
 @test "the guard catches an undefined helper" {
   tmp="$BATS_TEST_TMPDIR/model.ts"
   grep -v 'function busVariants' "$MODEL" > "$tmp"
-  ! grep -qE "^(export )?function busVariants\(" "$tmp"
-  grep -qE '\bbusVariants\(' "$tmp"
+  [ "$(undefined_helpers "$tmp")" = "busVariants" ]
 }
