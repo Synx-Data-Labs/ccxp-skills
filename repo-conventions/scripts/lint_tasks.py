@@ -24,6 +24,8 @@ ALLOWED = REQUIRED | {
     "source-url", "support-issue", "support-report",
     # task dimensions (T20261114-352324): time / place / person / type
     "when", "when-end", "place", "person", "type",
+    # autopilot tier (T20261124-345756): 1..4, default 3
+    "tier",
     # runtime (tooling-written: /stage, IPM, /focus)
     "scheduled", "claimed_by", "claimed_role", "claimed_takeover_from", "iteration",
 }
@@ -128,6 +130,19 @@ def check_estimation(ctx):
                 f"the Fibonacci-style points {{1, 2, 3, 5, 8}} "
                 f"(T20260924-232855 — duration buckets retired, no "
                 f"compatibility window)"]
+    return []
+
+
+TIER_RE = re.compile(r"^[1-4]$")
+
+
+def check_tier(ctx):
+    if "tier" not in ctx.keys:
+        return []
+    v = re.sub(r"\s+#.*$", "", str(ctx.keys["tier"]).strip()).strip("\"'")
+    if not TIER_RE.match(v):
+        return [f"tier '{ctx.keys['tier']}' must be an integer 1..4 "
+                f"(1 urgent, 2 support, 3 default, 4 low)"]
     return []
 
 
@@ -335,7 +350,7 @@ def warnings_for(path, today=None):
 
 
 CHECKS = (check_required, check_status, check_estimation,
-          check_allowlist, check_h1_id, check_scheduled_when_advanced,
+          check_allowlist, check_tier, check_h1_id, check_scheduled_when_advanced,
           check_not_done_in_todo, check_dimensions, check_typed_blockers)
 
 
