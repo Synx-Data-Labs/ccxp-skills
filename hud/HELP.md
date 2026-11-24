@@ -62,7 +62,7 @@ Background jobs from the job ledger: green `READY` = no job is running, yellow `
 
 ## queue
 
-Where `dev/TODO/queue.md` stands: `queue 44 = 30r 6h 3x` = 30 ready to take, 6 held (blocked or waiting), 3 epics. `2c` claimed by another session and `2a` auto-parked appear only when above 0. After it, `max 61/74/83 ▲` is the largest queue length in the 4 weeks before last week (14 to 42 days ago), last week (7 to 14 days ago) and this week (the last 7 days); `▲`/`▼` compares this week with last week, `-` means no history that old, and it turns yellow while the queue sits at the highest of the three. Narrow: the max drops first, then `queue 30/44`. Read from the default branch on origin (no checkout), or from the working tree with `queue.source`. No `queue.md`, no cell. Switch: `queue`.
+Where `dev/TODO/queue.md` stands: `queue 44 = 30r 6h 3x` = 30 ready to take, 6 held (blocked or waiting), 3 epics. `2c` claimed by another session, `2a` auto-parked and `2hd` on autopilot hold appear only when above 0 (`h` is held by status, `hd` is held by the autopilot: two different counts). After it, `max 61/74/83 ▲` is the largest queue length in the 4 weeks before last week (14 to 42 days ago), last week (7 to 14 days ago) and this week (the last 7 days); `▲`/`▼` compares this week with last week, `-` means no history that old, and it turns yellow while the queue sits at the highest of the three. Narrow: the max drops first, then `queue 30/44`. Read from the default branch on origin (no checkout), or from the working tree with `queue.source`. No `queue.md`, no cell. Switch: `queue`.
 
 ## nightly
 
