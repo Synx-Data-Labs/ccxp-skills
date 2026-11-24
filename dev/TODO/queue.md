@@ -77,3 +77,4 @@ reprioritize.
 - [T20261124-182499](T20261124-182499-autopilot-max-dop-min-3-reserved-slots.md): Autopilot: max_dop at least 3, add reserved_slots (default 2)
 - [T20261124-776095](T20261124-776095-hud-queue-max-rolling-windows.md): HUD queue max: non-overlapping rolling windows
 - [T20261124-317732](T20261124-317732-hud-show-commits-behind-remote.md): HUD: show commits behind the remote
+- [T20261124-239428](T20261124-239428-hud-show-autopilot-max-dop.md): HUD shows the autopilot's effective max_dop
