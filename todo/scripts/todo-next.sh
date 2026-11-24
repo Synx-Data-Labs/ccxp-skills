@@ -20,8 +20,9 @@
 #     --nth N       list only the Nth survivor (1-based) instead of the first 3; with --check,
 #                   exit 0 only when at least N survive
 #     --tier        only tasks whose effective tier (todo-tier: frontmatter `tier:`, default 3) is listed
-#     --ids         print only the id of every survivor, one per line, in queue order (no limit; for the
-#                   autopilot's tier cursor); wins over --nth and --check
+#     --ids         print only "<id><TAB><tier>" for every survivor, one per line, in queue order (no limit;
+#                   one scan for the autopilot's tier cursor); wins over --nth and --check. Peer claims are
+#                   NOT checked here (that is the slow part): the caller checks the few it takes
 #     --here        only tasks with no `place:` or a place in the profile file's `here:` list
 #     --when W      only tasks whose `when` matches W (today|tomorrow|week|overdue|<date>)
 #                   Both are filters only (T20261114-380745): the pick is still the first
@@ -117,12 +118,12 @@ function todo-next-main() {
       case ",$tiers," in *",$(todo-tier "$task_file"),"*) : ;; *) continue ;; esac
     fi
 
+    if [ "$ids" = 1 ]; then printf '%s\t%s\n' "$id" "$(todo-tier "$task_file")"; continue; fi
+
     claim="$(todo-claim-state "$id" "$TODO_LIB_REPO_ROOT")"
     case "$claim" in
       peer:*) continue ;;
     esac
-
-    if [ "$ids" = 1 ]; then picked=$((picked+1)); printf '%s\n' "$id"; continue; fi
 
     picked=$((picked+1))
     if [ "$nth" -gt 0 ]; then

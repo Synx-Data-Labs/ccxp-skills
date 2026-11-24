@@ -1908,9 +1908,9 @@ _tier_repo() { _nh_repo; echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/qu
   _tier_repo
   _tier_task T20260101-000001 2 a; _nh_task T20260101-000002 Open b; _tier_task T20260101-000003 2 c
   cd "$AUTOPILOT_REPO_ROOT"
-  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids; [ "$output" = $'T20260101-000001\nT20260101-000002\nT20260101-000003' ]
-  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 2; [ "$output" = $'T20260101-000001\nT20260101-000003' ]
-  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 3; [ "$output" = T20260101-000002 ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids; [ "$output" = $'T20260101-000001\t2\nT20260101-000002\t3\nT20260101-000003\t2' ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 2; [ "$output" = $'T20260101-000001\t2\nT20260101-000003\t2' ]
+  run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 3; [ "$output" = $'T20260101-000002\t3' ]
   run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --ids --tier 4; [ -z "$output" ]
   run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 5; [ "$status" -eq 2 ]
   run bash "$REPO_ROOT/todo/scripts/todo-next.sh" --tier 2 --check; [ "$status" -eq 0 ]
