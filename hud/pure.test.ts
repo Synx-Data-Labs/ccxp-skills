@@ -346,7 +346,7 @@ test('CI colours: green passing, yellow running, grey unknown get no highlight; 
 })
 
 test('AP and queue share the second row, queue right after the AP and 24h cells, at wide and narrow widths', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
   const s = withHelper({ autopilot: { ...AP, stats: { has_history: true, merged_24h: 8, cycles_24h: 26, avg_merged_24h: 5.2, trend: 'up' } }, queue: q }, HELPER_AP)
   for (const cols of [200, 140]) {
     const rows = bandRows(s, CI, cols)
@@ -663,7 +663,7 @@ test('details: sections in order: SESSION, REPO, WORK, RELEASE (no queue data, n
 
 test('details: the section order is SESSION, REPO, BUILD, SUPPORT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
   const snap = fullSnap({ rateUsed: 42 }) as any
-  snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
+  snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
   const lines = detail(snap, 400, CI)
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(DETAIL_LABELS)
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing .* │ nightly \+-\+\+\.-\+ \(last 7 days\)/)
@@ -1367,25 +1367,25 @@ test('ciFromAnswer: non-workflow URLs are still refused with a reason', () => {
 
 // --- queue breakdown (dev/TODO/queue.md) ---
 
-const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0, apholds: 0 }
+const QUEUE = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, apholds: 0 }
 // Short names: the queue cell is dropped early on a tight row (before repo/task shrink), so the long BASE names would crowd it out.
 const SHORT = { repo: 'r', branch: 'b', task_id: 'T1', task_title: 't' }
 
 test('queue: parseHelper clamps the counts and a missing or malformed queue is null', async () => {
   expect(parseHelper(HELPER)!.queue).toBeNull()
   expect(parseHelper(JSON.stringify({ ...BASE, queue: 'x' }))!.queue).toBeNull()
-  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 7, decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, autoparked: 0, apholds: 0 })
+  expect(parseHelper(JSON.stringify({ ...BASE, queue: { total: 5, ready: -2, held: 1.9, revisited: 7, decision: 4 } }))!.queue).toEqual({ total: 5, ready: 0, held: 1, epic: 0, claimed: 0, apholds: 0 })
 })
 
-test('queue: the band shows the compact form, details spell the labels out, claimed/auto-parked only when above 0, no revisited count', async () => {
+test('queue: the band shows the compact form, details spell the labels out, claimed only when above 0, no revisited count', async () => {
   const s = withHelper({ ...SHORT, queue: QUEUE })
   expect(text(bandRows(s as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x')
   expect(detail(s as any, 140).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics')
   expect(detail(withHelper({ queue: { ...QUEUE, claimed: 2 } }) as any, 160).join('\n')).toContain('3 epics | 2 claimed')
+  // the auto-parked token is gone: a stray `autoparked` in an old helper answer draws nothing
   const ap = { ...QUEUE, autoparked: 2 }
-  expect(detail(withHelper({ queue: ap }) as any, 160).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 2 auto-parked')
-  expect(text(bandRows(withHelper({ ...SHORT, queue: ap }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 2a')
-  expect(detail(withHelper({ queue: { ...QUEUE, claimed: 1, autoparked: 1 } }) as any, 200).join('\n')).toContain('3 epics | 1 claimed | 1 auto-parked')
+  expect(detail(withHelper({ queue: ap }) as any, 160).join('\n')).not.toContain('auto-parked')
+  expect(text(bandRows(withHelper({ ...SHORT, queue: ap }) as any, NOCI, 140))).not.toMatch(/\b2a\b/)
   // a count of 1 reads singular for epics, 0 stays plural
   const one = detail(withHelper({ queue: { ...QUEUE, epic: 1, held: 0 } }) as any, 160).join('\n')
   expect(one).toContain('0 held | 1 epic')
@@ -1399,9 +1399,9 @@ test('queue: autopilot holds show as `<n>hd` (band) and `on autopilot hold` (det
   const hd = { ...QUEUE, apholds: 2 }
   expect(text(bandRows(withHelper({ ...SHORT, queue: hd }) as any, NOCI, 140))).toContain('queue 44 = 30r 6h 3x 2hd')
   expect(detail(withHelper({ queue: hd }) as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 held | 3 epics | 2 on autopilot hold')
-  // appended after the 2c/2a tokens
-  const all = { ...QUEUE, claimed: 1, autoparked: 2, apholds: 3 }
-  expect(text(bandRows(withHelper({ ...SHORT, queue: all }) as any, NOCI, 160))).toContain('3x 1c 2a 3hd')
+  // appended after the 2c token
+  const all = { ...QUEUE, claimed: 1, apholds: 3 }
+  expect(text(bandRows(withHelper({ ...SHORT, queue: all }) as any, NOCI, 160))).toContain('3x 1c 3hd')
   // zero (and an older helper answer without the key) shows nothing
   for (const q of [{ ...QUEUE, apholds: 0 }, QUEUE]) {
     expect(text(bandRows(withHelper({ ...SHORT, queue: q }) as any, NOCI, 140))).not.toContain('hd')
@@ -1597,7 +1597,7 @@ test('AP stats: the details WORK row keeps the 24h cell in full and, when narrow
 // --- CI top row: detail view, highlight, NO_COLOR ---
 
 test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
   const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 400, CI)
   expect(lines.map(l => l.slice(0, 7).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'WORK', 'QUEUE'])
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
@@ -1611,7 +1611,7 @@ test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its ow
 
 // --- details: the AP line (AP, next loop, 24h average) and the queue on its own line right after it ---
 
-const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
+const AP_Q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
 const QLINE = 'queue 44 = 30 ready | 6 held | 3 epics'
 const linesOf = (helper: object, cols = 240, now = DETAIL_NOW) => detailRows(withHelper({ ci: null, ...helper }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join(''))
 const apLineOf = (helper: object, cols = 400) => apPart(linesOf(helper, cols))
@@ -1831,7 +1831,7 @@ test('nightly cell: `nightly ++-++-+ · 30d: 16✓ 14✗`, coloured per characte
 })
 
 test('nightly cell: shrinks strip+counts, then strip alone, and is dropped only after the queue cell', async () => {
-  const s = withHelper({ nightly: { red: 14, green: 16, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 } })
+  const s = withHelper({ nightly: { red: 14, green: 16, strip: '++-++-+' }, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 } })
   const rows: string[] = []
   for (let w = 200; w >= 20; w -= 1) rows.push(text(bandRows(s as any, NOCI, w)))
   expect(rows.some(t => t.includes('nightly ++-++-+ 16✓ 14✗') && !t.includes('30d:'))).toBe(true)
@@ -1854,7 +1854,7 @@ test('details: the nightly cell spells out the 7-day strip and the 30-day green 
 })
 
 test('details: the nightly cell sits right after the CI cell in the BUILD row (first when there is no CI), never in the queue row', async () => {
-  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0, autoparked: 0 }
+  const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
   const helper = { ...fullSnap().helper, queue: q, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
   const ciOn = detail(withHelper(helper), 400, CI)
   expect(sect(ciOn, 'BUILD')).toMatch(/^CI \(nightly\.yml\).* │ nightly \+-\+\+\.-\+ \(last 7 days\) · last 30 days: 16 green ✓ \/ 14 red ✗$/)
@@ -1928,7 +1928,7 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
 //   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> WORK
-//   5 queue             queue (branch) N = ready | held | epics | claimed | auto-parked | max last month/last week/this week -> QUEUE
+//   5 queue             queue (branch) N = ready | held | epics | claimed | max last month/last week/this week -> QUEUE
 //   6 you               you HH:MM (age)                                           -> SESSION
 //   6 version           ccxp X (latest | Y available)                             -> RELEASE
 //   6 url               plugin GitHub URL                                         -> RELEASE
@@ -1950,7 +1950,7 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['AP', 'WORK', /AP on 2\/6h 3 loops ✓2 merged/],
   ['next loop', 'WORK', /next loop due|next loop overdue|next loop \d/],
   ['AP 24h', 'WORK', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
-  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| 4 auto-parked \| max 61 last month \/ 74 last week \/ 83 this week ▲/],
+  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 held \| 3 epics \| 2 claimed \| max 61 last month \/ 74 last week \/ 83 this week ▲/],
   ['version', 'RELEASE', /ccxp 5\.0\.0 \(5\.1\.0 available\)/],
   ['plugin URL', 'RELEASE', /https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills/],
   ['unreleased', 'RELEASE', /4 unreleased/],
@@ -1961,7 +1961,7 @@ test('details sections: every cell of the old details-on output is still present
   s.helper = {
     ...s.helper,
     autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 60, stats: STATS },
-    queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 2, autoparked: 4, branch: 'main', hwm: { lm: 61, lw: 74, tw: 83 } },
+    queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 2, branch: 'main', hwm: { lm: 61, lw: 74, tw: 83 } },
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
     issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
     bus: { unread: 2, from: 'home' },

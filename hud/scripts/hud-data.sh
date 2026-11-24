@@ -24,7 +24,7 @@
 #    "ap_config": null | {"max_dop","reserved_slots","source","file"},   # the autopilot's EFFECTIVE settings (autopilot-state.sh config-show --json via sl-autopilot-config, cached per repo): null unless the autopilot is on/paused or dev/.autopilot-config.json exists; reserved_slots is null when the autopilot script does not report it; source = override|default; file = the config file exists
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
-#    "queue": null | {"total","ready","held","epic","claimed","autoparked","apholds"[,"source","branch"|"fallback"][,"hwm":{"lm","lw","tw"}]},
+#    "queue": null | {"total","ready","held","epic","claimed","apholds"[,"source","branch"|"fallback"][,"hwm":{"lm","lw","tw"}]},
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
 #                         # `source`/`branch` unless stdin `queue_source` is "working-tree" (opt-in): read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
