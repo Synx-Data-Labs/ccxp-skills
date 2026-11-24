@@ -777,6 +777,9 @@ test('rateTone: red under 25 left, yellow under 50, otherwise green (owner decis
 })
 
 
+test('resetEpochSec: epoch seconds, milliseconds, a numeric string or an ISO string; anything else is null', () => {
+  expect([resetEpochSec(1_800_000_000), resetEpochSec(1_800_000_000_000), resetEpochSec('1800000000'), resetEpochSec('2027-01-15T08:00:00Z'), resetEpochSec('x'), resetEpochSec(null), resetEpochSec(0)]).toEqual([1_800_000_000, 1_800_000_000, 1_800_000_000, 1_800_000_000, null, null, null])
+})
 
 test('rate cell: just the percent left and the reset time, no window label, no runout; coloured at 50 and 25', () => {
   const rate = (over: object, cols = 200) => bandRows(fullSnap(over) as any, { ...NOCI, fields: [...CI.fields, 'rate'] }, cols, RATE_NOW)
