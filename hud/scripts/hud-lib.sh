@@ -601,7 +601,6 @@ _sl-queue-json() {
   if [ -f "$sf" ]; then
     st=$(jq -c 'select(.schema == 2 and (.status == "on" or .status == "paused")) | (((.run_started_at | strings) // (.started_at | strings)) // "") as $s0 | {
         clone: ((.dispatch_clone_path // "") | strings),
-        visits: ((.visits | objects // {}) | with_entries(select(.value | type == "number" and . > 0)) | keys),
         parked: [(.parked | arrays // [])[] | select(type == "object" and (((.at // "") | strings) >= $s0)) | .id | strings]}' "$sf" 2>/dev/null) || st=""
     [ -z "$st" ] || state="$st"
   fi
