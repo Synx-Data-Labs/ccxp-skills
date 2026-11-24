@@ -1927,3 +1927,45 @@ _tier_repo() { _nh_repo; echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/qu
   _ap hold-add T20260101-000002 stalled "pr:9" "r"  # b held: the cursor passes over it to c
   run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000003 ]
 }
+
+# --- a stalled cycle creates a hold, not a bottom PR (T20261124-321658) -------------
+
+@test "hold-report: NEEDS-ATTENTION -> needs-human on the task file, STUCK -> stalled for 2h, nothing written to queue.md" {
+  _tier_repo; _tier_task T20260101-000001 3 a; _tier_task T20260101-000002 3 b
+  cp "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md" "$BATS_TEST_TMPDIR/q.before"
+  _ap_on
+  printf 'NEEDS-ATTENTION: T20260101-000001 — needs an owner decision\nSTUCK: ci red — last task T20260101-000002 (b)\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run _ap hold-report "$BATS_TEST_TMPDIR/r.txt"
+  [ "$output" = $'held T20260101-000001 needs-human\nheld T20260101-000002 stalled' ]
+  [ "$(_j '.holds["T20260101-000001"].cond')" = "file-changed dev/TODO/T20260101-000001-a.md" ]
+  [ "$(_j '.holds["T20260101-000001"].reason')" = "needs an owner decision" ]
+  [ "$(_j '.holds["T20260101-000002"].cond')" = "until 2026-10-28T12:00:00Z" ]
+  cmp "$BATS_TEST_TMPDIR/q.before" "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"     # no queue.md edit
+  # the held tasks are passed over by the next pick
+  run _ap top "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
+}
+
+@test "hold-report: an advanced task and a merged report make no hold; a missing task file falls back to until +24h" {
+  _tier_repo; _tier_task T20260101-000001 3 a
+  _ap_on
+  printf 'MERGED: T20260101-000001 (a) — PR #5\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run _ap hold-report "$BATS_TEST_TMPDIR/r.txt"; [ -z "$output" ]; [ "$(_j '.holds // {} | length')" -eq 0 ]
+  printf 'NEEDS-ATTENTION: T20260101-000009 — gone\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run _ap hold-report "$BATS_TEST_TMPDIR/r.txt"
+  [ "$(_j '.holds["T20260101-000009"].cond')" = "until 2026-10-29T10:00:00Z" ]
+  run _ap hold-report; [ "$status" -eq 2 ]
+}
+
+@test "hold-report: WAITING holds the fallback task for 1h; a run of stuck cycles (outage) holds nothing" {
+  _tier_repo; _tier_task T20260101-000001 3 a
+  _ap_on
+  printf 'WAITING: PR #7 needs a human approval\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run _ap hold-report "$BATS_TEST_TMPDIR/r.txt" --fallback T20260101-000001
+  [ "$output" = "held T20260101-000001 waiting" ]
+  [ "$(_j '.holds["T20260101-000001"].cond')" = "until 2026-10-28T11:00:00Z" ]
+  _ap release T20260101-000001 >/dev/null
+  jq '.stuck_count = 3' "$AUTOPILOT_STATE_FILE" > "$BATS_TEST_TMPDIR/o.json" && mv "$BATS_TEST_TMPDIR/o.json" "$AUTOPILOT_STATE_FILE"
+  printf 'STUCK: dispatch failed — last task T20260101-000001 (a)\n' > "$BATS_TEST_TMPDIR/r.txt"
+  run _ap hold-report "$BATS_TEST_TMPDIR/r.txt"; [ "$output" = "skip T20260101-000001" ]
+  [ "$(_j '.holds // {} | length')" -eq 0 ]
+}
