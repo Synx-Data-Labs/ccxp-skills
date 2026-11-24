@@ -86,6 +86,13 @@
 #   holds-check [repo-root]     release every hold whose condition is met (time passed, run completed or PR
 #                               closed via `gh api`, file mtime or git commit after the hold, task no longer in
 #                               dev/TODO); print "released <task> (<condition>)" per release. A gh failure keeps the hold.
+#   hold-report <file> [--fallback T<id>] [--repo <root>]
+#                               Phase 4: turn a /drive report into holds instead of a bottom PR. Per stalled task `plan`
+#                               names: NEEDS-ATTENTION -> needs-human, STUCK -> stalled; a WAITING report with --fallback ->
+#                               waiting. Release conditions: needs-human = the task file changes (else until +24h),
+#                               stalled = until +2h, waiting = until +1h. Prints "held <id> <kind>" per hold, or "skip <id>"
+#                               for a STUCK while stuck_count >= 3 (likely an outage, not the task). Nothing is written to
+#                               queue.md or a task file. A report with nothing stalled prints nothing.
 #   notify <kind> <text>        Slack (--channel dev) when possible, else record
 #                               in the state file; always exit 0
 #   classify <file|->           parse a /drive sub-agent's final report (the
@@ -687,6 +694,49 @@ ap-release() {
   else
     echo none
   fi
+}
+
+# hold-report <file> [--fallback T<id>] [--repo <root>] (see the usage header)
+ap-hold-report() {
+  local src="" fallback="" root="" id st reason source kind cond f line stuck tab=$'\t'
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fallback) fallback="${2:-}"; shift; [ $# -eq 0 ] || shift ;;
+      --repo) root="${2:-}"; shift; [ $# -eq 0 ] || shift ;;
+      *) [ -n "$src" ] || src="$1"; shift ;;
+    esac
+  done
+  { [ -n "$src" ] && [ -f "$src" ]; } || { echo "hold-report <file> [--fallback T<id>] [--repo <root>]" >&2; return 2; }
+  [ -n "$root" ] || root=$(ap-work-root)
+  [ "$(ap-status)" = on ] || return 0
+  stuck=$(jq -r '(.stuck_count | numbers) // 0' "$(ap-state-file)" 2>/dev/null || echo 0)
+  local plan; plan=$(ap-plan "$src" ${fallback:+--fallback "$fallback"}) || return $?
+  local seen=" "
+  while IFS=$tab read -r id st reason source; do
+    [ -n "$id" ] || continue
+    seen="$seen$id "
+    [ "$st" = stalled ] || continue
+    case "$source" in
+      attention)
+        kind=needs-human
+        f=$(compgen -G "$root/dev/TODO/$id-*.md" | head -1) || true
+        if [ -n "$f" ]; then cond="file-changed dev/TODO/$(basename "$f")"; else cond="until $(_ap_iso $(( $(_ap_epoch "$(ap-now)") + 86400 )))"; fi ;;
+      *)
+        kind=stalled
+        if [ "$stuck" -ge 3 ]; then printf 'skip %s\n' "$id"; continue; fi
+        cond="until $(_ap_iso $(( $(_ap_epoch "$(ap-now)") + 7200 )))" ;;
+    esac
+    ap-hold-add "$id" "$kind" "$cond" "$reason" || true
+  done <<< "$plan"
+  if [ -n "$fallback" ] && [[ "$fallback" =~ $AP_TASK_ID_RE ]]; then
+    case "$seen" in *" $fallback "*) ;; *)
+      line=$(_ap_report_lines "$src" | grep -m1 '^WAITING:' || true)
+      if [ -n "$line" ]; then
+        ap-hold-add "$fallback" waiting "until $(_ap_iso $(( $(_ap_epoch "$(ap-now)") + 3600 )))" "waiting: ${line#WAITING:}" || true
+      fi ;;
+    esac
+  fi
+  return 0
 }
 
 _ap_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || true; }
@@ -1333,7 +1383,7 @@ autopilot-state() {
     remaining) ap-remaining ;; overdue) ap-overdue "$@" ;; eligible) ap-eligible "$@" ;; pickable) ap-pickable "$@" ;;
     slots) ap-slots "$@" ;; routine-free) ap-routine-free ;; guard) ap-guard ;; hold) ap-hold "$@" ;; wake) ap-wake "$@" ;; set-clone) ap-set-clone "$@" ;;
     top) ap-top "$@" ;; plan) ap-plan "$@" ;; prune) ap-prune "$@" ;; visit) ap-visit "$@" ;; advance) ap-advance "$@" ;; parked) ap-parked "$@" ;; parked-list) ap-parked-list ;;
-    hold-add) ap-hold-add "$@" ;; holds) ap-holds "$@" ;; release) ap-release "$@" ;; holds-check) ap-holds-check "$@" ;;
+    hold-add) ap-hold-add "$@" ;; hold-report) ap-hold-report "$@" ;; holds) ap-holds "$@" ;; release) ap-release "$@" ;; holds-check) ap-holds-check "$@" ;;
     notify) ap-notify "$@" ;;
     classify) ap-classify "$@" ;; attention) ap-attention "$@" ;; clone-path) ap-clone-path "$@" ;;
     config-show) ap-config-show "$@" ;; config-set) ap-config-set "$@" ;; config-reset) ap-config-reset "$@" ;;

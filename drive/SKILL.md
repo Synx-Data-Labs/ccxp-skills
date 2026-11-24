@@ -31,7 +31,7 @@ argument-hint: "[task-id]"
 
 - Auto-pick never takes a task whose `status:` is gated: `Blocked by`, `SUPERVISED`, `BLOCKED`, `needs manual`, `sign-off` (case-insensitive). One shared definition: `todo-gated` in `todo/scripts/_lib.sh`, applied by `todo-next.sh --skip-gated`.
 - An explicit task id is never filtered: a human asking for that task gets it.
-- Nothing is written to a task file to say why a run could not finish it. Under `/autopilot` the dispatcher moves a task that did not advance to the back of `queue.md` and parks it after repeated no-progress visits (`autopilot/SKILL.md` Phase 3 and 4).
+- Nothing is written to a task file to say why a run could not finish it. Under `/autopilot` the dispatcher records a hold for a task that did not advance and passes over it until the release condition is met (`autopilot/SKILL.md` Phase 3 and 4).
 
 ## Workflow
 
@@ -644,7 +644,7 @@ Use `/slack-check-reply <task-id>` or `/slack-check-reply all`. Phase 0.5 runs t
 When a run stops because only the owner can move the task (an open decision, an outside party, a blocker only the owner can clear), do not record the reason in the task file.
 
 - Interactive: say what is needed and stop; the task keeps its status.
-- Under `/autopilot`: end the report with `NEEDS-ATTENTION: T<id> — <reason>` (and `ADVANCED: T<id> — <what moved>` if a design PR, a split, a pushed branch or a PR landed first). When the stalled task is a blocker you recursed into (Phase 6), name the blocker, not the goal. The dispatcher then bottoms the task and counts the visit.
+- Under `/autopilot`: end the report with `NEEDS-ATTENTION: T<id> — <reason>` (and `ADVANCED: T<id> — <what moved>` if a design PR, a split, a pushed branch or a PR landed first). When the stalled task is a blocker you recursed into (Phase 6), name the blocker, not the goal. The dispatcher then records a `needs-human` hold.
 - Task size is never a reason to stop: split a big task (`autopilot/SKILL.md` "Big tasks").
 
 ## Branch naming
