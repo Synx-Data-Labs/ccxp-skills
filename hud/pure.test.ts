@@ -651,6 +651,15 @@ test('details: colours match the band (ctx tone, READY/WORKING) and the dirty ma
   expect(idle.flat().find(s => s.text === 'READY')).toEqual({ text: 'READY', color: 'success' })
 })
 
+test('details: the nightly strip (seven one-character pieces) is never split across lines', async () => {
+  const snap = fullSnap() as any
+  snap.helper = { ...snap.helper, nightly: { red: 14, green: 16, strip: '+-++.-+' } }
+  for (let cols = 60; cols >= 22; cols--) {
+    const build = sections(detail(snap, cols, CI)).BUILD!
+    expect(build.join('\n'), `at ${cols}`).toContain('+-++.-+')
+  }
+})
+
 test('details: sections with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
   const lines = detail({ ...withHelper({ ledger: null, last_input_at: 0 }), ctxLeft: null }, 140, DEFAULTS)
   expect(lines.length).toBe(2) // REPO, WORK

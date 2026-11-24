@@ -323,3 +323,15 @@ _compare() {
   run _ver "$(_plugin 5.0.0)"
   [ "$(jq -c .unreleased <<<"$output")" = '{"count":300}' ]
 }
+
+@test "unreleased: an old cache file that still holds subjects never leaks them" {
+  _remote ccxp-skills--v5.0.0
+  local p; p="$(_plugin 5.0.0)"
+  _compare 2 "a" "b"
+  run _ver "$p"
+  local f="$HUD_VERSION_STATE_DIR/unreleased.json"
+  jq -c '. + {subjects: ["secret subject"]}' "$f" > "$f.t" && mv "$f.t" "$f"
+  run _ver "$p"
+  [ "$(jq -c .unreleased <<<"$output")" = '{"count":2}' ]
+  [[ "$output" != *"secret subject"* ]]
+}

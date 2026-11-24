@@ -928,31 +928,61 @@ export const DETAIL_LABEL_WIDTH = 9
 
 /** Splits segments into words and spaces (each keeping its style) and fills lines of at most `avail` columns, breaking at spaces; a single word longer than a line is broken hard. Nothing is ever cut off. */
 function wrapSegs(segs: Seg[], avail: number): Seg[][] {
-  const lines: Seg[][] = [[]]
-  let used = 0
-  for (const s of segs) {
-    for (const tok of s.text.match(/\s+|\S+/g) ?? []) {
-      const space = /^\s/.test(tok)
-      if (space && used === 0) continue // no leading blanks on a line
-      let rest = tok
-      if (!space && used + rest.length > avail && used > 0) {
-        lines.push([])
-        used = 0
-      }
-      while (!space && rest.length > avail) {
-        lines[lines.length - 1]!.push({ ...s, text: rest.slice(0, avail) })
-        lines.push([])
-        used = 0
-        rest = rest.slice(avail)
-      }
-      if (rest === '') continue
-      lines[lines.length - 1]!.push({ ...s, text: rest })
-      used += rest.length
+  // Words are found across segment boundaries (a word made of several styled pieces, like the nightly strip, stays whole).
+  type Piece = { seg: Seg; text: string }
+  const words: Array<{ space: boolean; pieces: Piece[]; len: number }> = []
+  let prevSpace: boolean | null = null
+  for (const sg of segs) {
+    for (const ch of sg.text) {
+      const space = /\s/.test(ch)
+      if (prevSpace !== space) words.push({ space, pieces: [], len: 0 })
+      prevSpace = space
+      const w = words[words.length - 1]!
+      const last = w.pieces[w.pieces.length - 1]
+      if (last && last.seg === sg) last.text += ch
+      else w.pieces.push({ seg: sg, text: ch })
+      w.len += 1
     }
   }
+  const lines: Seg[][] = [[]]
+  let used = 0
+  const push = (pieces: Piece[]) => pieces.forEach(pc => lines[lines.length - 1]!.push({ ...pc.seg, text: pc.text }))
+  for (const w of words) {
+    if (w.space && used === 0) continue // no leading blanks on a line
+    if (!w.space && used + w.len > avail && used > 0) {
+      lines.push([])
+      used = 0
+    }
+    if (!w.space && w.len > avail) {
+      // a single word longer than a line: break it hard
+      let left = avail - used
+      let line: Piece[] = []
+      let n = 0
+      for (const pc of w.pieces) {
+        for (const ch of pc.text) {
+          if (n === left) {
+            push(line)
+            lines.push([])
+            line = []
+            n = 0
+            left = avail
+            used = 0
+          }
+          const lp = line[line.length - 1]
+          if (lp && lp.seg === pc.seg) lp.text += ch
+          else line.push({ seg: pc.seg, text: ch })
+          n += 1
+        }
+      }
+      push(line)
+      used = n
+      continue
+    }
+    push(w.pieces)
+    used += w.len
+  }
   return lines.filter((l, i) => l.length > 0 || i === 0).map(l => {
-    // drop trailing blanks
-    const out = l.slice()
+    const out = l.slice() // drop trailing blanks
     while (out.length > 0 && out[out.length - 1]!.text.trim() === '') out.pop()
     return out
   })
