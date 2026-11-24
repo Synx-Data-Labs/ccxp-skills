@@ -481,6 +481,33 @@ test('repo cell: detached HEAD, linked worktree and the gh account', async () =>
   expect(repoCell({ repo_slug: 'a/b', branch: '', head: '' })).toBe('a/b')
 })
 
+test('repo cell: commits behind and ahead the remote sit right after the branch, only when there are some', async () => {
+  const b = (behind: number, ahead: number) => ({ behind, ahead, base: 'upstream' as const })
+  expect(repoCell({ repo_slug: 'a/b', branch: 'main', behind: b(134, 0) })).toBe('a/b @ main ↓134')
+  expect(repoCell({ repo_slug: 'a/b', branch: 'main', behind: b(0, 2) })).toBe('a/b @ main ↑2')
+  expect(repoCell({ repo_slug: 'a/b', branch: 'main', behind: b(134, 2) })).toBe('a/b @ main ↑2 ↓134')
+  expect(repoCell({ repo_slug: 'a/b', branch: 'main', dirty: 1, behind: b(3, 0) })).toBe('a/b @ main ↓3*')
+  expect(repoCell({ repo_slug: 'a/b', branch: 'main', behind: null })).toBe('a/b @ main')
+  expect(repoCell({ repo_slug: 'a/b', branch: '', head: 'abc1234', behind: b(5, 0) })).toBe('a/b @ detached abc1234')
+})
+
+test('repo cell: behind is neutral under the threshold and warning from it; ahead is always neutral', async () => {
+  const seg = (behind: number, text: string) => bandRows(withHelper({ repo_slug: 'a/b', branch: 'main', behind: { behind, ahead: 1, base: 'upstream' } }), { ...NOCI, fields: ['repo'] }, 200)[0].find(x => x.text === text)
+  expect(seg(19, ' ↓19')?.color).toBeUndefined()
+  expect(seg(20, ' ↓20')?.color).toBe('warning')
+  expect(seg(20, ' ↑1')?.color).toBeUndefined()
+})
+
+test('parseHelper: behind is read as whole counts, 0/0 or junk means none', async () => {
+  const p = (behind: unknown) => parseHelper(JSON.stringify({ ...BASE, behind }))?.behind
+  expect(p({ behind: 3, ahead: 1, base: 'origin' })).toEqual({ behind: 3, ahead: 1, base: 'origin' })
+  expect(p({ behind: 3, ahead: 'x', base: 'weird' })).toEqual({ behind: 3, ahead: 0, base: 'upstream' })
+  expect(p({ behind: 0, ahead: 0, base: 'upstream' })).toBeNull()
+  expect(p({ behind: -4 })).toBeNull()
+  expect(p('x')).toBeNull()
+  expect(p(undefined)).toBeNull()
+})
+
 test('repo cell: outside a git repo it is just the folder name, no branch, no marks', async () => {
   expect(repoCell({ repo: 'Downloads', repo_slug: null, repo_root: null, branch: '', dirty: null, gh_account: null, cwd: '/Users/u/Downloads' })).toBe('Downloads')
 })

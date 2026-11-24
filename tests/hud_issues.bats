@@ -10,6 +10,7 @@ DATA="$REPO_ROOT/hud/scripts/hud-data.sh"
 NOW=1793880000
 
 setup() {
+  export HUD_BEHIND_STATE_DIR="$BATS_TEST_TMPDIR/hud-behind" # the behind fetch never touches ~/.claude
   export HUD_ISSUES_STATE_DIR="$BATS_TEST_TMPDIR/hud-issues" HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_ISSUES_SYNC=1 HUD_HWM_NOW="$NOW"
   unset HUD_ISSUES_TTL HUD_ISSUES_NOW HUD_ISSUES_DELIVERED_LABEL
   mkdir -p "$BATS_TEST_TMPDIR/fakebin"

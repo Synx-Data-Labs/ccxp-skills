@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApStats, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
+import type { ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -193,6 +193,15 @@ export function parseHelper(stdout: string): HelperData | null {
     const o = bs as Record<string, unknown>
     if (typeof o.unread === 'number' && Number.isFinite(o.unread) && o.unread >= 1) bus = { unread: Math.min(Math.floor(o.unread), 999), from: typeof o.from === 'string' && /^[a-z0-9-]{1,32}$/.test(o.from) ? o.from : '' }
   }
+  const bh = r.behind
+  let behind: Behind | null = null
+  if (typeof bh === 'object' && bh !== null && !Array.isArray(bh)) {
+    // Untrusted: whole non-negative counts (capped for display), a known base; nothing to show when both are 0.
+    const o = bh as Record<string, unknown>
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.min(Math.floor(v), 99999) : 0)
+    const b = n(o.behind), a = n(o.ahead)
+    if (b + a > 0) behind = { behind: b, ahead: a, base: o.base === 'origin' ? 'origin' : 'upstream' }
+  }
   const pl = r.plugin
   let plugin: PluginVersion | null = null
   if (typeof pl === 'object' && pl !== null && !Array.isArray(pl)) {
@@ -221,6 +230,7 @@ export function parseHelper(stdout: string): HelperData | null {
     head: str(r.head),
     dirty: typeof r.dirty === 'number' && Number.isFinite(r.dirty) ? r.dirty : null,
     gh_account: strOrNull(r.gh_account),
+    behind,
     autopilot,
     ledger,
     queue,
@@ -563,11 +573,27 @@ function jobStatsSegs(st: JobStats | null | undefined): Seg[] | null {
   ]
 }
 
+/** Commits behind this many or more turn the behind count to the warning colour (a stale clone); fewer stay neutral. */
+export const BEHIND_WARN = 20
+
+/**
+ * ` ↑2 ↓134` after the branch: ahead in the neutral colour, behind neutral under BEHIND_WARN and warning from it.
+ * `withAhead` false keeps only the behind count (the narrow forms). Nothing when level or unknown.
+ */
+function behindSegs(b: Behind | null, withAhead: boolean): Seg[] {
+  if (!b) return []
+  const segs: Seg[] = []
+  if (withAhead && b.ahead > 0) segs.push({ text: ` ↑${b.ahead}`, dim: true })
+  if (b.behind > 0) segs.push({ text: ` ↓${b.behind}`, ...(b.behind >= BEHIND_WARN ? { color: 'warning' as const } : { dim: true }) })
+  return segs
+}
+
 /**
  * The repo cell, most to least detail:
- * `[→ ]owner/name @ branch* (wt X) (account) (root: X)`. It follows the session cwd (the helper is
+ * `[→ ]owner/name @ branch[ ↑ahead][ ↓behind]* (wt X) (account) (root: X)`. It follows the session cwd (the helper is
  * run for it). `→` leads for a couple of refreshes after the working repo changed; `(root: X)` shows
- * when a shell cd left the session root; a detached HEAD reads `detached <sha>`; `*` = changed
+ * when a shell cd left the session root; a detached HEAD reads `detached <sha>`; `↑N ↓M` = commits ahead of and behind the
+ * remote (warning colour from BEHIND_WARN behind; the narrow forms keep only `↓M`); `*` = changed
  * tracked files. Shrinking drops the worktree, then the account, then shortens the names, last the branch.
  */
 function repoVariants(snap: Snapshot): Variants | null {
@@ -577,11 +603,12 @@ function repoVariants(snap: Snapshot): Variants | null {
   const root = snap.sessionRoot && h.cwd && !isWithin(h.cwd, snap.sessionRoot) ? baseName(snap.sessionRoot) : ''
   const dirty = h.dirty !== null && h.dirty > 0
   const where = h.branch || (h.head ? `detached ${h.head}` : '')
-  const build = (o: { name: number; slug: boolean; branch: number; wt: boolean; acct: boolean; root: number }): Seg[] => {
+  const build = (o: { name: number; slug: boolean; branch: number; wt: boolean; acct: boolean; root: number; gap?: 'both' | 'behind' }): Seg[] => {
     const segs: Seg[] = []
     if (snap.moved) segs.push({ text: '→ ', color: 'suggestion', bold: true })
     segs.push({ text: truncate(o.slug ? full : baseName(full) || full, o.name), bold: true })
     if (where && o.branch > 0) segs.push({ text: ` @ ${truncate(where, o.branch)}` })
+    if (o.gap && h.branch) segs.push(...behindSegs(h.behind, o.gap === 'both'))
     if (dirty) segs.push({ text: '*', color: 'warning' })
     if (o.wt && h.worktree) segs.push({ text: ` (wt ${truncate(h.worktree, 24)})`, dim: true })
     if (o.acct && h.gh_account) segs.push({ text: ` (${truncate(h.gh_account, 24)})`, dim: true })
@@ -589,11 +616,11 @@ function repoVariants(snap: Snapshot): Variants | null {
     return segs
   }
   const all = [
-    build({ name: 48, slug: true, branch: 40, wt: true, acct: true, root: 20 }),
-    build({ name: 48, slug: true, branch: 40, wt: false, acct: true, root: 20 }),
-    build({ name: 48, slug: true, branch: 40, wt: false, acct: false, root: 20 }),
-    build({ name: 24, slug: false, branch: 24, wt: false, acct: false, root: 20 }),
-    build({ name: 16, slug: false, branch: 14, wt: false, acct: false, root: 10 }),
+    build({ name: 48, slug: true, branch: 40, wt: true, acct: true, root: 20, gap: 'both' }),
+    build({ name: 48, slug: true, branch: 40, wt: false, acct: true, root: 20, gap: 'both' }),
+    build({ name: 48, slug: true, branch: 40, wt: false, acct: false, root: 20, gap: 'both' }),
+    build({ name: 24, slug: false, branch: 24, wt: false, acct: false, root: 20, gap: 'both' }),
+    build({ name: 16, slug: false, branch: 14, wt: false, acct: false, root: 10, gap: 'behind' }),
     build({ name: 16, slug: false, branch: 0, wt: false, acct: false, root: 0 }),
   ]
   // Identical neighbours would waste a shrink step.

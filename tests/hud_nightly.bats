@@ -9,6 +9,7 @@ NIGHTLY="$REPO_ROOT/hud/scripts/hud-nightly.sh"
 NOW=1793880000
 
 setup() {
+  export HUD_BEHIND_STATE_DIR="$BATS_TEST_TMPDIR/hud-behind" # the behind fetch never touches ~/.claude
   export HUD_NIGHTLY_STATE_DIR="$BATS_TEST_TMPDIR/hud-nightly" HUD_NIGHTLY_SYNC=1 HUD_NIGHTLY_NOW="$NOW"
   unset HUD_NIGHTLY_OFF HUD_NIGHTLY_TTL
   mkdir -p "$BATS_TEST_TMPDIR/fakebin"
