@@ -25,6 +25,9 @@ scheduled: 2026-11-23
 
 ## Context
 
+- Docs to update: `autopilot/SKILL.md`, `autopilot/parallel.md`, top-level `README.md` line 111 ("1-16, default 1"), `hud/README.md` reviewed (no slot-count display, no change).
+- Existing tests that assume default 1 are rewritten: "max_dop: default 1, range 1-16", "start/resume ... max_dop=1 unchanged", "report: slots line only when max_dop > 1" (`tests/autopilot_state.bats`).
+- Parser: `busy on` accepts `--urgent` anywhere among its arguments and stores it on the slot object; `_ap_slots` keeps its three columns (a `routine` filter argument leaves urgent slots out).
 - Doc comments to refresh in `autopilot-state.sh`: the header lines naming "all five settings" and `max_dop` "1-16, default 1".
 - Dispatch verdicts compare busy slots with `ap-max-dop`: `start` (`:255`), `resume` (`:289`), `report` slots line (`:737`), overdue hint (`:743`).
 - `/autopilot` Phase 3 (SKILL.md) and `autopilot/parallel.md` fill every free slot with routine picks; nothing keeps slots back.
