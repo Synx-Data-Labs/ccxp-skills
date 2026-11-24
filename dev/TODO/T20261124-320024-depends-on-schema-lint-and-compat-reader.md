@@ -18,7 +18,7 @@ description: Define the depends_on and needs frontmatter fields, update lint, ad
   - lint (`repo-conventions/scripts/lint_tasks.py`): allow both keys; `depends_on` ids must resolve to a task file and not cycle; `Blocked by` gets a deprecation warning, not an error
   - compat reader in `todo/scripts/_lib.sh` (one function): a task's dependencies = `depends_on` plus any legacy `Blocked by T..` in `status:`; `todo-gated` treats a task with only `depends_on` as not gated
   - tests: `test_lint_tasks.py`, `tests/todo-next.bats`, a new bats for the reader
-- Resolves epic open questions Q1 and Q2 in its Closed section (or records the owner's answer).
+- Resolves epic open questions Q1, Q2 and Q3 in its Closed section (or records the owner's answer).
 
 ## Done criteria
 
