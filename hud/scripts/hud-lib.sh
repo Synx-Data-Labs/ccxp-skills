@@ -249,9 +249,10 @@ sl-iso-to-epoch() {
 # so an empty field survives `read`):
 #   <status> <prefix> <elapsed_hr> <requested_hr> <stuck> <cycle> <last_outcome>
 #   <last_task_id> <stuck_reason> <stop_reason> <merged_count> <next_wake_epoch>
-#   <busy> <current_task> <busy_slots>
+#   <busy> <current_task> <busy_slots> <busy_routine>
 # (busy_slots: how many parallel cycles are running (max_dop > 1: the state file's `slots` with a
-# fresh mark); 1 for a single busy cycle, empty when none; next_wake_epoch: next_wake_at as epoch seconds, empty when absent or unparseable;
+# fresh mark); 1 for a single busy cycle, empty when none; busy_routine: of those, the cycles not marked
+# `urgent` (they alone count against the routine limit), equal to busy_slots without a `slots` object; next_wake_epoch: next_wake_at as epoch seconds, empty when absent or unparseable;
 # busy: 1 while a cycle is marked running (busy_since set and under 3 h old, else
 # empty); current_task: the task id that cycle drives, only when busy, else empty)
 # when /autopilot's dev/.autopilot-state.json (schema 2) has status "on" or
