@@ -237,7 +237,7 @@ With `ci` set, the band is two rows, CI alone on top (AP on, red CI shown; the m
 - Which window: the one with LESS headroom (a tie keeps the 5-hour one). The other window is still collected and written to the cache file below, just not drawn.
 - Band, widest first: `20% left · resets 1h12m`, then `20% left · 1h12m`, then `20% left`; then the cell is dropped (after the stale tag, before any other cell). Details: `20% left · resets in 1h12m` on the SESSION row.
 - Time left is compact and rounded down: `1h12m`, `3d4h`, `2h`, `40m`, `<1m`.
-- Colour by the percent LEFT, strict on the rounded number, named constants `RATE_WARN_LEFT` (50) and `RATE_CRIT_LEFT` (25) in `hud/model.ts`: 50 and above in the success colour (green), below 50 yellow, below 25 red (so 50 is green, 49 yellow, 25 yellow, 24 red). The time carries the same colour. These are theme tokens, so a theme or `NO_COLOR` keeps working.
+- Colour by the percent LEFT, strict on the rounded number: green at 25 or more, orange under 25, red under 10 (`rateTone`); the time carries the same colour (theme tokens, so a theme or `NO_COLOR` keeps working). A different colouring, by the time until the limit runs out, and a runout estimate are a separate HUD task; the burn-rate data (`rateRunoutHours`) stays in `hud/model.ts` for it.
 - A window the engine does not report shows nothing; neither window means no cell; a window whose reset time has passed is dropped (the engine drops it too). Never an error.
 
 ### Rate-limit cache file (for the autopilot)
