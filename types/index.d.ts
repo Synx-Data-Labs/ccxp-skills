@@ -2,7 +2,7 @@
 // contract must be self-contained, so the shared shapes are defined here and the
 // module's files import them from '../types'.
 
-export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'alerts' | 'bus'
+export type Field = 'repo' | 'branch' | 'task' | 'ap' | 'ctx' | 'jobs' | 'ci' | 'rate' | 'cost' | 'lastat' | 'ver' | 'queue' | 'nightly' | 'issues' | 'bus'
 
 /** Which CI run the band shows; unset (undefined) means no CI segment. */
 export type CiConfig = {
@@ -43,8 +43,6 @@ export type HudConfig = {
   fillColor: string
   /** Show the ccxp-skills version segment (`ccxp 5.0.0`, plus `→ 5.1.0` when newer is released); default true. */
   version: boolean
-  /** Show the Slack-alerts-check staleness cell (`alerts 12m ago`); undefined means on. */
-  alerts?: boolean
   /** CI segment source; undefined (the default) hides the segment. */
   ci?: CiConfig
   /** Queue cell source; undefined means `{ source: 'default-branch' }`. A project file's value replaces the user file's. */
@@ -183,9 +181,6 @@ export type PluginVersion = {
   url?: string
 }
 
-/** Staleness of the persona's Slack alerts check (hud-alerts.sh): epoch seconds of the last check (0 = never) and whether alerts are held back under the cap. */
-export type Alerts = { checked_at: number; held: boolean }
-
 /** Unread notes on the cross-account bus (hud-bus.sh, from `bus.sh status --json`): how many and who sent the newest. */
 export type Bus = { unread: number; from: string }
 
@@ -219,8 +214,6 @@ export type HelperData = {
   nightly: Nightly | null
   /** Customer-issue stats; null when not configured or unknown. */
   issues: Issues | null
-  /** Slack alerts check staleness; null when off or this plugin has no alerts check. */
-  alerts: Alerts | null
   /** Unread cross-account bus notes; null when the bus is off for this profile or nothing is unread. */
   bus: Bus | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */

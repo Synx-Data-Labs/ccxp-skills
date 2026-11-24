@@ -162,7 +162,7 @@ async function refresh($: any, cfg: HudConfig) {
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
-      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_alerts: cfg.alerts !== false, show_bus: cfg.fields.includes('bus'), queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
+      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_bus: cfg.fields.includes('bus'), queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
       timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null
@@ -386,8 +386,6 @@ export const register: Register = on => {
           CLAUDE_CONFIG_DIR: await read(() => $.env.get('CLAUDE_CONFIG_DIR')),
           HOME: await read(() => $.env.get('HOME')),
           NO_COLOR: await read(() => $.env.get('NO_COLOR')),
-          CCXP_ALERTS: await read(() => $.env.get('CCXP_ALERTS')),
-          CCXP_ALERTS_DIR: await read(() => $.env.get('CCXP_ALERTS_DIR')),
           HUD_CACHE_DIR: await read(() => $.env.get('HUD_CACHE_DIR')),
           HUD_CACHE_TTL: await read(() => $.env.get('HUD_CACHE_TTL')),
           HUD_CI_STATE_DIR: await read(() => $.env.get('HUD_CI_STATE_DIR')),

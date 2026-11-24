@@ -396,14 +396,14 @@ test('the retired /hud pane is gone: it falls through to the usage line, which d
 
 test('/hud help prints the index; /hud help <topic> prints one section; neither writes', async ($: any, on: any) => {
   const w = fresh()
-  w.help = '## overview\nHow to read it.\n\n## alerts | alert\nalerts never checked means no record.\n'
+  w.help = '## overview\nHow to read it.\n\n## queue | q\nthe queue cell counts tasks.\n'
   world($, on, w)
   await $.session.start(START)
   const before = w.writes.length
   const idx = (await $.command.run({ command: 'hud', args: 'help' })).text
   expect(idx).toContain('How to read it.')
-  expect(idx).toContain('alerts')
-  expect((await $.command.run({ command: 'hud', args: 'help alert' })).text).toContain('never checked')
+  expect(idx).toContain('queue')
+  expect((await $.command.run({ command: 'hud', args: 'help q' })).text).toContain('counts tasks')
   expect((await $.command.run({ command: 'hud', args: 'help nope' })).text).toMatch(/no topic/)
   expect(w.writes.length).toBe(before)
 })

@@ -7,7 +7,7 @@ import { ALL_FIELDS, DEFAULTS, mergeConfig, parseConfigText } from './config'
 
 /** The environment variables the report looks at (all plain switches, paths and intervals; none can hold a secret). */
 export const ENV_NAMES = [
-  'CLAUDE_CONFIG_DIR', 'HOME', 'NO_COLOR', 'CCXP_ALERTS', 'CCXP_ALERTS_DIR',
+  'CLAUDE_CONFIG_DIR', 'HOME', 'NO_COLOR',
   'HUD_CACHE_DIR', 'HUD_CACHE_TTL', 'HUD_CI_STATE_DIR', 'HUD_NIGHTLY_STATE_DIR', 'HUD_NIGHTLY_OFF', 'HUD_NIGHTLY_REPO',
   'HUD_NIGHTLY_WORKFLOW', 'HUD_NIGHTLY_TTL', 'HUD_ISSUES_STATE_DIR', 'HUD_ISSUES_TTL', 'HUD_QUEUE_STATE_DIR', 'HUD_QUEUE_FETCH_TTL',
 ] as const
@@ -23,7 +23,7 @@ export type ShowInput = {
 type Raw = Record<string, unknown>
 // Keys that are retired on purpose and silently ignored; not worth a warning.
 const RETIRED = new Set(['fill', 'last'])
-const KNOWN = new Set(['enabled', 'userMessage', 'band', 'userBorder', 'userColor', 'fields', 'pollSeconds', 'ctxWarn', 'ctxCrit', 'fillColor', 'version', 'alerts', 'ci', 'queue', 'issues'])
+const KNOWN = new Set(['enabled', 'userMessage', 'band', 'userBorder', 'userColor', 'fields', 'pollSeconds', 'ctxWarn', 'ctxCrit', 'fillColor', 'version', 'ci', 'queue', 'issues'])
 
 function fileState(path: string | undefined, text: string | undefined): { line: string; keys: string[] } {
   if (!path) return { line: '(path unknown)', keys: [] }
@@ -73,8 +73,6 @@ export function configReport(input: ShowInput): string {
   row('ctxWarn', cfg.ctxWarn, DEFAULTS.ctxWarn, ' (ctx turns yellow at or below this percent left)')
   row('ctxCrit', cfg.ctxCrit, DEFAULTS.ctxCrit, ' (ctx turns red at or below this percent left)')
   row('version', cfg.version, DEFAULTS.version, ` (version cell ${onOff(cfg.version)})`)
-  const alertsOn = cfg.alerts !== false
-  row('alerts', cfg.alerts, 'unset (on)', ` (alerts cell ${onOff(alertsOn && env.CCXP_ALERTS !== '0')}${env.CCXP_ALERTS === '0' ? ', CCXP_ALERTS=0 switches it off' : ''})`)
   row('ci', cfg.ci, 'unset (no CI row)')
   row('queue', cfg.queue ?? { source: 'default-branch' }, { source: 'default-branch' })
   row('issues', cfg.issues, 'unset (no issues cell)', cfg.issues?.ghConfigDir ? ' (gh config dir is a path, never read here)' : '')
@@ -111,8 +109,7 @@ export function configReport(input: ShowInput): string {
   L.push(`  queue         ${dir('hud-queue', env.HUD_QUEUE_STATE_DIR)}`)
   L.push(`  repo/account  ${dir('hud-cache', env.HUD_CACHE_DIR)}`)
   L.push(`  heartbeat     ${dir('hud-active')}`)
-  L.push(`  alerts check  ${env.CCXP_ALERTS_DIR || (base ? `${base}/ccxp-alerts` : '(unknown: no config dir)')} (last-check, hold; written by the ccxp-agent persona)`)
   L.push('')
-  L.push(`Environment: NO_COLOR ${env.NO_COLOR ? 'set (no colours)' : 'not set'}${env.CCXP_ALERTS === '0' ? ', CCXP_ALERTS=0' : ''}. Explain any cell: /hud help <topic>.`)
+  L.push(`Environment: NO_COLOR ${env.NO_COLOR ? 'set (no colours)' : 'not set'}. Explain any cell: /hud help <topic>.`)
   return L.join('\n')
 }

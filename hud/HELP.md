@@ -58,25 +58,6 @@ The nightly build at a glance: `nightly +-++.-+ · 30d: 16✓ 14✗`. One charac
 
 Customer issues, opt-in: `issues 12 open / 7 undelivered · max 18 180d / 15 30d / 12 7d` = open issues, open ones without the `status:delivered` label (yellow while above 0), and the highest open count in the last 180 / 30 / 7 days. Needs `issues.repo` in the config. Source: one cached `gh issue list`, refreshed every 15 minutes. Switch: `issues`.
 
-## alerts
-
-The ccxp-agent persona's Slack alert check. The persona reads the Slack failure-alert channel and records when it last did; this cell shows how long ago, so "nobody is watching Slack" is visible.
-
-- `alerts checked 12m ago` (dim) = the persona checked 12 minutes ago, within the last 30 minutes. Past 30 minutes the same text turns yellow (`alerts checked 3h ago`).
-- `alerts never checked` (yellow) = there is no record of any check: the `last-check` file (an epoch written by `agent-pairing/scripts/alerts-due.sh` each time the persona checks) is missing, empty or garbage (a future time counts as garbage). It means the check has not run on this machine, not that there are no alerts.
-- `alerts held` (red) = alerts were found but held back under the per-check cap and are still waiting for a dispatch.
-- Narrow: `alerts 12m` / `alerts ?`. The cell is left out when `alerts` is false in the config, `CCXP_ALERTS=0`, or this plugin version has no `alerts-due.sh`.
-- Source: local files only, `${CCXP_ALERTS_DIR:-<profile>/ccxp-alerts}/last-check` and `hold`, read by `hud/scripts/hud-alerts.sh`. Switch: `alerts`.
-
-## bus
-
-The cross-account bus: notes another Claude Code session on this machine (another account or profile) left for this one. See the `bus` skill.
-
-- `bus 2 · home` (yellow) = 2 notes are waiting for this profile and the newest is from the agent `home`. Narrow: `bus 2`. The cell is drawn only while notes are unread; once the notes are delivered into the conversation (the next prompt, or the wake of an idle session) it goes away.
-- A note is another agent's text, not yours: Claude shows it labeled and does nothing because of it. `/hud details` spells it out: `bus 2 unread notes · newest from home`.
-- Left out when the profile has no bus config (`<profile>/ccxp-bus/config.json`), nothing is unread, or `bus` is out of `fields`.
-- Source: local files only, `bash _bus/bus.sh status --json` (read-only, no lock, no network) via `hud/scripts/hud-bus.sh`. Switch: `bus`.
-
 ## ci | red-ci, unhandled, unhandled-ci
 
 The one CI the HUD shows: the newest run of the configured workflow (normally the Nightly Orchestrator), alone on a top row: `CI (Nightly Orchestrator) ✗ failing 10-28 (2h ago)`. No other workflow is shown (owner decision d143: "we only need one CI"; drill down manually for more).
@@ -86,6 +67,10 @@ The one CI the HUD shows: the newest run of the configured workflow (normally th
 - Date = the run's day (`MM-DD`), then its age.
 - The old cell `✗ N unhandled CI (names)` is gone. It counted failed runs of any workflow on the default branch or a schedule whose run id was in no open task, no job context file and no ledger entry (so nobody was investigating it). Its list is still available by hand: `bash hud/scripts/hud-redci.sh list [owner/name ...]`.
 - Set it with `/hud config edit` (a workflow URL) or the `ci` key; no `ci`, no row and no `gh` call. Source: one cached `gh run list --workflow` (refreshed about every 2 minutes). The first result can take a couple of minutes. Switch: `ci`.
+
+## bus | notes
+
+Unread notes from another Claude Code session (another account or profile) on this machine: `bus 2 · home` (yellow) = 2 unread, newest from agent `home`. Narrow: `bus 2`. Nothing shows while nothing is unread, or when no bus is set up for this profile. Source: local files only (`_bus/bus.sh status --json`: the inbox size against your saved read position). Read them with `/bus`. Switch: `bus`.
 
 ## version | ver
 
