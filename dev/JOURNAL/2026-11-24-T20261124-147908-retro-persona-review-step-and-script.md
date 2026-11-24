@@ -1,12 +1,12 @@
 ---
-status: In Progress
+status: Done
 estimation: 2
 blocks: [T20261124-420719]
 source: owner request 2026-11-24 (decision d155), epic E2
 related: [T20261124-420719, T20261124-315192]
 description: /retro reviews the decisions log against the persona and proposes persona and skill edits through a tested script
-claimed_by: cc1-50ac6891:7e1d72cc6f5f5d2f
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -30,6 +30,21 @@ scheduled: 2026-11-23
 
 ## Done criteria
 
-- `persona-review.sh` with the five subcommands; `bats tests/persona_review.bats` green, including fixtures for each bucket hint and a no-decisions-file no-op.
-- `retro/SKILL.md` step added (at most 15 lines), `README.md` skill table unchanged or one line.
-- Persona asset untouched.
+- [x] `retro/scripts/persona-review.sh` with list, overlap, size, bucket, commands; `tests/persona_review.bats` (11 tests) green.
+- [x] `retro/SKILL.md` Phase 4f added (15 lines) plus a `## Persona review` report section.
+- [x] Persona asset untouched (48481 B, headroom 18 B under the 48500 cap).
+
+## Closed (2026-11-24)
+
+- Shipped in the PR that carries this journal move (see `git log -- retro/scripts/persona-review.sh`).
+- Script is read-only by test (decisions log and persona checksums unchanged); `commands` only prints lines for the owner.
+- Bucket hints are heuristics (words, scope, `decision review` stale/contradiction output); the retro agent confirms each.
+- Quality regression (file_loc): new 160-line script plus a 15-line SKILL.md step; the logic was put in the script on purpose to keep SKILL.md short.
+- Follow-up: T20261124-420719 (persona move 1) is unblocked.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): no, written together with its tests in one pass; tests were run red-to-green once (line numbers fixed).
+- Verification (`superpowers:verification-before-completion`): yes, ratchets, doc-impact, lint-identifiers and bats run before the PR.
+- Systematic debugging: no, did not get stuck.
+- Receiving code review: see PR (independent review via /address-pr).

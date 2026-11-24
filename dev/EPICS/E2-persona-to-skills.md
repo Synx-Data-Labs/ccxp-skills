@@ -27,7 +27,7 @@ Constraints:
 - Pending follow-ups from that review: n384 (d101 kept, d112 retired by the owner on 2026-11-24); d147, d129, d96 persona additions wait for trims from the persona moves below.
 - Later clusters to file after the second persona move, from the section sizes above: CI failure response and Repo freshness, HUD job ledger, Consent, Writing a job prompt; further skills (ccxp, retro, ipm, todo) by the same ranking.
 
-- [T20261124-147908](../TODO/T20261124-147908-retro-persona-review-step-and-script.md) — retro step and `persona-review.sh`: classify decisions, propose persona edits
+- [T20261124-147908](../JOURNAL/2026-11-24-T20261124-147908-retro-persona-review-step-and-script.md) — retro step and `persona-review.sh`: classify decisions, propose persona edits
 - [T20261124-420719](../TODO/T20261124-420719-persona-move-alerts-routines-idle-wake-to-docs.md) — persona move 1: alerts, routines due, idle wake become pointers
 - [T20261124-315192](../TODO/T20261124-315192-persona-move-detached-jobs-decisions-terms-to-skill.md) — persona move 2: detached jobs, decisions log, terms become pointers
 - [T20261124-870400](../TODO/T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md) — autopilot Phase 3/4 classification and housekeeping dispatch into scripts

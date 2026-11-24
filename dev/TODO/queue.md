@@ -68,7 +68,7 @@ reprioritize.
 - [T20261122-212315](T20261122-212315-hud-help-and-config-show.md): /hud help [topic] and a read-only /hud config
 - [T20261123-248916](T20261123-248916-hud-drop-alerts-cell.md): drop the alerts cell from the HUD
 - [T20261123-424791](T20261123-424791-hud-slack-failure-rca-progress.md): HUD shows RCA progress for each Slack-reported failure
-- [T20261124-147908](T20261124-147908-retro-persona-review-step-and-script.md): /retro persona-review step and `persona-review.sh`
+- [T20261124-157602](T20261124-157602-hud-unreleased-commits.md): HUD shows unreleased commits after the plugin repo URL
 - [T20261124-420719](T20261124-420719-persona-move-alerts-routines-idle-wake-to-docs.md): Persona move 1: alerts, routines due, idle wake become pointers
 - [T20261124-315192](T20261124-315192-persona-move-detached-jobs-decisions-terms-to-skill.md): Persona move 2: detached jobs, decisions log, terms become pointers
 - [T20261124-870400](T20261124-870400-autopilot-phase-3-4-prose-to-scripts.md): autopilot Phase 3/4 classification and housekeeping dispatch into scripts
