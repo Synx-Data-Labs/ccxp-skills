@@ -1245,17 +1245,108 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 
 _ap_on() { _ap start >/dev/null; }
 
-@test "max_dop: default 1, range 1-16, set/show/reset like the other keys" {
-  run _ap config-show; [[ "$output" == *"max_dop"*"1"*"default"*"1 (1-16)"* ]]
+@test "max_dop: default 3, range 3-16, set/show/reset like the other keys (2 slots are reserved)" {
+  run _ap config-show; [[ "$output" == *"max_dop"*"3"*"default"*"3 (3-16)"* ]]
   run _ap config-set max_dop 8; [ "$status" -eq 0 ]
   run _ap config-show --json; [ "$(jq -r .settings.max_dop.value <<<"$output")" = 8 ]
   [ "$(jq -r .settings.max_dop.source <<<"$output")" = override ]
-  run _ap config-set max_dop 0; [ "$status" -eq 2 ]
   run _ap config-set max_dop 17; [ "$status" -eq 2 ]
   run _ap config-set max_dop abc; [ "$status" -eq 2 ]
   run _ap config-reset max_dop; [ "$status" -eq 0 ]
-  run _ap config-show --json; [ "$(jq -r .settings.max_dop.value <<<"$output")" = 1 ]
+  run _ap config-show --json; [ "$(jq -r .settings.max_dop.value <<<"$output")" = 3 ]
   run _ap config-set max_dop 16; [ "$status" -eq 0 ]
+  run _ap config-set max_dop 3; [ "$status" -eq 0 ]
+}
+
+@test "max_dop: 0, 1 and 2 are refused with the reserved-slots message and nothing is written" {
+  for n in 0 1 2; do
+    run _ap config-set max_dop "$n"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"2 slots are always reserved"* ]]
+  done
+  [ ! -e "$AUTOPILOT_CONFIG_FILE" ]
+  printf '{"max_visits":7}' > "$AUTOPILOT_CONFIG_FILE"
+  before=$(cat "$AUTOPILOT_CONFIG_FILE")
+  run _ap config-set max_dop 2; [ "$status" -eq 2 ]
+  [ "$(cat "$AUTOPILOT_CONFIG_FILE")" = "$before" ]
+}
+
+@test "max_dop clamp-on-read: a file value below 3 reads as 3, notice in config-show and report, file never rewritten" {
+  printf '{"max_dop":1}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show --json
+  [ "$(jq -r .settings.max_dop.value <<<"$output")" = 3 ]
+  [[ "$(jq -r '.notices[0]' <<<"$output")" == *"max_dop 1"*"using 3"* ]]
+  run _ap config-show; [[ "$output" == *"notice: max_dop 1"*"using 3"* ]]
+  _ap_on
+  run _ap report; [[ "$output" == *"notice: max_dop 1"* ]]
+  [ "$(cat "$AUTOPILOT_CONFIG_FILE")" = '{"max_dop":1}' ]
+  printf '{"max_dop":2}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show; [[ "$output" == *"notice: max_dop 2"* ]]
+  printf '{"max_dop":4}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show; [[ "$output" != *"notice:"* ]]
+}
+
+@test "reserved_slots: default 2, range 0-8, set/show/reset, 0 is a valid override" {
+  run _ap config-show; [[ "$output" == *"reserved_slots"*"2"*"default"*"2 (0-8)"* ]]
+  _ap config-set max_dop 12 >/dev/null
+  run _ap config-set reserved_slots 8; [ "$status" -eq 0 ]
+  run _ap config-set reserved_slots 9; [ "$status" -eq 2 ]
+  run _ap config-set reserved_slots -1; [ "$status" -eq 2 ]
+  run _ap config-set reserved_slots abc; [ "$status" -eq 2 ]
+  run _ap config-set reserved_slots 0; [ "$status" -eq 0 ]
+  run _ap config-show --json
+  [ "$(jq -r .settings.reserved_slots.value <<<"$output")" = 0 ]
+  [ "$(jq -r .settings.reserved_slots.source <<<"$output")" = override ]
+  run _ap config-reset reserved_slots; [ "$status" -eq 0 ]
+  run _ap config-show --json; [ "$(jq -r .settings.reserved_slots.value <<<"$output")" = 2 ]
+  [ "$(jq -r .settings.reserved_slots.source <<<"$output")" = default ]
+}
+
+@test "reserved_slots: at most max_dop minus 1, both directions, and capped on read with a notice" {
+  run _ap config-set reserved_slots 3; [ "$status" -eq 2 ]    # max_dop 3 leaves 2 at most
+  [[ "$output" == *"at most 2"* ]]
+  run _ap config-set reserved_slots 2; [ "$status" -eq 0 ]
+  _ap config-set max_dop 6 >/dev/null
+  _ap config-set reserved_slots 5 >/dev/null
+  run _ap config-set max_dop 5; [ "$status" -eq 2 ]            # would leave 5 reserved of 5
+  [[ "$output" == *"lower reserved_slots first"* ]]
+  [ "$(jq -r .max_dop "$AUTOPILOT_CONFIG_FILE")" = 6 ]
+  printf '{"max_dop":4,"reserved_slots":7}' > "$AUTOPILOT_CONFIG_FILE"
+  run _ap config-show --json
+  [ "$(jq -r .settings.reserved_slots.value <<<"$output")" = 3 ]
+  [[ "$(jq -r '.notices[0]' <<<"$output")" == *"reserved_slots 7"*"using 3"* ]]
+  run _ap routine-free; [ "$output" = 1 ]
+}
+
+@test "routine limit: slots --summary, routine-free and report show max_dop minus reserved_slots" {
+  _ap_on
+  run _ap routine-free; [ "$output" = 1 ]
+  run _ap slots --summary; [ "$output" = "routine 1 of 3, reserved 2, busy 0, routine-free 1, free 3" ]
+  _ap config-set max_dop 10 >/dev/null
+  run _ap slots --summary; [ "$output" = "routine 8 of 10, reserved 2, busy 0, routine-free 8, free 10" ]
+  _ap busy on T20261106-000001 --slot 1
+  _ap busy on T20261106-000002 --slot 2
+  run _ap routine-free; [ "$output" = 6 ]
+  run _ap report; [[ "$output" == *"slots: 2 of 10 running (routine 8 of 10, reserved 2)"* ]]
+  _ap config-set reserved_slots 0 >/dev/null
+  run _ap routine-free; [ "$output" = 8 ]
+  run _ap slots --bogus; [ "$status" -eq 2 ]
+  run _ap slots; [[ "$output" == *"T20261106-000001"* ]]
+}
+
+@test "routine limit: routine-free never goes below 0; an urgent slot does not use up routine-free" {
+  _ap_on
+  _ap busy on T20261106-000001 --slot 1
+  run _ap routine-free; [ "$output" = 0 ]
+  _ap busy on T20261106-000002 --urgent --slot 2
+  _ap busy on --slot 3 T20261106-000003 --urgent
+  run _ap routine-free; [ "$output" = 0 ]
+  run _ap slots --summary; [ "$output" = "routine 1 of 3, reserved 2, busy 3, routine-free 0, free 0" ]
+  _ap busy off --slot 1
+  run _ap routine-free; [ "$output" = 1 ]
+  [ "$(_j '.slots["2"].urgent')" = true ]
+  [ "$(_j '.slots["2"].task')" = T20261106-000002 ]
+  [ "$(_j '.slots["3"].task')" = T20261106-000003 ]
 }
 
 @test "slots: busy on/off per slot; bare off clears all; the legacy mirror follows the oldest slot" {
@@ -1314,13 +1405,15 @@ _ap_on() { _ap start >/dev/null; }
   [ "$(_j .cycle_count)" = 2 ]
 }
 
-@test "start/resume: due with a free slot, already-on when every slot is busy; max_dop=1 unchanged" {
+@test "start/resume: due with a routine slot free, already-on when the routine limit is reached (default: one routine slot)" {
   _ap_on
   _ap busy on T20261106-000001 --slot 1
   run _ap start; [ "$output" = already-on ]
-  _ap config-set max_dop 2 >/dev/null
-  run _ap start; [ "$output" = dispatch ]
+  _ap config-set max_dop 4 >/dev/null
+  run _ap start; [ "$output" = dispatch ]       # routine limit 2
   _ap busy on T20261106-000002 --slot 2
+  run _ap start; [ "$output" = already-on ]
+  _ap busy on T20261106-000003 --urgent --slot 3   # urgent work leaves the routine count alone
   run _ap start; [ "$output" = already-on ]
   _ap pause >/dev/null
   run _ap resume; [ "$output" = busy ]
@@ -1411,12 +1504,12 @@ _ap_on() { _ap start >/dev/null; }
   run _ap delay held; [ "$output" = 300 ]
 }
 
-@test "report: slots line only when max_dop > 1" {
+@test "report: always shows the slots line with the routine limit (default max_dop 3, reserved 2)" {
   _ap_on
-  run _ap report; [[ "$output" != *"slots:"* ]]
+  run _ap report; [[ "$output" == *"slots: 0 of 3 running (routine 1 of 3, reserved 2)"* ]]
   _ap config-set max_dop 4 >/dev/null
   _ap busy on T20261106-000001 --slot 1
-  run _ap report; [[ "$output" == *"slots: 1 of 4 running"* ]]; [[ "$output" == *"slot 1: T20261106-000001"* ]]
+  run _ap report; [[ "$output" == *"slots: 1 of 4 running (routine 2 of 4, reserved 2)"* ]]; [[ "$output" == *"slot 1: T20261106-000001"* ]]
 }
 
 @test "state lock: a stale lock directory is broken; two writers both land" {
@@ -1481,9 +1574,16 @@ _ap_on() { _ap start >/dev/null; }
   [ "$(_j '.slots | keys | join(",")')" = "2" ]
 }
 
-@test "SKILL.md and parallel.md document max_dop (default 1, raising to 8), the guard and per-slot dispatch" {
+@test "docs: reserved_slots, the routine limit and --urgent are documented (T20261124-182499)" {
+  grep -q 'reserved_slots' "$REPO_ROOT/autopilot/SKILL.md"
+  grep -q 'reserved_slots' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q -- '--urgent' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q 'routine-free' "$REPO_ROOT/autopilot/parallel.md"
+  grep -q 'reserved_slots' "$REPO_ROOT/README.md"
+}
+
+@test "SKILL.md and parallel.md document max_dop (default 3), the guard and per-slot dispatch" {
   grep -q 'max_dop' "$REPO_ROOT/autopilot/SKILL.md"
-  grep -q 'config set max_dop 8' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q 'autopilot/parallel.md' "$REPO_ROOT/autopilot/SKILL.md"
   grep -q 'autopilot-state.sh guard' "$REPO_ROOT/autopilot/parallel.md"
   grep -q -- '--slot' "$REPO_ROOT/autopilot/parallel.md"

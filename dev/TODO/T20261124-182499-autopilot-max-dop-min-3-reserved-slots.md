@@ -1,5 +1,5 @@
 ---
-status: Design
+status: In Progress
 estimation: 2
 source: owner request, this conversation, 2026-11-24 (decisions d154, d157)
 description: Autopilot max_dop minimum 3 plus a reserved_slots setting (default 2) for urgent tier 1 and 2 work
