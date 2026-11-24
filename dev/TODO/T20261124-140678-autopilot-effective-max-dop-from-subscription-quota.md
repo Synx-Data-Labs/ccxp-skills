@@ -4,7 +4,7 @@ scheduled: 2026-12-07
 blocked-by: T20261124-168446
 estimation: 1
 source: Owner chat 2026-11-24 (job 1490)
-related: T20261103-169088
+related: [T20261103-169088, T20261124-182499]
 description: Autopilot computes an effective max_dop from the HUD's subscription-quota cache (burn rate vs time left), opt-in
 ---
 
@@ -14,7 +14,7 @@ description: Autopilot computes an effective max_dop from the HUD's subscription
 
 - **Type**: feature
 - Owner (2026-11-24): "if the subscription time limit is only 20% left, I would reduce the maxdop of AP down to 3." Phase 2 of the display-first request; do not start before T20261124-168446 (the HUD cache file) has landed.
-- Ordering: after T20261124-168446 and after the open autopilot-config task for max_dop minimum 3 and the `reserved_slots` key (owner decision d157: `max_dop` must be 3 or more because 2 slots are always reserved; T20261103-169088 is the earlier config task, the min-3 follow-up is job 1484).
+- Ordering: after T20261124-168446 and after the open autopilot-config task for max_dop minimum 3 and the `reserved_slots` key (owner decision d157: `max_dop` must be 3 or more because 2 slots are always reserved; T20261103-169088 is the earlier config task, the min-3 follow-up is T20261124-182499).
 
 ## Design
 
