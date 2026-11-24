@@ -34,9 +34,17 @@ scheduled: 2026-11-23
 
 - `max_dop`: range 3-16, default 3. `ap-max-dop` clamps a smaller file value up to 3 (never rewrites the file). `config set max_dop <n>` with n below 3 exits 2, writes nothing, and says 2 slots are reserved for urgent work.
 - `reserved_slots`: integer 0-8, default 2, effective value capped at `max_dop` minus 1 (at least one routine slot). `config set` refuses a value above the cap; `config set max_dop` refuses a value that would leave the stored `reserved_slots` above `max_dop` minus 1.
-- Routine limit = `max_dop` minus effective `reserved_slots`. New `routine-free` prints the routine slots still free (limit minus busy, never below 0); `slots --summary` prints `routine <limit> of <max_dop>, reserved <n>, busy <b>, routine-free <f>`; `report` always shows that line (the slots line now always applies since the default is 3).
+- Routine limit = `max_dop` minus effective `reserved_slots`. New `routine-free` prints the routine slots still free (limit minus busy, never below 0); `slots --summary` prints `routine <limit> of <max_dop>, reserved <n>, busy <b>, routine-free <f>, free <n>`; `report` always shows that line (the slots line now always applies since the default is 3).
 - `start` and `resume` (the routine wake) answer `dispatch` only while a routine slot is free; urgent work claims a reserved slot with `busy on <id> --slot <N>` and is not limited by the routine limit.
 - Clamp-on-read notice: `config-show` (text and `--json` `notices`) and `report` print a one-line notice when the file holds `max_dop` below 3 or `reserved_slots` above the cap.
+- Validation lives in `ap-config-set`, after the generic range check:
+  - `reserved_slots` uses a non-negative reader and validator (0 is valid; `ap-config` and the `^[1-9]` regex stay for the other keys) and `config-show` marks it `override` when the stored value is what is in effect
+  - cross-key refusals (exit 2, nothing written): `reserved_slots` above effective `max_dop` minus 1; `max_dop` that would leave the stored `reserved_slots` above `max_dop` minus 1
+  - `config-reset` is never refused: a stored value that no longer fits is capped on read, with the notice
+- Default 1 to 3, side effects handled:
+  - default stays one routine cycle (3 minus 2), so nothing new runs by default; an existing `max_dop` 2 user drops to 1 routine slot (clamped to 3, notice shown)
+  - the parallel path (clone per slot, `parallel.md`) applies when the routine limit is above 1; the merge cap can be exceeded by at most `max_dop` minus 1 merges (up to 2 at the default)
+- Urgent dispatch: deciding that work is urgent (a new or `/top`'d task, CI-failure response) stays the dispatcher's judgment per d154; the script supplies counts only. An urgent cycle takes the lowest free slot number up to `max_dop` with `busy on <id> --slot <N>`; `slots --summary` also prints `free <n>` (slots free overall) so the dispatcher can see room for it.
 - Alternatives rejected:
   - Default `max_dop` 2 or leaving 1-16: contradicts d157.
   - Rewrite a low value in the file on read: silent mutation of owner config.
@@ -48,7 +56,7 @@ scheduled: 2026-11-23
 - [ ] `tests/autopilot_state.bats`: `max_dop` 1 and 2 refused (exit 2, file untouched, message names the reserved slots); 3 and 16 accepted; 17 refused; default 3 and range `3-16` in `config-show`.
 - [ ] `reserved_slots`: default 2, 0 and 8 accepted when `max_dop` allows, 9 refused, cap at `max_dop` minus 1 refused, `max_dop` lowered under the stored reserved count refused, `config-reset` drops it.
 - [ ] Clamp-on-read: file with `max_dop` 1 reads 3, notice shown in `config-show` and `report`, file unchanged.
-- [ ] Routine limit: `routine-free`, `slots --summary` and `report` output; `start`/`resume` use the routine limit.
+- [ ] Routine limit: `routine-free`, `slots --summary` (with `free`) and `report` output; `start`/`resume` use the routine limit; `config-set` cross-key refusals.
 - [ ] Doc pins: SKILL.md and `autopilot/parallel.md` mention `reserved_slots`; skill-quality stays at its baseline.
 
 ## Done criteria
