@@ -15,7 +15,7 @@ scheduled: 2026-11-23
 
 - **Type**: bug
 - **Problem**: the queue cell's `max` shows nested 180d/30d/7d windows, so on a growing queue all three equal the current peak and no trend shows.
-- **Solution**: three adjacent, non-overlapping rolling windows (last month = days 15-42 ago, last week = days 8-14 ago, this week = the last 7 days) shown as `max a/b/c` plus a trend arrow; computed from the existing `hist-<key>` / `samples-<key>` series.
+- **Solution**: three adjacent, non-overlapping rolling windows (last month = 14 to 42 days ago, last week = 7 to 14 days ago, this week = the last 7 days) shown as `max a/b/c` plus a trend arrow; computed from the existing `hist-<key>` / `samples-<key>` series.
 - **Also (owner, same task)**: retire the `revisited` count from the queue cell and `/hud details` ("I don't care about the revisited stats"); `autoparked` stays (its own signal: tasks the autopilot gave up on).
 
 ## Problem
@@ -47,7 +47,7 @@ scheduled: 2026-11-23
 
 ## Test plan
 
-- [ ] `tests/hud_queue_hwm.bats`: growing, shrinking, flat, no-change window, no history, first days of history, edges at exactly 7, 14 and 42 days (and one second either side), future samples, DST and time zones (UTC vs New_York/Berlin).
+- [ ] `tests/hud_queue_hwm.bats` (the existing 180d/30d/7d assertions are replaced; the sample-rotation tests stay, the 180-day cap remains for the issues cell): growing, shrinking, flat, no-change window, no history, first days of history, edges at exactly 7, 14 and 42 days (and one second either side), future samples, DST and time zones (UTC vs New_York/Berlin).
 - [ ] `hud/pure.test.ts` (new tests `queue max: ...`, replacing the `queue hwm: ...` ones): parse (nullable windows, old shape ignored), band and details text, arrow up/down/none, warning colour, narrow-terminal shrink steps, no `revisited`.
 - [ ] `tests/hud_lib.bats`, `tests/hud_data.bats`, `tests/hud_queue_source.bats`: queue JSON without `revisited`, `hwm` shape.
 
@@ -55,8 +55,11 @@ scheduled: 2026-11-23
 
 - [ ] Three adjacent windows, the numbers differ and rise on a growing queue: `tests/hud_queue_hwm.bats` "a growing queue".
 - [ ] Window edges exact: `tests/hud_queue_hwm.bats` edge tests (7, 14, 42 days).
-- [ ] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history", `hud/pure.test.ts` "queue max: the arrow compares".
-- [ ] Narrow terminals shrink as before: `hud/pure.test.ts` "queue max: a narrow band degrades".
+- [ ] No history shows this week only, older windows `-`: `tests/hud_queue_hwm.bats` "no history and no samples" (rewritten: older windows null), `hud/pure.test.ts` "queue max: the arrow compares" (`max -/-/44`).
+- [ ] Arrow up/down/none and warning colour at the highest of the three: `hud/pure.test.ts` "queue max: the arrow compares", "queue max: at the highest of the three".
+- [ ] Band and details text and the `queue.hwm` JSON shape (`lm`/`lw`/`tw`, nullable, `tw` clamped to the current length): `hud/pure.test.ts` "queue max: the band shows", "queue max: parseHelper"; `tests/hud_data.bats` queue key.
+- [ ] The issues cell keeps its nested 180/30/7 figures: `tests/hud_issues.bats` unchanged and green; docs reworded in `hud/README.md` and `hud/scripts/hud-issues.sh`.
+- [ ] Narrow terminals: the band shrinks `· max a/b/c ▲` then no max then `queue len/total`, never wider than the row: `hud/pure.test.ts` "queue max: a narrow band degrades" (new).
 - [ ] `revisited` gone from cell, details, JSON: `tests/hud_lib.bats` sl-queue-json tests, `hud/pure.test.ts` queue tests.
 - [ ] README "Queue high watermark" rewritten, HELP updated: `hud/README.md`, `hud/HELP.md`.
 
@@ -67,8 +70,8 @@ scheduled: 2026-11-23
 - Today (`hud/README.md` "Queue high watermark") the queue cell shows three NESTED windows (180d >= 30d >= 7d >= current), enforced in `hud/model.ts` parseHelper; when the queue grows all three equal the current peak, so no trend shows.
 - Design, chosen by the owner (rolling over calendar buckets: "do the rolling window"): three adjacent, never overlapping windows relative to now:
   - this week = the trailing 7 days ending now, including the current length
-  - last week = the 7 days before that (days 8 to 14 ago)
-  - last month = the 4 weeks (28 days) before that (days 15 to 42 ago); owner: "last month, means last 4 weeks"
+  - last week = the 7 days before that (7 to 14 days ago)
+  - last month = the 4 weeks (28 days) before that (14 to 42 days ago); owner: "last month, means last 4 weeks"
 - Display: `max <lastMonth>/<lastWeek>/<thisWeek>` (e.g. `max 61/74/83`) plus a dim trend arrow comparing this week with last week (up, down, nothing when equal); warning colour when the queue is at the highest of the three.
 - Remove the nesting enforcement and the 180-day figure from the queue cell (the issues cell keeps its own 180/30/7 windows, out of scope).
 - Rules: windows are elapsed seconds (DST-safe); a window with no changes carries the length in force at its start; a window with no data at all (before the first history) shows `-`; no history yet: this week shows the current length, the others `-`; samples dated in the future (clock set back) are ignored.
