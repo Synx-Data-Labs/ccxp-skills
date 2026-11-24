@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request, this conversation, 2026-11-24
 description: HUD shows how many commits the local branch is behind (and ahead of) its remote
 type: feature
+claimed_by: cc1-50ac6891:9ce523ecfd3a0b1f
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261124-317732: HUD: show commits behind the remote
