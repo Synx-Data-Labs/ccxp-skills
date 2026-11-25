@@ -83,3 +83,4 @@ reprioritize.
 - [T20261123-135901](T20261123-135901-scrub-pii-from-public-repo.md): Scrub PII from the public repo
 - [T20261123-136500](T20261123-136500-configurable-ci-job-cap.md): Configurable CI job cap
 - [T20261124-153489](T20261124-153489-hud-details-sectioned-layout.md): HUD details: one labeled row per section
+- [T20261124-297524](T20261124-297524-migrate-ccxp-skills-to-xinzweb.md): Migrate ccxp-skills from Synx-Data-Labs/ to xinzweb/
