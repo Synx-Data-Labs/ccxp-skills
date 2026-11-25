@@ -74,4 +74,5 @@ claimed_role:
 - Met: all done criteria above; `hud/pure.test.ts` 201/201 through a local deno shim of the claude-code runner (the real runner is not available locally; CI runs the bats suites).
 - Quality probe: 8 files, shellcheck clean, no regression.
 - Not verified: the `hooks.test.tsx` suite (needs JSX in the real runner).
+- Owner addendum in the same PR: the details REPO section is renamed CLONE (same content and order; the `repo` cell is unchanged).
 - Follow-ups: none.

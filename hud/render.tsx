@@ -42,7 +42,7 @@ export function userMessageTree(
 
 /**
  * The status band, or null when there is nothing to draw. `expanded` (`/hud details`) draws the labeled sections
- * (SESSION, REPO, BUILD, ..., one row each, wrapped rows included) instead of the one row, capped at `maxRows` (a cut says so); with no detail data it falls back
+ * (SESSION, CLONE, BUILD, ..., one row each, wrapped rows included) instead of the one row, capped at `maxRows` (a cut says so); with no detail data it falls back
  * to the one row. With a `fill` style (always passed by the register; null only in tests) and a known width of at least FILL_MIN_COLUMNS) every row is padded
  * to `columns` and drawn on a background (or reverse video); otherwise the plain row.
  */
