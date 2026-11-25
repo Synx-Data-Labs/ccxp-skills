@@ -36,7 +36,8 @@ function nr-classify() {
   local conc created started updated job step now q r
   conc="$(jq -r '.conclusion // ""' "$f")" || return 3
   created="$(jq -r '.createdAt // empty' "$f")"
-  started="$(jq -r '.startedAt // .createdAt // empty' "$f")"
+  # run-level startedAt can equal createdAt even after a long queue: prefer the earliest job start
+  started="$(jq -r '([.jobs[]?.startedAt | select(. != null and . != "" and . > "2000")] | min) // .startedAt // .createdAt // empty' "$f")"
   updated="$(jq -r '.updatedAt // empty' "$f")"
   [ -n "$created" ] && [ -n "$updated" ] || { nr-die "classify: createdAt/updatedAt missing"; return 3; }
   q=$(( ($(nr-epoch "$started") - $(nr-epoch "$created")) / 60 ))
@@ -93,7 +94,7 @@ function nr-sha-reachable() {
   local repo=$1 branch=$2 sha=$3 out
   [[ "$sha" =~ ^[0-9a-fA-F]{7,40}$ ]] || { nr-die "sha-reachable: bad sha"; return 2; }
   [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ ]] && [[ "$branch" != *..* ]] || { nr-die "sha-reachable: bad branch"; return 2; }
-  [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { nr-die "sha-reachable: bad repo"; return 2; }
+  [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && [[ "$repo" != .*/* && "$repo" != */.* ]] || { nr-die "sha-reachable: bad repo"; return 2; }
   # a typo in the branch also 404s the compare call, so prove the branch exists first
   if ! out="$(nr-gh api "repos/$repo/branches/$branch" --jq .name 2>&1)"; then
     if grep -q -E '404|Not Found' <<<"$out"; then nr-die "sha-reachable: branch $branch not found in $repo"; return 3; fi
@@ -105,7 +106,9 @@ function nr-sha-reachable() {
       ahead|diverged) printf 'unreachable\n' ;;
       *) nr-die "sha-reachable: unexpected status '$out'"; return 4 ;;
     esac
-  elif grep -q -E '404|422|Not Found|No commit found|No common ancestor' <<<"$out"; then
+  elif grep -q -E 'No common ancestor' <<<"$out"; then
+    printf 'unreachable\n'
+  elif grep -q -E '404|422|Not Found|No commit found' <<<"$out"; then
     printf 'missing\n'
   else
     nr-die "sha-reachable: gh api failed"; return 4
