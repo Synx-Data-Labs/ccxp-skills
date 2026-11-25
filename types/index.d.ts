@@ -127,17 +127,17 @@ export type Ledger = {
 }
 
 /**
- * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|held|epic|claimed, so those sum to `total`.
- * `held` = a status the HUD counts as not takeable (Blocked by an open task, BLOCKED, SUPERVISED, needs manual, sign-off); auto-pick's own gate is slightly wider.
+ * Breakdown of dev/TODO/queue.md; every task is in exactly one of ready|blocked|epic|claimed, so those sum to `total`.
+ * `blocked` = `Blocked by T<id>` while that task is still open.
  */
 export type Queue = {
   total: number
   ready: number
-  held: number
+  blocked: number
   epic: number
   /** Held by another session; shown only when above 0. */
   claimed: number
-  /** Autopilot holds (keys of the state file's `.holds`); shown as `2hd` only when above 0. Absent in an older helper answer = 0. */
+  /** Autopilot holds (keys of the state file's `.holds`); shown in the AUTOPILOT section as `2 held by autopilot` only when above 0. Absent in an older helper answer = 0. */
   apholds?: number
   /** Set when the queue was read from origin/<branch> (queue.source `default-branch`): the cell then reads `queue@<branch>`. */
   branch?: string

@@ -516,21 +516,19 @@ sl-queue-materialize() {
 # Queue breakdown of <repo>/dev/TODO/queue.md -> one compact JSON object, or nothing
 # when the repo has no queue (the HUD then shows no queue cell). Deterministic, no LLM,
 # one awk over the queued task files plus one jq; read-only, never fails.
-#   {"total","ready","held","epic","claimed","apholds"}
+#   {"total","ready","blocked","epic","claimed","apholds"}
 # Every queued task line (`- [T<id>](file.md)...`, struck-through lines are not tasks)
-# lands in EXACTLY ONE of ready|held|epic|claimed, first match wins, so those four always
+# lands in EXACTLY ONE of ready|blocked|epic|claimed, first match wins, so those four always
 # sum to total; apholds is an extra count from the autopilot state file:
 #   epic      the frontmatter has a `children:` key, or the task is the parent of a dev/EPICS/E*.md epic (that file has a
 #             `Parent design task:` / `Parent:` line naming it), or a deliberate uppercase
 #             marker: the title starts with `EPIC` / contains `— EPIC`, or the status has the
 #             standalone word EPIC. Free-text "umbrella"/"epic" is NOT a signal (product
 #             terms and prose misfire). Plain members of a dev/EPICS epic stay takeable.
-#   held      a status the HUD counts as not takeable: `Blocked by T<id>` while that blocker
-#             is still in dev/TODO/, or BLOCKED / SUPERVISED (case-sensitive, so a resolved
-#             "Blocked by" is not held), or "needs manual" / sign-off (case-insensitive). This
-#             is the HUD's stricter display rule: auto-pick (`todo-gated`) is a little wider
-#             (case-insensitive words, any `Blocked by`), so `ready` can include a task
-#             auto-pick skips. Nothing is derived from any marker text (T20261102-296642).
+#   blocked   `Blocked by T<id>` while that blocker is still in dev/TODO/ (a dependency; a resolved
+#             "Blocked by" is not blocked). The old status words BLOCKED / SUPERVISED / needs manual /
+#             sign-off are no longer a bucket: such a task counts as claimed or ready like any other.
+#             Nothing is derived from any marker text (T20261102-296642).
 #   claimed   `claimed_by:` set to a clone other than this one / the autopilot clone
 #   ready     everything else: what the autopilot can take
 #             (An old state file's `visits` / `parked` keys are ignored: the park path is retired.)
@@ -619,10 +617,10 @@ _sl-queue-json() {
     | [$ids[] | . as $id | ($meta[$id] // {status: "", claimed: "", title: "", kids: false}) as $m
         | ($m.status) as $s
         | (if $m.kids or ($epicParents | index($id)) != null or ($m.title | test("^# T[0-9]+-[0-9]+: EPIC\\b|— EPIC\\b")) or ($s | test("\\bEPIC\\b")) then "epic"
-           elif ($s | test("\\b(BLOCKED|SUPERVISED)\\b")) or ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) or ($s | test("needs manual|sign-off"; "i")) then "held"
+           elif ([$s | scan("(?i:blocked by) (T[0-9]+-[0-9]+)") | .[0]] | any(. as $b | $openIds | index($b) != null)) then "blocked"
            elif $m.claimed != "" and $m.claimed != $me1 and $m.claimed != $me2 then "claimed"
            else "ready" end)] as $b
-    | {total: ($ids | length)} + (["ready", "held", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
+    | {total: ($ids | length)} + (["ready", "blocked", "epic", "claimed"] | map({key: ., value: (. as $k | $b | map(select(. == $k)) | length)}) | from_entries)
       + {apholds: $aph} + $extra' 2>/dev/null || true
 }
 

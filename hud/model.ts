@@ -132,7 +132,7 @@ export function parseHelper(stdout: string): HelperData | null {
     const q = qu as Record<string, unknown>
     // Counts are clamped to whole non-negative numbers; the buckets are the helper's job to keep summing to total.
     const n = (x: unknown) => Math.max(0, Math.floor(num(x)))
-    queue = { total: n(q.total), ready: n(q.ready), held: n(q.held), epic: n(q.epic), claimed: n(q.claimed), apholds: n(q.apholds) }
+    queue = { total: n(q.total), ready: n(q.ready), blocked: n(q.blocked), epic: n(q.epic), claimed: n(q.claimed), apholds: n(q.apholds) }
     // Untrusted: the branch is only drawn when it is a plain git ref name (the same shape the config accepts for `ci.branch`).
     const branch = str(q.branch)
     if (q.source === 'default-branch' && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch)) queue.branch = branch
@@ -841,21 +841,19 @@ const trendMark = (m: QueueMax) => (m.lw === null || m.tw === m.lw ? '' : m.tw >
 const maxTone = (total: number, m: QueueMax) => (total > 0 && total >= Math.max(m.lm ?? 0, m.lw ?? 0, m.tw) ? ('warning' as const) : undefined)
 
 /**
- * Details (`full`): `queue 44 = 30 ready | 6 held | 3 epics`, the labels always in full
+ * Details (`full`): `queue 44 = 30 ready | 6 blocked | 3 epics`, the labels always in full
  * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); `epics` reads
- * singular at a count of 1. The one-row band (`!full`) starts at `queue 44 = 30r 6h 3x` and shrinks to
- * `queue 30/44`. `claimed` (held by another session) shows only above 0: `2c` in the band. `apholds` (autopilot holds, a different count from status-held `h`) also shows only above 0: `2hd` in the band, `2 on autopilot hold` in details. The max block `max 61/74/83 ▲` (details spell the labels out)
+ * singular at a count of 1. The one-row band (`!full`) starts at `queue 44 = 30r 6b 3x` and shrinks to
+ * `queue 30/44`. `claimed` (held by another session) shows only above 0: `2c` in the band. `blocked` = `Blocked by` an open task. The autopilot's holds are not here: they show in the AUTOPILOT section. The max block `max 61/74/83 ▲` (details spell the labels out)
  * shows the queue's largest length in the previous 4 weeks, last week and this week (see hud-queue-hwm.sh).
  */
 export function queueVariants(q: Queue, full: boolean): Variants {
   const parts: Array<[string, string, string, number]> = [
     ['ready', 'ready', 'r', q.ready],
-    ['held', 'held', 'h', q.held],
+    ['blocked', 'blocked', 'b', q.blocked],
     ['epic', 'epics', 'x', q.epic],
   ]
   if (q.claimed > 0) parts.push(['claimed', 'claimed', 'c', q.claimed])
-  // `h` is status-held (blocked, waiting); `hd` is an autopilot hold (the state file's `.holds`), a distinct count.
-  if ((q.apholds ?? 0) > 0) parts.push(['on autopilot hold', 'on autopilot hold', 'hd', q.apholds ?? 0])
   if (full) {
     const long: Seg[] = [{ text: `queue${q.branch ? ` (${q.branch})` : q.fallback ? ' (working tree, origin unavailable)' : ''} ${q.total} = ` }]
     parts.forEach(([one, many, , n], i) => {
@@ -1292,7 +1290,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   const dopSegs = dopDetailSegs(h)
   // Holds (the state file's `.holds`, via the queue breakdown): only while there is an autopilot record (on, paused, idle), and only above 0.
   const holds = ap ? h?.queue?.apholds ?? 0 : 0
-  const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held`, color: 'warning' }]) : null
+  const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held by autopilot`, color: 'warning' }]) : null
   section('AUTOPILOT', [apItem, dopSegs ? one('dop', dopSegs) : null, holdsItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null])
   section('WORK', jobCells)
 
