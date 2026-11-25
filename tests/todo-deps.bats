@@ -132,3 +132,16 @@ fixture() {
   [ -z "$(grep -L $'\r' "$BOARD/T20260101-000002-x.md")" ]
   [ "$(grep -c $'\r$' "$BOARD/T20260101-000002-x.md")" = "$(wc -l < "$BOARD/T20260101-000002-x.md" | tr -d ' ')" ]
 }
+
+@test "migrate keeps scalar depends_on ids, never overwrites free text, reports block-list notes" {
+  task T20260101-000001 'blocks:\n  - T20260101-000002  # why b\n  - T20260101-000003  # why c\n  - T20260101-000004'
+  task T20260101-000002 'depends_on: T20260101-000009, T20260101-000008'
+  task T20260101-000003 'depends_on: waits on the vendor'
+  task T20260101-000004 ''
+  run bash "$SCRIPT" migrate --dir "$BOARD"
+  [ "$status" -eq 0 ]
+  grep -q '^depends_on: \[T20260101-000009, T20260101-000008, T20260101-000001\]$' "$BOARD/T20260101-000002-x.md"
+  grep -q '^depends_on: waits on the vendor$' "$BOARD/T20260101-000003-x.md"
+  grep -q '^blocks: \[T20260101-000003\]$' "$BOARD/T20260101-000001-x.md"
+  [[ "$output" == *"not carried over: why b"* && "$output" == *"not carried over: why c"* ]]
+}
