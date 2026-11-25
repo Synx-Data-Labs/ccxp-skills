@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 5
 depends_on: [T20261125-255147, T20261125-361713, T20261125-187172, T20261125-366351]
 source: owner request 2026-11-25 (decisions d158, d159, d174), epic E3
 related: T20261124-177980, T20261124-112157, T20261124-158321, T20261124-320024
 description: Retire the blocks frontmatter field; depends_on is the only authored relation and dependants are derived from its inverse
+claimed_by: cc1-50ac6891:106b09463f085cb8
+claimed_role: interactive
+scheduled: 2026-11-30
 ---
 
 # T20261125-264487: Retire `blocks`, keep only `depends_on`
