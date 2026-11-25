@@ -155,3 +155,8 @@ fixture() {
   grep -q '^depends_on: \[T20260101-000009, T20260101-000001\]$' "$BOARD/T20260101-000002-x.md"
   [[ "$output" == *"T20260101-000003: blocks line names no task id, removed: blocks: nothing yet"* ]]
 }
+
+@test "todo_deps_migrate.py: no directory argument is a usage error" {
+  run python3 -I "$REPO_ROOT/todo/scripts/todo_deps_migrate.py"
+  [ "$status" -eq 2 ]
+}
