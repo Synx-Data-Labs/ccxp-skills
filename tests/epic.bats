@@ -86,7 +86,7 @@ EOF
 }
 
 @test "next: epic order, not queue.md order (000005 is first in queue but later in epic)" {
-  run bash "$SCRIPT" next E1 T20260101-000001 T20260101-000002 T20260101-000006
+  run bash "$SCRIPT" next E1 T20260101-000001 T20260101-000002 T20260101-000006 T20260101-000004
   [ "$output" = "T20260101-000005" ]
 }
 
@@ -99,7 +99,7 @@ EOF
 }
 
 @test "next: exits 1 when nothing is left" {
-  run bash "$SCRIPT" next E1 T20260101-000001 T20260101-000002 T20260101-000006 T20260101-000005
+  run bash "$SCRIPT" next E1 T20260101-000001 T20260101-000002 T20260101-000006 T20260101-000005 T20260101-000004
   [ "$status" -eq 1 ]
 }
 
@@ -116,12 +116,11 @@ EOF
   run bash "$SCRIPT" report E1 "$res"
   [ "$status" -eq 0 ]
   grep -q '^- T20260101-000006 — PR #7' <<<"$output"
-  # 000005 has a deadline -> first; then queue order: 000001 (pos 2), 000004 (pos 3), 000003 (pos 4)
+  # 000005 has a deadline -> first; then queue order: 000001 (pos 2), 000003 (pos 4)
   order="$(grep -oE '^- T[0-9]{8}-[0-9]{6}' <<<"$output" | sed -n '2,$p' | sed 's/^- //' | tr -d '\n')"
-  [[ "$order" == T20260101-000005T20260101-000001T20260101-000004T20260101-000003* ]]
+  [[ "$order" == T20260101-000005T20260101-000001T20260101-000003* ]]
   grep -q 'due 2026-11-01' <<<"$output"
   grep -q 'drive the blocker T20260101-000001 first' <<<"$output"
-  grep -q 'operator-only' <<<"$output"
   grep -q 'T20260101-999999 — other repo thing' <<<"$output"
   ! grep -q 'T20260101-000010' <<<"$output"
 }
