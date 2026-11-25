@@ -706,12 +706,12 @@ test('details split: autopilot cycles (flag autopilot) do not count as WORK; hou
   // only autopilot cycles running: WORK is READY, the cycles are named in AUTOPILOT
   const onlyAp = splitLines({ autopilot: { ...AP, busy: true, busy_slots: 2 }, ...led([apRun(5, 'autopilot'), apRun(6, 'autopilot,x')]) })
   expect(sect(onlyAp, 'WORK')).toMatch(/^READY/)
-  expect(sect(onlyAp, 'AUTOPILOT')).toContain('running r5,r6')
+  expect(sect(onlyAp, 'AUTOPILOT')).toContain('2 cycles running')
   // a non-cycle job the autopilot started (no flag) is WORK
   const mixed = splitLines({ autopilot: { ...AP, busy: true, busy_slots: 1 }, ...led([apRun(5, 'autopilot'), apRun(7, '')]) })
   expect(sect(mixed, 'WORK')).toMatch(/^WORKING \(1\)/)
   expect(sect(mixed, 'AUTOPILOT')).not.toMatch(/WORKING|READY|parked/)
-  expect(sect(mixed, 'AUTOPILOT')).toContain('running r5')
+  expect(sect(mixed, 'AUTOPILOT')).toContain('running')
   expect(sect(mixed, 'AUTOPILOT')).not.toContain('r7')
 })
 
@@ -1034,23 +1034,17 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
   expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
-  // a running cycle names its ledger job (flag autopilot, highest number); no flagged row: plain `running`
+  // a running cycle says `running` (or `N cycles running` with parallel cycles); the ledger job numbers are never shown
   const led = (rows: object[]) => ({ ledger: { running: rows, lifetime_jobs: 600, parked: [], next_job: 700, updated_at: '' } })
   const apWith = (rows: object[], over: object) => apPart(detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null, ...led(rows) }) as any, DEFAULTS, 400, now).map(r => r.map(x => x.text).join('')))
   const busy = { next_wake_at: wake, busy: true, current_task: 'T20261028-151063' }
   const rows = [{ job: 590, title: 'other', flags: '' }, { job: 596, title: 'autopilot cycle', flags: 'autopilot' }, { job: 599, title: 'x', flags: 'detached' }]
-  expect(apWith(rows, busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running r596')
-  expect(apWith([...rows, { job: 598, title: 'older', flags: 'detached,autopilot' }], busy)).toMatch(/running r598$/)
-  expect(apWith(rows, { ...busy, next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/running r596$/)
-  expect(apWith(rows, { ...busy, current_task: '' })).toMatch(/running r596$/)
-  // parallel cycles (busy_slots > 1): name that many autopilot rows, highest numbers, ascending
-  const par = { ...busy, busy_slots: 2 }
-  const prow = [{ job: 596, title: 'autopilot cycle', flags: 'autopilot' }, { job: 597, title: 'autopilot cycle s2', flags: 'autopilot' }, { job: 599, title: 'x', flags: 'detached' }]
-  expect(apWith(prow, par)).toBe('AP on 2/6h 3 loops ✓2 merged │ running r596,r597')
-  expect(apWith([{ job: 590, title: 'old', flags: 'autopilot' }, ...prow], par)).toMatch(/running r596,r597$/)
-  expect(apWith([{ job: 596, title: 'a', flags: 'autopilot' }], par)).toMatch(/running r596$/)
-  expect(apWith(prow, { ...busy, busy_slots: 1 })).toMatch(/running r597$/)
-  expect(apWith(prow, { ...busy, busy_slots: 3 })).toMatch(/running r596,r597$/)
+  expect(apWith(rows, busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
+  expect(apWith(rows, { ...busy, next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/│ running$/)
+  expect(apWith(rows, { ...busy, current_task: '' })).toMatch(/│ running$/)
+  expect(apWith(rows, { ...busy, busy_slots: 2 })).toBe('AP on 2/6h 3 loops ✓2 merged │ 2 cycles running')
+  expect(apWith(rows, { ...busy, busy_slots: 1 })).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
+  expect(apWith(rows, busy)).not.toMatch(/r\d/)
   expect(apWith([{ job: 599, title: 'x', flags: 'detached' }], busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
   expect(apWith([], busy)).toMatch(/│ running$/)
   expect(apWith(rows, { next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
