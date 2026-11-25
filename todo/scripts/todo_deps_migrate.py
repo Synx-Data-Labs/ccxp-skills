@@ -93,8 +93,13 @@ def add_dep(lines, dep):
             c = (" " + m.group(2)) if m.group(2) else ""
             lines[span[0]] = "depends_on: [%s]%s%s" % (dep, c, nl)
             return "added"
-        lines[span[0]] = "depends_on: [%s]%s" % (dep, nl)  # scalar text: replace by list
-        return "added"
+        m = re.match(r"^depends_on:\s*([^\[#]*?)\s*(#.*)?$", body)
+        old = ID.findall(m.group(1)) if m else []
+        if m and re.sub(r"[\s,]|" + ID.pattern, "", m.group(1)) == "":
+            c = (" " + m.group(2)) if m.group(2) else ""  # scalar ids: keep them, add dep
+            lines[span[0]] = "depends_on: [%s]%s%s" % (", ".join(old + [dep]), c, nl)
+            return "added"
+        return "cannot"  # free text: never overwritten
     last = lines[span[1] - 1]
     indent = re.match(r"^(\s*)-", last).group(1)
     lines.insert(span[1], "%s- %s%s" % (indent, dep, "\r" if last.endswith("\r") else ""))
@@ -163,9 +168,10 @@ def main(argv):
                 print("  %s blocks %s: %s in %s depends_on" % (a, x, "added" if r == "added" else "already present", x))
         lines = docs[a]
         span = find_key(lines, "blocks")
-        note = re.search(r"#(.*)$", lines[span[0]])
-        if note:
-            print("  %s: note on blocks line not carried over:%s" % (a, note.group(1).rstrip("\r")))
+        for ln in lines[span[0]:span[1]]:
+            note = re.search(r"#(.*)$", ln)
+            if note:
+                print("  %s: note on blocks line not carried over:%s" % (a, note.group(1).rstrip("\r")))
         if keep:
             lines[span[0]:span[1]] = ["blocks: [%s]%s" % (", ".join(keep), eol(lines))]
         else:
