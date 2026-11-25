@@ -4,8 +4,10 @@
 For each task A with `blocks: [X, ...]`: add A's id to X's `depends_on` (key
 created when absent, de-duplicated, trailing comments and notes kept), then
 remove the `blocks:` key from A. An id with no task file on the board cannot be
-placed: it is reported and stays in A's `blocks:` (nothing is dropped silently).
-Idempotent. `--dry-run` reports and writes nothing.
+placed (also: the target has no frontmatter, or a multi-line flow
+`depends_on: [` list this script will not reformat): it is reported and stays in
+A's `blocks:` (nothing is dropped silently). A trailing comment on a `blocks:`
+line is printed in the report, not carried over. Idempotent. `--dry-run` reports and writes nothing.
 
 Usage: todo_deps_migrate.py [--dry-run] DIR [DIR ...]
 Exit: 0 ok, 2 usage.
@@ -32,6 +34,10 @@ def fm_bounds(lines):
     return None
 
 
+def eol(lines):
+    return "\r" if lines and lines[0].endswith("\r") else ""
+
+
 def find_key(lines, key):
     """(first, last_exclusive) of `key:` and its block-list continuation, or None."""
     b = fm_bounds(lines)
@@ -40,6 +46,11 @@ def find_key(lines, key):
     for i in range(b[0], b[1]):
         if lines[i].startswith(key + ":"):
             j = i + 1
+            head = re.sub(r"#.*$", "", lines[i])
+            if "[" in head and "]" not in head:  # multi-line flow list: up to the closing ]
+                while j < b[1] and "]" not in lines[j - 1]:
+                    j += 1
+                return (i, j)
             while j < b[1] and re.match(r"^\s*(-|#|$)", lines[j].rstrip("\r")):
                 j += 1
             # trailing blank/comment lines belong to what follows, not the list
@@ -56,29 +67,33 @@ def ids_of(lines, span):
 
 def add_dep(lines, dep):
     """Add `dep` to depends_on in place. Returns 'added' or 'already'."""
+    b = fm_bounds(lines)
+    if b is None:
+        return "cannot"
     span = find_key(lines, "depends_on")
     if span is None:
-        b = fm_bounds(lines)
-        lines.insert(b[1], "depends_on: [%s]" % dep)
+        lines.insert(b[1], "depends_on: [%s]%s" % (dep, eol(lines)))
         return "added"
     if dep in ids_of(lines, span):
         return "already"
     first = lines[span[0]]
-    eol = "\r" if first.endswith("\r") else ""
+    nl = eol(lines)
     body = first.rstrip("\r")
+    if span[1] - span[0] > 1 and "[" in body:
+        return "cannot"  # multi-line flow list: not reformatted
     if span[1] - span[0] == 1:
         m = re.match(r"^(depends_on:\s*)\[(.*?)\](\s*(#.*)?)$", body)
         if m:
             inner = m.group(2).strip()
             inner = (inner + ", " + dep) if inner else dep
-            lines[span[0]] = "%s[%s]%s%s" % (m.group(1), inner, m.group(3), eol)
+            lines[span[0]] = "%s[%s]%s%s" % (m.group(1), inner, m.group(3), nl)
             return "added"
         m = re.match(r"^(depends_on:)\s*(#.*)?$", body)
         if m:  # bare key: becomes a flow list, keeping the comment
             c = (" " + m.group(2)) if m.group(2) else ""
-            lines[span[0]] = "depends_on: [%s]%s%s" % (dep, c, eol)
+            lines[span[0]] = "depends_on: [%s]%s%s" % (dep, c, nl)
             return "added"
-        lines[span[0]] = "depends_on: [%s]%s" % (dep, eol)  # scalar text: replace by list
+        lines[span[0]] = "depends_on: [%s]%s" % (dep, nl)  # scalar text: replace by list
         return "added"
     last = lines[span[1] - 1]
     indent = re.match(r"^(\s*)-", last).group(1)
@@ -106,7 +121,10 @@ def main(argv):
             continue
         for n in sorted(os.listdir(d)):
             if re.match(r"^T\d{8}-\d{6}-.+\.md$", n):
-                files.setdefault(n[:16], os.path.join(d, n))
+                if n[:16] in files:
+                    print("  duplicate id %s (%s): skipped, only the first file is migrated" % (n[:16], os.path.join(d, n)))
+                    continue
+                files[n[:16]] = os.path.join(d, n)
     docs = {}  # id -> lines (loaded lazily, edited in memory)
     dirty = set()
 
@@ -115,7 +133,7 @@ def main(argv):
             docs[i] = read_lines(files[i])
         return docs[i]
 
-    stats = dict(files=0, relations=0, added=0, already=0, unknown=0, self=0)
+    stats = dict(files=0, relations=0, added=0, already=0, unknown=0, self=0, cannot=0)
     print("%s: blocks -> depends_on" % ("DRY RUN" if dry else "MIGRATE"))
     for a in sorted(files):
         lines = load(a)
@@ -135,19 +153,27 @@ def main(argv):
                 print("  %s blocks %s: unknown id, cannot convert (kept in blocks:)" % (a, x))
             else:
                 r = add_dep(load(x), a)
+                if r == "cannot":
+                    stats["cannot"] += 1
+                    keep.append(x)
+                    print("  %s blocks %s: cannot edit %s (no frontmatter or multi-line flow depends_on); kept in blocks:" % (a, x, x))
+                    continue
                 stats[r] += 1
                 dirty.add(x)
                 print("  %s blocks %s: %s in %s depends_on" % (a, x, "added" if r == "added" else "already present", x))
         lines = docs[a]
         span = find_key(lines, "blocks")
+        note = re.search(r"#(.*)$", lines[span[0]])
+        if note:
+            print("  %s: note on blocks line not carried over:%s" % (a, note.group(1).rstrip("\r")))
         if keep:
-            lines[span[0]:span[1]] = ["blocks: [%s]" % ", ".join(keep)]
+            lines[span[0]:span[1]] = ["blocks: [%s]%s" % (", ".join(keep), eol(lines))]
         else:
             del lines[span[0]:span[1]]
         dirty.add(a)
-    print("SUMMARY files-with-blocks=%d relations=%d added=%d already=%d unknown=%d self=%d%s" % (
+    print("SUMMARY files-with-blocks=%d relations=%d added=%d already=%d unknown=%d self=%d cannot=%d%s" % (
         stats["files"], stats["relations"], stats["added"], stats["already"],
-        stats["unknown"], stats["self"], " (nothing written)" if dry else ""))
+        stats["unknown"], stats["self"], stats["cannot"], " (nothing written)" if dry else ""))
     if not dry:
         for i in sorted(dirty):
             with open(files[i], "w", encoding="utf-8", newline="") as f:
