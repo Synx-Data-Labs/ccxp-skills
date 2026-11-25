@@ -157,6 +157,8 @@ fixture() {
 }
 
 @test "todo_deps_migrate.py: no directory argument is a usage error" {
+  [ -f "$REPO_ROOT/todo/scripts/todo_deps_migrate.py" ]
   run python3 -I "$REPO_ROOT/todo/scripts/todo_deps_migrate.py"
   [ "$status" -eq 2 ]
+  [[ "$output" == *"Usage: todo_deps_migrate.py"* ]]
 }
