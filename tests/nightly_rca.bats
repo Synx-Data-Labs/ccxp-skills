@@ -14,6 +14,7 @@ setup() {
 case "$*" in
   "api repos/o/r/branches/main --jq .name") echo main ;;
   "api repos/o/r/branches/gone --jq .name") echo "Not Found (HTTP 404)" >&2; exit 1 ;;
+  "api repos/o/r/branches/flaky --jq .name") echo "HTTP 503" >&2; exit 1 ;;
   "api repos/o/r/compare/main...aaaaaaa --jq .status") echo behind ;;
   "api repos/o/r/compare/main...bbbbbbb --jq .status") echo ahead ;;
   "api repos/o/r/compare/main...ccccccc --jq .status") echo "No commit found for SHA: ccccccc (HTTP 422)" >&2; exit 1 ;;
@@ -147,4 +148,36 @@ EOF
   [ "$status" -eq 0 ]
   run bash "$NR" bogus
   [ "$status" -eq 2 ]
+}
+
+@test "classify: unusual conclusion is other; fresh in-progress run is running" {
+  c="$(iso $((NR_NOW - 1200)))"; u="$(iso $((NR_NOW - 300)))"
+  printf '{"conclusion":"startup_failure","createdAt":"%s","startedAt":"%s","updatedAt":"%s","jobs":[]}' "$c" "$c" "$u" > "$BATS_TEST_TMPDIR/o.json"
+  run bash "$NR" classify "$BATS_TEST_TMPDIR/o.json"
+  [[ "$output" == *"verdict=other"* ]]
+  printf '{"conclusion":null,"createdAt":"%s","startedAt":"%s","updatedAt":"%s","jobs":[]}' "$c" "$c" "$u" > "$BATS_TEST_TMPDIR/p.json"
+  run bash "$NR" classify "$BATS_TEST_TMPDIR/p.json"
+  [[ "$output" == *"verdict=running"* ]]
+}
+
+@test "sha-reachable: bad repo or dotdot branch exit 2; non-404 branch probe failure exits 4" {
+  run bash "$NR" sha-reachable 'o/r/../x' main aaaaaaa
+  [ "$status" -eq 2 ]
+  run bash "$NR" sha-reachable o/r 'a/../b' aaaaaaa
+  [ "$status" -eq 2 ]
+  run bash "$NR" sha-reachable o/r flaky aaaaaaa
+  [ "$status" -eq 4 ]
+}
+
+@test "pin-diff: a manifest with no components yields no bogus row" {
+  printf 'version: x\n' > "$BATS_TEST_TMPDIR/e.yml"
+  printf 'components:\n  - name: a\n    prepared_commit: abc1234\n' > "$BATS_TEST_TMPDIR/n.yml"
+  run bash "$NR" pin-diff "$BATS_TEST_TMPDIR/e.yml" "$BATS_TEST_TMPDIR/n.yml"
+  [ "$output" = "$(printf 'a\t-\tabc1234')" ]
+}
+
+@test "briefing: creates a missing output directory" {
+  run bash "$NR" briefing 99 "$BATS_TEST_TMPDIR/new/dir"
+  [ "$status" -eq 0 ]
+  [ -f "$BATS_TEST_TMPDIR/new/dir/nightly-rca-99.md" ]
 }

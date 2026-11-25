@@ -12,7 +12,7 @@ The deeper step after `/nightly-check`, `/labrun-rca` and `/rca`: those find and
 
 ## Argument
 
-- `<run-id|run-url>`: the failed run (a URL is reduced to its trailing numeric id). `--repo owner/repo`: default the working repo (`gh repo view --json nameWithOwner`).
+- `<run-id|run-url>`: the failed run (a URL is reduced to the id after `/runs/`, never a trailing `/job/<id>`). `--repo owner/repo`: default the working repo (`gh repo view --json nameWithOwner`).
 
 ## Rules
 
@@ -26,8 +26,8 @@ The deeper step after `/nightly-check`, `/labrun-rca` and `/rca`: those find and
 
 Helpers: `bash <skills-root>/nightly-rca/scripts/nightly-rca.sh <subcommand>` (see its header; tests `tests/nightly_rca.bats`).
 
-1. **Announcement**: when the run has a Slack alert thread, read it, then `/labrun-rca` for the announced run (`/rca <id> --no-post` otherwise). Keep their failing job and step.
-2. **Classify**: `gh run view <id> --repo <repo> --json name,conclusion,createdAt,startedAt,updatedAt,jobs > $RUN`, then `nightly-rca.sh classify $RUN`. `queued` (long wait before start, no conclusion) and `hung` are different from `failed`; report queue time apart from run time, and the failing job and step.
+1. **Announcement**: read the Slack alert thread when there is one (`slack_read_thread`, read-only), then run `/rca <id> --repo <repo> --no-post`. Do not run `/labrun-rca` here: it replies in the thread, which this skill never does (`/nightly-check` owns that path). Keep the failing job and step.
+2. **Classify**: `gh run view <id> --repo <repo> --json name,conclusion,createdAt,startedAt,updatedAt,jobs > $RUN`, then `nightly-rca.sh classify $RUN`. `queued` (long wait, no conclusion), `running`, `hung` and `other` (skipped, startup_failure) are different from `failed`; report queue time apart from run time, and the failing job and step.
 3. **Last green and input diff**:
    - `nightly-rca.sh last-green <repo> <workflow file> <run id>` gives the previous green run and its head SHA.
    - Diff the inputs between the two SHAs: `git show <sha>:manifests/<m>.yml` for both, then `nightly-rca.sh pin-diff old.yml new.yml`; also compare submodule gitlinks per component (for example lightning to arrow) and prepared-branch divergence (`prepared/upstream` against `upstream`).
