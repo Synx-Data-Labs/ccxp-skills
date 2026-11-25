@@ -112,7 +112,7 @@ Opt-in: how much of your Claude subscription's usage window is left, when it wou
 `/hud details` toggles an expanded view: one labeled row per section, spelling the cells out in full (never abbreviated). Run it again to collapse. It updates live like the band.
 
 - `SESSION` context left, subscription limit left with its reset time, unread bus notes, your last prompt time
-- `REPO` repo, branch, claimed task
+- `CLONE` the clone you work in: repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)
 - `AUTOPILOT` on / paused / off, `max_dop` use, holds, next loop and 24h numbers

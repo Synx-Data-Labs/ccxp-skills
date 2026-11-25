@@ -609,7 +609,7 @@ test('jobs cell narrow: the count goes before the word, READY keeps its word; th
 const DETAIL_NOW = Math.floor(Date.now() / 1000) * 1000 // whole seconds, so 'in 12m' is exact
 const detail = (s: object, cols = 140, cfg: typeof CI | typeof NOCI = NOCI) => detailRows(s as any, cfg, cols, DETAIL_NOW).map(r => r.map(x => x.text).join(''))
 /** The sections of a details render: label -> its lines (label column stripped, continuation lines included). */
-const DETAIL_LABELS = ['SESSION', 'REPO', 'BUILD', 'SUPPORT', 'AUTOPILOT', 'WORK', 'QUEUE', 'RELEASE']
+const DETAIL_LABELS = ['SESSION', 'CLONE', 'BUILD', 'SUPPORT', 'AUTOPILOT', 'WORK', 'QUEUE', 'RELEASE']
 const sections = (lines: string[]): Record<string, string[]> => {
   const out: Record<string, string[]> = {}
   let cur = ''
@@ -653,16 +653,16 @@ test('AP ON (no duration): elapsed shows without a requested window; idle names 
   expect(paused).toContain('AP ⏸ paused 2h')
 })
 
-test('details: sections in order: SESSION, REPO, AUTOPILOT, WORK (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
+test('details: sections in order: SESSION, CLONE, AUTOPILOT, WORK (no queue data, no `ci`: no QUEUE or BUILD row)', async () => {
   const lines = detail(fullSnap({ rateUsed: 42 }))
-  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'REPO', 'AUTOPILOT', 'WORK'])
+  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'CLONE', 'AUTOPILOT', 'WORK'])
   expect(lines[0]).toMatch(/^SESSION {3}context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you \d\d:\d\d \(5m ago\)$/)
-  expect(lines[1]).toBe('REPO      acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
+  expect(lines[1]).toBe('CLONE     acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
   expect(lines[2]).toMatch(/^AUTOPILOT AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
   expect(lines[3]).toBe('WORK      WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
 })
 
-test('details: the section order is SESSION, REPO, BUILD, SUPPORT, AUTOPILOT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
+test('details: the section order is SESSION, CLONE, BUILD, SUPPORT, AUTOPILOT, WORK, QUEUE, RELEASE, one labeled row each', async () => {
   const snap = fullSnap({ rateUsed: 42 }) as any
   snap.helper = { ...snap.helper, queue: { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }, nightly: { red: 14, green: 16, strip: '+-++.-+' }, issues: { open: 12, undelivered: 7 }, plugin: { installed: '5.2.0', latest: '5.2.0' } }
   const lines = detail(snap, 400, CI)
@@ -692,7 +692,7 @@ test('details: the nightly strip (seven one-character pieces) is never split acr
 
 test('details: sections with nothing to say are left out (no ledger, no CI config, no prompt time, no ctx)', async () => {
   const lines = detail({ ...withHelper({ ledger: null, last_input_at: 0 }), ctxLeft: null }, 140, DEFAULTS)
-  expect(lines.length).toBe(2) // REPO, AUTOPILOT (no ledger: no WORK section)
+  expect(lines.length).toBe(2) // CLONE, AUTOPILOT (no ledger: no WORK section)
   expect(lines[1]).toBe('AUTOPILOT AP off')
   expect(lines.join('\n')).not.toMatch(/READY|WORKING|you |CI/)
 })
@@ -1076,7 +1076,7 @@ test('parseHelper: autopilot next_wake_at is a number, 0 when missing or not a n
 
 test('details: an empty snapshot has no lines; a stale helper keeps its tag', async () => {
   expect(detailRows(EMPTY, DEFAULTS, 140, DETAIL_NOW)).toEqual([])
-  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['REPO      stale'])
+  expect(detail({ ...EMPTY, stale: true }, 140, DEFAULTS)).toEqual(['CLONE     stale'])
 })
 
 const fillWidth = (segs: { text: string }[]) => segs.reduce((n, s) => n + displayWidth(s.text), 0)
@@ -1635,12 +1635,12 @@ test('AP stats: the details WORK row keeps the 24h cell in full and, when narrow
 
 // --- CI top row: detail view, highlight, NO_COLOR ---
 
-test('details: BUILD (CI first), then REPO, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
+test('details: BUILD (CI first), then CLONE, WORK, QUEUE with the queue on its own row, SESSION first', async () => {
   const q = { total: 44, ready: 30, held: 6, epic: 3, claimed: 0 }
   const lines = detail(withHelper({ ...fullSnap().helper, queue: q }), 400, CI)
-  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'REPO', 'BUILD', 'AUTOPILOT', 'WORK', 'QUEUE'])
+  expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'CLONE', 'BUILD', 'AUTOPILOT', 'WORK', 'QUEUE'])
   expect(sect(lines, 'BUILD')).toMatch(/^CI \(nightly\.yml\) ✓ passing \d\d-\d\d \(2h ago\)$/)
-  expect(sect(lines, 'REPO')).toContain('acme/widgets')
+  expect(sect(lines, 'CLONE')).toContain('acme/widgets')
   expect(sect(lines, 'AUTOPILOT') + sect(lines, 'WORK')).not.toContain('queue')
   expect(sect(lines, 'QUEUE')).toBe('queue 44 = 30 ready | 6 held | 3 epics')
   expect(lines.filter(l => l.includes('queue')).length).toBe(1)
@@ -1963,7 +1963,7 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   0b nightly          7-day strip, last 30 days green/red                       -> BUILD
 //   0c issues           open, not delivered, max open 180/30/7 days               -> SUPPORT
 //   0e bus              unread notes, newest from                                 -> SESSION
-//   1 where             repo @ branch*, worktree, account, root, task, stale      -> REPO
+//   1 where             repo @ branch*, worktree, account, root, task, stale      -> CLONE
 //   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
 //   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> AUTOPILOT
@@ -1977,9 +1977,9 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['nightly', 'BUILD', /nightly \+-\+\+\.-\+ \(last 7 days\) · last 30 days: 16 green ✓ \/ 14 red ✗/],
   ['issues', 'SUPPORT', /issues 12 open \| 7 not delivered \| max open 18 in 180 days \/ 15 in 30 days \/ 12 in 7 days/],
   ['bus', 'SESSION', /bus 2 unread notes · newest from home/],
-  ['repo', 'REPO', /acme\/widgets @ t20261021-354035-decouple\*/],
-  ['task', 'REPO', /T20261021-354035 Decouple the nightly orchestrator/],
-  ['stale', 'REPO', /stale$/],
+  ['repo', 'CLONE', /acme\/widgets @ t20261021-354035-decouple\*/],
+  ['task', 'CLONE', /T20261021-354035 Decouple the nightly orchestrator/],
+  ['stale', 'CLONE', /stale$/],
   ['context', 'SESSION', /context 64% left ▓▓▓▓▓▓░░░░/],
   ['limit', 'SESSION', /10% left · runs out in 26m · reset (\w{3} )?\d\d:\d\d/],
   ['you', 'SESSION', /you \d\d:\d\d \(5m ago\)/],
