@@ -145,3 +145,13 @@ fixture() {
   grep -q '^blocks: \[T20260101-000003\]$' "$BOARD/T20260101-000001-x.md"
   [[ "$output" == *"not carried over: why b"* && "$output" == *"not carried over: why c"* ]]
 }
+
+@test "migrate: a trailing comma in a flow depends_on stays valid; an id-less blocks line is reported" {
+  task T20260101-000001 'blocks: [T20260101-000002]'
+  task T20260101-000002 'depends_on: [T20260101-000009,]'
+  task T20260101-000003 'blocks: nothing yet'
+  run bash "$SCRIPT" migrate --dir "$BOARD"
+  [ "$status" -eq 0 ]
+  grep -q '^depends_on: \[T20260101-000009, T20260101-000001\]$' "$BOARD/T20260101-000002-x.md"
+  [[ "$output" == *"T20260101-000003: blocks line names no task id, removed: blocks: nothing yet"* ]]
+}
