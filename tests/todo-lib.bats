@@ -216,3 +216,13 @@ mk_task() { # dir id slug frontmatter-extra
   run todo-legacy-blocks "$d/T20260101-000001-x.md"
   [ "$output" = "$(printf 'T20260101-000002\nT20260101-000003')" ]
 }
+
+@test "todo-dependants ignores a --- rule in a file without frontmatter" {
+  local d="$BATS_TEST_TMPDIR/todo"
+  mk_task "$d" T20260101-000001
+  printf 'no frontmatter\n---\ndepends_on: [T20260101-000001]\n---\n' > "$d/T20260101-000004-x.md"
+  printf '\n---\nstatus: Open\ndepends_on: [T20260101-000001]\n---\n' > "$d/T20260101-000005-x.md"
+  run todo-dependants T20260101-000001 "$d"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
