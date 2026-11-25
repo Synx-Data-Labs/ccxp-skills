@@ -38,8 +38,8 @@ All deterministic parts live in `<skills-root>/epic/scripts/epic.sh` (sourceable
 Sequential: one task at a time, never parallel, a fresh sub-agent per task. Failures never stop the loop.
 
 1. **Plan.** `bash <skills-root>/epic/scripts/epic.sh plan E<n>` — members in **epic-file order** (not `queue.md` order) with a verdict:
-   - `drive`: in `dev/TODO`, not done/parked, not claimed by a live peer, no open blocker, not SUPERVISED.
-   - `skip` (reason recorded): `done`, `parked`, `peer:<who>`, `blocked:<Tid>`, `supervised`.
+   - `drive`: in `dev/TODO`, not done/parked, not claimed by a live peer, no open blocker.
+   - `skip` (reason recorded): `done`, `parked`, `peer:<who>`, `blocked:<Tid>`.
    - `external`: no task file here (other repo) — listed as "not driveable from here".
    - Show the plan to the user, then start. No confirmation gate: the user invoking `drive` is the go-ahead.
 2. **Loop.** Bash state does not persist between calls: run `mktemp` once, keep its literal path as `<results>` and the attempted ids as a literal list in your notes (substitute them in every command). Repeat:

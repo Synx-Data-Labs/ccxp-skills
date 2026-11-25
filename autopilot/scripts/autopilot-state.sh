@@ -809,7 +809,7 @@ ap-record() {
   echo "$notice"
 }
 
-# Status-line markers that need a human (or are blocked): not auto-driven. The
+# A `Blocked by` status is not auto-driven (prose words like SUPERVISED are not gates). The
 # definition is shared with todo-next.sh --skip-gated (todo-gated, _lib.sh).
 ap-eligible() {
   local file="${1:?task file}" line

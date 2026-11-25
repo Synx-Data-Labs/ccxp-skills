@@ -55,14 +55,14 @@ EOF
   [ "$(wc -l <<<"$output" | tr -d ' ')" = "9" ]
 }
 
-@test "plan: verdicts for done, parked, blocked, supervised, stale blocker, external" {
+@test "plan: verdicts for done, parked, blocked, stale blocker, external" {
   run bash "$SCRIPT" plan E1
   [ "$status" -eq 0 ]
   grep -qE $'^T20260101-000003\tskip\tblocked:T20260101-000001\t' <<<"$output"
   grep -qE $'^T20260101-000001\tdrive\t' <<<"$output"
   grep -qE $'^T20260101-000010\tskip\tdone\t' <<<"$output"
   grep -qE $'^T20260101-000011\tskip\tparked\t' <<<"$output"
-  grep -qE $'^T20260101-000004\tskip\tsupervised\t' <<<"$output"
+  grep -qE $'^T20260101-000004\tdrive\t' <<<"$output"   # a SUPERVISED word is no gate (d174)
   grep -qE $'^T20260101-000006\tdrive\t' <<<"$output"
   grep -qE $'^T20260101-999999\texternal\tno-file\t' <<<"$output"
 }

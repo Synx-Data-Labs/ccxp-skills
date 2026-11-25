@@ -29,7 +29,7 @@ argument-hint: "[task-id]"
 
 **Gated tasks.**
 
-- Auto-pick never takes a task whose `status:` is gated: `Blocked by`, `SUPERVISED`, `BLOCKED`, `needs manual`, `sign-off` (case-insensitive). One shared definition: `todo-gated` in `todo/scripts/_lib.sh`, applied by `todo-next.sh --skip-gated`.
+- Auto-pick never takes a task whose `status:` is gated: `Blocked by` (case-insensitive; the words `SUPERVISED`, `BLOCKED`, `needs manual` and `sign-off` are not gates, d174). One shared definition: `todo-gated` in `todo/scripts/_lib.sh`, applied by `todo-next.sh --skip-gated`.
 - An explicit task id is never filtered: a human asking for that task gets it.
 - Nothing is written to a task file to say why a run could not finish it. Under `/autopilot` the dispatcher records a hold for a task that did not advance and passes over it until the release condition is met (`autopilot/SKILL.md` Phase 3 and 4).
 
@@ -66,7 +66,7 @@ Before picking new work, check if prior escalations have received replies:
 If no task ID given (auto-pick):
 
 1. **Run `/todo sweep` first.** Auto-pick reads `queue.md`'s order via `/todo next`, and `sweep` is the only workflow that keeps `queue.md` in sync with `dev/TODO/` (adds untracked files, strikes closed/parked entries, fixes stale blockers, re-orders on blocker violations). Skipping it risks picking a stale queue entry (a task already closed by another session) or missing blocker-ordering fixes that would have changed the #1 slot. Run it every auto-pick, not just periodically — it's idempotent and a no-op when nothing has drifted.
-2. Run `/todo next` logic — read all `dev/TODO/*.md`, build dependency graph, score by readiness + priority + unblocks — through `bash <skills-root>/todo/scripts/todo-next.sh --skip-gated` so gated tasks (`Blocked by`, `SUPERVISED`, ...) are never the #1 pick
+2. Run `/todo next` logic — read all `dev/TODO/*.md`, build dependency graph, score by readiness + priority + unblocks — through `bash <skills-root>/todo/scripts/todo-next.sh --skip-gated` so gated tasks (`Blocked by`) are never the #1 pick
 3. Select the #1 recommendation
 4. Flip the task file's Status `Open` → `Design` (in-place). **Peer mode is on by default** (disable with `CCXP_PEER_MODE=0`), so cross-session collisions ARE possible (ccxp + interactive sessions run as parallel peers) — see the peer-mode claim block in "Claim PR" below before picking. (With `CCXP_PEER_MODE=0`, the old one-session-per-clone assumption applies — no separate claim registry, no collisions to detect.)
 5. Report the pick to the user: task ID, title, current status, what "done" looks like.

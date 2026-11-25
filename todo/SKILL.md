@@ -57,7 +57,7 @@ source: Retro 2026-04-25
 **Field semantics:**
 
 - `estimation`: a Fibonacci-style story point, one of `1`, `2`, `3`, `5`, `8` (duration buckets retired). Always `1` at file time; `/incept` is the only place it's revised upward. Required for `/eta` projections (`points * hours_per_point`, from `dev/velocity.json`).
-- `status`: one of `Open`, `Design`, `In Progress`, `Review`, `Parked`, `Done` (`Blocked by T{id}` is deprecated: see `depends_on`). Required. Free text may follow the leading token (e.g. `In Progress — SUPERVISED (needs VPN)`); consumer repos' `/ccxp` pre-flight gate (`dev/daily-ccxp.sh`) greps for `BLOCKED` / `SUPERVISED` so cron does not wake a session for work that needs a human.
+- `status`: one of `Open`, `Design`, `In Progress`, `Review`, `Parked`, `Done` (`Blocked by T{id}` is deprecated: see `depends_on`). Required. Free text may follow the leading token (e.g. `In Progress — SUPERVISED (needs VPN)`); prose words such as `SUPERVISED` or `BLOCKED` gate nothing (d174).
 - `scheduled`: `YYYY-MM-DD` (always a Monday). Written **only at IPM commit time** (`/ipm` step 5) for the tasks the IPM picks off the top of `queue.md`; it records which iteration a task landed in and does not drive priority. **Update-forward-only — never removed.** There is no GitHub Project board: `scheduled:` plus the local `dev/TODO/` and `dev/JOURNAL/` files are the whole source of truth for the iteration.
 - `deadline`: `YYYY-MM-DD`. Hard date the task must be delivered by — usually customer-, release-, or compliance-driven. Informational — display it, but it does not reorder the queue; if a deadline makes something urgent, reflect that by `/top`-ing it.
 - `when` / `when-end` / `place` / `person`: optional time (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`), window end, context slugs, and involved-person aliases (never emails). Time fields never reorder the queue; position in `queue.md` stays the priority. Lint warns on a past `when`. Waiting on someone: `needs: [person:<alias>]` or `ext:<text>` (legacy `Blocked by person:` still read).
@@ -78,7 +78,7 @@ Start from the canonical scaffold: [`repo-conventions/templates/task.md`](../rep
 `$ARGUMENTS` is one of:
 
 - `list` — show all open tasks in queue order (reports stale blockers and queue/`dev/TODO/` drift but does not modify files)
-- `next` — show the top 3 non-done, non-peer-claimed tasks off the queue (does not check blocked-by/lint-frozen — that's `sweep`'s job). `next --skip-gated` also skips gated tasks (`Blocked by`, `SUPERVISED`, `BLOCKED`, `needs manual`, `sign-off`), `next --check` prints nothing and exits 0 when something would be listed, 1 when not; `/drive` auto-pick and `/autopilot` use both
+- `next` — show the top 3 non-done, non-peer-claimed tasks off the queue (does not check blocked-by/lint-frozen — that's `sweep`'s job). `next --skip-gated` also skips gated tasks (`Blocked by`), `next --check` prints nothing and exits 0 when something would be listed, 1 when not; `/drive` auto-pick and `/autopilot` use both
 - `sweep` — sync `queue.md` with `dev/TODO/`, fix stale blockers, then prune the backlog (auto-close finished/superseded work, ask before parking anything blocked or stale)
 
 If `$ARGUMENTS` is empty, default to `list`.
