@@ -1202,7 +1202,7 @@ function isApJob(j: { flags?: string }): boolean {
  *   CLONE    repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
- *   AUTOPILOT autopilot on/paused/off, max_dop and how it is used, holds, next loop (or overdue / running cycles), its 24h cell
+ *   AUTOPILOT two lines: status (on/paused/off, max_dop and how it is used, next loop or overdue / running cycles), then progress (24h cell with the average, holds)
  *   WORK     the ledger rows WITHOUT the autopilot flag: jobs state (READY / WORKING (N)), parked, last 24h jobs
  *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
  *   RELEASE  the plugin's GitHub URL, the ccxp version label, the number of unreleased commits
@@ -1290,7 +1290,13 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // Holds (the state file's `.holds`, via the queue breakdown): only while there is an autopilot record (on, paused, idle), and only above 0.
   const holds = ap ? h?.queue?.apholds ?? 0 : 0
   const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held by autopilot`, color: 'warning' }]) : null
-  section('AUTOPILOT', [apItem, dopSegs ? one('dop', dopSegs) : null, holdsItem, wakeItem, apStats ? one('apstats', apStats[0]!) : null])
+  // AUTOPILOT takes two lines: status (state, max_dop use, next loop / running / overdue), then progress (24h merged and average, holds).
+  // Each line wraps on its own when the terminal is narrow; the second line has a blank label column. A line with no cell is left out.
+  const statusCells = [apItem, dopSegs ? one('dop', dopSegs) : null, wakeItem]
+  const progressCells = [apStats ? one('apstats', apStats[0]!) : null, holdsItem]
+  const statusRows = sectionRows('AUTOPILOT', statusCells.map(c => (c ? full(c) : null)), width)
+  const progressRows = sectionRows(statusRows.length > 0 ? '' : 'AUTOPILOT', progressCells.map(c => (c ? full(c) : null)), width)
+  rows.push(...statusRows, ...progressRows)
   section('WORK', jobCells)
 
   // QUEUE: the breakdown (labels in full)
