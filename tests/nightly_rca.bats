@@ -181,3 +181,16 @@ EOF
   [ "$status" -eq 0 ]
   [ -f "$BATS_TEST_TMPDIR/new/dir/nightly-rca-99.md" ]
 }
+
+@test "classify: queue time comes from the earliest job start when the run startedAt equals createdAt" {
+  c="$(iso $((NR_NOW - 10*3600)))"; j="$(iso $((NR_NOW - 2*3600)))"; u="$(iso $((NR_NOW - 600)))"
+  printf '{"conclusion":null,"createdAt":"%s","startedAt":"%s","updatedAt":"%s","jobs":[{"name":"a","conclusion":null,"startedAt":"%s","steps":[]}]}' "$c" "$c" "$u" "$j" > "$BATS_TEST_TMPDIR/q.json"
+  run bash "$NR" classify "$BATS_TEST_TMPDIR/q.json"
+  [[ "$output" == *"queue_min=480"* ]]
+  [[ "$output" == *"verdict=queued"* ]]
+}
+
+@test "sha-reachable: dot-dot repo exits 2" {
+  run bash "$NR" sha-reachable ../.. main aaaaaaa
+  [ "$status" -eq 2 ]
+}
