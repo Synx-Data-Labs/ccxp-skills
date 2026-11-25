@@ -1090,7 +1090,7 @@ export function stalledFor(ap: Autopilot, nowMs: number): number {
   return late > STALL_GRACE_SEC ? late : 0
 }
 
-/** Width of the section label column in `/hud details`: the longest label (`SESSION`, `SUPPORT`, `RELEASE`) plus two spaces. */
+/** Width of the section label column in `/hud details`: the longest label (`AUTOPILOT`) plus one space. */
 export const DETAIL_LABEL_WIDTH = 10
 
 /** Splits segments into words and spaces (each keeping its style) and fills lines of at most `avail` columns, breaking at spaces; a single word longer than a line is broken hard. Nothing is ever cut off. */
@@ -1199,7 +1199,7 @@ function isApJob(j: { flags?: string }): boolean {
  * `/hud details`: the band expanded into labeled SECTIONS, one row each (a long row wraps onto an indented line, nothing is
  * truncated or abbreviated; the one-row band keeps the short forms). A section with nothing to say is left out. Order:
  *   SESSION  context left, subscription limit left with its reset time, unread bus notes, last prompt (stamp and age)
- *   CLONE     repo, branch, dirty mark, claimed task (and `stale`)
+ *   CLONE    repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
  *   AUTOPILOT autopilot on/paused/off, max_dop and how it is used, holds, next loop (or overdue / running cycles), its 24h cell
