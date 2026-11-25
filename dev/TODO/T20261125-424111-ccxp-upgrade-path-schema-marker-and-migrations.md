@@ -32,7 +32,7 @@ description: ccxp upgrade path: per-repo schema marker, ordered idempotent migra
 - **Hard gate**: repo schema below `CCXP_MIN_REPO_SCHEMA` makes drive and autopilot refuse with a clear message.
 - **Two-release window**: release N ships compat reader plus migration and warns; release N+1 drops the old form and raises `CCXP_MIN_REPO_SCHEMA`.
 - **Release check**: a `CCXP_SCHEMA` bump without a migration directory and a test fails; release notes list schema changes and migration ids.
-- **Local state files** (autopilot-state schema 2, ledger schema 3): gitignored and per machine, so they migrate by reader tolerance (a state without the current `schema` reads as off, the ledger (one JSON object, schema 3) is rewritten by each `start`, so an older object is simply replaced; the docs task verifies this against `ledger.sh`); documented, no runner step.
+- **Local state files** (autopilot-state schema 2, ledger schema 3): gitignored and per machine, so they migrate by reader tolerance (a state without the current `schema` reads as off, the ledger (one JSON object, schema 3) upgrades an older object in place on write and refuses to write a newer one (`ledger.sh`)); documented, no runner step.
 
 ## Split
 
