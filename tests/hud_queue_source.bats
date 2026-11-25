@@ -53,7 +53,7 @@ _origin_moves_on() {
   printf -- '- [T20260101-000003](T20260101-000003-c.md): c\n' >> "$SEED/dev/TODO/queue.md"
   _task 3 Open > "$SEED/dev/TODO/T20260101-000003-c.md"
   _task 2 Open "someone-else:abc" > "$SEED/dev/TODO/T20260101-000002-b.md"
-  _task 1 "BLOCKED" > "$SEED/dev/TODO/T20260101-000001-a.md"
+  _task 1 "Blocked by T20260101-000003" > "$SEED/dev/TODO/T20260101-000001-a.md"
   git -C "$SEED" add -A && git -C "$SEED" commit -q -m more && git -C "$SEED" push -q origin HEAD:"${1:-main}"
 }
 
@@ -61,16 +61,16 @@ _origin_moves_on() {
   _world; _origin_moves_on
   run _q "$ME"
   [ "$status" -eq 0 ]
-  [ "$output" = '{"total":2,"ready":2,"held":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":2,"ready":2,"blocked":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
   run _q "$ME" working-tree
-  [ "$output" = '{"total":2,"ready":2,"held":0,"epic":0,"claimed":0,"apholds":0}' ]
+  [ "$output" = '{"total":2,"ready":2,"blocked":0,"epic":0,"claimed":0,"apholds":0}' ]
 }
 
 @test "default-branch mode reads origin/<default> after the fetch: newer queue, same bucketing, labelled with the branch" {
   _world; _origin_moves_on
   run _q "$ME" default-branch
   [ "$status" -eq 0 ]
-  [ "$(jq -c . <<<"$output")" = '{"total":3,"ready":1,"held":1,"epic":0,"claimed":1,"apholds":0,"source":"default-branch","branch":"main"}' ] || { echo "$output"; false; }
+  [ "$(jq -c . <<<"$output")" = '{"total":3,"ready":1,"blocked":1,"epic":0,"claimed":1,"apholds":0,"source":"default-branch","branch":"main"}' ] || { echo "$output"; false; }
 }
 
 @test "default-branch mode uses the real default branch name from origin/HEAD (trunk), not main" {

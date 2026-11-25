@@ -446,17 +446,17 @@ _queue_fixture() {
   local repo; repo=$(_make_repo "$1")
   printf '# TODO Queue\n\nprose line\n\n' > "$repo/dev/TODO/queue.md"
   _task "$repo" 1 Open                                   # ready
-  _task "$repo" 2 "Blocked by T20260101-000003 — wait"   # held (blocker still open)
+  _task "$repo" 2 "Blocked by T20260101-000003 — wait"   # blocked (blocker still open)
   _task "$repo" 3 Open                                   # ready
   _task "$repo" 4 "Blocked by T20260101-999999"          # blocker gone: ready
-  _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # held
+  _task "$repo" 5 "In Progress — SUPERVISED (needs VPN)" # ready: no longer a bucket
   _task "$repo" 6 "Open — waiting on HashData review"    # ready: free text is no signal any more
   _task "$repo" 7 "Open — needs owner decision"          # ready: same
   _task "$repo" 8 Open "" "EPIC: the big thing"          # epic (uppercase marker)
   _task "$repo" 9 Open "claimed_by: other-box:/x"        # claimed
   _task "$repo" 10 Open "claimed_by: $(_clone_id "$repo")"  # ours: ready
-  _task "$repo" 11 "Review — needs manual QA"            # held
-  _task "$repo" 12 "Open — sign-off pending"             # held
+  _task "$repo" 11 "Review — needs manual QA"            # ready: no longer a bucket
+  _task "$repo" 12 "Open — sign-off pending"             # ready: no longer a bucket
   _task "$repo" 14 "BLOCKED on infra" "" "Tracking — EPIC"  # epic beats blocked
   _task "$repo" 15 Open "children: [T20260101-000001]"   # epic by structure
   local i; for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do _qline "$i" "$repo"; done   # 13 has no file
@@ -474,8 +474,8 @@ _queue_fixture() {
   local repo; repo=$(_queue_fixture q-fm)
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
   [ "$status" -eq 0 ]
-  [ "$output" = '{"total":15,"ready":7,"held":4,"epic":3,"claimed":1,"apholds":0}' ] || { echo "$output"; false; }
-  [ "$(jq '.ready + .held + .epic + .claimed - .total' <<<"$output")" = 0 ]
+  [ "$output" = '{"total":15,"ready":10,"blocked":1,"epic":3,"claimed":1,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$(jq '.ready + .blocked + .epic + .claimed - .total' <<<"$output")" = 0 ]
 }
 
 @test "sl-queue-json: apholds counts the keys of the state file's .holds (any status), 0 when absent or not an object" {
@@ -507,11 +507,11 @@ _queue_fixture() {
   _task "$repo" 3 Open
   local i; for i in 1 2 3; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":3,"ready":3,"blocked":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
   # an old state file with visits/parked (the park path is retired) is read without error and adds no key
   printf '{"schema":2,"status":"on","started_at":"2026-10-28T14:00:00Z","run_started_at":"2026-10-28T09:00:00Z","dispatch_clone_path":null,"visits":{"T20260101-000001":2},"parked":[{"id":"T20260101-000051","at":"2026-10-28T10:00:00Z"}]}' > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":3,"ready":3,"held":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":3,"ready":3,"blocked":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
   # paused, off and a malformed file leave the buckets alone
   jq '.status = "paused"' "$repo/dev/.autopilot-state.json" > "$repo/s.t" && mv "$repo/s.t" "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
@@ -538,7 +538,7 @@ _queue_fixture() {
   printf '### E1 — Thing\n\n**Parent design task:** [T20260101-000008](../TODO/T20260101-000008-t.md) (supersedes T20260101-000001)\n\n- [T20260101-000010](../TODO/T20260101-000010-t.md) — member\n' > "$repo/dev/EPICS/E1-thing.md"
   local i; for i in 1 2 3 4 5 6 7 8 9 10; do _qline "$i" "$repo"; done
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":10,"ready":5,"held":1,"epic":4,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":10,"ready":5,"blocked":1,"epic":4,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
 }
 
 @test "sl-queue-json: a released claim (null), UNBLOCKED and the dispatch clone's claim are not misfiled" {
@@ -552,5 +552,5 @@ _queue_fixture() {
   local i; for i in 1 2 3 4; do _qline "$i" "$repo"; done
   printf '{"schema":2,"status":"paused","dispatch_clone_path":"%s"}' "$ap" > "$repo/dev/.autopilot-state.json"
   run bash -c "source '$SCRIPT'; sl-queue-json '$repo'"
-  [ "$output" = '{"total":4,"ready":3,"held":1,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
+  [ "$output" = '{"total":4,"ready":4,"blocked":0,"epic":0,"claimed":0,"apholds":0}' ] || { echo "$output"; false; }
 }
