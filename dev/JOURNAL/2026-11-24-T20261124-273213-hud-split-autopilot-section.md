@@ -76,4 +76,5 @@ claimed_role:
 - Not verified: the `hooks.test.tsx` suite (needs JSX in the real runner).
 - Owner addendum in the same PR: the details REPO section is renamed CLONE (same content and order; the `repo` cell is unchanged).
 - Owner addendum 2 in the same PR: the QUEUE `held` bucket is removed (BLOCKED / SUPERVISED / needs manual / sign-off no longer count as anything); the minimal consistent choice is a `blocked` bucket for `Blocked by T<id>` (open blocker) only, so ready + blocked + epic + claimed still equals total. The autopilot hold count moved out of QUEUE to the AUTOPILOT row (`N held by autopilot`).
+- Owner addendum 3 in the same PR: the `running r<n>` job-number list is gone from the AUTOPILOT row (plain `running`, or `N cycles running` with parallel cycles).
 - Follow-ups: none.
