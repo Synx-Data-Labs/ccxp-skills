@@ -12,7 +12,7 @@
 #   epic.sh status  [E1|path]                 read-only progress + member table
 #   epic.sh refresh [E1|path]                 epic-links sync+lint, moved/missing report, candidates
 #
-# verdict: drive | skip | external ; detail = reason (done, parked, peer:<who>, blocked:<Tid>, supervised, no-file)
+# verdict: drive | skip | external ; detail = reason (done, parked, peer:<who>, blocked:<Tid>, no-file)
 # Sourceable (functions prefixed epic-); idempotent (only `refresh` writes: epic member links).
 # Fields that may be empty are printed as "-" in `plan` so TSV columns never collapse.
 _EPIC_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

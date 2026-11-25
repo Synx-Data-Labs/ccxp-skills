@@ -911,7 +911,7 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
 @test "pickable: pick, drift and none; a Blocked by status never counts as pickable, SUPERVISED prose does" {
   _nh_repo
   echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
-  _nh_task T20260101-000001 "Blocked by T20260101-000009" a
+  _nh_task T20260101-000001 "Blocked by person:person-a" a
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
   _nh_task T20260101-000002 "Open" b
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]
