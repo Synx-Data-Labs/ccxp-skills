@@ -294,6 +294,15 @@ class LintTasksTest(unittest.TestCase):
         self.assertTrue(any("deprecated" in m for m in msgs), msgs)
         self.assertEqual(lint_tasks.main(["--all", self.root]), 0)
 
+    def test_blocks_is_retired_warns_but_passes(self):
+        write_task(self.root, name="T20260611-000012-other.md")
+        f = write_task(self.root, name="T20260611-000013-blk.md", frontmatter=(
+            "status: Open\nestimation: 2\nblocks: [T20260611-000012]"))
+        self.assertEqual(lint_tasks.lint_file(f), [])
+        msgs = lint_tasks.warnings_for(f)
+        self.assertTrue(any("blocks: is retired" in m for m in msgs), msgs)
+        self.assertEqual(lint_tasks.main(["--all", self.root]), 0)
+
     def test_depends_on_live_passes_done_warns_missing_fails(self):
         write_task(self.root, name="T20260611-000010-live.md")
         write_journal(self.root, "2026-06-17-T20260611-000020-done.md")

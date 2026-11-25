@@ -18,9 +18,9 @@ except ImportError:  # graceful: fall back to line-based key extraction
 
 REQUIRED = {"status", "estimation"}
 ALLOWED = REQUIRED | {
-    # authored-optional
+    # authored-optional (`blocks` is retired: still allowed, warns; see warn_blocks)
     "priority", "deadline", "blocks", "blocked-by", "source",
-    # dependency chain (epic E3, T20261124-320024): inverse of blocks, and
+    # dependency chain (epic E3, T20261124-320024): the only authored relation, and
     # human-only conditions that are NOT task dependencies
     "depends_on", "needs",
     "target-repo", "target-path", "related", "owner", "description",
@@ -419,6 +419,14 @@ def warn_blocked_by(ctx):
     return []
 
 
+def warn_blocks(ctx):
+    """Soft nudge: `blocks:` is retired; depends_on is the only authored relation."""
+    if "blocks" not in ctx.keys or not id_list(ctx.keys.get("blocks")):
+        return []
+    return ["blocks: is retired (T20261125-264487): record the relation as depends_on "
+            "on the dependant and drop this line (todo-deps.sh migrate does it)"]
+
+
 def warn_dimensions(ctx, today=None):
     """Soft nudges: printed, never change the exit code."""
     today = today or datetime.date.today().isoformat()
@@ -438,7 +446,7 @@ def warnings_for(path, today=None):
     ctx = Ctx(path)
     if ctx.error:
         return []
-    return warn_dimensions(ctx, today) + warn_blocked_by(ctx)
+    return warn_dimensions(ctx, today) + warn_blocked_by(ctx) + warn_blocks(ctx)
 
 
 CHECKS = (check_required, check_status, check_estimation,

@@ -307,3 +307,29 @@ append_queue_line() {
   [[ "$output" == *"T1"* ]]
   [[ "$output" != *"T2 —"* ]]
 }
+
+# --- Unblocks: derived from depends_on (T20261125-264487) ----------------
+
+@test "Unblocks: lists the tasks whose depends_on names the pick" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T20260101-000001 "blocker" "Open"
+  write_task T20260101-000002 "dep a" "Open" "depends_on: [T20260101-000001]"
+  write_task T20260101-000003 "dep b" "Open" "depends_on: [T20260101-000001]"
+  append_queue_line T20260101-000001 "blocker"
+
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Unblocks: T20260101-000002, T20260101-000003"* ]]
+}
+
+@test "Unblocks: a legacy blocks: line still shows, with a deprecation warning" {
+  echo "# TODO Queue" > dev/TODO/queue.md
+  write_task T20260101-000001 "blocker" "Open" "blocks: [T20260101-000002]"
+  write_task T20260101-000002 "dep" "Open"
+  append_queue_line T20260101-000001 "blocker"
+
+  run bash "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Unblocks: T20260101-000002"* ]]
+  [[ "$output" == *"legacy blocks:"* ]]
+}
