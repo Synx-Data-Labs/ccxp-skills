@@ -424,7 +424,7 @@ def warn_blocks(ctx):
     if "blocks" not in ctx.keys or not id_list(ctx.keys.get("blocks")):
         return []
     return ["blocks: is retired (T20261125-264487): record the relation as depends_on "
-            "on the dependant and drop this line (todo-deps.sh migrate does it)"]
+            "on the dependant and drop this line (todo-deps.sh migrate, T20261125-366351, does it)"]
 
 
 def warn_dimensions(ctx, today=None):

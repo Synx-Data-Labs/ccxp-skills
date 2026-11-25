@@ -3,6 +3,7 @@
 # and todo-next.sh (T20260914-359646).
 
 load test_helper
+bats_require_minimum_version 1.5.0
 setup() {
   source "$REPO_ROOT/todo/scripts/_lib.sh"
 }
@@ -169,8 +170,6 @@ mk_dep_task() {
   run todo-deps "$BATS_TEST_TMPDIR/t.md"
   [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020')" ]
 }
-
-bats_require_minimum_version 1.5.0
 
 # --- derived dependants + legacy blocks compat (T20261125-264487) -------------
 

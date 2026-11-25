@@ -93,18 +93,30 @@ function todo-dependants() {
   _todo-dependants-raw "$id" "$dir" | awk '!seen[$0]++'
 }
 function _todo-dependants-raw() {
-  local id="$1" dir="$2" f own base legacy x
-  for f in "$dir"/T*.md; do
-    [ -f "$f" ] || continue
-    base="${f##*/}"
-    [ "${base:0:16}" = "$id" ] && continue
-    if todo-deps "$f" | grep -qx "$id"; then printf '%s\n' "${base:0:16}"; fi
-  done
+  local id="$1" dir="$2" own legacy x
+  # One awk pass over the board (no per-file forks): every task whose depends_on
+  # or legacy `Blocked by` status names <id>.
+  local files=("$dir"/T*.md)
+  if [ -f "${files[0]}" ]; then
+    awk -v id="$id" '
+      function flush() { if (hit && substr(base, 1, 16) != id) print substr(base, 1, 16); hit=0 }
+      FNR==1 { flush(); infm=0; indep=0; n=0; base=FILENAME; sub(/^.*\//, "", base) }
+      { sub(/\r$/, "") }
+      $0=="---" && n<2 { n++; infm=(n==1); next }
+      !infm { next }
+      /^depends_on:/ { indep=1; line=$0; sub(/#.*$/, "", line); if (index(line, id)) hit=1; next }
+      indep && /^[[:space:]]*-/ { line=$0; sub(/#.*$/, "", line); if (index(line, id)) hit=1; next }
+      indep && /^[[:space:]]*(#.*)?$/ { next }
+      { indep=0 }
+      /^status:[ \t]*[Bb]locked by/ { if (index($0, id)) hit=1 }
+      END { flush() }
+    ' "${files[@]}"
+  fi
   own="$(compgen -G "$dir/${id}-*.md" | head -1 || true)"
   if [ -n "$own" ]; then
     legacy="$(todo-legacy-blocks "$own")"
     if [ -n "$legacy" ]; then
-      printf 'warning: %s carries a legacy blocks: line; depends_on is the only authored field (run todo-deps.sh migrate)\n' "${own##*/}" >&2
+      printf 'warning: %s carries a legacy blocks: line; depends_on is the only authored field (migration: todo-deps.sh migrate, T20261125-366351)\n' "${own##*/}" >&2
       for x in $legacy; do
         if compgen -G "$dir/${x}-*.md" > /dev/null 2>&1; then printf '%s\n' "$x"; fi
       done
