@@ -29,8 +29,14 @@ undefined_helpers() {
 # T20261124-273213: the details view splits AUTOPILOT from WORK; the behavioural cases live in hud/pure.test.ts
 # (they need the claude-code runner), so this pins the structure statically.
 @test "details builds an AUTOPILOT section before WORK, and WORK filters out the autopilot-flagged ledger rows" {
-  grep -qE "section\('AUTOPILOT'," "$MODEL"
+  grep -qE "sectionRows\('AUTOPILOT', statusCells" "$MODEL"
   grep -qE "section\('WORK', jobCells\)" "$MODEL"
-  [ "$(grep -n "section('AUTOPILOT'" "$MODEL" | cut -d: -f1)" -lt "$(grep -n "section('WORK'" "$MODEL" | cut -d: -f1)" ]
+  [ "$(grep -n "sectionRows('AUTOPILOT'" "$MODEL" | head -1 | cut -d: -f1)" -lt "$(grep -n "section('WORK'" "$MODEL" | cut -d: -f1)" ]
   grep -qE "led\.running\.filter\(j => !isApJob\(j\)\)" "$MODEL"
+}
+
+# The AUTOPILOT section is two lines: status cells, then progress cells (the behavioural cases are in hud/pure.test.ts).
+@test "details AUTOPILOT has a status line (state, dop, next loop) and a progress line (24h and average, holds)" {
+  grep -qE "const statusCells = \[apItem, dopSegs .*wakeItem\]" "$MODEL"
+  grep -qE "const progressCells = \[apStats .*holdsItem\]" "$MODEL"
 }

@@ -43,7 +43,7 @@ The autopilot's last 24 hours (a rolling window, not a calendar day) against its
 The autopilot's parallelism, so you can see the current config: `dop 8/16` = 8 cycles running out of `max_dop` 16.
 
 - Neutral colour normally; yellow when the running routine cycles are at the routine limit (`max_dop` less the reserved slots, all of `max_dop` while there is no reserved key; urgent cycles run in the reserved slots and are not counted against it, though they are in the number shown) or when every slot is taken (`running` has reached `max_dop`): the cases where the autopilot can start no routine cycle. `dop 8/6` after lowering `max_dop` under live cycles stays yellow until they finish.
-- `/hud details` spells it out on the AP line: `max_dop 16 (14 routine + 2 reserved) · 8 running`, and `(limit lowered)` when more cycles run than `max_dop` allows. With the autopilot off but a config file present it shows the dim configured value: `max_dop 16`.
+- `/hud details` spells it out on the first AUTOPILOT line: `max_dop 16 (14 routine + 2 reserved) · 8 running`, and `(limit lowered)` when more cycles run than `max_dop` allows. With the autopilot off but a config file present it shows the dim configured value: `max_dop 16`.
 - The reserved part comes from the autopilot's `reserved_slots` setting (default 2); with an older autopilot script that does not report it, `max_dop` is shown alone, e.g. `max_dop 16`.
 - A narrow terminal drops it whole (after the AP cell is at its shortest form, before the ctx cell). Silent with the autopilot off and no config file.
 - Source: `autopilot-state.sh config-show --json` (the effective value, default or override, from `dev/.autopilot-config.json`) and the number of busy slots in `dev/.autopilot-state.json`. Shown with AP on. Switch: `ap`.
@@ -115,7 +115,7 @@ Opt-in: how much of your Claude subscription's usage window is left, when it wou
 - `CLONE` the clone you work in: repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)
-- `AUTOPILOT` on / paused / off, `max_dop` use, holds, next loop and 24h numbers
+- `AUTOPILOT` two lines: status (on / paused / off, `max_dop` use with running cycles, next loop or overdue), then progress (24h merged and loops, average per day, `N held by autopilot`)
 - `WORK` everything the autopilot does not run: READY / WORKING counts only jobs without the `autopilot` flag, then parked and the 24 hour job count (all jobs started, autopilot cycles included). The one-row band's READY / WORKING still counts every running job
 - `QUEUE` the task queue breakdown
 - `RELEASE` the plugin's GitHub address, the version, and the count of unreleased commits

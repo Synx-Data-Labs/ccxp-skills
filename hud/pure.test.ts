@@ -717,7 +717,9 @@ test('details split: autopilot cycles (flag autopilot) do not count as WORK; hou
 
 test('details split: AUTOPILOT carries status, max_dop use, holds count, 24h merged and next wake; WORK none of them', async () => {
   const lines = splitLines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: { max_dop: 6, reserved_slots: null, source: 'override', file: true }, queue: { ...AP_Q, apholds: 2 } })
-  expect(sect(lines, 'AUTOPILOT')).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ 2 held by autopilot │ next loop .*\(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops/)
+  const ap = sections(lines)['AUTOPILOT']!
+  expect(ap[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ next loop .*\(in 12m\)$/)
+  expect(ap[1]).toBe('last 24h: 8 merged ▲ / 26 loops · average 5.2/day │ 2 held by autopilot')
   expect(sect(lines, 'WORK')).toMatch(/^WORKING \(1\) │ parked 3/)
   expect(sect(lines, 'WORK')).not.toMatch(/AP |held|max_dop|merged|next loop/)
   // no holds: no holds cell
@@ -726,13 +728,50 @@ test('details split: AUTOPILOT carries status, max_dop use, holds count, 24h mer
 
 test('details split: a paused autopilot still shows its holds', async () => {
   const lines = splitLines({ autopilot: { ...AP, prefix: '[p]', status: 'paused' }, queue: { ...AP_Q, apholds: 2 } })
-  expect(sect(lines, 'AUTOPILOT')).toMatch(/paused.*│ 2 held by autopilot │ next loop paused/)
+  expect(sections(lines)['AUTOPILOT']).toEqual([expect.stringMatching(/paused.*│ next loop paused$/), '2 held by autopilot'])
 })
 
 test('details split: autopilot off leaves AUTOPILOT as `AP off` only (no running, holds, wake or 24h cells) and WORK keeps every job', async () => {
   const lines = splitLines({ autopilot: null, queue: { ...AP_Q, apholds: 3 } })
   expect(sect(lines, 'AUTOPILOT')).toBe('AP off')
   expect(sect(lines, 'WORK')).toMatch(/^WORKING \(1\) │ parked 3/)
+})
+
+// --- AUTOPILOT on two lines: status, then progress ---
+test('details AUTOPILOT: two lines, status then progress (on with holds, paused, off, overdue, running)', async () => {
+  const cfg = { max_dop: 6, reserved_slots: null, source: 'override', file: true }
+  const lines = (helper: object, cols = 400) => sections(detail(withHelper({ ci: null, ...helper }) as any, cols))['AUTOPILOT']!
+  const q = { ...AP_Q, apholds: 2 }
+  const progress = 'last 24h: 8 merged ▲ / 26 loops · average 5.2/day │ 2 held by autopilot'
+  // on, with holds: line 1 = state, slots, next loop; line 2 = 24h, average, holds
+  const on = lines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: cfg, queue: q })
+  expect(on.length).toBe(2)
+  expect(on[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ next loop .*\(in 12m\)$/)
+  expect(on[1]).toBe(progress)
+  // paused
+  const paused = lines({ autopilot: { ...AP, prefix: '[p]', status: 'paused', stats: STATS }, ap_config: cfg, queue: q })
+  expect(paused).toEqual([expect.stringMatching(/^AP ⏸ paused .*│ max_dop 6 · 0 running │ next loop paused$/), progress])
+  // overdue: red, on line 1
+  const od = { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 3 * 3600, stats: STATS }
+  expect(lines({ autopilot: od, queue: q })).toEqual([expect.stringMatching(/│ next loop overdue 3h$/), progress])
+  const odRows = detailRows(withHelper({ ci: null, autopilot: od, queue: q }) as any, NOCI, 400, DETAIL_NOW)
+  expect(odRows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('error')
+  // running cycles stay on line 1
+  expect(lines({ autopilot: { ...AP, busy: true, busy_slots: 3, stats: STATS }, queue: q })[0]).toMatch(/│ 3 cycles running$/)
+  // off: one line, `AP off`; nothing for line 2
+  expect(lines({ autopilot: null, queue: q })).toEqual(['AP off'])
+  // holds alone (no stats yet) still go on a second line; no holds and no stats: one line
+  expect(lines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: q })).toEqual([expect.stringContaining('next loop'), '2 held by autopilot'])
+  expect(lines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: AP_Q }).length).toBe(1)
+  // the second line carries a blank label column and the same colours: holds warning, arrow success
+  const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: q }) as any, NOCI, 400, DETAIL_NOW)
+  const second = rows[rows.findIndex(r => r[0].text.startsWith('AUTOPILOT')) + 1]!
+  expect(second[0]!.text).toBe(' '.repeat(10))
+  expect(second.find(x => x.text === '2 held by autopilot')?.color).toBe('warning')
+  expect(second.find(g => /▲/.test(g.text))?.color).toBe('success')
+  // a narrow terminal wraps each line on its own; no label is abbreviated
+  const narrow = lines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: cfg, queue: q }, 50)
+  expect(squash(narrow.join(''))).toBe(squash(on.join('')))
 })
 
 test('details: parked shows the count only, never the parked ids', async () => {
@@ -1645,7 +1684,7 @@ const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
 
 test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate consecutive rows, no `||`', async () => {
   const lines = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }, 400)
-  expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) │ last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
+  expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
   const at = lines.findIndex(l => l.startsWith('WORK '))
   expect(lines[at + 1]).toBe('QUEUE     ' + QLINE)
   expect(lines.join('\n')).not.toContain('||')
@@ -1660,7 +1699,8 @@ test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate 
 
 test('details: the QUEUE row follows the WORK row in every AP state (due, paused, running, no stats, AP off) and is omitted without queue data', async () => {
   const due = linesOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q }, 400)
-  expect(apPart(due)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due │ last 24h: 8 merged ▲ / 26 loops · average 5.2/day')
+  expect(apPart(due)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due last 24h: 8 merged ▲ / 26 loops · average 5.2/day') // two lines (status, progress), joined by sect
+  expect(sections(due)['AUTOPILOT']).toEqual(['AP on 2/6h 3 loops ✓2 merged │ next loop due', 'last 24h: 8 merged ▲ / 26 loops · average 5.2/day'])
   expect(sect(due, 'QUEUE')).toBe(QLINE)
   const at = (helper: object) => { const l = linesOf(helper, 400); return [apPart(l), sect(l, 'QUEUE'), l.findIndex(x => x.startsWith('QUEUE')) - l.findIndex(x => x.startsWith('WORK '))] }
   expect(at({ autopilot: AP, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged', QLINE, 1])
