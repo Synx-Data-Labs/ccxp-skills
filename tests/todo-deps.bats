@@ -43,7 +43,7 @@ fixture() {
   [[ "$output" == *"T20260101-000001 blocks T20260101-000002: added in T20260101-000002 depends_on"* ]]
   [[ "$output" == *"T20260101-000004 blocks T20260101-000777: unknown id"* ]]
   [[ "$output" == *"T20260101-000005 blocks T20260101-000002"* ]]
-  [[ "$output" == *"SUMMARY files-with-blocks=3 relations=5 added=4 already=0 unknown=1 self=0 (nothing written)"* ]]
+  [[ "$output" == *"SUMMARY files-with-blocks=3 relations=5 added=4 already=0 unknown=1 self=0 cannot=0 (nothing written)"* ]]
   [ "$before" = "$(cat "$BOARD"/*.md | cksum)" ]
 }
 
@@ -68,7 +68,7 @@ fixture() {
   after="$(cat "$BOARD"/*.md | cksum)"
   run bash "$SCRIPT" migrate --dir "$BOARD"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"files-with-blocks=1 relations=1 added=0 already=0 unknown=1"* ]]
+  [[ "$output" == *"files-with-blocks=1 relations=1 added=0 already=0 unknown=1 self=0 cannot=0"* ]]
   [ "$after" = "$(cat "$BOARD"/*.md | cksum)" ]
 }
 
@@ -86,4 +86,49 @@ fixture() {
 @test "migrate: usage errors exit 2" {
   run bash "$SCRIPT" nonsense
   [ "$status" -eq 2 ]
+}
+
+@test "migrate parses a multi-line flow blocks list" {
+  printf -- '---\nstatus: Open\nestimation: 1\nblocks: [\n  T20260101-000002,\n  T20260101-000003\n]\n---\n\n# t\n' > "$BOARD/T20260101-000001-x.md"
+  task T20260101-000002 ''
+  task T20260101-000003 ''
+  run bash "$SCRIPT" migrate --dir "$BOARD"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"relations=2 added=2"* ]]
+  run cat "$BOARD/T20260101-000001-x.md"
+  [[ "$output" != *"T20260101-000002,"* ]]
+  [[ "$output" != *"]"* ]]
+  grep -q '^depends_on: \[T20260101-000001\]$' "$BOARD/T20260101-000002-x.md"
+}
+
+@test "migrate leaves a multi-line flow depends_on target and a frontmatter-less target alone, reporting both" {
+  task T20260101-000001 'blocks: [T20260101-000002, T20260101-000003]'
+  printf -- '---\nstatus: Open\nestimation: 1\ndepends_on: [\n  T20260101-000009,\n  T20260101-000008\n]\n---\n\n# t\n' > "$BOARD/T20260101-000002-x.md"
+  printf 'no frontmatter\n' > "$BOARD/T20260101-000003-x.md"
+  before2="$(cat "$BOARD/T20260101-000002-x.md" "$BOARD/T20260101-000003-x.md" | cksum)"
+  run bash "$SCRIPT" migrate --dir "$BOARD"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"cannot=2"* ]]
+  grep -q '^blocks: \[T20260101-000002, T20260101-000003\]$' "$BOARD/T20260101-000001-x.md"
+  [ "$before2" = "$(cat "$BOARD/T20260101-000002-x.md" "$BOARD/T20260101-000003-x.md" | cksum)" ]
+}
+
+@test "migrate reports a trailing note on the blocks line and a duplicate id across dirs" {
+  task T20260101-000001 'blocks: [T20260101-000002]  # because reasons'
+  task T20260101-000002 ''
+  mkdir -p "$BATS_TEST_TMPDIR/dev/PARKING"
+  printf -- '---\nstatus: Open\nestimation: 1\n---\n' > "$BATS_TEST_TMPDIR/dev/PARKING/T20260101-000002-y.md"
+  run bash "$SCRIPT" migrate --dir "$BOARD" --dir "$BATS_TEST_TMPDIR/dev/PARKING"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"note on blocks line not carried over: because reasons"* ]]
+  [[ "$output" == *"duplicate id T20260101-000002"* ]]
+}
+
+@test "migrate keeps CRLF line endings consistent" {
+  printf -- '---\r\nstatus: Open\r\nestimation: 1\r\nblocks: [T20260101-000002]\r\n---\r\n# t\r\n' > "$BOARD/T20260101-000001-x.md"
+  printf -- '---\r\nstatus: Open\r\nestimation: 1\r\n---\r\n# t\r\n' > "$BOARD/T20260101-000002-x.md"
+  run bash "$SCRIPT" migrate --dir "$BOARD"
+  [ "$status" -eq 0 ]
+  [ -z "$(grep -L $'\r' "$BOARD/T20260101-000002-x.md")" ]
+  [ "$(grep -c $'\r$' "$BOARD/T20260101-000002-x.md")" = "$(wc -l < "$BOARD/T20260101-000002-x.md" | tr -d ' ')" ]
 }
