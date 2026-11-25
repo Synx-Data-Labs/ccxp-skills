@@ -2,6 +2,7 @@
 status: Open
 estimation: 2
 source: split of T20261125-424111
+depends_on: [T20261125-119704]
 related: T20261125-424111, T20261125-264487
 description: /ccxp-upgrade skill: dry-run report, one branch and PR, --all over the registry
 ---

@@ -2,6 +2,7 @@
 status: Open
 estimation: 2
 source: split of T20261125-424111
+depends_on: [T20261125-305580]
 related: T20261125-424111, T20261125-264487
 description: ordered idempotent migration runner with check/apply and fixtures; migration 0001 wrapper
 ---

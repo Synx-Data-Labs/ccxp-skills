@@ -1,6 +1,6 @@
 ---
 status: Open
-estimation: 8
+estimation: 8   # umbrella; children sum to 10
 depends_on: [T20261125-305580, T20261125-119704, T20261125-107918, T20261125-303266, T20261125-230436, T20261125-239989]
 source: owner request via job 1579, 2026-11-25
 related: T20261125-264487, T20261125-366351, dev/EPICS/E3-dependency-chain.md
@@ -26,13 +26,13 @@ description: ccxp upgrade path: per-repo schema marker, ordered idempotent migra
   - `apply <repo>`: idempotent rewrite; the runner writes the marker only after every pending migration applied.
   - Each ships before/after bats fixtures under `tests/fixtures/schema/NNNN/`.
   - 0001 = blocks to depends_on, wrapping `todo-deps.sh migrate` once job 1577 lands it.
-- **Runner**: `_schema/schema.sh` with `repo-schema`, `plugin-schema`, `status`, `pending`, `check`, `apply`, `gate`.
+- **Runner**: `_schema/schema.sh` with `repo-schema`, `plugin-schema`, `status`, `pending`, `check`, `apply`, `gate`, `release-check`.
 - **`/ccxp-upgrade`**: reads the schema, shows the dry-run of every pending migration, makes ONE branch and ONE PR via the normal lint/review/`/address-pr` flow in a fresh worktree (never the owner's shared clone); `--all` iterates `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/ccxp-repos.json`. Never merges except through `/address-pr`.
 - **Detection**: drive, todo and autopilot preflight warn "repo schema N, plugin needs M: run /ccxp-upgrade"; never a silent write.
 - **Hard gate**: repo schema below `CCXP_MIN_REPO_SCHEMA` makes drive and autopilot refuse with a clear message.
 - **Two-release window**: release N ships compat reader plus migration and warns; release N+1 drops the old form and raises `CCXP_MIN_REPO_SCHEMA`.
 - **Release check**: a `CCXP_SCHEMA` bump without a migration directory and a test fails; release notes list schema changes and migration ids.
-- **Local state files** (autopilot-state schema 2, ledger schema 3): gitignored and per machine, so they migrate by reader tolerance (a state without the current `schema` reads as off, ledger readers accept older lines); documented, no runner step.
+- **Local state files** (autopilot-state schema 2, ledger schema 3): gitignored and per machine, so they migrate by reader tolerance (a state without the current `schema` reads as off, the ledger (one JSON object, schema 3) is rewritten by each `start`, so an older object is simply replaced; the docs task verifies this against `ledger.sh`); documented, no runner step.
 
 ## Split
 

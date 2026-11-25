@@ -2,6 +2,7 @@
 status: Open
 estimation: 1
 source: split of T20261125-424111
+depends_on: [T20261125-230436]
 related: T20261125-424111, T20261125-264487
 description: document upgrade path, two-release window rule, local state file migration
 ---
