@@ -64,7 +64,7 @@ source: Retro 2026-04-25
 - `type`: `chore|feature|bug|event|research|spike|rca|support|other`. `event` needs `when`, is never auto-picked, and closes once its date passes. `todo-list.sh --type event` lists events.
 - `source-url` / `support-issue` / `support-report`: `source-url` is set by `/to-task` for any tracked URL (dedup key); `support-issue` is a recognized legacy alias (pre-dates the `/support` -> `/to-task` rename). `support-report: on|off` opts in to outward status reports (absent = off). See `_support/README.md` and `/customer-support`.
 - `tier`: `1`-`4` (default `3`); autopilot takes the lowest eligible tier, then `queue.md` order. Reader: `todo-tier`.
-- `blocks`: `T{id}`s that depend on this task (drives `Unblocks:` in `next`). `depends_on`: its inverse, `T{id}`s this task waits on; it keeps its real status. `needs`: human-only conditions (`human`, `vpn`, `owner-decision`, `person:<alias>`, `ext:<text>`). Details: `lifecycle.md`.
+- `depends_on`: `T{id}`s this task waits on (the only authored relation; the task keeps its real status). Dependants (`Unblocks:` in `next`) are derived from its inverse; `blocks:` is retired, an old line is read with a warning. `needs`: human-only conditions (`human`, `vpn`, `owner-decision`, `person:<alias>`, `ext:<text>`). Details: `lifecycle.md`.
 - `source`: one-line origin (e.g. `Retro 2026-04-25`, `RCA run 12345`, `Customer ticket SUPPORT-123`).
 
 There is no `priority:` field — position in `queue.md` **is** the priority. A prior version of this schema had a free-form `Critical/High/.../Low` field that duplicated what the queue now expresses directly; it's retired.
@@ -154,7 +154,7 @@ implements; it stays documented here for a human reading this skill.
    - Current status verbatim, including a `Blocked by T{id}` prefix if present — don't resolve it, just show it
    - **Deadline** if set, and **Scheduled** (≥ this Monday = landed in the active iteration at a past IPM)
    - **Claim status** (unclaimed / claimed by this session / reclaimable stale peer claim)
-   - **Unblocks:** if the task's frontmatter has a `blocks:` list, show it verbatim (e.g. "Unblocks: T20260320-000029, T20260320-000045")
+   - **Unblocks:** the tasks whose `depends_on` names this task, derived by `todo-dependants` (e.g. "Unblocks: T20260320-000029, T20260320-000045"); a legacy `blocks:` line is merged in with a warning
    - The next concrete action to move it forward, if evident from the file
 5. If any of the 3 are `Blocked by` an open task, call that out plainly and point at `/todo sweep` rather than trying to interpret it further.
 

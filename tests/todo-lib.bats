@@ -169,3 +169,51 @@ mk_dep_task() {
   run todo-deps "$BATS_TEST_TMPDIR/t.md"
   [ "$output" = "$(printf 'T20260611-000010\nT20260611-000020')" ]
 }
+
+bats_require_minimum_version 1.5.0
+
+# --- derived dependants + legacy blocks compat (T20261125-264487) -------------
+
+mk_task() { # dir id slug frontmatter-extra
+  local d="$1" id="$2" extra="${3:-}"
+  mkdir -p "$d"
+  { printf -- '---\nstatus: Open\nestimation: 1\n'; [ -n "$extra" ] && printf '%b\n' "$extra"; printf -- '---\n\n# %s: t\n' "$id"; } > "$d/$id-x.md"
+}
+
+@test "todo-dependants derives dependants from the inverse of depends_on" {
+  local d="$BATS_TEST_TMPDIR/todo"
+  mk_task "$d" T20260101-000001
+  mk_task "$d" T20260101-000002 'depends_on: [T20260101-000001]'
+  mk_task "$d" T20260101-000003 'depends_on:\n  - T20260101-000001\n  - T20260101-000002'
+  mk_task "$d" T20260101-000004
+  run --separate-stderr todo-dependants T20260101-000001 "$d"
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(printf 'T20260101-000002\nT20260101-000003')" ]
+  [ -z "$stderr" ]
+}
+
+@test "todo-dependants reads a legacy blocks: line with a warning, deduplicated with depends_on" {
+  local d="$BATS_TEST_TMPDIR/todo"
+  mk_task "$d" T20260101-000001 'blocks: [T20260101-000002, T20260101-000009]'
+  mk_task "$d" T20260101-000002 'depends_on: [T20260101-000001]'
+  mk_task "$d" T20260101-000003 'blocks: [T20260101-000002]'
+  run --separate-stderr todo-dependants T20260101-000001 "$d"
+  [ "$status" -eq 0 ]
+  [ "$output" = "T20260101-000002" ]
+  [[ "$stderr" == *"legacy blocks:"* ]]
+}
+
+@test "todo-dependants: a task with no dependants prints nothing and succeeds" {
+  local d="$BATS_TEST_TMPDIR/todo"
+  mk_task "$d" T20260101-000001
+  run todo-dependants T20260101-000001 "$d"
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "todo-legacy-blocks reads flow and block list forms" {
+  local d="$BATS_TEST_TMPDIR/todo"
+  mk_task "$d" T20260101-000001 'blocks:\n  - T20260101-000002  # note\n  - T20260101-000003'
+  run todo-legacy-blocks "$d/T20260101-000001-x.md"
+  [ "$output" = "$(printf 'T20260101-000002\nT20260101-000003')" ]
+}

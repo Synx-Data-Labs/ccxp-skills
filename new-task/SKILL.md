@@ -49,8 +49,8 @@ surfaces actual scope.
 
 Ask about these only when they plausibly apply — don't force them:
 
-- `deadline` (hard date), `blocks`/`blocked-by` (dependency on another
-  `T<id>`), `source` (where this came from — infer "this conversation,
+- `deadline` (hard date), `depends_on` (dependency on another
+  `T<id>`; never `blocks:`, it is retired), `source` (where this came from — infer "this conversation,
   YYYY-MM-DD" when that's genuinely the origin rather than asking),
   `related`, `owner`
 

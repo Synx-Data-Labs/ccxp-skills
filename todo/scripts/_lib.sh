@@ -65,6 +65,54 @@ function todo-deps() {
   } | grep -oE 'T[0-9]{8}-[0-9]{6}' | awk '!seen[$0]++' || true
 }
 
+# --- legacy `blocks:` and derived dependants (T20261125-264487) ---------------
+# `depends_on:` is the only authored relation. Dependants (what a task holds up)
+# are derived from its inverse over the board. An old `blocks: [X]` line on task A
+# still reads as "X depends on A" during the migration window (compat reader):
+# it warns on stderr, never fails. `todo-deps.sh migrate` rewrites those lines.
+
+# Ids named by a task's legacy `blocks:` line (flow or block list), one per line,
+# de-duplicated. Silent; use todo-dependants for the warned, board-aware view.
+function todo-legacy-blocks() {
+  local file="$1"
+  tr -d '\r' < "$file" | awk '
+    NR==1 && $0=="---" { infm=1; next }
+    infm && $0=="---" { exit }
+    infm && /^blocks:/ { inb=1; sub(/#.*$/, ""); print; next }
+    infm && inb && /^[[:space:]]*-/ { sub(/#.*$/, ""); print; next }
+    infm && inb && /^[[:space:]]*(#.*)?$/ { next }
+    infm && inb { inb=0 }
+  ' | grep -oE 'T[0-9]{8}-[0-9]{6}' | awk '!seen[$0]++' || true
+}
+
+# Task ids that depend on <id>, one per line, de-duplicated, in board order:
+# every task in <todo-dir> whose todo-deps names <id>, then the open ids in <id>'s
+# own legacy `blocks:` line (one stderr warning per file carrying it). Read-only.
+function todo-dependants() {
+  local id="$1" dir="$2"
+  _todo-dependants-raw "$id" "$dir" | awk '!seen[$0]++'
+}
+function _todo-dependants-raw() {
+  local id="$1" dir="$2" f own base legacy x
+  for f in "$dir"/T*.md; do
+    [ -f "$f" ] || continue
+    base="${f##*/}"
+    [ "${base:0:16}" = "$id" ] && continue
+    if todo-deps "$f" | grep -qx "$id"; then printf '%s\n' "${base:0:16}"; fi
+  done
+  own="$(compgen -G "$dir/${id}-*.md" | head -1 || true)"
+  if [ -n "$own" ]; then
+    legacy="$(todo-legacy-blocks "$own")"
+    if [ -n "$legacy" ]; then
+      printf 'warning: %s carries a legacy blocks: line; depends_on is the only authored field (run todo-deps.sh migrate)\n' "${own##*/}" >&2
+      for x in $legacy; do
+        if compgen -G "$dir/${x}-*.md" > /dev/null 2>&1; then printf '%s\n' "$x"; fi
+      done
+    fi
+  fi
+  return 0
+}
+
 # Claim-state verdict for one task id: mine|peer:<claimant>|reclaimable:<claimant>|unclaimed
 # $2 (optional) overrides the repo root task_claim.sh is invoked from — tests
 # pass a throwaway task file's directory; real callers omit it (defaults to

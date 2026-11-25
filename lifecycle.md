@@ -45,8 +45,7 @@ description: {One-line summary of what's wrong and what "done" looks like}
 
 Optional metadata fields:
 
-- `blocks: [T{id1}, T{id2}]` — YAML list, records what this task is holding up (bidirectional)
-- `depends_on: [T{id1}]` — YAML list, the inverse of `blocks:`: tasks this one depends on. The task keeps its real status (`In Progress`, `Design`, `Open`); nothing is ever shown as blocked. `needs: [human, vpn, owner-decision, person:<alias>, ext:<text>]` — human-only or outside conditions, which are not task dependencies. Replace `Blocked by` (epic E3, `dev/EPICS/E3-dependency-chain.md`)
+- `depends_on: [T{id1}]` — YAML list, the ONLY authored dependency field: tasks this one depends on. What a task holds up (its dependants) is derived from the inverse of `depends_on` (`todo-dependants` in `todo/scripts/_lib.sh`), never stored. `blocks:` is retired (T20261125-264487): an old line is still read, with a warning, until `todo-deps.sh migrate` rewrites it. The task keeps its real status (`In Progress`, `Design`, `Open`); nothing is ever shown as blocked. `needs: [human, vpn, owner-decision, person:<alias>, ext:<text>]` — human-only or outside conditions, which are not task dependencies. Replace `Blocked by` (epic E3, `dev/EPICS/E3-dependency-chain.md`)
 - `deadline: YYYY-MM-DD` — release or hard deadline
 - `when:` / `when-end:` / `place:` / `person:` / `type:` — optional task dimensions (time, place, person, type; T20261114-352324). `when` is `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM`; `place` and `person` are slug lists (aliases, never emails or names); `type: event` requires `when` and is never auto-picked. Time fields never reorder the queue; position in `queue.md` stays the priority. Waiting on someone: `status: Blocked by person:<alias>` / `ext:<text>`. Full semantics in `todo/SKILL.md` "Task metadata".
 - `scheduled: YYYY-MM-DD` — a Monday; set by `/ipm` step 5 at IPM commit, for whichever tasks land in that iteration. Update-forward-only — never removed (see the Iteration assignment section below)
@@ -98,14 +97,12 @@ The active states `Design`, `In Progress`, `Review`, `Blocked` live in the task 
 
 ## Blocking: Bidirectional Links
 
-**New dependencies use `depends_on:`** (on the dependant) plus `blocks:` (on the dependency), both kept; the status stays real. `todo/scripts/_lib.sh` `todo-deps <file>` is the compat reader: it returns `depends_on` plus any legacy `Blocked by` ids, so old and new files mix during the rollout. Lint (`lint_tasks.py`): `depends_on` ids must exist and not cycle (an id already Done only warns), and `Blocked by` warns as deprecated. The rest of this section describes the legacy `Blocked by` form.
+**New dependencies use `depends_on:` on the dependant only** (no `blocks:` on the dependency; dependants are derived); the status stays real. A legacy `blocks: [X]` on task A reads as "X depends on A" with a warning (compat reader, `todo-dependants`); lint warns that `blocks:` is retired. `todo/scripts/_lib.sh` `todo-deps <file>` is the compat reader: it returns `depends_on` plus any legacy `Blocked by` ids, so old and new files mix during the rollout. Lint (`lint_tasks.py`): `depends_on` ids must exist and not cycle (an id already Done only warns), and `Blocked by` warns as deprecated. The rest of this section describes the legacy `Blocked by` form.
 
 Blocking relationships are recorded in **both** directions:
 
 - **Blocked task**: frontmatter `status: Blocked by T{id}` — cannot proceed until blocker is resolved
-- **Blocking task**: frontmatter `blocks: [T{id}]` (YAML list) — records what this task is holding up
-
-Always maintain both sides. When adding `Blocked by T{id}` to a task's `status`, also add `T{other}` to the blocker's `blocks` list. This lets `/todo next` prioritize blockers that unblock the most work.
+- **Blocking task**: nothing is written on it; `/todo next` derives what it unblocks from the dependants' `depends_on` (and, in the window, a legacy `blocks:` line).
 
 **`/top` follows the blocker chain.** `/top T{id}` on a blocked task expands to `[blocker-chain..., T{id}]` before reordering, walking the structured `status: Blocked by T{id}` field (never `related:` — that's soft context, not a hard dependency) recursively, capped at 10 hops with a hard-stop on a cycle. This puts the task that's actually actionable next at the very front of `dev/TODO/queue.md`, instead of surfacing a task whose own prerequisite is still buried mid-queue. A blocker not found in `dev/TODO/` (already closed, or lives in another repo) is skipped.
 

@@ -3,8 +3,7 @@ status: Open
 estimation: 1
 # Optional — delete the lines you don't use:
 # deadline: 2026-06-30         # hard date (release / compliance / customer) — informational, does not affect queue order
-# blocks: [T20260101-000001]   # task IDs that depend on THIS one (bidirectional)
-# depends_on: [T20260101-000002] # tasks this one waits on (pair with their blocks:); keep your real status
+# depends_on: [T20260101-000002] # tasks this one waits on (the ONLY relation field; dependants are derived); keep your real status
 # needs: [human]               # human-only condition: human|vpn|owner-decision|person:<alias>|ext:<text>
 # source: Retro 2026-06-09     # one-line origin (retro / RCA run / ticket / conversation)
 # related: T20260101-000003    # see-also, non-blocking
@@ -64,8 +63,8 @@ SCAFFOLD NOTES (delete this block once the task is filed):
   `/todo sweep`, which picks up any untracked task automatically). New tasks
   always enter at the end of the queue; use `/top T{ID}` if it needs to jump
   the line.
-- To mark a dependency, add the dependency's ID to this task's `depends_on:` AND this
-  task's ID to the dependency's `blocks:` (both directions); keep the real `status:`
+- To mark a dependency, add the dependency's ID to this task's `depends_on:` only (no
+  `blocks:` anywhere; it is retired); keep the real `status:`
   (`Blocked by T{id}` is deprecated).
 - As the task enters `/drive`, grow this body into the full design using
   repo-conventions/templates/design-doc.md (TLDR · Problem · Context ·
