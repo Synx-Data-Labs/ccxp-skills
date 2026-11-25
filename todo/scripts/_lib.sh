@@ -100,9 +100,10 @@ function _todo-dependants-raw() {
   if [ -f "${files[0]}" ]; then
     awk -v id="$id" '
       function flush() { if (hit && substr(base, 1, 16) != id) print substr(base, 1, 16); hit=0 }
-      FNR==1 { flush(); infm=0; indep=0; n=0; base=FILENAME; sub(/^.*\//, "", base) }
+      FNR==1 { flush(); infm=0; indep=0; closed=0; base=FILENAME; sub(/^.*\//, "", base) }
       { sub(/\r$/, "") }
-      $0=="---" && n<2 { n++; infm=(n==1); next }
+      FNR==1 && $0=="---" { infm=1; next }
+      infm && $0=="---" { infm=0; closed=1; next }
       !infm { next }
       /^depends_on:/ { indep=1; line=$0; sub(/#.*$/, "", line); if (index(line, id)) hit=1; next }
       indep && /^[[:space:]]*-/ { line=$0; sub(/#.*$/, "", line); if (index(line, id)) hit=1; next }
