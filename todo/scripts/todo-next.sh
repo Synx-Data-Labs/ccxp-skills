@@ -147,7 +147,7 @@ function todo-next-main() {
       unclaimed) : ;;
     esac
 
-    blocks="$(todo-dependants "$id" "$TODO_QUEUE_DIR/dev/TODO" | awk '!s[$0]++' | paste -sd, - | sed 's/,/, /g')"
+    blocks="$(todo-dependants "$id" "$TODO_QUEUE_DIR/dev/TODO" | paste -sd, - | sed 's/,/, /g')"
     [ -n "$blocks" ] && printf '  Unblocks: %s\n' "$blocks"
 
     # Step 5: a still-open blocker gets a plain callout, no interpretation.
