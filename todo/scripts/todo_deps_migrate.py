@@ -85,6 +85,7 @@ def add_dep(lines, dep):
         m = re.match(r"^(depends_on:\s*)\[(.*?)\](\s*(#.*)?)$", body)
         if m:
             inner = m.group(2).strip()
+            inner = inner.rstrip().rstrip(",").rstrip()
             inner = (inner + ", " + dep) if inner else dep
             lines[span[0]] = "%s[%s]%s%s" % (m.group(1), inner, m.group(3), nl)
             return "added"
@@ -147,6 +148,8 @@ def main(argv):
             continue
         stats["files"] += 1
         keep = []
+        if not ids_of(lines, span):
+            print("  %s: blocks line names no task id, removed: %s" % (a, lines[span[0]].rstrip("\r")))
         for x in ids_of(lines, span):
             stats["relations"] += 1
             if x == a:
