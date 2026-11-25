@@ -39,7 +39,7 @@ All state arithmetic lives in `<skills-root>/autopilot/scripts/autopilot-state.s
 For `status` (and for an unsupported argument): run `autopilot-state.sh report` and relay it. Then add, derived live and never from a cache:
 
 - **Done**: `autopilot-state.sh done` (journal files added since `started_at`, one bullet each; prints "- No tasks merged this run" when empty).
-- **Needs your attention**: `autopilot-state.sh holds` (each held task with its kind, reason and release condition), plus a task whose `status:` flags a human-only condition (`SUPERVISED`, a sign-off) and an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
+- **Needs your attention**: `autopilot-state.sh holds` (each held task with its kind, reason and release condition), plus an open PR stuck in a way no skill resolves; apply the filter in Important Notes.
 
 No Slack post, no `ScheduleWakeup`: this phase never touches the loop.
 
@@ -100,7 +100,7 @@ A dirty or mid-rebase leftover: remove the directory and re-run the block. Full 
 
 - Nothing is written to a task file to say why a cycle could not finish it, and `queue.md` is never reordered by the loop.
 - A cycle that ends `NEEDS-ATTENTION`, `STUCK` or `WAITING` creates a recorded **hold** (Phase 4): a kind, a reason and one release condition (d152). `top` and `pickable` pass over held tasks until `holds-check` releases them; the tier cursor (Helper and files) moves on to the next task. No PR is opened for a hold.
-- `Blocked by T<id>`, `SUPERVISED`, `BLOCKED`, `needs manual` and `sign-off` statuses are still skipped by auto-pick. Task size is never a reason to stall (see **Big tasks**).
+- A `Blocked by T<id>` status is still skipped by auto-pick; the words `SUPERVISED`, `BLOCKED`, `needs manual` and `sign-off` are plain prose, not gates (d174). Task size is never a reason to stall (see **Big tasks**).
 
 **Dispatch** `/drive T<id> --auto-selected` via the `Agent` tool (`subagent_type: general-purpose`, no `isolation`), where `ID=$(autopilot-state.sh top "$CLONE_PATH")` (tiers, cursor and holds decide it; an empty id on a `drift` pickable means bare `/drive --auto-selected`, whose Phase 0 PR drain and sweep still run) after `autopilot-state.sh busy on "$ID"`; note the `agentId`. Its ledger start line passes `--flags autopilot` (HUD `running r<n>`). Never start a second cycle while one is busy. The prompt is self-contained: name `$CLONE_PATH`, require `/drive` to run to completion, give Phase 4's classification rules, and add the guardrail and the big-task rule below. A `/todo sweep` park ask (Step B) needs a human: the sub-agent reports it as `STUCK`. **Every bash command for the whole `/drive` run begins `cd "$CLONE_PATH" &&`** (a sub-agent's Bash does not keep `cd` between calls).
 

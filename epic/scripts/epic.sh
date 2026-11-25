@@ -114,7 +114,6 @@ function epic-verdict() {
       if [[ "$status" == Done* ]]; then v="skip"; d="done"
       elif [[ "$status" == Parked* ]]; then v="skip"; d="parked"
       elif [[ "$claim" == peer:* ]]; then v="skip"; d="$claim"
-      elif [[ "$status" == *SUPERVISED* || "$status" == *BLOCKED* ]]; then v="skip"; d="supervised"
       elif [[ "$status" =~ ^Blocked\ by\ (T[0-9]{8}-[0-9]{6}) ]]; then
         blocker="${BASH_REMATCH[1]}"
         if [ -n "$(find dev/TODO -maxdepth 1 -name "${blocker}-*.md" 2>/dev/null | head -n1)" ]; then
@@ -171,7 +170,6 @@ function _epic-action() {
     escalated:*)    echo "answer the NEEDS INPUT question, then /drive <id>" ;;
     skip:peer:*)    echo "coordinate with the claimant, or wait for the claim to go stale" ;;
     skip:blocked:*) echo "drive the blocker ${detail#blocked:} first" ;;
-    skip:supervised) echo "operator-only: run it supervised, not via /epic drive" ;;
     skip:parked)    echo "revive from dev/PARKING if still wanted" ;;
     *)              echo "review manually" ;;
   esac

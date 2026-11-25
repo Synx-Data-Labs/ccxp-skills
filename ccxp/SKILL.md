@@ -163,7 +163,7 @@ Still yours: item 5b, reading the files it names (`journal_yesterday`, `previous
 #### 1.1a Cheap-hold short-circuit (Option C)
 
 - On the hourly cadence (`3 * * * *`), the pre-flight gate (`dev/daily-ccxp.sh`) starts a session whenever there is a *signal* — but it sees only the signal, not whether the work is actually **doable** this tick.
-- A tick that fires on a real `task-due`/`inflight-task`/`pr-activity` signal but where every candidate turns out **gated** (peer-owned / supervised-release / VPN-not-clearable / maintainer-owned-fork) would otherwise pay a **full Phase-1 standup + a per-tick doc PR for zero forward progress** — the dominant residual spend (~$6–14/standup; see the cost note in `dev/daily-ccxp.sh`).
+- A tick that fires on a real `task-due`/`inflight-task`/`pr-activity` signal but where every candidate turns out **gated** (peer-owned / VPN-not-clearable / maintainer-owned-fork) would otherwise pay a **full Phase-1 standup + a per-tick doc PR for zero forward progress** — the dominant residual spend (~$6–14/standup; see the cost note in `dev/daily-ccxp.sh`).
 - This short-circuit makes that tick **cheap**.
 
 **It is a gate, evaluated here using checks 1.1 already gathered (plus two cheap peeks) — it never skips a mandatory check.** A "cheap hold" requires **all** of:
@@ -171,7 +171,7 @@ Still yours: item 5b, reading the files it names (`journal_yesterday`, `previous
 - **No new maintainer reply** — `/slack-check-reply all` (step 1.1#5b, already run — *mandatory, never skipped*) returned nothing actionable.
 - **Nightly all-green** — a cheap peek (`gh run list --branch main --created ">=<last-tick>"`, conclusions only — *not* a full Phase-1.5 RCA) shows no new `failure`.
 - **No drainable PR** — Phase 0 (`/address-pr`) already exited non-actionable (every open PR `owned:`/draft/blocked, nothing `mine`/`free`/`untracked` + mergeable).
-- **No clean autonomous leg** — `/todo next` yields nothing workable: its top candidates are all peer-owned / supervised / external-blocked. This is the **genuine-gate** determination from Phase 3 ("VPN and the Workflow tool are tools, not walls"), **not** the reflexive "all gated" bail — each candidate maps to a concrete gate.
+- **No clean autonomous leg** — `/todo next` yields nothing workable: its top candidates are all peer-owned / external-blocked. This is the **genuine-gate** determination from Phase 3 ("VPN and the Workflow tool are tools, not walls"), **not** the reflexive "all gated" bail — each candidate maps to a concrete gate.
 - **Not a Friday tick** — retro (2b) always runs the full ritual regardless of gating. Monday carries no special exemption anymore — the IPM (2a) is opt-in and no longer auto-invoked (see Phase 2a), so a cheap hold can fire on a Monday tick the same as any other weekday.
 
 **Decide with the script, not by eye.** Feed it the four counts from the checks above (an input you did not obtain: omit the flag — a check that did not run never justifies a hold); it prints `DECISION=hold|full` + `REASONS=` (the Friday test is built in, in the cron's `America/Chicago` frame):
@@ -196,7 +196,7 @@ Anything other than an explicit `DECISION=hold` (`full`, exit 2, no output) mean
    • slack: 0 new
    • nightly: green
    • drainable PR: 0
-   • clean leg: 0 ({1-line why each top candidate is gated, e.g. "T298901 peer, T240817 supervised"})
+   • clean leg: 0 ({1-line why each top candidate is gated, e.g. "T298901 peer, T240817 external"})
    ```
 
    Still one Slack message (`slack_send_message` with `thread_ts`) — "compact" means brief

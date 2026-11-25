@@ -199,7 +199,7 @@ append_queue_line() {
   [[ "$output" == *"T1"* ]]; [[ "$output" == *"SUPERVISED"* ]]
 }
 
-@test "--skip-gated skips every human-only status word; the 5.9.0 'needs a human' text is no gate" {
+@test "--skip-gated skips only a Blocked by status; SUPERVISED, BLOCKED, needs manual and sign-off words are no gate (d174)" {
   echo "# TODO Queue" > dev/TODO/queue.md
   write_task T1 "marked" "Open — sign-off pending"
   write_task T2 "supervised" "In Progress — SUPERVISED (needs VPN)"
@@ -207,28 +207,28 @@ append_queue_line() {
   write_task T4 "signoff" "Review — sign-off pending"
   write_task T5 "free" "Open"
   write_task T6 "old-marker" "Open — needs a human [decision]: pick"
-  local t; for t in T1 T2 T3 T4 T5 T6; do append_queue_line $t "x"; done
+  write_task T7 "blocked-word" "Open — BLOCKED upstream, needs manual QA"
+  local t; for t in T3 T1 T2 T4 T5 T6 T7; do append_queue_line $t "x"; done
   run bash "$SCRIPT" --skip-gated
   [ "$status" -eq 0 ]
-  [[ "$output" == *"T5"* && "$output" == *"T6"* ]]
-  [[ "$output" == *"#5 of 6"* ]]   # position in the queue is kept
-  [[ "$output" != *"T1 "* && "$output" != *"T2 "* && "$output" != *"T3 "* && "$output" != *"T4 "* ]]
+  [[ "$output" == *"T1"* && "$output" == *"T2"* && "$output" == *"T4"* ]]
+  [[ "$output" != *"T3 "* ]]   # only the Blocked by task is skipped
 }
 
 @test "--skip-gated with only gated tasks reports none, and a plain status brings the task back" {
   echo "# TODO Queue" > dev/TODO/queue.md
-  write_task T1 "marked" "Open — sign-off pending"
+  write_task T1 "marked" "Blocked by T9"
   append_queue_line T1 "marked"
   run bash "$SCRIPT" --skip-gated
   [[ "$output" == *"No actionable tasks"* ]]
-  write_task T1 "marked" "Open"
+  write_task T1 "marked" "Open — sign-off pending"
   run bash "$SCRIPT" --skip-gated
   [[ "$output" == *"T1"* ]]
 }
 
 @test "--check is silent: exit 0 when a task is pickable, 1 when none, also without a queue file" {
   echo "# TODO Queue" > dev/TODO/queue.md
-  write_task T1 "marked" "Open — sign-off pending"
+  write_task T1 "marked" "Blocked by T9"
   append_queue_line T1 "marked"
   run bash "$SCRIPT" --skip-gated --check
   [ "$status" -eq 1 ]; [ -z "$output" ]

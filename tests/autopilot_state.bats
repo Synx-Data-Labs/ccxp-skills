@@ -192,12 +192,12 @@ _j() { jq -r "$1" "$AUTOPILOT_STATE_FILE"; }
   run _ap cap; [ "$output" = ok ]
 }
 
-@test "eligible: status-line markers that need a human are refused" {
+@test "eligible: a Blocked by status is refused, SUPERVISED prose is not (d174)" {
   local t="$BATS_TEST_TMPDIR/t.md"
   printf -- '---\nstatus: Open\nestimation: 1\n---\n# T\n' > "$t"
   run _ap eligible "$t"; [ "$status" -eq 0 ]
   printf -- '---\nstatus: In Progress — SUPERVISED (needs VPN)\n---\n# T\n' > "$t"
-  run _ap eligible "$t"; [ "$status" -ne 0 ]
+  run _ap eligible "$t"; [ "$status" -eq 0 ]
   printf -- '---\nstatus: Blocked by T20260101-000001\n---\n# T\n' > "$t"
   run _ap eligible "$t"; [ "$status" -ne 0 ]
   printf -- '---\nstatus: Open\n---\n# T\nSUPERVISED in the body is not a status marker\n' > "$t"
@@ -781,12 +781,14 @@ _nh_task() {
   for c in skip unskip marked attention-list visit advance parked parked-list; do run _ap "$c" T1; [ "$status" -eq 2 ]; done
 }
 
-@test "eligible: the five pre-5.9.0 human-only words are refused; the 5.9.0 'needs a human' text is not a gate" {
+@test "eligible: the old human-only words are no gate any more; only Blocked by is refused (d174)" {
   local t="$BATS_TEST_TMPDIR/t.md" s
-  for s in 'In Progress — SUPERVISED (needs VPN)' 'Open — BLOCKED upstream' 'Review — needs manual QA' 'Open — sign-off pending' 'Blocked by T20260101-000001'; do
+  for s in 'In Progress — SUPERVISED (needs VPN)' 'Open — BLOCKED upstream' 'Review — needs manual QA' 'Open — sign-off pending'; do
     printf -- '---\nstatus: %s\n---\n# T\n' "$s" > "$t"
-    run _ap eligible "$t"; [ "$status" -ne 0 ]
+    run _ap eligible "$t"; [ "$status" -eq 0 ]
   done
+  printf -- '---\nstatus: Blocked by T20260101-000001\n---\n# T\n' > "$t"
+  run _ap eligible "$t"; [ "$status" -ne 0 ]
   printf -- '---\nstatus: Open — needs a human [decision]: pick one\n---\n# T\n' > "$t"
   run _ap eligible "$t"; [ "$status" -eq 0 ]
   printf -- '---\nstatus: Open — UNBLOCKED now\n---\n# T\n' > "$t"
@@ -888,12 +890,12 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run _ap record progress 1 T20260101-000004; [ "$output" = resumed ]
 }
 
-@test "top: the id /drive will pick, skipping gated tasks; nothing when none" {
+@test "top: the id /drive will pick, skipping Blocked by tasks; a SUPERVISED word is no gate" {
   _nh_repo
   echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
   run _ap top "$AUTOPILOT_REPO_ROOT"; [ -z "$output" ]
-  _nh_task T20260101-000001 "Open — SUPERVISED (needs VPN)" a
-  _nh_task T20260101-000002 "Open" b
+  _nh_task T20260101-000001 "Blocked by T20260101-000009" a
+  _nh_task T20260101-000002 "Open — SUPERVISED (needs VPN)" b
   _nh_task T20260101-000003 "Open" c
   run _ap top "$AUTOPILOT_REPO_ROOT"; [ "$output" = T20260101-000002 ]
 }
@@ -906,10 +908,10 @@ _plan() { _report "$@"; _ap plan "$BATS_TEST_TMPDIR/report.txt"; }
   run _ap final-report; [ "$status" -eq 2 ]
 }
 
-@test "pickable: pick, drift and none; a gated status never counts as pickable" {
+@test "pickable: pick, drift and none; a Blocked by status never counts as pickable, SUPERVISED prose does" {
   _nh_repo
   echo "# TODO Queue" > "$AUTOPILOT_REPO_ROOT/dev/TODO/queue.md"
-  _nh_task T20260101-000001 "Open — SUPERVISED (needs VPN)" a
+  _nh_task T20260101-000001 "Blocked by T20260101-000009" a
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = none ]
   _nh_task T20260101-000002 "Open" b
   run _ap pickable "$AUTOPILOT_REPO_ROOT"; [ "$output" = pick ]

@@ -32,12 +32,11 @@ function todo-fm-get() {
 
 # --- gated statuses (not auto-pickable) ---------------------------------------
 # One shared definition, used by todo-next.sh (--skip-gated) and autopilot-state.sh
-# (eligible). Exit 0 when a status value is not auto-pickable: a human-only word
-# (case-insensitive): SUPERVISED and BLOCKED as whole words, so "Blocked by T<id>" is
-# gated but "UNBLOCKED now" (a real status convention) is not; plus "needs manual" and
-# "sign-off". The 5.9.0 "needs a human" marker is not a gate any more (T20261102-296642).
+# (eligible). Exit 0 when a status value is not auto-pickable: only a `Blocked by ...`
+# dependency status (case-insensitive). The words BLOCKED, SUPERVISED, "needs manual" and
+# "sign-off" are plain prose now, never a gate (d174, T20261124-381200).
 function todo-gated() {
-  printf '%s' "${1:-}" | grep -qiE '(^|[^[:alpha:]])(supervised|blocked)([^[:alpha:]]|$)|needs manual|sign-off'
+  printf '%s' "${1:-}" | grep -qiE '(^|[^[:alpha:]])blocked by([^[:alpha:]]|$)'
 }
 
 # --- dependencies (compat reader, epic E3, T20261124-320024) -------------------

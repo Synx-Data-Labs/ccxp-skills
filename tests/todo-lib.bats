@@ -152,6 +152,16 @@ mk_dep_task() {
   [ "$status" -ne 0 ]
   run todo-gated "Blocked by T20260611-000010"
   [ "$status" -eq 0 ]
+  run todo-gated "Blocked by person:person-a"
+  [ "$status" -eq 0 ]
+}
+
+@test "todo-gated: BLOCKED, SUPERVISED, needs manual and sign-off words are no gate (d174)" {
+  local s
+  for s in "In Progress — SUPERVISED (needs VPN)" "Open — BLOCKED upstream" "Review — needs manual QA" "Open — sign-off pending" "Open — UNBLOCKED now"; do
+    run todo-gated "$s"
+    [ "$status" -ne 0 ]
+  done
 }
 
 @test "todo-deps reads an unindented block list, CRLF files and ignores comments" {

@@ -10,8 +10,8 @@
 #
 #   todo-next.sh [--skip-gated] [--check] [--exclude T<id>[,T<id>...]] [--nth N] [--here] [--when W]
 #                [--tier N[,N...]] [--ids]
-#     --skip-gated  also skip gated tasks (the SUPERVISED/BLOCKED/needs manual/sign-off
-#                   words, or a `Blocked by` status; see todo-gated in _lib.sh). Used by
+#     --skip-gated  also skip gated tasks (a
+#                   `Blocked by` status only; see todo-gated in _lib.sh). Used by
 #                   /drive's auto-pick; the default listing still shows them.
 #     --check       print nothing; exit 0 when at least one task would be listed,
 #                   1 when none

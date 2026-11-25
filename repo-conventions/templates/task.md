@@ -51,9 +51,8 @@ SCAFFOLD NOTES (delete this block once the task is filed):
 - Bullets, not paragraphs, in every section — ~3 per level, nest a sub-list
   instead of running past that or folding detail back into prose. See
   `templates/guidelines.md`'s Documentation section for the canonical wording.
-- A `BLOCKED` or `SUPERVISED` substring anywhere in `status:` (e.g.
-  `In Progress — SUPERVISED (needs VPN to GitLab)`) tells the consumer repo's `/ccxp`
-  pre-flight gate not to wake an hourly cron session for this task.
+- Words in `status:` such as `BLOCKED`, `SUPERVISED`, `needs manual` or `sign-off`
+  gate nothing; only `Blocked by T{id}` (or `depends_on:`) keeps a task out of auto-pick.
 - Generate {ID} with `bash _taskid/new.sh --check ./dev`, resolved relative
   to wherever the ccxp-skills plugin is installed (a loaded skill's own
   directory, printed as "Base directory for this skill" — not a hardcoded
