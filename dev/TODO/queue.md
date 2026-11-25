@@ -84,3 +84,10 @@ reprioritize.
 - [T20261123-136500](T20261123-136500-configurable-ci-job-cap.md): Configurable CI job cap
 - [T20261124-153489](T20261124-153489-hud-details-sectioned-layout.md): HUD details: one labeled row per section
 - [T20261124-297524](T20261124-297524-migrate-ccxp-skills-to-xinzweb.md): Move ccxp-skills development to a new public xinzweb/ccxp-skills repo
+- [T20261125-305580](T20261125-305580-schema-marker-and-gate.md): schema marker file, plugin schema.env, runner gate
+- [T20261125-119704](T20261125-119704-migration-runner-and-bats.md): ordered idempotent migration runner with check/apply and fixtures; migration 0001 wrapper
+- [T20261125-107918](T20261125-107918-ccxp-upgrade-skill.md): /ccxp-upgrade skill: dry-run report, one branch and PR, --all over the registry
+- [T20261125-303266](T20261125-303266-schema-preflight-warnings.md): drive, todo and autopilot preflight warn on schema drift and refuse below min_repo_schema
+- [T20261125-230436](T20261125-230436-schema-release-check.md): release check: schema bump needs a migration and a test; release notes list migration ids
+- [T20261125-239989](T20261125-239989-upgrade-path-docs.md): document upgrade path, two-release window rule, local state file migration
+- [T20261125-424111](T20261125-424111-ccxp-upgrade-path-schema-marker-and-migrations.md): ccxp upgrade path: per-repo schema marker, ordered idempotent migrations, /ccxp-upgrade skill, preflight warnings, hard gate, release check
