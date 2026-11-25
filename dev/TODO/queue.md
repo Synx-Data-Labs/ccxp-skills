@@ -6,6 +6,13 @@ Reordered by `/stage` (append to the end if missing) and `/top` (move to the
 front). It's a plain list — hand-editing the order is a fully valid way to
 reprioritize.
 
+- [T20261125-255147](T20261125-255147-derived-dependants-reader-and-compat-warning.md): Derived dependants reader, compat warning, core docs
+- [T20261125-361713](T20261125-361713-queue-consumers-read-derived-dependants.md): Queue consumers read derived dependants
+- [T20261125-187172](T20261125-187172-hud-and-autopilot-use-depends-on-only.md): HUD blocked bucket and autopilot big-task rule on depends_on
+- [T20261125-366351](T20261125-366351-todo-deps-migrate-blocks-to-depends-on.md): `todo-deps.sh migrate` for `blocks:` with dry-run
+- [T20261125-264487](T20261125-264487-retire-blocks-field-depends-on-only.md): Retire `blocks`, keep only `depends_on`
+- [T20261125-288322](T20261125-288322-migrate-ccxp-skills-blocks-to-depends-on.md): Migrate ccxp-skills' own task files from `blocks:` to `depends_on`
+- [T20261125-315142](T20261125-315142-migrate-synxdb-build-pipeline-blocks-to-depends-on.md): Migrate synxdb-build-pipeline from `blocks:` to `depends_on`
 - [T20261124-502781](T20261124-502781-hud-restore-busvariants.md): Restore busVariants in hud/model.ts (regression)
 - [T20261121-261197](T20261121-261197-hud-redci-supersede-and-list.md): HUD red-CI counts superseded failures; add hud-redci.sh list
 - [T20261121-359191](T20261121-359191-context-file-naming-n-r-t-slug.md): Context file naming convention n<k>-r<job>-t<taskid>-slug
