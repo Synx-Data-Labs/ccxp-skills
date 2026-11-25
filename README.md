@@ -10,7 +10,7 @@ or config-driven via environment variables with no baked-in default.
 ## Install
 
 This repo is a Claude Code plugin *and* its own single-plugin marketplace,
-so `/plugin` can install all 56 skills in one step:
+so `/plugin` can install all 57 skills in one step:
 
 ```
 /plugin marketplace add Synx-Data-Labs/ccxp-skills
@@ -142,6 +142,7 @@ Per-repo CI secret (set in each repo's GitHub settings, not locally):
 | `slack` | Send a Slack notification to a configured channel |
 | `routine` | List, run, enable and report configured routines |
 | `nightly-check` | Find failed nightly runs of the last day and run `/rca` or `/labrun-rca` per run |
+| `nightly-rca` | Read-only investigation of a red nightly whose cause may be a moved upstream input; writes a fixed-structure briefing |
 | `slack-check-reply` | Check replies on escalation/standup Slack threads |
 | `email-triage` | Triage the Gmail inbox — summarize, surface the top action item |
 | `inbox-clean` | Archive, label and draft replies for review in the Gmail inbox; never sends |
