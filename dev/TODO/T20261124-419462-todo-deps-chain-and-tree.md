@@ -2,6 +2,7 @@
 status: Open
 estimation: 2
 blocks: [T20261124-177980]
+depends_on: [T20261125-366351]
 source: owner request 2026-11-24 (decision d158), epic E3
 description: todo-deps.sh chain and tree: the derived dependency chain view with cycle detection and the first open leaf
 ---
