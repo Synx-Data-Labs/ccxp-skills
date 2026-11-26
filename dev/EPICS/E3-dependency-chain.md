@@ -39,9 +39,9 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 
 ## Open questions
 
-- Q1: field name `depends_on` vs reusing `blocked-by:` (already in the allowlist, free text). Proposed `depends_on` (clear inverse of `blocks:`, and the old key stays a legacy alias read by the compat reader).
-- Q2: `needs:` value vocabulary and whether it replaces the `SUPERVISED` / `needs manual` / `sign-off` substrings outright or only alongside them (the ccxp pre-flight gate in consumer repos greps them).
-- Q3: cross-repo dependencies (a task in another repo): `depends_on: [owner/repo#T..]`, or typed `ext:` only? Proposed `needs: ext:<text>` until the multi-repo cursor work lands. Answered in (a)'s Closed section.
+- Q1: field name `depends_on` vs reusing `blocked-by:` (already in the allowlist, free text). Proposed `depends_on` (clear inverse of `blocks:`, and the old key stays a legacy alias read by the compat reader). ACCEPTED by owner 2026-11-26 (d184).
+- Q2: `needs:` value vocabulary and whether it replaces the `SUPERVISED` / `needs manual` / `sign-off` substrings outright or only alongside them (the ccxp pre-flight gate in consumer repos greps them). Answered in (a)'s Closed section: slug list plus typed `person:`/`ext:`, substrings keep working alongside. ACCEPTED by owner 2026-11-26 (d184).
+- Q3: cross-repo dependencies (a task in another repo): `depends_on: [owner/repo#T..]`, or typed `ext:` only? Proposed `needs: ext:<text>` until the multi-repo cursor work lands. Answered in (a)'s Closed section. ACCEPTED by owner 2026-11-26 (d184).
 - Q4: when every open leaf of a chain is held by live peers, does the cycle take the next queue task (lateral) or wait? Proposed: take the next queue task; the goal is not stalled because it is still `In Progress` and its leaf is being worked.
 - Q5: deprecation window length for `Blocked by` (proposed one minor release after (e)); answered in (e)'s Closed section.
 - Q6: the `/drive` Phase 6 Project-board mirror (`_session/status.sh <id> Blocked`) is vestigial since the board was retired; drop it in (d).
