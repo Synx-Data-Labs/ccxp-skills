@@ -1,10 +1,13 @@
 ---
-status: Open
+status: In Progress
 estimation: 2
 depends_on: [T20261125-255147]
 source: split of T20261125-264487 (retire blocks), epic E3
 related: T20261125-264487, T20261124-177980
 description: todo-deps.sh migrate rewrites each blocks entry into depends_on on the other task, removes blocks, with a dry-run report; T20261124-177980 design updated
+claimed_by: cc1-50ac6891:474db8fe7450c9b6
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261125-366351: `todo-deps.sh migrate` for `blocks:` with dry-run
