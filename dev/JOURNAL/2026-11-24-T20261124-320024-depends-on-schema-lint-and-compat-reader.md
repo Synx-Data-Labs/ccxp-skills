@@ -75,6 +75,7 @@ scheduled: 2026-11-23
   - Q1: field name `depends_on` (the legacy `blocked-by:` key stays free text and is not read).
   - Q2: `needs:` is a slug list (`human`, `vpn`, `owner-decision`) plus typed `person:<alias>` and `ext:<text>`; the free-text `SUPERVISED`, `needs manual` and `sign-off` substrings keep working alongside it (the consumer pre-flight gate still greps them); vocabulary is not enforced beyond shape.
   - Q3: cross-repo dependencies are recorded as `needs: [ext:<text>]` until the multi-repo cursor work (T20261124-989194) lands.
+- Owner review (2026-11-26, d184): "if there is ONLY one recommended action, you got my approval to follow it. Only when you have tradeoff to ask, then you create next item and waiting for me." Q1-Q3 above are accepted unchanged (none contradicts d158 or d159), so sub-tasks (b)-(e) proceed.
 - Found along the way: main's `skill-quality` baseline for `todo` was already 73 below 74 after a concurrent tier change; PR #742 trimmed `todo/SKILL.md` (net smaller than main) so the baseline holds.
 - Quality regression (max_fn_lines): `lint_depends_on` holds the board-wide cycle detection in one 40-line function (iterative DFS kept inline for linear time); splitting it is not worth a helper for a single caller.
 - Not verified here: `claude plugin validate .` (no `claude` CLI in this sandbox); run before the next release.
