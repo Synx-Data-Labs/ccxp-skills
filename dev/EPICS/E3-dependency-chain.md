@@ -39,7 +39,7 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 
 ## Open questions
 
-- Q1: field name `depends_on` vs reusing `blocked-by:` (already in the allowlist, free text). Proposed `depends_on` (clear inverse of `blocks:`, and the old key stays a legacy alias read by the compat reader). ACCEPTED by owner 2026-11-26 (d184).
+- Q1: field name `depends_on` vs reusing `blocked-by:` (already in the allowlist, free text). Proposed `depends_on` (clear inverse of `blocks:`); as shipped in (a), the legacy `blocked-by:` key stays free text and is not read (the compat reader reads only the legacy `Blocked by T..` status). ACCEPTED by owner 2026-11-26 (d184).
 - Q2: `needs:` value vocabulary and whether it replaces the `SUPERVISED` / `needs manual` / `sign-off` substrings outright or only alongside them (the ccxp pre-flight gate in consumer repos greps them). Answered in (a)'s Closed section: slug list plus typed `person:`/`ext:`, substrings keep working alongside. ACCEPTED by owner 2026-11-26 (d184).
 - Q3: cross-repo dependencies (a task in another repo): `depends_on: [owner/repo#T..]`, or typed `ext:` only? Proposed `needs: ext:<text>` until the multi-repo cursor work lands. Answered in (a)'s Closed section. ACCEPTED by owner 2026-11-26 (d184).
 - Q4: when every open leaf of a chain is held by live peers, does the cycle take the next queue task (lateral) or wait? Proposed: take the next queue task; the goal is not stalled because it is still `In Progress` and its leaf is being worked.
