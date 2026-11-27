@@ -22,7 +22,7 @@ scheduled: 2026-11-23
 
 Design approved in-conversation 2026-11-26 (owner request above); no design PR.
 
-- **Edge source**: one edge `dependency -> dependant` per id the compat reader `todo-deps` returns for a task (`depends_on` plus legacy `Blocked by`), plus one per id in a task's legacy `blocks:` line (`todo-legacy-blocks`, same stderr warning as `todo-dependants`, now shared through `todo-legacy-blocks-warn`). No new parsing.
+- **Edge source**: one edge `dependency -> dependant` per id the compat reader `todo-deps` returns for a task (`depends_on` plus legacy `Blocked by`), plus one per id in a task's legacy `blocks:` line (`todo-legacy-blocks`, same stderr warning as `todo-dependants`, extracted from `_todo-dependants-raw` into a shared `todo-legacy-blocks-warn`). No new parsing.
 - **Open dependencies only**: an edge whose ends are not both in `dev/TODO/` (done, journaled, parked, unknown) is ignored; sweep never rewrites `depends_on`.
 - **Move**: for every edge where the dependency is queued behind its dependant, move the dependency immediately before the dependant (the `/top --before` behaviour, `q_insert_before`, never the absolute front); dependencies of the same task keep their relative order; the loop repeats until the order is topological.
 - **Cycle**: detected before anything is written; `plan` prints `CYCLE <ids>`, `apply --phase 2` exits 4 and moves nothing.
@@ -34,6 +34,8 @@ Design approved in-conversation 2026-11-26 (owner request above); no design PR.
 - `bats tests/todo_sweep.bats tests/todo-deps.bats tests/todo-lib.bats`, then the whole suite and the `gcpr` doc lints.
 
 ## Not in scope
+
+- Split with [T20261124-158321](T20261124-158321-hud-chain-display-and-sweep-phase-2.md) (epic E3 item e): this task takes the sweep Phase 2 ordering part; that task keeps the HUD chain display and dropping satisfied `depends_on` entries.
 
 - A release, version bump or tag (maintainer-triggered).
 - Dropping a satisfied `depends_on` entry or striking `## Dependencies` lines for it.
