@@ -63,7 +63,6 @@ function parseJobStats(x: unknown): JobStats | null {
   return { approx: o.approx === true, avg_approx: o.avg_approx === true, jobs_24h: Math.max(0, Math.floor(num(o.jobs_24h))), avg_jobs_day: Math.max(0, num(o.avg_jobs_day)), trend }
 }
 
-/** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
 /** What the trend helper may print: letters, digits, spaces, signs, `/ * ( ) . ,` and the sparkline blocks, nothing else is ever drawn. */
 const TREND_TEXT_RE = /^[A-Za-z0-9 .,+\-±/*()·▁▂▃▄▅▆▇█]{1,160}$/
 
@@ -94,6 +93,7 @@ export function trendRow(snap: Snapshot, cfg: HudConfig, width: number): Seg[] {
   return first
 }
 
+/** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
 export function parseHelper(stdout: string): HelperData | null {
   let raw: unknown
   try {

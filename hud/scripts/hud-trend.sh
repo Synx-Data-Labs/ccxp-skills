@@ -40,7 +40,7 @@ HT_GH_TIMEOUT=20
 HT_GH_LIMIT=3000
 
 _ht-now() { printf '%s' "${HUD_TREND_NOW:-$(date +%s)}"; }
-_ht-dir() { printf '%s' "${HUD_TREND_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-trend}"; }
+_ht-dir() { printf '%s' "${HUD_TREND_STATE_DIR:-${CCXP_PROFILE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}/state/hud-trend}"; }
 
 # $1 now, $2 weeks (default 5) -> the Mondays 00:00 UTC bounding the buckets, oldest first, space separated:
 # weeks + 1 values; the last one is the current week's Monday. Pure arithmetic (the epoch started on a Thursday).
@@ -176,6 +176,8 @@ ht-data() {
   now=$(_ht-now); bounds=$(ht-bounds "$now" "$weeks")
   q=$(ht-queue-series "$root" "$now" "$bounds" 2>/dev/null) || q=""
   [ -n "$repo" ] || repo=$(_ht-config-repo "$root") || repo=""
+  # A repo name from a flag, the environment or stdin is checked like the config's: owner/name characters only.
+  [[ -z "$repo" || "$repo" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*$ ]] || repo=""
   if [ -n "$repo" ] || [ -n "${HUD_TREND_SUPPORT_FILE:-}" ]; then
     raw=$(_ht-support-fetch "$repo" "$ghdir") || raw=""
     [ -z "$raw" ] || s=$(printf '%s' "$raw" | ht-support-series "$now" "$bounds") || s=""
