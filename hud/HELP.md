@@ -68,6 +68,10 @@ Where `dev/TODO/queue.md` stands: `queue 44 = 30r 6b 3x` = 30 ready to take, 6 b
 
 The nightly build at a glance: `nightly +-++.-+ · 30d: 16✓ 14✗`. One character per UTC day, oldest to newest, last = today: `+` every nightly that day succeeded, `-` at least one failed or timed out, `.` no finished run. `30d` counts green and red days over 30 days. Source: `gh run list` for the `Nightly Orchestrator` workflow (scheduled runs), cached 30 minutes. No access or no data: no cell. Switch: `nightly`.
 
+## trend | weekly, sparkline
+
+Where the queue, the support issues and the autopilot are heading, one line each: `Queue 172 ▇▇▆▆▅▅* -9` = 172 tasks now, a block per week (the last 5 full weeks, Monday to Sunday UTC, then this week so far, marked `*`), and the change since the end of last week. `/hud details` spells it out: `(in 14 / out 23)` = tasks added and closed this week, `(opened 2 / delivered 3)` for support issues, and for AP the merges per week with `(holds 52 ... up)` = tasks the autopilot holds against last week. Each line is scaled to its own highest week. Computed from git history, `gh issue list` (the `issues.repo` in your config) and `dev/.autopilot-history.jsonl`, cached 10 minutes, never waiting on the network; a source it cannot read leaves its line out. Run `hud/scripts/hud-trend.sh --table` or `--hist` for the numbers or a histogram. Switch: `"trend": false`.
+
 ## issues
 
 Customer issues, opt-in: `issues 12 open / 7 undelivered · max 18 180d / 15 30d / 12 7d` = open issues, open ones without the `status:delivered` label (yellow while above 0), and the highest open count in the last 180 / 30 / 7 days. Needs `issues.repo` in the config. Source: one cached `gh issue list`, refreshed every 15 minutes. Switch: `issues`.
@@ -118,6 +122,7 @@ Opt-in: how much of your Claude subscription's usage window is left, when it wou
 - `AUTOPILOT` two lines: status (on / paused / off, `max_dop` use with running cycles, next loop or overdue), then progress (24h merged and loops, average per day, `N held by autopilot`)
 - `WORK` everything the autopilot does not run: READY / WORKING counts only jobs without the `autopilot` flag, then parked and the 24 hour job count (all jobs started, autopilot cycles included). The one-row band's READY / WORKING still counts every running job
 - `QUEUE` the task queue breakdown
+- `TREND` the weekly queue, support and AP lines in full
 - `RELEASE` the plugin's GitHub address, the version, and the count of unreleased commits
 
 A row too long for the terminal wraps onto an indented line; nothing is cut. A section with nothing to say is left out.

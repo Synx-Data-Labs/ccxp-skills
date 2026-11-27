@@ -174,7 +174,7 @@ _redci() { # $1 repos json
 
 @test "hud-data.sh no longer carries redci and never sources hud-redci.sh (d143: the HUD shows the configured CI only)" {
   local repo="$BATS_TEST_TMPDIR/r"; mkdir -p "$repo"; git -C "$repo" init -q -b trunk
-  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hq" HUD_HWM_SYNC=1 HUD_NIGHTLY_OFF=1 HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hv" HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/none"
+  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hq" HUD_HWM_SYNC=1 HUD_NIGHTLY_OFF=1 HUD_TREND_OFF=1 HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hv" HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/none"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/li" CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/l.json"
   printf '[%s]' "$(_run 16000001 Tests trunk push 600)" > "$BATS_TEST_TMPDIR/fail.json"
   run bash -c "printf '%s' '{\"cwd\":\"$repo\",\"redci\":[\"acme/widgets\"]}' | bash '$HUD' --json"

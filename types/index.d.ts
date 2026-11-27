@@ -49,6 +49,8 @@ export type HudConfig = {
   queue?: QueueConfig
   /** Customer-issue stats cell; undefined (the default) hides the cell and runs no lookup. */
   issues?: IssuesConfig
+  /** Weekly trend row (queue, support, autopilot; see "Trend band" in hud/README.md); undefined means on, `false` hides it and stops the lookup. */
+  trend?: boolean
 }
 
 /** Rolling-24h and lifetime autopilot progress (`autopilot-state.sh stats`); absent when there is nothing to show. */
@@ -175,6 +177,10 @@ export type Nightly = {
   strip: string
 }
 
+/** One weekly-trend line (hud-trend.sh): `short` for the band, `full` for details. Only the helper's text is ever drawn. */
+export type TrendRow = { key: 'queue' | 'support' | 'ap'; label: string; short: string; full: string }
+export type Trend = { rows: TrendRow[] }
+
 export type CiState = 'passing' | 'failing' | 'running' | 'unknown'
 
 export type Ci = {
@@ -240,6 +246,8 @@ export type HelperData = {
   nightly: Nightly | null
   /** Customer-issue stats; null when not configured or unknown. */
   issues: Issues | null
+  /** Weekly trend lines (cached by the helper); null or absent when off or unknown. */
+  trend?: Trend | null
   /** Unread cross-account bus notes; null when the bus is off for this profile or nothing is unread. */
   bus: Bus | null
   /** Installed ccxp-skills version and the newer released one (hud-version.sh), null when off or unknown. */

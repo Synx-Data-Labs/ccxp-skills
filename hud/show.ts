@@ -9,7 +9,7 @@ import { ALL_FIELDS, DEFAULTS, mergeConfig, parseConfigText } from './config'
 export const ENV_NAMES = [
   'CLAUDE_CONFIG_DIR', 'HOME', 'NO_COLOR',
   'HUD_CACHE_DIR', 'HUD_CACHE_TTL', 'HUD_CI_STATE_DIR', 'HUD_NIGHTLY_STATE_DIR', 'HUD_NIGHTLY_OFF', 'HUD_NIGHTLY_REPO',
-  'HUD_NIGHTLY_WORKFLOW', 'HUD_NIGHTLY_TTL', 'HUD_ISSUES_STATE_DIR', 'HUD_ISSUES_TTL', 'HUD_QUEUE_STATE_DIR', 'HUD_QUEUE_FETCH_TTL', 'HUD_BEHIND_STATE_DIR', 'HUD_BEHIND_TTL', 'HUD_BEHIND_FETCH',
+  'HUD_NIGHTLY_WORKFLOW', 'HUD_NIGHTLY_TTL', 'HUD_ISSUES_STATE_DIR', 'HUD_ISSUES_TTL', 'HUD_QUEUE_STATE_DIR', 'HUD_QUEUE_FETCH_TTL', 'HUD_BEHIND_STATE_DIR', 'HUD_BEHIND_TTL', 'HUD_BEHIND_FETCH', 'HUD_TREND_STATE_DIR', 'HUD_TREND_TTL', 'HUD_TREND_OFF',
 ] as const
 
 export type ShowInput = {
@@ -23,7 +23,7 @@ export type ShowInput = {
 type Raw = Record<string, unknown>
 // Keys that are retired on purpose and silently ignored; not worth a warning.
 const RETIRED = new Set(['fill', 'last'])
-const KNOWN = new Set(['enabled', 'userMessage', 'band', 'userBorder', 'userColor', 'fields', 'pollSeconds', 'ctxWarn', 'ctxCrit', 'fillColor', 'version', 'ci', 'queue', 'issues'])
+const KNOWN = new Set(['enabled', 'userMessage', 'band', 'userBorder', 'userColor', 'fields', 'pollSeconds', 'ctxWarn', 'ctxCrit', 'fillColor', 'version', 'trend', 'ci', 'queue', 'issues'])
 
 function fileState(path: string | undefined, text: string | undefined): { line: string; keys: string[] } {
   if (!path) return { line: '(path unknown)', keys: [] }
@@ -73,6 +73,7 @@ export function configReport(input: ShowInput): string {
   row('ctxWarn', cfg.ctxWarn, DEFAULTS.ctxWarn, ' (ctx turns yellow at or below this percent left)')
   row('ctxCrit', cfg.ctxCrit, DEFAULTS.ctxCrit, ' (ctx turns red at or below this percent left)')
   row('version', cfg.version, DEFAULTS.version, ` (version cell ${onOff(cfg.version)})`)
+  row('trend', cfg.trend !== false, true, ` (weekly trend row ${onOff(cfg.trend !== false)})`)
   row('ci', cfg.ci, 'unset (no CI row)')
   row('queue', cfg.queue ?? { source: 'default-branch' }, { source: 'default-branch' })
   row('issues', cfg.issues, 'unset (no issues cell)', cfg.issues?.ghConfigDir ? ' (gh config dir is a path, never read here)' : '')
@@ -97,7 +98,7 @@ export function configReport(input: ShowInput): string {
 
   const ttl = (name: string, def: string): string => (env[name as keyof typeof env] ? `${env[name as keyof typeof env]}s (${name})` : def)
   L.push('Refresh intervals (fixed in the helper scripts; some can be overridden by the variable shown):')
-  L.push(`  ci ${Math.max(120, cfg.pollSeconds)}s | nightly ${ttl('HUD_NIGHTLY_TTL', '1800s')} | issues ${ttl('HUD_ISSUES_TTL', '900s')} | version 6h | repo and gh account ${ttl('HUD_CACHE_TTL', '60s')} | queue fetch ${ttl('HUD_QUEUE_FETCH_TTL', 'default')} | behind fetch ${ttl('HUD_BEHIND_TTL', '300s')}`)
+  L.push(`  ci ${Math.max(120, cfg.pollSeconds)}s | nightly ${ttl('HUD_NIGHTLY_TTL', '1800s')} | issues ${ttl('HUD_ISSUES_TTL', '900s')} | trend ${ttl('HUD_TREND_TTL', '600s')} | version 6h | repo and gh account ${ttl('HUD_CACHE_TTL', '60s')} | queue fetch ${ttl('HUD_QUEUE_FETCH_TTL', 'default')} | behind fetch ${ttl('HUD_BEHIND_TTL', '300s')}`)
   L.push('')
 
   L.push('Cache and state folders (the helper scripts write only here):')
@@ -105,6 +106,7 @@ export function configReport(input: ShowInput): string {
   L.push(`  ci            ${dir('hud-ci', env.HUD_CI_STATE_DIR)}`)
   L.push(`  nightly       ${dir('hud-nightly', env.HUD_NIGHTLY_STATE_DIR)}`)
   L.push(`  issues        ${dir('hud-issues', env.HUD_ISSUES_STATE_DIR)}`)
+  L.push(`  trend         ${dir('hud-trend', env.HUD_TREND_STATE_DIR)}`)
   L.push(`  version       ${dir('hud-version')}`)
   L.push(`  queue         ${dir('hud-queue', env.HUD_QUEUE_STATE_DIR)}`)
   L.push(`  behind        ${dir('hud-behind', env.HUD_BEHIND_STATE_DIR)}`)

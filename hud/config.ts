@@ -95,7 +95,7 @@ export function parseConfigText(text: string | undefined | null): Partial<HudCon
   }
   if (!isRecord(raw)) return {}
   const out: Partial<HudConfig> = {}
-  for (const key of ['enabled', 'userMessage', 'band', 'version'] as const) {
+  for (const key of ['enabled', 'userMessage', 'band', 'version', 'trend'] as const) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean
   }
   if (typeof raw.userBorder === 'string') out.userBorder = raw.userBorder
