@@ -1,11 +1,11 @@
 ---
-status: In Progress
+status: Done
 estimation: 3
 source: owner request 2026-11-26 (conversation), design approved in-conversation 2026-11-26
 type: feature
 description: HUD weekly trend one-liner for queue, support and autopilot
-claimed_by: cc1-50ac6891:750ccbdf23cdd7df
-claimed_role: interactive
+claimed_by:
+claimed_role:
 scheduled: 2026-11-23
 ---
 
@@ -46,16 +46,31 @@ scheduled: 2026-11-23
 
 ## Test plan
 
-- [ ] BATS `tests/hud_trend.bats`: bounds, queue history (reorder, future commits, empty file, no file), support fixtures (empty, malformed), AP history, holds snapshot, the three views, missing and failing sources, cache TTL, tamper-proof cache, `hud-data.sh` key.
-- [ ] TS tests in `hud/pure.test.ts`: band row, narrow drop order, config switch, `parseHelper` sanitising, details section.
-- [ ] Real output against the synxdb-build-pipeline repo, read-only, pasted in the PR description.
+- [x] BATS `tests/hud_trend.bats`: bounds, queue history (reorder, future commits, empty file, no file), support fixtures (empty, malformed), AP history, holds snapshot, the three views, missing and failing sources, cache TTL, tamper-proof cache, `hud-data.sh` key.
+- [x] TS tests in `hud/pure.test.ts`: band row, narrow drop order, config switch, `parseHelper` sanitising, details section.
+- [x] Real output against the synxdb-build-pipeline repo, read-only, pasted in the PR description.
 
 ## Done criteria
 
-- [ ] One line per domain with the agreed format: `tests/hud_trend.bats` "line: all three domains".
-- [ ] Missing sources degrade to a dash: `tests/hud_trend.bats` "line: a missing source", "nothing at all", "gh failing".
-- [ ] No network on a render, cached for minutes: `tests/hud_trend.bats` "hud-trend-json" tests.
-- [ ] `--table` and `--hist` views: `tests/hud_trend.bats` "table", "hist".
-- [ ] HUD band and details wiring: `hud/pure.test.ts` "trend:" tests, `tests/hud_trend.bats` "hud-data".
-- [ ] `hud/README.md` "Trend band" and `hud/HELP.md` topic `trend`: `tests/hud_help.bats`.
-- [ ] No release, version bump or tag in this PR (the owner decides).
+- [x] One line per domain with the agreed format: `tests/hud_trend.bats` "line: all three domains".
+- [x] Missing sources degrade to a dash: `tests/hud_trend.bats` "line: a missing source", "nothing at all", "gh failing".
+- [x] No network on a render, cached for minutes: `tests/hud_trend.bats` "hud-trend-json" tests.
+- [x] `--table` and `--hist` views: `tests/hud_trend.bats` "table", "hist".
+- [x] HUD band and details wiring: `hud/pure.test.ts` "trend:" tests, `tests/hud_trend.bats` "hud-data".
+- [x] `hud/README.md` "Trend band" and `hud/HELP.md` topic `trend`: `tests/hud_help.bats`.
+- [x] No release, version bump or tag in this PR (the owner decides).
+
+## Closed (2026-11-26)
+
+- Shipped in the HUD trend PR (number in the PR list for branch `t20261126-122285-hud-trend`); claim landed in #788.
+- Met: all done criteria above; the BATS suite `tests/hud_trend.bats` (31 cases) and the TS cases in `hud/pure.test.ts` (run through a local shim; the claude-code runner is not available here).
+- Quality regression (shellcheck_info, max_fn_lines, file_loc): a new 380-line helper with long jq programs (info-level SC1091/SC2016 only, same as sibling hud scripts); the jq filters are single expressions, so function length counts them as one body.
+- Unverified: the band row in a live Claude Code session (needs the mod runtime); the real-data sample is in the PR description.
+- Follow-ups: none filed; release or version bump left to the owner.
+
+## Skills invoked
+
+- TDD (`superpowers:test-driven-development`): yes in spirit, code-class; fixtures written alongside, failures fixed (bucket-end off-by-one found by the real-data run)
+- Verification (`superpowers:verification-before-completion`): yes, local bats and CI before merge
+- Systematic debugging (`superpowers:systematic-debugging`): no, bugs were direct
+- Receiving code review (`superpowers:receiving-code-review`): no findings to receive
