@@ -131,7 +131,7 @@ JSON
 
 @test "hud-data.sh: no issues config means no lookup and issues:null" {
   _fixture
-  run bash -c "echo '{\"cwd\":\"$BATS_TEST_TMPDIR\"}' | HUD_NIGHTLY_OFF=1 bash '$DATA'"
+  run bash -c "echo '{\"cwd\":\"$BATS_TEST_TMPDIR\"}' | HUD_NIGHTLY_OFF=1 HUD_TREND_OFF=1 bash '$DATA'"
   [ "$(jq -c .issues <<<"$output")" = "null" ]
   ! grep -q "issue list" "$GH_LOG" 2>/dev/null
 }

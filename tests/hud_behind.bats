@@ -138,7 +138,7 @@ _run() { run bash "$BEHIND" "$WORK"; }
 }
 
 @test "hud-data.sh: the behind key carries the counts, and is null when level" {
-  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 HUD_NIGHTLY_OFF=1
+  export HUD_QUEUE_STATE_DIR="$BATS_TEST_TMPDIR/hud-queue" HUD_HWM_SYNC=1 HUD_NIGHTLY_OFF=1 HUD_TREND_OFF=1
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json" LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
   export HUD_VERSION_STATE_DIR="$BATS_TEST_TMPDIR/hud-version" HUD_VERSION_REMOTE="$BATS_TEST_TMPDIR/none" HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/ci"
   export CCXP_HUD_CACHE_DIR="$BATS_TEST_TMPDIR/hud-cache"

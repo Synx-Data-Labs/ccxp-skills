@@ -169,7 +169,7 @@ async function refresh($: any, cfg: HudConfig) {
     const argv = ['bash', `${$.plugin.root}/hud/scripts/hud-data.sh`, '--json']
     const res = await $.process.run(argv, {
       cwd,
-      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_bus: cfg.fields.includes('bus'), queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
+      stdin: JSON.stringify({ cwd, session_id: sessionId, ci: cfg.ci ?? null, ci_ttl: cfg.pollSeconds, show_version: cfg.version, show_bus: cfg.fields.includes('bus'), show_trend: cfg.trend !== false, queue_source: cfg.queue?.source ?? 'default-branch', issues: cfg.issues ? { repo: cfg.issues.repo, gh_config_dir: cfg.issues.ghConfigDir } : null }),
       timeoutMs: 5000,
     })
     helper = res.exitCode === 0 ? parseHelper(res.stdout) : null
@@ -430,6 +430,9 @@ export const register: Register = on => {
           HUD_BEHIND_STATE_DIR: await read(() => $.env.get('HUD_BEHIND_STATE_DIR')),
           HUD_BEHIND_TTL: await read(() => $.env.get('HUD_BEHIND_TTL')),
           HUD_BEHIND_FETCH: await read(() => $.env.get('HUD_BEHIND_FETCH')),
+          HUD_TREND_STATE_DIR: await read(() => $.env.get('HUD_TREND_STATE_DIR')),
+          HUD_TREND_TTL: await read(() => $.env.get('HUD_TREND_TTL')),
+          HUD_TREND_OFF: await read(() => $.env.get('HUD_TREND_OFF')),
         }
         return { text: configReport({ paths, userText: await readText($, paths.user), projectText: await readText($, paths.project), env: vars }) }
       }

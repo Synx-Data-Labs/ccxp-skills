@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, QueueMax, Snapshot } from '../types'
+import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, QueueMax, Snapshot, Trend, TrendRow } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -64,6 +64,36 @@ function parseJobStats(x: unknown): JobStats | null {
 }
 
 /** Validates the helper's stdout; null on anything unusable (the mod then goes stale). */
+/** What the trend helper may print: letters, digits, spaces, signs, `/ * ( ) . ,` and the sparkline blocks, nothing else is ever drawn. */
+const TREND_TEXT_RE = /^[A-Za-z0-9 .,+\-±/*()·▁▂▃▄▅▆▇█]{1,160}$/
+
+/**
+ * The trend band row (below the status row): `trend Queue 172 ▇▇▆▆▅▅* -9 │ Support 5 ▃▅▆▄▃▂* -1 │ AP 32 ▂▃▅▆▇▅* merged/wk`.
+ * Rows that do not fit are dropped from the right (AP first), never cut mid-line, unless even the first alone is wider than
+ * the terminal. [] when the helper has no trend or `trend` is off.
+ */
+export function trendRow(snap: Snapshot, cfg: HudConfig, width: number): Seg[] {
+  const rows = snap.helper?.trend?.rows ?? []
+  if (cfg.trend === false || rows.length === 0) return []
+  const build = (n: number): Seg[] => {
+    const out: Seg[] = [{ text: 'trend ', dim: true }]
+    rows.slice(0, n).forEach((r, i) => {
+      if (i > 0) out.push({ text: SEP, dim: true })
+      out.push({ text: r.short })
+    })
+    return out
+  }
+  for (let n = rows.length; n >= 1; n--) {
+    const row = build(n)
+    if (widthOf(row) <= width) return row
+  }
+  const first = build(1)
+  const over = widthOf(first) - width
+  const last = first[first.length - 1]!
+  first[first.length - 1] = { ...last, text: truncate(last.text, Math.max(1, last.text.length - over)) }
+  return first
+}
+
 export function parseHelper(stdout: string): HelperData | null {
   let raw: unknown
   try {
@@ -227,6 +257,20 @@ export function parseHelper(stdout: string): HelperData | null {
     }
     if (VERSION_RE.test(installed)) plugin = { installed, latest: VERSION_RE.test(latest) ? latest : null, ...(PLUGIN_URL_RE.test(url) ? { url } : {}), ...(unreleased ? { unreleased } : {}) }
   }
+  const tr = r.trend
+  let trend: Trend | null = null
+  if (typeof tr === 'object' && tr !== null && !Array.isArray(tr) && Array.isArray((tr as Record<string, unknown>).rows)) {
+    // Untrusted: at most three rows, a known key each, text of digits, spaces, signs and the sparkline blocks only.
+    const rows: TrendRow[] = []
+    for (const x of ((tr as Record<string, unknown>).rows as unknown[]).slice(0, 3)) {
+      if (typeof x !== 'object' || x === null || Array.isArray(x)) continue
+      const o = x as Record<string, unknown>
+      if ((o.key !== 'queue' && o.key !== 'support' && o.key !== 'ap') || typeof o.short !== 'string' || typeof o.full !== 'string') continue
+      if (!TREND_TEXT_RE.test(o.short) || !TREND_TEXT_RE.test(o.full)) continue
+      rows.push({ key: o.key, label: o.key === 'ap' ? 'AP' : o.key === 'queue' ? 'Queue' : 'Support', short: o.short, full: o.full })
+    }
+    if (rows.length > 0) trend = { rows }
+  }
   return {
     repo: str(r.repo),
     task_id: str(r.task_id),
@@ -247,6 +291,7 @@ export function parseHelper(stdout: string): HelperData | null {
     ci,
     nightly,
     issues,
+    trend,
     bus,
     plugin,
     last_input_at: num(r.last_input_at),
@@ -1003,6 +1048,9 @@ export function bandRows(snap: Snapshot, cfg: HudConfig, columns: number, nowMs:
   if (top && top.length > 0) rows.push(top)
   const row = items.length === 0 ? [] : fitRow(items, STEPS[mode], width)
   if (row.length > 0) rows.push(row)
+  // The trend row (weekly queue / support / AP one-liners) is its own bottom row; the `trend` key switches it.
+  const trend = trendRow(snap, cfg, width)
+  if (trend.length > 0) rows.push(trend)
   return rows
 }
 
@@ -1205,6 +1253,7 @@ function isApJob(j: { flags?: string }): boolean {
  *   AUTOPILOT two lines: status (on/paused/off, max_dop and how it is used, next loop or overdue / running cycles), then progress (24h cell with the average, holds)
  *   WORK     the ledger rows WITHOUT the autopilot flag: jobs state (READY / WORKING (N)), parked, last 24h jobs
  *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
+ *   TREND    the weekly trend lines for queue, support and AP, one row each (the band shows their short forms)
  *   RELEASE  the plugin's GitHub URL, the ccxp version label, the number of unreleased commits
  * Details is a SUPERSET of the band: every cell the band can show has its full-form counterpart here (pinned by the
  * superset test in pure.test.ts). It ignores `fields`: the rows are the view. [] when there is no data at all.
@@ -1301,6 +1350,11 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
 
   // QUEUE: the breakdown (labels in full)
   section('QUEUE', [h?.queue ? full(one('queue', ...queueVariants(h.queue, true))) : null])
+
+  // TREND: the full weekly one-liners (hud-trend.sh), one line per domain, the sparkline's last block is the current partial week
+  ;(h?.trend?.rows ?? []).forEach((r, i) => {
+    rows.push(...sectionRows(i === 0 ? 'TREND' : '', [[{ text: r.full }]], width))
+  })
 
   // RELEASE: the plugin's GitHub location as a bare URL (terminals make it cmd-clickable; no OSC 8) from the manifest via the helper
   // (the public URL otherwise), the version label, then how many commits came after the installed release (a count only). Shown with the version label, so only when that is.

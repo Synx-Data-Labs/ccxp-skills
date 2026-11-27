@@ -10,7 +10,7 @@ HUD="$REPO_ROOT/hud/scripts/hud-data.sh"
 setup() {
   export HUD_BEHIND_STATE_DIR="$BATS_TEST_TMPDIR/hud-behind" # the behind fetch never touches ~/.claude
   isolate_claimant_state
-  export HUD_NIGHTLY_OFF=1 # no real gh lookup or state under ~/.claude
+  export HUD_NIGHTLY_OFF=1 HUD_TREND_OFF=1 # no real gh lookup or state under ~/.claude
   export CCXP_LEDGER_FILE="$BATS_TEST_TMPDIR/ledger.json"
   export LAST_INPUT_STATE_DIR="$BATS_TEST_TMPDIR/last-input"
   export HUD_CI_STATE_DIR="$BATS_TEST_TMPDIR/hud-ci"

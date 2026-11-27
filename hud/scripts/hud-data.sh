@@ -33,13 +33,14 @@
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached refresh (hud-issues.sh)
+#    "trend": null | {"rows":[{"key","label","short","full"}]},   # weekly trend one-liners for queue / support / AP (hud-trend.sh): Monday-aligned UTC weeks, stock + flow + sparkline; answered from a cache (default 10 min), detached refresh, no network on a render; null when off (stdin `show_trend` false) or nothing is known
 #    "bus": null | {"unread","from"},   # unread cross-account bus notes (count, newest sender); local files only (hud-bus.sh, _bus/bus.sh status --json); null when off or nothing unread
 #    "behind": null | {"behind","ahead","base"},   # commits the branch is behind / ahead of its upstream ("base":"upstream") or origin's default branch ("origin"); null when 0/0, detached, or no reference (hud-behind.sh)
 #    "plugin": null | {"installed","latest","url"?},   # ccxp-skills version; latest = highest known release, null when unknown (hud-version.sh)
 #    "last_input_at": 0}        # epoch secs of this session's last prompt (0 = unknown)
 #
 # stdin also carries the mod's `ci` config ({workflow,branch?,repo?} or null) and
-# `ci_ttl` (poll seconds), `show_version` (bool, default true), `show_bus` (bool, default true),
+# `ci_ttl` (poll seconds), `show_version` (bool, default true), `show_bus` (bool, default true), `show_trend` (bool, default true),
 # `issues` ({repo,gh_config_dir?} or null = off), `queue_source` ("default-branch" default, also for absent or unknown | "working-tree" opt-in). Never exits non-zero: any failure prints "{}" so the mod
 # keeps its last good snapshot. The only network use is the detached, cached,
 # time-limited CI lookup in hud-ci.sh; the only writes are its cache files (and the rate-limited detached `git fetch origin <default>` unless queue_source is working-tree, and only when a queue exists).
@@ -61,6 +62,8 @@ _HD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$_HD_DIR/hud-nightly.sh"
 # shellcheck source=hud-issues.sh
 . "$_HD_DIR/hud-issues.sh"
+# shellcheck source=hud-trend.sh
+. "$_HD_DIR/hud-trend.sh"
 
 hud-data() {
   local input cwd session_id ci_cfg ci_ttl show_version queue_source
@@ -138,6 +141,11 @@ hud-data() {
   if [ -n "$issues_repo" ]; then issues=$(hud-issues-json "$issues_repo" "$issues_gh" 2>/dev/null) || issues="null"; fi
   [ -n "$issues" ] || issues="null"
 
+  local trend="null" show_trend
+  show_trend=$(printf '%s' "$input" | jq -r 'if .show_trend == false then 0 else 1 end' 2>/dev/null) || show_trend=1
+  if [ "$show_trend" = 1 ]; then trend=$(hud-trend-json "$repo_root" "$issues_repo" "$issues_gh" 2>/dev/null) || trend="null"; fi
+  [ -n "$trend" ] || trend="null"
+
   local bus show_bus
   show_bus=$(printf '%s' "$input" | jq -r 'if .show_bus == false then 0 else 1 end' 2>/dev/null) || show_bus=1
   bus=$(hud-bus-json "$(cd "$_HD_DIR/../.." && pwd)" "$show_bus" 2>/dev/null) || bus="null"
@@ -154,7 +162,7 @@ hud-data() {
   jq -n -c \
     --arg task_id "$task_id" --arg task_title "$task_title" \
     --arg branch "$branch" --arg worktree "$worktree" --arg cwd "$cwd" --arg slug "$slug" --arg top "$top" \
-    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson apconfig "$ap_config" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson plugin "$plugin" --argjson behind "$behind" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
+    --arg head "$head" --arg dirty "$dirty" --arg gh_account "$gh_account" --arg rec "$rec" --argjson apstats "$ap_stats" --argjson apconfig "$ap_config" --argjson ledger "$ledger" --argjson queue "$queue" --argjson ci "$ci" --argjson bus "$bus" --argjson nightly "$nightly" --argjson issues "$issues" --argjson trend "$trend" --argjson plugin "$plugin" --argjson behind "$behind" --arg repo "$repo_name" --argjson last_input_at "$last_input_at" '
     ($rec | split("\u001f")) as $f
     | {repo: $repo, task_id: $task_id, task_title: $task_title, branch: $branch, worktree: $worktree,
        cwd: $cwd, repo_slug: (if $slug == "" then null else $slug end),
@@ -169,7 +177,7 @@ hud-data() {
          stuck_reason: $f[8], stop_reason: $f[9], merged: (($f[10] // "0") | tonumber? // 0),
          next_wake_at: (($f[11] // "") | tonumber? // 0),
          busy: (($f[12] // "") == "1"), current_task: ($f[13] // ""), busy_slots: (($f[14] // "") | tonumber? // 0), busy_routine: (($f[15] // "") | tonumber? // 0), stats: $apstats} end),
-       ap_config: $apconfig, ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, bus: $bus, plugin: $plugin, behind: $behind,
+       ap_config: $apconfig, ledger: $ledger, queue: $queue, ci: $ci, nightly: $nightly, issues: $issues, trend: $trend, bus: $bus, plugin: $plugin, behind: $behind,
        last_input_at: $last_input_at}'
 }
 

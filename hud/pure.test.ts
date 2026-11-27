@@ -2337,3 +2337,52 @@ test('details: AP off shows the configured max_dop dim only when a config exists
   expect(dopLine(dopSnap(null, null))).toMatch(/^AP off(?: │ WORKING| │ READY|$)/)
   expect(dopLine(dopSnap(null, null))).not.toContain('max_dop')
 })
+
+// ---- the weekly trend row (hud-trend.sh, T20261126-122285) ----
+
+const TREND_ROWS = [
+  { key: 'queue', label: 'Queue', short: 'Queue 172 ▇▇▆▆▅▅* -9', full: 'Queue   172 ▇▇▆▆▅▅*  -9 vs last wk   (in 14 / out 23)' },
+  { key: 'support', label: 'Support', short: 'Support 5 ▃▅▆▄▃▂* -1', full: 'Support   5 ▃▅▆▄▃▂*  -1 vs last wk   (opened 2 / delivered 3)' },
+  { key: 'ap', label: 'AP', short: 'AP 32 ▂▃▅▆▇▅* merged/wk', full: 'AP       32 ▂▃▅▆▇▅*  merged/wk       (holds 52 ▅▆▆▇▇▇* up)' },
+]
+const trendSnap = (rows: object[] = TREND_ROWS) => snap({}, JSON.stringify({ ...BASE, trend: { rows } }))
+
+test('trend: the band gets its own bottom row with the three short forms; wide terminals show all of them', async () => {
+  const rows = bandRows(trendSnap() as any, NOCI, 120)
+  const last = rows[rows.length - 1]!.map(s => s.text).join('')
+  expect(last).toBe('trend Queue 172 ▇▇▆▆▅▅* -9 │ Support 5 ▃▅▆▄▃▂* -1 │ AP 32 ▂▃▅▆▇▅* merged/wk')
+  expect(rows.length).toBe(bandRows(snap() as any, NOCI, 120).length + 1)
+})
+
+test('trend: narrow terminals drop rows from the right (AP first) instead of wrapping; one row is cut with an ellipsis at the very least', async () => {
+  const at = (w: number) => text([bandRows(trendSnap() as any, NOCI, w).at(-1)!])
+  expect(at(70)).toBe('trend Queue 172 ▇▇▆▆▅▅* -9 │ Support 5 ▃▅▆▄▃▂* -1')
+  expect(at(40)).toBe('trend Queue 172 ▇▇▆▆▅▅* -9')
+  expect(displayWidth(at(24))).toBeLessThanOrEqual(22)
+})
+
+test('trend: `trend: false` hides the row; absent or empty trend draws nothing', async () => {
+  const off = bandRows(trendSnap() as any, { ...NOCI, trend: false }, 120)
+  expect(text(off)).not.toContain('trend ')
+  expect(text(bandRows(snap() as any, NOCI, 120))).not.toContain('trend ')
+  expect(text(bandRows(trendSnap([]) as any, NOCI, 120))).not.toContain('trend ')
+  expect(mergeConfig(parseConfigText('{"trend": false}'), {}).trend).toBe(false)
+  expect(mergeConfig(parseConfigText('{"trend": "no"}'), {}).trend).toBeUndefined()
+})
+
+test('trend: parseHelper keeps only known keys and plain text, at most three rows', async () => {
+  const h = parseHelper(JSON.stringify({ ...BASE, trend: { rows: [...TREND_ROWS, { key: 'queue', short: 'x', full: 'y' }] } }))!
+  expect(h.trend!.rows.map(r => r.key)).toEqual(['queue', 'support', 'ap'])
+  const bad = parseHelper(JSON.stringify({ ...BASE, trend: { rows: [{ key: 'evil', short: 'a', full: 'b' }, { key: 'ap', short: '\u001b[31mred', full: 'z' }, { key: 'ap', short: 5, full: 'z' }] } }))!
+  expect(bad.trend).toBeNull()
+  expect(parseHelper(JSON.stringify({ ...BASE, trend: 'x' }))!.trend).toBeNull()
+  expect(parseHelper(HELPER)!.trend).toBeNull()
+})
+
+test('trend: details has a TREND section with the full line per domain, one row each', async () => {
+  const rows = detailRows(trendSnap() as any, NOCI, 100, DETAIL_NOW).map(r => r.map(s => s.text).join(''))
+  const i = rows.findIndex(r => r.startsWith('TREND'))
+  expect(i).toBeGreaterThanOrEqual(0)
+  expect(rows.slice(i, i + 3).map(r => r.slice(10))).toEqual(TREND_ROWS.map(r => r.full))
+  expect(rows.find(r => r.startsWith('TREND'))).toContain('Queue   172 ▇▇▆▆▅▅*')
+})
