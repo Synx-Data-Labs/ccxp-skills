@@ -56,3 +56,4 @@ This epic is a spec for the owner to review; nothing in it is implemented yet. S
 - [T20261124-112157](../TODO/T20261124-112157-drive-and-autopilot-work-first-open-leaf.md) — (d) `/drive` Phase 6 and autopilot pick: work the first open leaf
 - [T20261124-158321](../TODO/T20261124-158321-hud-chain-display-and-sweep-phase-2.md) — (e) HUD chain display and sweep Phase 2
 - [T20261125-264487](../TODO/T20261125-264487-retire-blocks-field-depends-on-only.md) — Retire `blocks`, keep only `depends_on`
+- [T20261126-213289](../TODO/T20261126-213289-todo-sweep-orders-queue-by-depends-on.md) — `/todo sweep` orders queue.md by depends_on
