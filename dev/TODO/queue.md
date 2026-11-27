@@ -93,3 +93,4 @@ reprioritize.
 - [T20261124-297524](T20261124-297524-migrate-ccxp-skills-to-xinzweb.md): Move ccxp-skills development to a new public xinzweb/ccxp-skills repo
 - [T20261126-213289](T20261126-213289-todo-sweep-orders-queue-by-depends-on.md): `/todo sweep` orders queue.md by depends_on
 - [T20261126-122285](T20261126-122285-hud-weekly-trend-one-liner.md): HUD weekly trend one-liner (queue, support, AP)
+- [T20261127-294152](T20261127-294152-hud-drop-old-queue-max-and-next-loop-text.md): HUD drops the old queue max stats and the AP next loop text
