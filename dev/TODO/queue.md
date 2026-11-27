@@ -91,3 +91,4 @@ reprioritize.
 - [T20261123-136500](T20261123-136500-configurable-ci-job-cap.md): Configurable CI job cap
 - [T20261124-153489](T20261124-153489-hud-details-sectioned-layout.md): HUD details: one labeled row per section
 - [T20261124-297524](T20261124-297524-migrate-ccxp-skills-to-xinzweb.md): Move ccxp-skills development to a new public xinzweb/ccxp-skills repo
+- [T20261126-213289](T20261126-213289-todo-sweep-orders-queue-by-depends-on.md): `/todo sweep` orders queue.md by depends_on
