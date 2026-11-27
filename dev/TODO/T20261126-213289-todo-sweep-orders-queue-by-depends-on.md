@@ -3,6 +3,7 @@ status: In Progress
 estimation: 1
 source: owner request 2026-11-26 (typed words quoted below), epic E3 spec item 7, decisions d158 and d182
 type: feature
+description: /todo sweep Phase 2 derives queue order violations from depends_on (legacy Blocked by and blocks read as a fallback), cycles reported and never applied
 claimed_by: cc1-50ac6891:3259fb54c60ab149
 claimed_role: interactive
 scheduled: 2026-11-23
@@ -36,6 +37,5 @@ Design approved in-conversation 2026-11-26 (owner request above); no design PR.
 ## Not in scope
 
 - Split with [T20261124-158321](T20261124-158321-hud-chain-display-and-sweep-phase-2.md) (epic E3 item e): this task takes the sweep Phase 2 ordering part; that task keeps the HUD chain display and dropping satisfied `depends_on` entries.
-
 - A release, version bump or tag (maintainer-triggered).
 - Dropping a satisfied `depends_on` entry or striking `## Dependencies` lines for it.
