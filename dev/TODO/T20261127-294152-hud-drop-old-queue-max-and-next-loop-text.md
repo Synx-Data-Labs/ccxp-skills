@@ -1,9 +1,12 @@
 ---
-status: Open
+status: In Progress
 estimation: 1
 source: owner request via coordinator, 2026-11-27 (HUD after 6.10.0)
 related: T20261126-122285
 description: HUD drops the queue max last-month/last-week/this-week stats and the AP next loop text
+claimed_by: cc1-50ac6891:ae1d5ec7fe551034
+claimed_role: interactive
+scheduled: 2026-11-23
 ---
 
 # T20261127-294152: HUD drops the old queue max stats and the AP next loop text
