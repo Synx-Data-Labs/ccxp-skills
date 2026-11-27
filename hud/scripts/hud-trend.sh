@@ -40,7 +40,7 @@ HT_GH_TIMEOUT=20
 HT_GH_LIMIT=3000
 
 _ht-now() { printf '%s' "${HUD_TREND_NOW:-$(date +%s)}"; }
-_ht-dir() { printf '%s' "${HUD_TREND_STATE_DIR:-${CCXP_PROFILE_DIR:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}/state/hud-trend}"; }
+_ht-dir() { printf '%s' "${HUD_TREND_STATE_DIR:-${CCXP_PROFILE_DIR:-}/state/hud-trend}"; }
 
 # $1 now, $2 weeks (default 5) -> the Mondays 00:00 UTC bounding the buckets, oldest first, space separated:
 # weeks + 1 values; the last one is the current week's Monday. Pure arithmetic (the epoch started on a Thursday).
