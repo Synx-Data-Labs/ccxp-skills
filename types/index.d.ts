@@ -145,15 +145,7 @@ export type Queue = {
   branch?: string
   /** `default-branch` was asked for but origin/<default> was unavailable, so the working tree was read; the cell reads `queue@wt`. */
   fallback?: boolean
-  /** Queue-length maxima of three adjacent, non-overlapping rolling windows (hud-queue-hwm.sh); absent when unknown. */
-  hwm?: QueueMax
 }
-
-/**
- * The largest queue length in each window: `tw` = the last 7 days (this week, includes the current length, so never below it),
- * `lw` = 7 to 14 days ago (last week), `lm` = the 4 weeks before that, 14 to 42 days ago (last month). `null` = no history that old.
- */
-export type QueueMax = { lm: number | null; lw: number | null; tw: number }
 
 /** The largest count seen over the last 180 days, the last 30 days and the last 7 days (nested windows; the issues cell). */
 export type QueueHwm = { d180: number; d30: number; d7: number }

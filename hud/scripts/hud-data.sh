@@ -24,12 +24,10 @@
 #    "ap_config": null | {"max_dop","reserved_slots","source","file"},   # the autopilot's EFFECTIVE settings (autopilot-state.sh config-show --json via sl-autopilot-config, cached per repo): null unless the autopilot is on/paused or dev/.autopilot-config.json exists; reserved_slots is null when the autopilot script does not report it; source = override|default; file = the config file exists
 #    "ledger": null | {"running":[{"job","title"}],"lifetime_jobs","parked":[{"id"}],
 #                      "next_job","updated_at"},   # ledger.sh file
-#    "queue": null | {"total","ready","blocked","epic","claimed","apholds"[,"source","branch"|"fallback"][,"hwm":{"lm","lw","tw"}]},
+#    "queue": null | {"total","ready","blocked","epic","claimed","apholds"[,"source","branch"|"fallback"]},
 #                         # dev/TODO/queue.md breakdown (sl-queue-json in hud-lib.sh: buckets sum to total); null without a queue.
 #                         # `source`/`branch` unless stdin `queue_source` is "working-tree" (opt-in): read from origin/<branch>
 #                         # (git object reads, no checkout); `source:"working-tree",fallback:true` when origin/<default> was unavailable
-#                         # `hwm`: {"lm","lw","tw"} the largest queue length in the 14-to-42-days-ago, 7-to-14-days-ago and last-7-days windows (null = no data), from
-#                         # git history of the default branch's queue file plus local samples (hud-queue-hwm.sh); absent when unknown
 #    "ci": null | {"state","at"[,"eta"]},   # last run of the CONFIGURED workflow (hud-ci.sh); eta only while running
 #    "nightly": null | {"red","green"?,"strip"},   # SynxDB nightly: red and green days in the last 30 UTC days + last-7-days strip (+ - .), cached 30 min (hud-nightly.sh)
 #    "issues": null | {"open","undelivered","hwm"?: {"d180","d30","d7"}},   # opt-in customer-issue stats (stdin `issues` {repo,gh_config_dir?}); cached 15 min, detached refresh (hud-issues.sh)
@@ -118,13 +116,6 @@ hud-data() {
 
   local queue; queue=$(sl-queue-json "$repo_root" "$queue_source" 2>/dev/null) || queue=""
   [ -n "$queue" ] || queue="null"
-  if [ "$queue" != "null" ]; then
-    # High watermark (hud-queue-hwm.sh): samples the length, kicks a detached git-history backfill, reads local files only.
-    local hwm; hwm=$(sl-queue-hwm "$repo_root" "$(printf '%s' "$queue" | jq -r '.total // empty' 2>/dev/null)" 2>/dev/null) || hwm=""
-    if [ -n "$hwm" ]; then queue=$(printf '%s' "$queue" | jq -c --argjson h "$hwm" '. + {hwm: $h}' 2>/dev/null) || true; fi
-    [ -n "$queue" ] || queue="null"
-  fi
-
   local repo_name ci
   repo_name=$(sl-origin-name "$repo_root")
   [ -n "$repo_name" ] || repo_name=$(basename "$repo_root")

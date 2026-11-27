@@ -62,7 +62,7 @@ Background jobs from the job ledger: green `READY` = no job is running, yellow `
 
 ## queue
 
-Where `dev/TODO/queue.md` stands: `queue 44 = 30r 6b 3x` = 30 ready to take, 6 blocked (`Blocked by` an open task), 3 epics. `2c` claimed by another session appears only when above 0. Tasks the autopilot holds are not counted here: the AUTOPILOT row in `/hud details` shows `2 held by autopilot`. After it, `max 61/74/83 ▲` is the largest queue length in the 4 weeks before last week (14 to 42 days ago), last week (7 to 14 days ago) and this week (the last 7 days); `▲`/`▼` compares this week with last week, `-` means no history that old, and it turns yellow while the queue sits at the highest of the three. Narrow: the max drops first, then `queue 30/44`. Read from the default branch on origin (no checkout), or from the working tree with `queue.source`. No `queue.md`, no cell. Switch: `queue`.
+Where `dev/TODO/queue.md` stands: `queue 44 = 30r 6b 3x` = 30 ready to take, 6 blocked (`Blocked by` an open task), 3 epics. `2c` claimed by another session appears only when above 0. Tasks the autopilot holds are not counted here: the AUTOPILOT row in `/hud details` shows `2 held by autopilot`. Narrow: it shrinks to `queue 30/44`. Read from the default branch on origin (no checkout), or from the working tree with `queue.source`. No `queue.md`, no cell. Switch: `queue`.
 
 ## nightly
 
@@ -119,7 +119,7 @@ Opt-in: how much of your Claude subscription's usage window is left, when it wou
 - `CLONE` the clone you work in: repo, branch, claimed task
 - `BUILD` CI (red when failing), nightly
 - `SUPPORT` customer issues (when configured)
-- `AUTOPILOT` two lines: status (on / paused / off, `max_dop` use with running cycles, next loop or overdue), then progress (24h merged and loops, average per day, `N held by autopilot`)
+- `AUTOPILOT` two lines: status (on / paused / off, `max_dop` use with running cycles, red `stalled 2d` when the loop is overdue), then progress (24h merged and loops, average per day, `N held by autopilot`)
 - `WORK` everything the autopilot does not run: READY / WORKING counts only jobs without the `autopilot` flag, then parked and the 24 hour job count (all jobs started, autopilot cycles included). The one-row band's READY / WORKING still counts every running job
 - `QUEUE` the task queue breakdown
 - `TREND` the weekly queue, support and AP lines in full
