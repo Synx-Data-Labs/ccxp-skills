@@ -265,11 +265,11 @@ _is() { run _hwm "$2"; [ "$status" -eq 0 ]; [ "$(jq -c . <<<"$output")" = "$1" ]
   [ "$(jq .tw <<<"$output")" -eq 1 ]
 }
 
-@test "hud-data.sh adds queue.hwm next to the breakdown and keeps its own keys" {
+@test "hud-data.sh no longer adds queue.hwm (d190): the breakdown stays, no maxima ride along" {
   _commit 3 4
-  run bash -c "echo '{\"cwd\":\"$R\"}' | bash '$HUD' | jq -c '.queue | {total, hwm}'"
+  run bash -c "echo '{\"cwd\":\"$R\"}' | bash '$HUD' | jq -c '.queue | {total, hwm: has(\"hwm\")}'"
   [ "$(jq -r .total <<<"$output")" -eq 4 ]
-  [ "$(jq -c .hwm <<<"$output")" = '{"lm":null,"lw":null,"tw":4}' ]
+  [ "$(jq -c .hwm <<<"$output")" = 'false' ]
 }
 
 @test "the render path never fetches or blocks: with HUD_HWM_SYNC unset the backfill is detached and the call returns at once" {

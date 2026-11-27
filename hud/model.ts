@@ -1,6 +1,6 @@
 // ccxp-hud model: pure snapshot + band layout. No `$`, so it is unit-testable.
 
-import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, QueueMax, Snapshot, Trend, TrendRow } from '../types'
+import type { ApConfig, ApStats, Behind, Bus, Autopilot, Ci, CiState, Field, HelperData, HudConfig, JobStats, Jobs, Issues, Ledger, Nightly, PluginVersion, Queue, Snapshot, Trend, TrendRow } from '../types'
 
 export type { Autopilot, Ci, HelperData, Jobs, Snapshot }
 
@@ -167,15 +167,6 @@ export function parseHelper(stdout: string): HelperData | null {
     const branch = str(q.branch)
     if (q.source === 'default-branch' && /^[A-Za-z0-9][A-Za-z0-9._/-]{0,100}$/.test(branch)) queue.branch = branch
     else if (q.fallback === true) queue.fallback = true
-    // The maxima are three separate windows (not nested): only this week is required (never below the current length); an older window the helper has no data for is null and drawn as `-`.
-    const h = q.hwm
-    if (typeof h === 'object' && h !== null && !Array.isArray(h)) {
-      const hw = h as Record<string, unknown>
-      if (typeof hw.tw === 'number' && Number.isFinite(hw.tw)) {
-        const old = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? n(x) : null)
-        queue.hwm = { lm: old(hw.lm), lw: old(hw.lw), tw: Math.max(n(hw.tw), queue.total) }
-      }
-    }
   }
   const c = r.ci
   let ci: Ci | null = null
@@ -879,18 +870,11 @@ function itemFor(field: Field, snap: Snapshot, cfg: HudConfig, nowMs: number = D
   }
 }
 
-const maxNum = (x: number | null) => (x === null ? '-' : String(x))
-/** ` ▲` when this week's peak is above last week's, ` ▼` below, nothing when equal or when there is no last week. */
-const trendMark = (m: QueueMax) => (m.lw === null || m.tw === m.lw ? '' : m.tw > m.lw ? ' ▲' : ' ▼')
-/** Warning colour while the queue sits at the highest of the three maxima. */
-const maxTone = (total: number, m: QueueMax) => (total > 0 && total >= Math.max(m.lm ?? 0, m.lw ?? 0, m.tw) ? ('warning' as const) : undefined)
-
 /**
  * Details (`full`): `queue 44 = 30 ready | 6 blocked | 3 epics`, the labels always in full
  * (one form only: details never abbreviates, a too-wide line is cut with an ellipsis); `epics` reads
  * singular at a count of 1. The one-row band (`!full`) starts at `queue 44 = 30r 6b 3x` and shrinks to
- * `queue 30/44`. `claimed` (held by another session) shows only above 0: `2c` in the band. `blocked` = `Blocked by` an open task. The autopilot's holds are not here: they show in the AUTOPILOT section. The max block `max 61/74/83 ▲` (details spell the labels out)
- * shows the queue's largest length in the previous 4 weeks, last week and this week (see hud-queue-hwm.sh).
+ * `queue 30/44`. `claimed` (held by another session) shows only above 0: `2c` in the band. `blocked` = `Blocked by` an open task. The autopilot's holds are not here: they show in the AUTOPILOT section.
  */
 export function queueVariants(q: Queue, full: boolean): Variants {
   const parts: Array<[string, string, string, number]> = [
@@ -905,24 +889,12 @@ export function queueVariants(q: Queue, full: boolean): Variants {
       if (i > 0) long.push({ text: ' | ', dim: true })
       long.push({ text: `${n} ${n === 1 ? one : many}`, dim: n === 0 && one !== 'ready', color: one === 'ready' && n > 0 ? 'success' : undefined })
     })
-    if (q.hwm) {
-      const m = q.hwm, tone = maxTone(q.total, m)
-      long.push({ text: ' | ', dim: true }, { text: `max ${maxNum(m.lm)} last month / ${maxNum(m.lw)} last week / ${m.tw} this week${trendMark(m)}`, dim: !tone, color: tone })
-    }
     return [long]
   }
   const at = q.branch ? `@${q.branch}` : q.fallback ? '@wt' : ''
-  const hw = q.hwm
   const short: Seg[] = [{ text: `queue${at} ${q.total} = ` }, ...parts.flatMap(([, , ch, n], i): Seg[] => [...(i > 0 ? [{ text: ' ' }] : []), { text: `${n}${ch}`, dim: n === 0 && ch !== 'r', color: ch === 'r' && n > 0 ? 'success' : undefined }])]
   const tiny: Seg[] = [{ text: `queue${at} ${q.ready}/${q.total}`, color: q.ready > 0 ? 'success' : undefined }]
-  if (!hw) return [short, tiny]
-  // Maxima: `max 31/40/52 ▲` (last month / last week / this week, `-` = no history that old, the arrow compares this week with last week), then dropped. At the highest of the three: warning colour.
-  const tone = maxTone(q.total, hw)
-  return [
-    [...short, { text: ` · max ${maxNum(hw.lm)}/${maxNum(hw.lw)}/${hw.tw}${trendMark(hw)}`, dim: !tone, color: tone }],
-    short,
-    tiny,
-  ]
+  return [short, tiny]
 }
 
 /**
@@ -1250,7 +1222,7 @@ function isApJob(j: { flags?: string }): boolean {
  *   CLONE    repo, branch, dirty mark, claimed task (and `stale`)
  *   BUILD    CI (first; a red CI is drawn highlighted), nightly: 7-day strip and the last 30 days' green and red counts
  *   SUPPORT  the customer-issue stats (opt-in)
- *   AUTOPILOT two lines: status (on/paused/off, max_dop and how it is used, next loop or overdue / running cycles), then progress (24h cell with the average, holds)
+ *   AUTOPILOT two lines: status (on/paused/off, max_dop and how it is used, running cycles or stalled), then progress (24h cell with the average, holds)
  *   WORK     the ledger rows WITHOUT the autopilot flag: jobs state (READY / WORKING (N)), parked, last 24h jobs
  *   QUEUE    the queue breakdown (dev/TODO/queue.md), labels in full
  *   TREND    the weekly trend lines for queue, support and AP, one row each (the band shows their short forms)
@@ -1295,7 +1267,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // SUPPORT: the customer-issue stats (opt-in): open, not delivered, max open over 180 / 30 / 7 days
   section('SUPPORT', [h?.issues ? full(one('issues', ...issuesVariants(h.issues, true))) : null])
 
-  // WORK: autopilot, the next loop, its 24h cell, then the jobs from the ledger (no ledger: no jobs cells)
+  // WORK: autopilot, the stalled signal, its 24h cell, then the jobs from the ledger (no ledger: no jobs cells)
   const ap = h?.autopilot
   let apItem: Item | null = null
   if (ap) {
@@ -1305,25 +1277,19 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   } else if (h) {
     apItem = one('ap', [{ text: 'AP ', bold: true }, { text: 'off', dim: true }])
   }
-  // The next loop: the clock time and the wait; paused says so (the stored time is stale then); nothing when unknown.
-  // A wake time that passed by more than the grace is not "due" but a stalled loop: warn-coloured, with how late it is.
+  // Cycles running, or `stalled <span>` when the wake time passed by more than the grace; nothing otherwise (paused and not-yet-due show nothing).
   let wakeItem: Item | null = null
   if (ap?.prefix === '[p]') {
-    wakeItem = one('wake', [{ text: 'next loop paused', dim: true }])
+    wakeItem = null
   } else if (ap?.busy) {
     // A cycle is running: say so rather than a due time that is stale until the cycle ends. With parallel cycles (busy_slots > 1) the count: `2 cycles running`.
     // The ledger job numbers (r596) are deliberately not shown (owner decision 2026-11-24).
     const n = ap.busy_slots || 0
     wakeItem = one('wake', [{ text: n > 1 ? `${n} cycles running` : 'running' }])
   } else if (ap && ap.next_wake_at > 0) {
+    // Only the health signal stays: a loop overdue beyond the grace reads `stalled 3h 5m` (red). No next-loop clock or countdown (owner decision d191).
     const late = stalledFor(ap, nowMs)
-    if (late > 0) {
-      wakeItem = one('wake', [{ text: `next loop overdue ${formatSpan(late, true)}`, color: 'error', bold: true }])
-    } else if (formatIn(ap.next_wake_at, nowMs) === 'now') {
-      wakeItem = one('wake', [{ text: 'next loop due', dim: true }])
-    } else {
-      wakeItem = one('wake', [{ text: `next loop ${formatStamp(ap.next_wake_at, nowMs)} (${formatIn(ap.next_wake_at, nowMs)})` }])
-    }
+    if (late > 0) wakeItem = one('wake', [{ text: `stalled ${formatSpan(late, true)}`, color: 'error', bold: true }])
   }
   const apStats = ap ? apStatsVariants(ap) : null
   const led = h?.ledger
@@ -1339,7 +1305,7 @@ export function detailRows(snap: Snapshot, cfg: HudConfig, columns: number, nowM
   // Holds (the state file's `.holds`, via the queue breakdown): only while there is an autopilot record (on, paused, idle), and only above 0.
   const holds = ap ? h?.queue?.apholds ?? 0 : 0
   const holdsItem = holds > 0 ? one('apholds', [{ text: `${holds} held by autopilot`, color: 'warning' }]) : null
-  // AUTOPILOT takes two lines: status (state, max_dop use, next loop / running / overdue), then progress (24h merged and average, holds).
+  // AUTOPILOT takes two lines: status (state, max_dop use, running / stalled), then progress (24h merged and average, holds).
   // Each line wraps on its own when the terminal is narrow; the second line has a blank label column. A line with no cell is left out.
   const statusCells = [apItem, dopSegs ? one('dop', dopSegs) : null, wakeItem]
   const progressCells = [apStats ? one('apstats', apStats[0]!) : null, holdsItem]

@@ -36,7 +36,7 @@ undefined_helpers() {
 }
 
 # The AUTOPILOT section is two lines: status cells, then progress cells (the behavioural cases are in hud/pure.test.ts).
-@test "details AUTOPILOT has a status line (state, dop, next loop) and a progress line (24h and average, holds)" {
+@test "details AUTOPILOT has a status line (state, dop, running or stalled) and a progress line (24h and average, holds)" {
   grep -qE "const statusCells = \[apItem, dopSegs .*wakeItem\]" "$MODEL"
   grep -qE "const progressCells = \[apStats .*holdsItem\]" "$MODEL"
 }

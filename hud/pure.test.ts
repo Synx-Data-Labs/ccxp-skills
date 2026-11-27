@@ -658,7 +658,7 @@ test('details: sections in order: SESSION, CLONE, AUTOPILOT, WORK (no queue data
   expect(lines.map(l => l.slice(0, 9).trim())).toEqual(['SESSION', 'CLONE', 'AUTOPILOT', 'WORK'])
   expect(lines[0]).toMatch(/^SESSION {3}context 64% left ▓▓▓▓▓▓░░░░ │ 58% left │ you \d\d:\d\d \(5m ago\)$/)
   expect(lines[1]).toBe('CLONE     acme/widgets @ t20261021-354035-decouple* │ T20261021-354035 Decouple the nightly orchestrator')
-  expect(lines[2]).toMatch(/^AUTOPILOT AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\)$/)
+  expect(lines[2]).toMatch(/^AUTOPILOT AP on 2\/6h 3 loops ✓2 merged$/)
   expect(lines[3]).toBe('WORK      WORKING (2) │ parked 2 │ last 24h: jobs 8 ▲ / average 5.2/day')
 })
 
@@ -718,17 +718,17 @@ test('details split: autopilot cycles (flag autopilot) do not count as WORK; hou
 test('details split: AUTOPILOT carries status, max_dop use, holds count, 24h merged and next wake; WORK none of them', async () => {
   const lines = splitLines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: { max_dop: 6, reserved_slots: null, source: 'override', file: true }, queue: { ...AP_Q, apholds: 2 } })
   const ap = sections(lines)['AUTOPILOT']!
-  expect(ap[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ next loop .*\(in 12m\)$/)
+  expect(ap[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running$/)
   expect(ap[1]).toBe('last 24h: 8 merged ▲ / 26 loops · average 5.2/day │ 2 held by autopilot')
   expect(sect(lines, 'WORK')).toMatch(/^WORKING \(1\) │ parked 3/)
-  expect(sect(lines, 'WORK')).not.toMatch(/AP |held|max_dop|merged|next loop/)
+  expect(sect(lines, 'WORK')).not.toMatch(/AP |held|max_dop|merged|next loop|stalled/)
   // no holds: no holds cell
   expect(sect(splitLines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: AP_Q }), 'AUTOPILOT')).not.toContain('held')
 })
 
 test('details split: a paused autopilot still shows its holds', async () => {
   const lines = splitLines({ autopilot: { ...AP, prefix: '[p]', status: 'paused' }, queue: { ...AP_Q, apholds: 2 } })
-  expect(sections(lines)['AUTOPILOT']).toEqual([expect.stringMatching(/paused.*│ next loop paused$/), '2 held by autopilot'])
+  expect(sections(lines)['AUTOPILOT']).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged', '2 held by autopilot'])
 })
 
 test('details split: autopilot off leaves AUTOPILOT as `AP off` only (no running, holds, wake or 24h cells) and WORK keeps every job', async () => {
@@ -746,22 +746,22 @@ test('details AUTOPILOT: two lines, status then progress (on with holds, paused,
   // on, with holds: line 1 = state, slots, next loop; line 2 = 24h, average, holds
   const on = lines({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, ap_config: cfg, queue: q })
   expect(on.length).toBe(2)
-  expect(on[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running │ next loop .*\(in 12m\)$/)
+  expect(on[0]).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ max_dop 6 · 0 running$/)
   expect(on[1]).toBe(progress)
   // paused
   const paused = lines({ autopilot: { ...AP, prefix: '[p]', status: 'paused', stats: STATS }, ap_config: cfg, queue: q })
-  expect(paused).toEqual([expect.stringMatching(/^AP ⏸ paused .*│ max_dop 6 · 0 running │ next loop paused$/), progress])
+  expect(paused).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged │ max_dop 6 · 0 running', progress])
   // overdue: red, on line 1
   const od = { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 3 * 3600, stats: STATS }
-  expect(lines({ autopilot: od, queue: q })).toEqual([expect.stringMatching(/│ next loop overdue 3h$/), progress])
+  expect(lines({ autopilot: od, queue: q })).toEqual([expect.stringMatching(/│ stalled 3h$/), progress])
   const odRows = detailRows(withHelper({ ci: null, autopilot: od, queue: q }) as any, NOCI, 400, DETAIL_NOW)
-  expect(odRows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('error')
+  expect(odRows.flat().find(x => x.text.startsWith('stalled'))?.color).toBe('error')
   // running cycles stay on line 1
   expect(lines({ autopilot: { ...AP, busy: true, busy_slots: 3, stats: STATS }, queue: q })[0]).toMatch(/│ 3 cycles running$/)
   // off: one line, `AP off`; nothing for line 2
   expect(lines({ autopilot: null, queue: q })).toEqual(['AP off'])
   // holds alone (no stats yet) still go on a second line; no holds and no stats: one line
-  expect(lines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: q })).toEqual([expect.stringContaining('next loop'), '2 held by autopilot'])
+  expect(lines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: q })).toEqual([expect.stringMatching(/^AP on 2\/6h 3 loops ✓2 merged(?!.*next loop)/), '2 held by autopilot'])
   expect(lines({ autopilot: { ...AP, next_wake_at: WAKE }, queue: AP_Q }).length).toBe(1)
   // the second line carries a blank label column and the same colours: holds warning, arrow success
   const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: q }) as any, NOCI, 400, DETAIL_NOW)
@@ -1060,19 +1060,16 @@ test('formatIn: under a minute, minutes, hours with minutes, days; due or past i
   expect([inn(0), inn(-5)]).toEqual(['now', 'now'])
 })
 
-test('details: AP line shows the next loop (clock and wait), independent of the time of day', async () => {
+test('details: AP line carries no next-loop clock or countdown, whatever the wake time (owner decision d191)', async () => {
   // Local-time construction: the same clock reading in every timezone, never "yesterday".
   const now = new Date(2026, 9, 28, 12, 0, 0).getTime()
   const wake = Math.floor(now / 1000) + 12 * 60
   const apLine = (over: object, cols = 400) => apPart(detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null }) as any, DEFAULTS, cols, now).map(r => r.map(x => x.text).join('')))
-  expect(apLine({ next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
-  expect(apLine({ next_wake_at: wake })).toContain('next loop 12:12')
-  // a different day carries the date, like the last-prompt stamp
-  expect(apLine({ next_wake_at: wake + 86400 })).toMatch(/next loop \w{3} 29 12:12 \(in 1d\)$/)
-  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due$/)
+  expect(apLine({ next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(apLine({ next_wake_at: wake + 86400 })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(apLine({ next_wake_at: Math.floor(now / 1000) - 5 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(apLine({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
-  expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
-  expect(apLine({ next_wake_at: wake })).not.toContain('next loop paused')
+  expect(apLine({ next_wake_at: wake, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged')
   // a running cycle says `running` (or `N cycles running` with parallel cycles); the ledger job numbers are never shown
   const led = (rows: object[]) => ({ ledger: { running: rows, lifetime_jobs: 600, parked: [], next_job: 700, updated_at: '' } })
   const apWith = (rows: object[], over: object) => apPart(detailRows(withHelper({ autopilot: { ...AP, ...over }, ci: null, ...led(rows) }) as any, DEFAULTS, 400, now).map(r => r.map(x => x.text).join('')))
@@ -1086,14 +1083,14 @@ test('details: AP line shows the next loop (clock and wait), independent of the 
   expect(apWith(rows, busy)).not.toMatch(/r\d/)
   expect(apWith([{ job: 599, title: 'x', flags: 'detached' }], busy)).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
   expect(apWith([], busy)).toMatch(/│ running$/)
-  expect(apWith(rows, { next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)')
-  expect(apWith(rows, { next_wake_at: Math.floor(now / 1000) - 5 })).toMatch(/next loop due$/)
+  expect(apWith(rows, { next_wake_at: wake })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(apWith(rows, { next_wake_at: Math.floor(now / 1000) - 5 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   // paused still wins over a busy mark
-  expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063', status: 'paused', prefix: '[p]' })).toMatch(/next loop paused$/)
+  expect(apLine({ next_wake_at: wake, busy: true, current_task: 'T20261028-151063', status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged')
   // AP off or no record: no schedule
   expect(detailRows(withHelper({ autopilot: null }) as any, DEFAULTS, 140, now).map(r => r.map(x => x.text).join('')).join('\n')).not.toContain('next')
-  // narrow: the row wraps, `next loop` is never shortened to `next` and the clock never dropped
-  expect(squash(apLine({ next_wake_at: wake }, 52))).toBe(squash('AP on 2/6h 3 loops ✓2 merged │ next loop 12:12 (in 12m)'))
+  // narrow: the row wraps, nothing about the next loop appears
+  expect(squash(apLine({ next_wake_at: wake }, 52))).toBe(squash('AP on 2/6h 3 loops ✓2 merged'))
 })
 
 test('parseHelper: autopilot busy is a boolean and current_task a string, false and empty when missing', async () => {
@@ -1487,68 +1484,16 @@ test('queue: no queue, no cell and no line; a tight band shrinks it to ready/tot
   expect(tight).toMatch(/queue (30\/44|44 = 30r)/)
 })
 
-// --- queue maxima: last month / last week / this week (adjacent rolling windows) ---
+// --- queue maxima: removed (owner decision d190, the TREND one-liner replaces them) ---
 
-const HWM = { lm: 61, lw: 74, tw: 83 }
-
-test('queue max: parseHelper keeps this week (never below the current length), nulls windows without data, ignores anything else', async () => {
-  const get = (hwm: unknown) => parseHelper(JSON.stringify({ ...BASE, queue: { ...QUEUE, hwm } }))!.queue!.hwm
-  expect(get({ lm: 61, lw: 74, tw: 83 })).toEqual({ lm: 61, lw: 74, tw: 83 })
-  expect(get({ lm: 10, lw: 20, tw: 30 })).toEqual({ lm: 10, lw: 20, tw: 44 }) // this week is never below the current length (44); the older windows are NOT nested
-  expect(get({ lm: null, lw: null, tw: 50.9 })).toEqual({ lm: null, lw: null, tw: 50 })
-  expect(get({ tw: 50 })).toEqual({ lm: null, lw: null, tw: 50 })
-  expect(get({ lm: -3, lw: 'x', tw: 50 })).toEqual({ lm: 0, lw: null, tw: 50 })
-  // the old nested shape (180d/30d/7d) and anything incomplete draw no maxima
-  for (const bad of [undefined, null, 'x', [], {}, { d180: 90, d30: 61, d7: 52 }, { lm: 1, lw: 2 }, { tw: '9' }, { tw: NaN }]) expect(get(bad)).toBeUndefined()
-})
-
-test('queue max: the band shows max last month/last week/this week with a trend arrow; details spell the labels out; no max means the cell is unchanged', async () => {
-  const s = withHelper({ ...SHORT, queue: { ...QUEUE, hwm: HWM } })
-  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6b 3x · max 61/74/83 ▲')
-  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 blocked | 3 epics | max 61 last month / 74 last week / 83 this week ▲')
-  expect(text(bandRows(withHelper({ ...SHORT, queue: QUEUE }) as any, NOCI, 160))).not.toContain('max')
-  expect(detail(withHelper({ queue: QUEUE }) as any, 200).join('\n')).not.toContain('max')
-  // the source marker stays in front of the numbers
-  expect(text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, branch: 'main', hwm: HWM } }) as any, NOCI, 160))).toContain('queue@main 44 = 30r 6b 3x · max 61/74/83 ▲')
-  // the 180d/30d/7d wording is gone
-  expect(text(bandRows(s as any, NOCI, 160))).not.toMatch(/180d|30d/)
-})
-
-test('queue max: the arrow compares this week with last week: up, down, nothing when equal or when there is no last week', async () => {
-  const band = (hwm: unknown) => text(bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, hwm } }) as any, NOCI, 160))
-  expect(band({ lm: 40, lw: 50, tw: 60 })).toContain('max 40/50/60 ▲')   // growing: three different, rising numbers
-  expect(band({ lm: 70, lw: 60, tw: 50 })).toContain('max 70/60/50 ▼')   // shrinking
-  expect(band({ lm: 50, lw: 50, tw: 50 })).toContain('max 50/50/50')    // flat
-  expect(band({ lm: 50, lw: 50, tw: 50 })).not.toMatch(/[▲▼]/)
-  expect(band({ lm: null, lw: null, tw: 44 })).toContain('max -/-/44')  // no history yet: this week only
-  expect(band({ lm: null, lw: null, tw: 44 })).not.toMatch(/[▲▼]/)
-  expect(band({ lm: null, lw: 40, tw: 44 })).toContain('max -/40/44 ▲')
-  expect(detail(withHelper({ queue: { ...QUEUE, hwm: { lm: null, lw: null, tw: 44 } } }) as any, 200).join('\n')).toContain('max - last month / - last week / 44 this week')
-})
-
-test('queue max: a narrow band degrades max a/b/c, then the plain cell, then ready/total, never wider than the row', async () => {
-  const q = { ...QUEUE, hwm: HWM }
-  const seen = new Set<string>()
-  for (let cols = 160; cols >= 22; cols--) {
-    const rows = bandRows(withHelper({ ...SHORT, task_title: '', queue: q, ledger: null, ci: null }) as any, NOCI, cols)
-    const t = text(rows)
-    for (const r of rows) expect(r.map(x => x.text).join('').length).toBeLessThanOrEqual(Math.max(20, cols - 2))
-    if (t.includes('max 61/74/83 ▲')) seen.add('max')
-    else if (t.includes('queue 44 = 30r')) seen.add('plain')
-    else if (t.includes('queue 30/44')) seen.add('tiny')
-    // never a half-cut maximum such as "max 61/7"
-    for (const m of t.matchAll(/max (\S*)/g)) expect(m[1]).toMatch(/^[\d-]+\/[\d-]+\/\d+$/)
-  }
-  expect([...seen].sort()).toEqual(['max', 'plain', 'tiny'])
-})
-
-test('queue max: at the highest of the three the max reads in the warning colour, otherwise dim', async () => {
-  const find = (total: number, hwm: unknown) => bandRows(withHelper({ ...SHORT, queue: { ...QUEUE, total, ready: total, blocked: 0, epic: 0, hwm } }) as any, NOCI, 200).flat().find(x => x.text.includes('max '))!
-  expect(find(90, { lm: 60, lw: 70, tw: 90 }).color).toBe('warning')
-  expect(find(44, { lm: 60, lw: 70, tw: 90 }).color).toBeUndefined()
-  expect(find(44, { lm: 60, lw: 70, tw: 90 }).dim).toBe(true)
-  // the queue is at this week's peak but an earlier window was higher: not at the highest
-  expect(find(44, { lm: 90, lw: 60, tw: 44 }).color).toBeUndefined()
+test('queue max: a helper answer that still carries `hwm` draws no maxima, in the band or in details, and parseHelper drops it', async () => {
+  const q = { ...QUEUE, hwm: { lm: 61, lw: 74, tw: 83 } }
+  expect((parseHelper(JSON.stringify({ ...BASE, queue: q }))!.queue as any).hwm).toBeUndefined()
+  const s = withHelper({ ...SHORT, queue: q })
+  expect(text(bandRows(s as any, NOCI, 160))).toContain('queue 44 = 30r 6b 3x')
+  expect(text(bandRows(s as any, NOCI, 160))).not.toMatch(/max|last month|last week|this week/)
+  expect(detail(s as any, 200).join('\n')).toContain('queue 44 = 30 ready | 6 blocked | 3 epics')
+  expect(detail(s as any, 200).join('\n')).not.toMatch(/max|last month|last week|this week/)
 })
 
 // --- autopilot 24h progress and lifetime average -------------------------------------------------
@@ -1674,7 +1619,7 @@ test('details: BUILD (CI first), then CLONE, WORK, QUEUE with the queue on its o
   for (let cols = 200; cols >= 22; cols--) for (const l of detail(withHelper({ ...fullSnap().helper, queue: q }), cols, CI)) expect(l.length).toBeLessThanOrEqual(Math.max(20, cols - 2))
 })
 
-// --- details: the AP line (AP, next loop, 24h average) and the queue on its own line right after it ---
+// --- details: the AP line (AP, 24h average) and the queue on its own line right after it ---
 
 const AP_Q = { total: 44, ready: 30, blocked: 6, epic: 3, claimed: 0 }
 const QLINE = 'queue 44 = 30 ready | 6 blocked | 3 epics'
@@ -1684,7 +1629,7 @@ const WAKE = Math.floor(DETAIL_NOW / 1000) + 720
 
 test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate consecutive rows, no `||`', async () => {
   const lines = linesOf({ autopilot: { ...AP, next_wake_at: WAKE, stats: STATS }, queue: AP_Q }, 400)
-  expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged │ next loop (?:[A-Z][a-z]{2} \d+ )?\d\d:\d\d \(in 12m\) last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
+  expect(apPart(lines)).toMatch(/^AP on 2\/6h 3 loops ✓2 merged last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day$/)
   const at = lines.findIndex(l => l.startsWith('WORK '))
   expect(lines[at + 1]).toBe('QUEUE     ' + QLINE)
   expect(lines.join('\n')).not.toContain('||')
@@ -1699,12 +1644,12 @@ test('details: AP on + queue data: AP (WORK) and queue (QUEUE) are two separate 
 
 test('details: the QUEUE row follows the WORK row in every AP state (due, paused, running, no stats, AP off) and is omitted without queue data', async () => {
   const due = linesOf({ autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 5, stats: STATS }, queue: AP_Q }, 400)
-  expect(apPart(due)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due last 24h: 8 merged ▲ / 26 loops · average 5.2/day') // two lines (status, progress), joined by sect
-  expect(sections(due)['AUTOPILOT']).toEqual(['AP on 2/6h 3 loops ✓2 merged │ next loop due', 'last 24h: 8 merged ▲ / 26 loops · average 5.2/day'])
+  expect(apPart(due)).toBe('AP on 2/6h 3 loops ✓2 merged last 24h: 8 merged ▲ / 26 loops · average 5.2/day') // two lines (status, progress), joined by sect
+  expect(sections(due)['AUTOPILOT']).toEqual(['AP on 2/6h 3 loops ✓2 merged', 'last 24h: 8 merged ▲ / 26 loops · average 5.2/day'])
   expect(sect(due, 'QUEUE')).toBe(QLINE)
   const at = (helper: object) => { const l = linesOf(helper, 400); return [apPart(l), sect(l, 'QUEUE'), l.findIndex(x => x.startsWith('QUEUE')) - l.findIndex(x => x.startsWith('WORK '))] }
   expect(at({ autopilot: AP, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged', QLINE, 1])
-  expect(at({ autopilot: { ...AP, status: 'paused', prefix: '[p]', next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused', QLINE, 1])
+  expect(at({ autopilot: { ...AP, status: 'paused', prefix: '[p]', next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP ⏸ paused 2/6h 3 loops ✓2 merged', QLINE, 1])
   expect(at({ autopilot: { ...AP, busy: true, next_wake_at: WAKE }, queue: AP_Q })).toEqual(['AP on 2/6h 3 loops ✓2 merged │ running', QLINE, 1])
   expect(at({ autopilot: null, queue: AP_Q })).toEqual(['AP off', QLINE, 1])
   // no queue data: no queue row and no empty row
@@ -1733,45 +1678,45 @@ test('details: the queue row never abbreviates: narrow widths wrap it; the band 
   expect(text(bandRows(withHelper({ ...helper, ci: null }) as any, NOCI, 90))).not.toContain('30 ready')
 })
 
-// --- the next loop: due only within a grace, then a stalled (overdue) cell ---
+// --- no next-loop text (d191); beyond a grace a red stalled cell is the only schedule signal ---
 
 const STALL_NOW = new Date(2026, 10, 2, 12, 0, 0).getTime()
 const secs = (n: number) => Math.floor(STALL_NOW / 1000) + n
 const stallLines = (ap: object, cols = 400) => apPart(linesOf({ autopilot: { ...AP, ...ap }, queue: AP_Q }, cols, STALL_NOW))
 
-test('next loop: not yet due shows the clock and wait; due within the 10-minute grace stays `due`', async () => {
-  expect(stallLines({ next_wake_at: secs(300) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop 12:05 (in 5m)')
-  expect(stallLines({ next_wake_at: secs(-1) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
-  expect(stallLines({ next_wake_at: secs(-STALL_GRACE_SEC) })).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due') // exactly the grace: still due
+test('stalled: not yet due and due within the 10-minute grace show nothing (no next-loop text)', async () => {
+  expect(stallLines({ next_wake_at: secs(300) })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(stallLines({ next_wake_at: secs(-1) })).toBe('AP on 2/6h 3 loops ✓2 merged')
+  expect(stallLines({ next_wake_at: secs(-STALL_GRACE_SEC) })).toBe('AP on 2/6h 3 loops ✓2 merged') // exactly the grace: still due
 })
 
-test('next loop: beyond the grace it is overdue, red, with how late (minutes, hours, days) and no upcoming wake time', async () => {
+test('stalled: beyond the grace the details row shows `stalled <span>` in red, how late (minutes, hours, days), no next-loop text', async () => {
   const at = (late: number) => stallLines({ next_wake_at: secs(-late) })
-  expect(at(STALL_GRACE_SEC + 1)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 10m')
-  expect(at(25 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 25m')
-  expect(at(3 * 3600 + 5 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 3h 5m')
-  expect(at(2 * 86400 + 16 * 3600 + 120)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 2d 16h')
-  expect(at(2 * 86400)).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop overdue 2d')
+  expect(at(STALL_GRACE_SEC + 1)).toBe('AP on 2/6h 3 loops ✓2 merged │ stalled 10m')
+  expect(at(25 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ stalled 25m')
+  expect(at(3 * 3600 + 5 * 60)).toBe('AP on 2/6h 3 loops ✓2 merged │ stalled 3h 5m')
+  expect(at(2 * 86400 + 16 * 3600 + 120)).toBe('AP on 2/6h 3 loops ✓2 merged │ stalled 2d 16h')
+  expect(at(2 * 86400)).toBe('AP on 2/6h 3 loops ✓2 merged │ stalled 2d')
   expect(at(2 * 86400)).not.toMatch(/due$|\d\d:\d\d|\(in /)
   const rows = detailRows(withHelper({ ci: null, autopilot: { ...AP, next_wake_at: secs(-86400) } }) as any, DEFAULTS, 200, STALL_NOW)
-  expect(rows.flat().find(x => x.text.startsWith('next loop overdue'))?.color).toBe('error')
+  expect(rows.flat().find(x => x.text.startsWith('stalled'))?.color).toBe('error')
   // the queue row still follows
   expect(sect(linesOf({ autopilot: { ...AP, next_wake_at: secs(-86400) }, queue: AP_Q }, 400, STALL_NOW), 'QUEUE')).toBe(QLINE)
 })
 
-test('next loop: paused and a running cycle are unaffected by how old the stored wake time is', async () => {
+test('stalled: paused and a running cycle are unaffected by how old the stored wake time is', async () => {
   const old = secs(-3 * 86400)
-  expect(stallLines({ next_wake_at: old, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged │ next loop paused')
+  expect(stallLines({ next_wake_at: old, status: 'paused', prefix: '[p]' })).toBe('AP ⏸ paused 2/6h 3 loops ✓2 merged')
   expect(stallLines({ next_wake_at: old, busy: true })).toBe('AP on 2/6h 3 loops ✓2 merged │ running')
   expect(stallLines({ next_wake_at: 0 })).toBe('AP on 2/6h 3 loops ✓2 merged')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, status: 'paused', prefix: '[p]' } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
   expect(text(bandRows(withHelper({ autopilot: { ...AP, next_wake_at: old, busy: true } }) as any, NOCI, 200, STALL_NOW))).not.toContain('stalled')
 })
 
-test('next loop: a wake less than a second away reads as due, not `(now)`; the band drops the stalled cell after the version', async () => {
+test('stalled: a wake less than a second away shows nothing; the band drops the stalled cell after the version', async () => {
   const wake = secs(0) // wake at the whole second, `nowMs` half a second before it
   const line = apPart(linesOf({ autopilot: { ...AP, next_wake_at: wake }, queue: AP_Q }, 400, STALL_NOW - 500))
-  expect(line).toBe('AP on 2/6h 3 loops ✓2 merged │ next loop due')
+  expect(line).toBe('AP on 2/6h 3 loops ✓2 merged')
   // drop order on the band: ver goes before stalled, so whenever the version shows the stalled cell shows too
   const snap = withHelper({ autopilot: { ...AP, next_wake_at: secs(-2 * 86400) }, plugin: { installed: '5.2.0', latest: '5.2.0' } })
   let sawStalledAlone = false
@@ -1783,7 +1728,7 @@ test('next loop: a wake less than a second away reads as due, not `(now)`; the b
   expect(sawStalledAlone).toBe(true)
 })
 
-test('next loop: formatSpan and stalledFor; the single-line band shows a short red `stalled 2d` only beyond the grace', async () => {
+test('stalled: formatSpan and stalledFor; the single-line band shows a short red `stalled 2d` only beyond the grace', async () => {
   expect([formatSpan(59, true), formatSpan(600, true), formatSpan(3900, true), formatSpan(7200, true), formatSpan(2 * 86400 + 16 * 3600, true), formatSpan(2 * 86400 + 16 * 3600, false), formatSpan(3900, false)]).toEqual(['0m', '10m', '1h 5m', '2h', '2d 16h', '2d', '1h'])
   expect(stalledFor({ ...AP, next_wake_at: secs(-STALL_GRACE_SEC) } as any, STALL_NOW)).toBe(0)
   expect(stalledFor({ ...AP, next_wake_at: secs(-STALL_GRACE_SEC - 1) } as any, STALL_NOW)).toBe(STALL_GRACE_SEC + 1)
@@ -1938,7 +1883,7 @@ const SUPERSET_MARK: Record<string, RegExp> = {
   task: /T20261021-354035 /,
   ap: /AP on /,
   apstats: /last 24h: \d+ merged/,
-  stall: /next loop overdue/,
+  stall: /stalled/,
   ctx: /context \d+% left/,
   jobs: /READY|WORKING/,
   queue: /queue \d+ = /,
@@ -1993,8 +1938,8 @@ test('details is a superset of the band: every band cell has a details counterpa
 //   1 where             repo @ branch*, worktree, account, root, task, stale      -> CLONE
 //   2 usage             context left, limit left + reset time (cost cell retired by the owner 2026-11-24) -> SESSION
 //   3 jobs              READY/WORKING (N), parked N, last 24h jobs / average      -> WORK
-//   4 autopilot         AP state/hours/loops/merged, next loop (due/overdue/paused/running rN), 24h merged/average -> AUTOPILOT
-//   5 queue             queue (branch) N = ready | blocked | epics | claimed | max last month/last week/this week -> QUEUE
+//   4 autopilot         AP state/hours/loops/merged, running cycles / stalled, 24h merged/average -> AUTOPILOT
+//   5 queue             queue (branch) N = ready | blocked | epics | claimed -> QUEUE
 //   6 you               you HH:MM (age)                                           -> SESSION
 //   6 version           ccxp X (latest | Y available)                             -> RELEASE
 //   6 url               plugin GitHub URL                                         -> RELEASE
@@ -2014,9 +1959,9 @@ const OLD_CELLS: Array<[string, string, RegExp]> = [
   ['parked', 'WORK', /parked 2/],
   ['jobs 24h', 'WORK', /last 24h: jobs 8 ▲ \/ average 5\.2\/day/],
   ['AP', 'AUTOPILOT', /AP on 2\/6h 3 loops ✓2 merged/],
-  ['next loop', 'AUTOPILOT', /next loop due|next loop overdue|next loop \d/],
+  ['stalled', 'AUTOPILOT', /stalled \d/],
   ['AP 24h', 'AUTOPILOT', /last 24h: 8 merged ▲ \/ 26 loops · average 5\.2\/day/],
-  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 blocked \| 3 epics \| 2 claimed \| max 61 last month \/ 74 last week \/ 83 this week ▲/],
+  ['queue', 'QUEUE', /queue \(main\) 44 = 30 ready \| 6 blocked \| 3 epics \| 2 claimed/],
   ['version', 'RELEASE', /ccxp 5\.0\.0 \(5\.1\.0 available\)/],
   ['plugin URL', 'RELEASE', /https:\/\/github\.com\/Synx-Data-Labs\/ccxp-skills/],
   ['unreleased', 'RELEASE', /4 unreleased/],
@@ -2026,8 +1971,8 @@ test('details sections: every cell of the old details-on output is still present
   const s = fullSnap({ rateUsed: 90, rateResetsAt: Math.floor(DETAIL_NOW / 1000) + 3600, stale: true }) as any
   s.helper = {
     ...s.helper,
-    autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 60, stats: STATS },
-    queue: { total: 44, ready: 30, blocked: 6, epic: 3, claimed: 2, branch: 'main', hwm: { lm: 61, lw: 74, tw: 83 } },
+    autopilot: { ...AP, next_wake_at: Math.floor(DETAIL_NOW / 1000) - 3600, stats: STATS },
+    queue: { total: 44, ready: 30, blocked: 6, epic: 3, claimed: 2, branch: 'main' },
     nightly: { red: 14, green: 16, strip: '+-++.-+' },
     issues: { open: 12, undelivered: 7, hwm: { d180: 18, d30: 15, d7: 12 } },
     bus: { unread: 2, from: 'home' },
